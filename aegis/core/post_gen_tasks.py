@@ -648,11 +648,12 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/services/ai/domains/llm/agents.py")
         remove_file(project_path, "app/services/ai/domains/llm/writer.py")
 
-    # Remove voice (TTS/STT) if not enabled: what the AI spec lists under
-    # ``ai_voice``, so a new voice file is cleaned up by being listed there.
-    if not is_enabled(AnswerKeys.AI_VOICE):
-        for _rel_path in SERVICES["ai"].files.extras[AnswerKeys.AI_VOICE]:
-            apply_cleanup_path(project_path, _rel_path)
+    # Remove voice (TTS/STT) and the eval harness when off: what the AI spec
+    # lists under each answer, so a new file is cleaned up by being listed there.
+    for _option in (AnswerKeys.AI_VOICE, AnswerKeys.AI_EVALS):
+        if not is_enabled(_option):
+            for _rel_path in SERVICES["ai"].files.extras[_option]:
+                apply_cleanup_path(project_path, _rel_path)
 
     # (comms / payment / insights / auth-dashboard primary cleanups handled
     # by the Pattern A loop above.)

@@ -142,6 +142,8 @@ dependencies = [
 {#- A live call is a Pydantic AI realtime session (2.51 brought them): the
     OpenAI and Gemini realtime transports ride as extras. #}
 {%- if ai_voice %}{% set pydantic_extras = pydantic_extras ~ ",openai-realtime,google-realtime" %}{% endif %}
+{#- The eval harness: pydantic-evals, at the version this pydantic-ai pins. #}
+{%- if ai_evals %}{% set pydantic_extras = pydantic_extras ~ ",evals" %}{% endif %}
     "pydantic-ai-slim[{{ pydantic_extras }}]>=2.51,<3",
 {#- Code mode: sandboxed Monty execution for agents flagged code_mode.
     The capability only constructs for flagged agent rows, so unflagged

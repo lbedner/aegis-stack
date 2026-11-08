@@ -128,6 +128,7 @@ class TemplateGenerator:
         self.ai_framework = AIFrameworks.PYDANTIC_AI  # Default to pydantic-ai
         self.ai_rag = False  # Default to no RAG
         self.ai_voice = False  # Default to no voice
+        self.ai_evals = False
         user_specified_ai_backend = False
 
         for service in self.selected_services:
@@ -138,8 +139,11 @@ class TemplateGenerator:
                     self.ai_framework = ai_config.framework
                     self.ai_rag = ai_config.rag_enabled
                     self.ai_voice = ai_config.voice_enabled
+                    self.ai_evals = ai_config.evals_enabled
                     user_specified_ai_backend = True
                 break
+        # Brackets name the framework outright; without them init's prompt does.
+        self._ai_from_brackets = user_specified_ai_backend
 
         # OAuth social login (GitHub + Google) — opt-in via the
         # ``auth[oauth]`` modifier in the bracket syntax (composes with
@@ -356,6 +360,8 @@ class TemplateGenerator:
             AnswerKeys.AI_RAG: "yes" if self.ai_rag else "no",
             # AI Voice (TTS and STT) selection
             AnswerKeys.AI_VOICE: "yes" if self.ai_voice else "no",
+            # The eval harness (ai[evals])
+            AnswerKeys.AI_EVALS: "yes" if self.ai_evals else "no",
             # The inference component's axes
             AnswerKeys.INFERENCE_ENGINE: self.inference_engine,
             AnswerKeys.INFERENCE_PLACEMENT: self.inference_placement,
@@ -518,6 +524,9 @@ class TemplateGenerator:
         )
         if not has_ai:
             return AIFrameworks.PYDANTIC_AI  # Default
+
+        if self._ai_from_brackets:
+            return self.ai_framework
 
         # Import here to avoid circular imports
         from ..cli.interactive import get_ai_framework_selection

@@ -195,6 +195,7 @@ def generate_with_copier(
         == "yes",
         AnswerKeys.AI_RAG: template_context.get(AnswerKeys.AI_RAG, "no") == "yes",
         AnswerKeys.AI_VOICE: template_context.get(AnswerKeys.AI_VOICE, "no") == "yes",
+        AnswerKeys.AI_EVALS: template_context.get(AnswerKeys.AI_EVALS, "no") == "yes",
         # Derived by the template generator from the inference component.
         AnswerKeys.OLLAMA_MODE: template_context.get(
             AnswerKeys.OLLAMA_MODE, OllamaMode.NONE

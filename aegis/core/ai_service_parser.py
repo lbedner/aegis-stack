@@ -12,9 +12,12 @@ New plugins do not need a parser module of their own — declaring
 ``options=[OptionSpec(...)]`` on ``PluginSpec`` is enough.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
-from ..constants import AIFrameworks, AIProviders, StorageBackends
+from ..constants import AIFrameworks, AIProviders, AnswerKeys, StorageBackends
+from ..i18n import t
 from .option_spec import is_spec_with_options, parse_options
 from .services import SERVICES
 
@@ -35,6 +38,7 @@ class AIServiceConfig:
     providers: list[str]
     rag_enabled: bool = False
     voice_enabled: bool = False
+    evals_enabled: bool = False
 
 
 def parse_ai_service_config(service_string: str) -> AIServiceConfig:
@@ -46,6 +50,7 @@ def parse_ai_service_config(service_string: str) -> AIServiceConfig:
         providers=list(parsed["providers"]),
         rag_enabled=bool(parsed.get("rag", False)),
         voice_enabled=bool(parsed.get("voice", False)),
+        evals_enabled=bool(parsed.get("evals", False)),
     )
 
 
@@ -53,3 +58,14 @@ def is_ai_service_with_options(service_string: str) -> bool:
     """True when ``service_string`` uses ``ai[...]`` bracket syntax."""
     s = service_string.strip()
     return s.startswith("ai[") and is_spec_with_options(s)
+
+
+def evals_rule(answers: Mapping[str, Any]) -> str | None:
+    """Why these answers cannot have the eval harness, or None: it scores
+    Pydantic AI's tool events and scripts a turn with its ``FunctionModel``,
+    which LangChain has neither of."""
+    evals = answers.get(AnswerKeys.AI_EVALS) in (True, "yes")
+    framework = answers.get(AnswerKeys.AI_FRAMEWORK, AIFrameworks.PYDANTIC_AI)
+    if evals and framework != AIFrameworks.PYDANTIC_AI:
+        return t("validation.evals_needs_pydantic_ai", framework=framework)
+    return None

@@ -495,6 +495,13 @@ SERVICES: dict[str, ServiceSpec] = {
                 default=False,
                 answer_key=AnswerKeys.AI_VOICE,
             ),
+            OptionSpec(
+                name="evals",
+                mode=OptionMode.FLAG,
+                choices=["evals"],
+                default=False,
+                answer_key=AnswerKeys.AI_EVALS,
+            ),
         ],
         pyproject_deps=[
             "{AI_FRAMEWORK_DEPS}",  # Dynamic framework + provider deps
@@ -645,6 +652,12 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/components/frontend/dashboard/modals/voice_settings",
                     "tests/components/frontend/test_voice_tab.py",
                     "tests/components/frontend/test_voice_designer.py",
+                ],
+                # The eval harness: its domain, its tests, the datasets.
+                "ai_evals": [
+                    "app/services/ai/domains/evals",
+                    "tests/services/ai/evals",
+                    "evals",
                 ],
             },
         ),

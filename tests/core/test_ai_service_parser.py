@@ -465,6 +465,20 @@ class TestAIServiceParserRagAndVoice:
         assert result.providers == ["openai"]
 
 
+class TestAIServiceParserEvals:
+    """``ai[evals]``: the eval harness, an option like rag and voice."""
+
+    def test_evals_is_off_unless_named(self) -> None:
+        assert parse_ai_service_config("ai").evals_enabled is False
+        assert parse_ai_service_config("ai[sqlite, voice]").evals_enabled is False
+
+    def test_evals_flag_turns_it_on_beside_the_others(self) -> None:
+        result = parse_ai_service_config("ai[sqlite, rag, evals]")
+        assert result.evals_enabled is True
+        assert result.rag_enabled is True
+        assert result.backend == "sqlite"
+
+
 class TestAIServiceConfigVoiceAttribute:
     """Test the AIServiceConfig dataclass voice_enabled attribute."""
 

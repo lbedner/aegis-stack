@@ -122,6 +122,7 @@ PARTS: dict[str, Part] = {
             ),
             Option(name="rag", mode="flag", choices=("rag",), answer="ai_rag"),
             Option(name="voice", mode="flag", choices=("voice",), answer="ai_voice"),
+            Option(name="evals", mode="flag", choices=("evals",), answer="ai_evals"),
         ),
     ),
     "auth": Part(

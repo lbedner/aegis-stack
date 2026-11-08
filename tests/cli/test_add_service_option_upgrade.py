@@ -80,3 +80,31 @@ def test_an_auth_level_upgrade_takes_too(project_factory: ProjectFactory) -> Non
     assert "role" in text
     assert "# kept by the project" in text
     assert (project / "app/services/auth/domains/orgs/organizations.py").exists()
+
+
+def test_adding_evals_brings_the_harness(project_factory: ProjectFactory) -> None:
+    project = project_factory("base_with_ai_sqlite_service")
+    assert not (project / f"{AI}/domains/evals").exists()
+
+    result = ManualUpdater(project).add_component(
+        "ai", {"ai_evals": True}, run_post_gen=False
+    )
+
+    assert result.success, result.error_message
+    assert (project / f"{AI}/domains/evals/runner.py").exists()
+    assert (project / "evals/starter.yaml").exists()
+    assert "evals" in (project / "pyproject.toml").read_text()
+
+
+def test_adding_evals_to_a_langchain_project_is_refused(
+    project_factory: ProjectFactory,
+) -> None:
+    project = project_factory("ai_langchain")
+
+    result = ManualUpdater(project).add_component(
+        "ai", {"ai_evals": True}, run_post_gen=False
+    )
+
+    assert not result.success
+    assert "Pydantic AI" in (result.error_message or "")
+    assert not (project / f"{AI}/domains/evals").exists()

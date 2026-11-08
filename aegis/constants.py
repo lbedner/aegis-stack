@@ -312,6 +312,7 @@ class AnswerKeys:
     AUTH_ORG = "include_auth_org"
     AUTH_OAUTH = "include_oauth"
     AI_VOICE = "ai_voice"
+    AI_EVALS = "ai_evals"
     OLLAMA_MODE = "ollama_mode"
     INFERENCE = "include_inference"
     INFERENCE_ENGINE = "inference_engine"

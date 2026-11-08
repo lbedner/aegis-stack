@@ -310,6 +310,12 @@ ai_voice:
   default: false
   when: "{{ include_ai }}"
 
+ai_evals:
+  type: bool
+  help: "Ship the eval harness (datasets scored on the assistant's tool calls)?"
+  default: false
+  when: "{{ include_ai }}"
+
 ollama_mode:
   type: str
   help: "Ollama deployment mode (host, docker, or none)"

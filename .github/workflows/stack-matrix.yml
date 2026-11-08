@@ -91,6 +91,7 @@ jobs:
           - deploy
           - deploy_backups
           - ai_voice
+          - ai_evals
           - insights
           - insights_per_user
           - payment

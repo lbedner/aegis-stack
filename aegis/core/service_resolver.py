@@ -7,9 +7,15 @@ to their required components and validating service-to-component compatibility.
 
 from ..constants import AnswerKeys, AuthLevels
 from ..i18n import t
+from .ai_service_parser import evals_rule
 from .component_utils import extract_base_component_name, extract_base_service_name
 from .dependency_resolver import DependencyResolver
-from .option_spec import compute_auto_requires, is_spec_with_options, parse_options
+from .option_spec import (
+    compute_auto_requires,
+    is_spec_with_options,
+    parse_options,
+    variant_answers,
+)
 from .services import SERVICES, get_service_dependencies
 
 
@@ -127,6 +133,9 @@ class ServiceResolver:
                     parse_options(service, spec)
                 except ValueError as e:
                     errors.append(f"Invalid {base_service} service syntax: {e}")
+                else:
+                    if rule := evals_rule(variant_answers(service, spec)):
+                        errors.append(rule)
 
             # Check service conflicts
             if spec.conflicts:

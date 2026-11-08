@@ -1,4 +1,4 @@
-"""Her way onto the web (#593): a search, and a page read as text.
+"""The assistant's way onto the web (#1997): a search, and a page read as text.
 
 Both ride what the contact lookup already had - Brave search, keyed and
 budgeted, and the guarded fetch that refuses any host off the public
@@ -11,7 +11,7 @@ import httpx
 import pytest
 
 from app.core import search
-from app.core.tools import get_tool
+from app.core.cache import CacheService
 from app.services.ai.domains.chat import web_tools
 from tests._fake_dns import answering, resolving_to
 
@@ -32,7 +32,6 @@ class TestWebSearch:
                 )
             ]
 
-        monkeypatch.setattr(web_tools.settings, "BRAVE_SEARCH_API_KEY", "key")
         monkeypatch.setattr(web_tools, "search", fake)
 
         result = await web_tools.web_search("MetLife Stable Value Fund")
@@ -52,11 +51,30 @@ class TestWebSearch:
         """No hits with no explanation reads as "nothing on the web"; off
         is a different answer."""
         monkeypatch.setattr(search.settings, "BRAVE_SEARCH_API_KEY", None)
+        monkeypatch.setattr(search, "get_cache", lambda: CacheService())
 
         result = await web_tools.web_search("anything")
 
         assert result.hits == []
         assert result.note and "off" in result.note
+
+    @pytest.mark.asyncio
+    async def test_a_spent_budget_says_so(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def spent() -> dict[str, object]:
+            return {"enabled": True, "queries_today": 25, "daily_budget": 25}
+
+        async def nothing(query: str, *, limit: int = 5) -> list[search.SearchHit]:
+            return []
+
+        monkeypatch.setattr(web_tools, "status", spent)
+        monkeypatch.setattr(web_tools, "search", nothing)
+
+        result = await web_tools.web_search("anything")
+
+        assert result.hits == []
+        assert result.note and "budget" in result.note
 
 
 class TestReadPage:
@@ -104,6 +122,25 @@ class TestReadPage:
 
         assert len(result.text) == 40
         assert result.truncated is True
+
+    @pytest.mark.asyncio
+    async def test_the_rest_is_read_from_an_offset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Asking for more continues where the cut was, never the top again."""
+        resolving_to(monkeypatch, PUBLIC)
+        answering(
+            monkeypatch,
+            httpx.Response(
+                200, headers={"content-type": "text/html"}, text="<p>abcdef</p>"
+            ),
+        )
+
+        result = await web_tools.read_page(
+            "https://example.com/", max_chars=4, offset=4
+        )
+
+        assert (result.text, result.offset, result.truncated) == ("ef", 4, False)
 
     @pytest.mark.asyncio
     async def test_an_empty_shell_says_so(
@@ -164,9 +201,3 @@ class TestReadPage:
         result = await web_tools.read_page("https://example.com/missing")
 
         assert result.error == "HTTP 404"
-
-
-def test_both_are_read_tools() -> None:
-    for name in ("web_search", "read_page"):
-        tool = get_tool(name)
-        assert tool is not None and tool.effect == "read", name

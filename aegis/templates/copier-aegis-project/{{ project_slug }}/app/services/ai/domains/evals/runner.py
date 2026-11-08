@@ -12,11 +12,20 @@ from app.services.ai.domains.llm.agents import MODEL_OVERRIDE
 from app.services.ai.service import AIService
 
 from .datasets import EVALS_DIR, CaseInput, load
-from .evaluators import TRACE
+from .evaluators import EVALS_USER, TRACE
 from .script import scripted_model
 
-# Whose conversations an eval run's turns are, so they never mix with a person's.
-EVALS_USER = "evals"
+
+def _observe() -> None:
+    """Report the run to Logfire as its own process, where the stack has
+    observability; with no token, ``configure_logfire`` does nothing."""
+    try:
+        from app.components.backend.middleware.logfire_tracing import (
+            configure_logfire,
+        )
+    except ImportError:  # observability component not installed
+        return
+    configure_logfire("evals")
 
 
 async def run_dataset(
@@ -24,6 +33,7 @@ async def run_dataset(
 ) -> EvaluationReport[CaseInput, str, None]:
     """Every case of ``name``, one at a time: a real model costs money and
     shares a rate limit. ``scripted`` plays each case's script instead."""
+    _observe()
     service = AIService(settings)
 
     async def turn(case: CaseInput) -> str:

@@ -1,0 +1,64 @@
+{%- if ai_backend != "memory" -%}
+"""``Judged``: the model in force grading an answer against a rubric, as
+the ``eval-judge`` agent, metered like every other writer."""
+
+from typing import Any
+
+from pydantic_evals.evaluators import EvaluatorContext
+from pydantic_evals.evaluators.llm_as_a_judge import GradingOutput
+import pytest
+from sqlmodel import Session, select
+
+from app.services.ai.domains.evals import evaluators
+from app.services.ai.domains.evals.agents import JUDGE, JUDGING
+from app.services.ai.domains.evals.datasets import CaseInput
+from app.services.ai.fixtures import load_agent_registry_fixtures
+from app.services.ai.models.agents import Agent
+
+
+def _ctx(message: str, output: str) -> EvaluatorContext:
+    return EvaluatorContext(
+        name="case",
+        inputs=CaseInput(message=message),
+        metadata=None,
+        expected_output=None,
+        output=output,
+        duration=1.0,
+        _span_tree=None,
+        attributes={},
+        metrics={},
+    )
+
+
+async def test_judged_asks_the_writer_and_scores_its_verdict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The judge is told the message, the answer and the rubric, is metered
+    to the run's user, and its verdict and reason are the score."""
+    asked: dict[str, Any] = {}
+
+    async def write(slug: str, prompt: str, output_type: type, text: str, **kw: Any) -> Any:
+        asked.update(slug=slug, output_type=output_type, text=text, **kw)
+        return GradingOutput(reason="no figure is invented", pass_=True, score=1.0), "m"
+
+    monkeypatch.setattr(evaluators, "write", write)
+    ctx = _ctx("what is my balance?", "I can't see a balance from here.")
+
+    verdict = await evaluators.Judged("never invents a number").evaluate(ctx)
+
+    assert (verdict.value, verdict.reason) == (True, "no figure is invented")
+    assert (asked["slug"], asked["output_type"]) == (JUDGE, GradingOutput)
+    assert asked["action"] == evaluators.JUDGE_ACTION
+    assert asked["owner_user_id"] == evaluators.EVALS_USER
+    for said in ("what is my balance?", "I can't see a balance", "never invents a number"):
+        assert said in asked["text"]
+
+
+def test_the_judge_is_seeded_as_an_agent(db_session: Session) -> None:
+    """``eval-judge`` is seeded with the registry, so its model and prompt
+    are set in Agents; with no model picked, it runs on the active one."""
+    load_agent_registry_fixtures(db_session)
+
+    row = db_session.exec(select(Agent).where(Agent.slug == JUDGE)).one()
+    assert (row.system_prompt, row.model_id) == (JUDGING, None)
+{%- endif %}

@@ -42,7 +42,7 @@ async def write(
     text: str,
     *,
     action: str,
-    owner_user_id: int | None,
+    owner_user_id: int | str | None,
 ) -> tuple[Output, str]:
     """One pass of the agent ``slug`` (``writer``) over ``text``, metered as
     ``action`` against the owner: what it wrote, and the model's name."""

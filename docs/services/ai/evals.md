@@ -39,6 +39,9 @@ Each case runs as one real turn, through `AIService.chat()`, with the same agent
 | `ToolCalls: {tool, times, args}` | `tool` was called `times` times, or at least once if `times` is unset. With `args`, only calls holding every one of them count, and `times: 0` means it never was. |
 | `ToolOrder: {tools}` | `tools` were called in this order, with other calls allowed between them. |
 | `AnswerAvoids: {terms}` | The answer contains none of `terms`, in any case. |
+| `Judged: {rubric}` | The model in force says the answer meets `rubric`, given the message. |
+
+`Judged` asks a model even when the case plays a script, so a dataset that uses it costs money on every run. Its calls appear in AI spend as `eval_judge`. The judge is the `eval-judge` agent, seeded with the others, so its model and prompt are set in Agents. Until a model is picked there, it runs on the active one. A judge that errors fails its case, never the run. On the memory backend, which keeps no spend, use Pydantic Evals' `LLMJudge` instead.
 
 Pydantic Evals' own evaluators work too, such as `Contains` for something the answer must say.
 
@@ -56,3 +59,5 @@ report.print()
 ```
 
 An eval run's conversations belong to the user `evals`, so they never mix with a person's.
+
+With the observability component and `LOGFIRE_TOKEN` set, a run reports to Logfire as the `evals` process, where each run shows as an evals table. Without a token, it reports nothing.

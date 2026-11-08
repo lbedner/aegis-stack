@@ -89,6 +89,12 @@ from tests import _queryspy_shape  # noqa: E402
 def pytest_sessionstart(session: pytest.Session) -> None:
     # After every plugin's pytest_configure, so queryspy has read the file.
     _queryspy_shape.shape_loaded_baseline(session.config)
+{%- else %}
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    # queryspy, whose mark this is, ships with the database.
+    config.addinivalue_line("markers", "queryspy: queryspy's per-test policy")
 {%- endif %}
 
 

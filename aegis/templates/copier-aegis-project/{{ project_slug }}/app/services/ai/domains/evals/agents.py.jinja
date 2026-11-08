@@ -1,0 +1,40 @@
+{%- if ai_backend != "memory" -%}
+"""The judge's agent row (``Judged``): seeded with the AI service's own
+agents, so its model and prompt are set in Agents. With no model picked,
+it runs on the active one."""
+
+from typing import Any
+
+from sqlmodel import Session
+
+JUDGE = "eval-judge"
+JUDGING = """You grade an assistant's answer to a message against a rubric.
+The answer passes when the rubric's statement is true of it. Give a one or
+two sentence reason, pass, and a score from 0 to 1."""
+
+
+def judge_agent_definition() -> dict[str, Any]:
+    """The seed row for the judge: the active model, no memory, knowledge
+    or code of the chat's."""
+    # Here, not at the top: the AI fixtures package loads these seeds.
+    from app.services.ai.fixtures.agent_fixtures import default_agent_definition
+
+    return default_agent_definition() | {
+        "slug": JUDGE,
+        "name": "Eval judge",
+        "description": "Grades an eval case's answer against its rubric (Judged)",
+        "category": "analysis",
+        "model_id": None,
+        "system_prompt": JUDGING,
+        "context_modules": [],
+        "knowledge_base_ids": [],
+        "code_mode": False,
+    }
+
+
+def load_evals_agent_fixtures(session: Session) -> dict[str, int]:
+    """Seed the judge if it is missing; a row edited in Agents is kept."""
+    from app.services.ai.fixtures.agent_fixtures import seed_missing_agents
+
+    return {"evals_agents": seed_missing_agents(session, [judge_agent_definition()])}
+{%- endif %}

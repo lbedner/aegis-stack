@@ -13,6 +13,12 @@
   one exclusive pick: `days` holds the values ticked and the row is a
   `data-checklist`, so over a list it narrows the rows with no request
   (`data-facets`).
+- **`ai[evals]`.** Datasets in `evals/<name>.yaml`, each case one real
+  turn scored on the tools it called (`ToolCalls`, `ToolOrder`) and its
+  answer (`AnswerAvoids`, `Judged`). A case's script plays without a
+  model, and the starter dataset plays in the project's tests. `Judged`
+  is metered as `eval_judge`, and a run reports to Logfire as `evals`
+  when a token is set. Pydantic AI only. (#2004, #1161)
 
 ## [0.19.1] - 2026-11-06
 

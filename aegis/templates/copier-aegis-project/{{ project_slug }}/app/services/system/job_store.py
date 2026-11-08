@@ -13,10 +13,20 @@ subscribed, which is a read every half second and nothing to keep alive.
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Awaitable, Callable
 import json
 from typing import Any
+import uuid
 
-from app.services.system.jobs import JobSnapshot, SetLabel, now_iso
+from app.core.discovery import present
+from app.services.system.jobs import (
+    JobSnapshot,
+    Report,
+    SetLabel,
+    get_job_runner,
+    now_iso,
+)
 
 KEY_PREFIX = "jobs:"
 # Long enough for a client that asks after the fact, short enough that a
@@ -122,3 +132,81 @@ class RedisJobStore:
 
     async def aclose(self) -> None:
         await self._redis.aclose()
+
+
+async def start_job(
+    name: str,
+    task: str,
+    args: tuple[Any, ...],
+    work: Callable[[Report], Awaitable[dict[str, Any]]],
+    *,
+    label: str = "Queued...",
+) -> str:
+    """Start ``work`` as a job: handed to the worker as ``task`` (called
+    with the job id and ``args``) where the stack has one, else run as an
+    asyncio task here. The job id either way, followed the same way."""
+    if present("app.components.worker"):
+        return await queue_job(name, task, *args)
+    return get_job_runner().start(
+        name, lambda handle: work(handle.set_label), label=label
+    )
+
+
+async def queue_job(name: str, task: str, *args: Any) -> str:
+    """Record ``name`` as queued, then hand ``task`` (called with the job id
+    and ``args``) to the worker on the system queue. The job id."""
+    job_id = uuid.uuid4().hex
+    store = RedisJobStore.shared()
+    try:
+        await store.create(job_id, name, "Queued...")
+        try:
+            # The worker binds its task id as the run: the job's log is there.
+            await store.set_run(job_id, await _enqueue(task, job_id, *args))
+        except Exception as exc:
+            # The record outlives this function, so a failed hand-off has to
+            # be written into it: otherwise the job sits "Queued..." until it
+            # expires, with the reason only in this process's logs.
+            await store.fail(job_id, f"Could not queue the job: {exc}")
+            raise
+    finally:
+        await store.aclose()
+    return job_id
+
+
+async def _enqueue(task: str, *args: Any) -> str:
+    """Hand ``task`` to the worker; the task id it runs under."""
+    from app.components.worker import pools
+    from app.core.constants import QueueName
+
+    # The one way work reaches the queue: its feed, its history, its edge.
+    return pools.job_id(await pools.enqueue_task(task, QueueName.SYSTEM, *args))
+
+
+async def narrate(
+    job_id: str, work: Callable[[Report], Awaitable[dict[str, Any]]]
+) -> dict[str, Any]:
+    """The worker's side of a job: ``work`` reports into the shared record,
+    which then holds its result or why it failed."""
+    store = RedisJobStore.shared()
+    loop = asyncio.get_running_loop()
+    # Labels are written without waiting, so the work is never held up by
+    # Redis - but they are held here, because closing the client out from
+    # under a write in flight loses the progress it carried.
+    writes: set[asyncio.Task[None]] = set()
+
+    def report(label: str) -> None:
+        task = loop.create_task(store.set_label(job_id, label))
+        writes.add(task)
+        task.add_done_callback(writes.discard)
+
+    try:
+        result = await work(report)
+        await store.finish(job_id, result)
+        return result
+    except Exception as exc:
+        await store.fail(job_id, str(exc) or type(exc).__name__)
+        raise
+    finally:
+        if writes:
+            await asyncio.gather(*writes, return_exceptions=True)
+        await store.aclose()

@@ -1,0 +1,134 @@
+{%- if ai_backend != "memory" -%}
+"""A dataset run and kept as one call, and run as a job: on the worker
+where the stack has one, else in this process."""
+
+import functools
+from pathlib import Path
+{%- if include_worker %}
+from typing import Any
+{%- endif %}
+
+import pytest
+
+from app.core.db import get_async_session
+from app.services.ai.domains.evals import jobs, queries, runner
+from app.services.ai.domains.llm.llm_service import SetModelResult
+{%- if include_worker %}
+from app.services.system import job_store
+{%- else %}
+from app.services.system.jobs import get_job_runner
+{%- endif %}
+from tests.services.ai.evals._mini import DATASET, answering
+
+
+def _checked(success: bool, provider: str | None = None) -> SetModelResult:
+    return SetModelResult(
+        success=success,
+        model_id="m",
+        vendor=None,
+        provider_updated=provider is not None,
+        message="" if success else "'tts-1' is a tts model, not a chat model.",
+        provider=provider,
+    )
+
+
+@pytest.fixture
+def mini(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``mini`` is the dataset every run here plays, answered by a fake chat."""
+    (tmp_path / "mini.yaml").write_text(DATASET)
+    answering(monkeypatch)
+    monkeypatch.setattr(
+        jobs, "run_dataset", functools.partial(runner.run_dataset, directory=tmp_path)
+    )
+
+
+async def test_a_run_is_scored_then_kept(mini: None) -> None:
+    labels: list[str] = []
+
+    run = await jobs.run_evals("mini", note="nightly", report=labels.append)
+
+    assert (run.dataset, run.cases, run.passed) == ("mini", 2, 2)
+    assert (run.note, run.trigger) == ("nightly", "cli")
+    assert labels == ["1 of 2 · reads the paper", "2 of 2 · never deletes"]
+    async with get_async_session() as session:
+        assert [kept.id for kept in await queries.runs(session)] == [run.id]
+
+
+async def test_a_model_that_cannot_answer_is_refused_before_anything_runs(
+    mini: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def check_model(session: object, model_id: str) -> SetModelResult:
+        return _checked(False)
+
+    monkeypatch.setattr(jobs, "check_model", check_model)
+
+    with pytest.raises(ValueError, match="not a chat model"):
+        await jobs.start_evals("mini", model="tts-1", note=None)
+    with pytest.raises(ValueError, match="not a chat model"):
+        await jobs.run_evals("mini", model="tts-1")
+
+
+async def test_a_named_model_runs_on_the_provider_it_needs(
+    mini: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def check_model(session: object, model_id: str) -> SetModelResult:
+        return _checked(True, provider="anthropic")
+
+    monkeypatch.setattr(jobs, "check_model", check_model)
+    seen: set[tuple[str, str]] = set()
+    chat = runner.AIService.chat
+
+    async def noting(self: runner.AIService, message: str, **kwargs: object) -> object:
+        seen.add((self.config.model, str(self.config.provider.value)))
+        return await chat(self, message, **kwargs)
+
+    monkeypatch.setattr(runner.AIService, "chat", noting)
+
+    await jobs.run_evals("mini", model="claude-test")
+
+    assert seen == {("claude-test", "anthropic")}
+{%- if include_worker %}
+
+
+async def test_a_started_run_is_handed_to_the_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    queued: list[tuple[Any, ...]] = []
+
+    async def queue_job(*args: Any) -> str:
+        queued.append(args)
+        return "job-1"
+
+    monkeypatch.setattr(job_store, "queue_job", queue_job)
+
+    assert await jobs.start_evals("mini", model=None, note="nightly") == "job-1"
+    assert queued == [("ai-evals:mini", "run_evals_task", "mini", None, "nightly")]
+
+
+async def test_the_worker_narrates_each_case_and_ends_with_the_run(
+    mini: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    labels: list[str] = []
+
+    async def narrate(job_id: str, work: Any) -> dict[str, Any]:
+        return await work(labels.append)
+
+    monkeypatch.setattr(job_store, "narrate", narrate)
+
+    result = await jobs.run_evals_job("job-1", "mini", None, None)
+
+    assert result["dataset"] == "mini" and result["passed"] == 2
+    assert labels == ["1 of 2 · reads the paper", "2 of 2 · never deletes"]
+{%- else %}
+
+
+async def test_a_started_run_is_a_job_in_this_process(mini: None) -> None:
+    job_id = await jobs.start_evals("mini", model=None, note=None)
+
+    snapshot = await get_job_runner().wait(job_id)
+
+    assert snapshot.status == "done", snapshot.error
+    assert snapshot.result is not None
+    assert (snapshot.result["dataset"], snapshot.result["passed"]) == ("mini", 2)
+{%- endif %}
+{%- endif %}

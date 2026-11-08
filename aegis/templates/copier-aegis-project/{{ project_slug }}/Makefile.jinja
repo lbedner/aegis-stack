@@ -146,6 +146,16 @@ test: ## Run tests locally
 test-verbose: ## Run tests with verbose output
 	@echo "Running tests (verbose)..."
 	@uv run pytest -v
+{%- if ai_evals %}
+
+evals-ci: ## Play every dataset under evals/ from its scripts: no model, no network
+	@uv run pytest -q tests/services/ai/evals/test_runner.py -k every_shipped_dataset
+{%- if ai_backend != "memory" %}
+
+evals: ## Score every dataset under evals/ on the model in force, and keep the runs
+	@uv run {{ project_slug }} ai evals run $(ARGS)
+{%- endif %}
+{%- endif %}
 
 #=============================================================================
 # CODE QUALITY (local development tools)

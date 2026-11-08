@@ -11,6 +11,7 @@ from pydantic_evals.reporting import EvaluationReport
 from app.core.config import settings
 from app.services.ai.domains.llm.agents import MODEL_OVERRIDE
 from app.services.ai.service import AIService
+from app.services.system.jobs import Report
 
 from .datasets import EVALS_DIR, CaseInput, load
 from .evaluators import CONVERSATION, COST, EVALS_USER, MODEL, TRACE
@@ -30,14 +31,36 @@ def _observe() -> None:
 
 
 async def run_dataset(
-    name: str, *, scripted: bool = False, directory: Path = EVALS_DIR
+    name: str,
+    *,
+    scripted: bool = False,
+    model: str | None = None,
+    provider: str | None = None,
+    report: Report | None = None,
+    directory: Path = EVALS_DIR,
 ) -> EvaluationReport[CaseInput, str, None]:
     """Every case of ``name``, one at a time: a real model costs money and
-    shares a rate limit. ``scripted`` plays each case's script instead."""
+    shares a rate limit. ``scripted`` plays each case's script instead;
+    ``model`` (on ``provider``, where it needs another) stands in for the
+    configured one where an agent pins none; ``report`` hears each case as
+    it starts."""
     _observe()
-    service = AIService(settings)
+    in_force = settings
+    if model:
+        provider = provider or settings.AI_PROVIDER
+        in_force = settings.model_copy(update={"AI_MODEL": model, "AI_PROVIDER": provider})
+    service = AIService(in_force)
+    dataset = load(name, directory)
+    # Each case's inputs reach the task as the same object, so its name is
+    # found by identity: the task is handed only the inputs.
+    named = {id(case.inputs): case.name for case in dataset.cases}
+    started = 0
 
     async def turn(case: CaseInput) -> str:
+        nonlocal started
+        started += 1
+        if report is not None:
+            report(f"{started} of {len(named)} · {named[id(case)]}")
         if scripted and not case.script:
             raise ValueError("this case has no script to play")
         token = MODEL_OVERRIDE.set(scripted_model(case.script) if scripted else None)
@@ -51,5 +74,4 @@ async def run_dataset(
             set_eval_attribute(key, reply.metadata.get(key))
         return reply.content
 
-    dataset = load(name, directory)
     return await dataset.evaluate(turn, name=name, max_concurrency=1, progress=False)

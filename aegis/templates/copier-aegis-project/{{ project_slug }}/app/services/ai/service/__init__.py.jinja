@@ -218,6 +218,18 @@ if TYPE_CHECKING:
         VoicePronunciation,
     )
 {%- endif %}
+{%- if ai_evals and ai_backend != "memory" %}
+    from app.services.ai.domains.evals import queries as eval_runs
+    from app.services.ai.domains.evals.datasets import names as eval_datasets
+    from app.services.ai.domains.evals.jobs import (
+{%- if include_worker %}
+        run_evals_job,
+{%- endif %}
+        run_evals,
+        start_evals,
+    )
+    from app.services.ai.models.evals import EvalCase, EvalRun, EvalScore
+{%- endif %}
     from app.services.ai.models.provider_names import provider_label
     from app.services.ai.service.ai_service import AIService
     from app.services.ai.service.base import (

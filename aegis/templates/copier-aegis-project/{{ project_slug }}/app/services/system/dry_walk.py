@@ -15,6 +15,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
+from app.core.ontology.calls import QUEUE_DOORS
 from app.core.ontology.model import Kind, Mode, node_id
 from app.core.ontology.parts import node_of
 from app.core.source_functions import called
@@ -24,8 +25,10 @@ from app.core.source_members import Def
 from .dry_names import SELF, Names, Scope
 
 DEPTH = 12  # how many calls deep the walk goes
-# Called with a task's name first: the queue's front doors (arq's own too).
-ENQUEUES = frozenset({"enqueue_task", "enqueue_job"})
+# Called with a task's name: the queue's front doors (arq's own, the job store's).
+ENQUEUES = frozenset({"enqueue_task", "enqueue_job"}) | {
+    door.rpartition(".")[2] for door in QUEUE_DOORS
+}
 # Called on a task itself: taskiq's, dramatiq's.
 HANDS_OFF = frozenset({"kiq", "send"})
 # A table named in one of these is read, or written (``session.add(post)``).
@@ -302,15 +305,15 @@ class Walker:
     def _handed_off(
         self, call: ast.Call, name: str | None, scope: Scope
     ) -> Symbol | None:
-        """The task a call queues: by its name (``enqueue_task("x", ...)``)
-        or on the task (``x.kiq(...)``)."""
-        first = call.args[0] if call.args else None
-        if (
-            name in ENQUEUES
-            and isinstance(first, ast.Constant)
-            and isinstance(first.value, str)
-        ):
-            return self.names.task(first.value)
+        """The task a call queues: by its name (``enqueue_task("x", ...)``,
+        ``start_job(label, "x", ...)``) or on the task (``x.kiq(...)``)."""
+        if name in ENQUEUES:
+            named = (
+                a.value
+                for a in call.args
+                if isinstance(a, ast.Constant) and isinstance(a.value, str)
+            )
+            return next((t for n in named if (t := self.names.task(n))), None)
         if name in HANDS_OFF and isinstance(call.func, ast.Attribute):
             task = self.names.resolve(call.func.value, scope)
             return task if self.names.is_function(task) else None

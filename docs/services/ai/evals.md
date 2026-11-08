@@ -53,41 +53,49 @@ A case's `script` is the turn it expects. Each step is one model response, eithe
 
 Run without a script, each case asks the active model. That costs real money, and it's the run that tells you whether the assistant still does the right thing.
 
-```python
-from app.services.ai.domains.evals.runner import run_dataset
-
-report = await run_dataset("starter", scripted=True)
-report.print()
-```
+`make evals-ci` plays every dataset under `evals/` from its scripts, and the same test runs in `make check`. A case without a script fails there, so every case a dataset ships needs one.
 
 An eval run's turns belong to the user `evals`, so they never mix with a person's.
 
-## Kept runs
+## Running it
 
-On a database-backed stack, a run is kept in three tables by `record_run`, in a session of its own (a run is minutes of model calls, so it never holds one open): `eval_run` (the dataset, model, build, counts, cost, what started it and a `note` on why), `eval_case` (what each case asked, what came back, the tool calls its turn made, or the error that stopped it) and `eval_score` (each evaluator's verdict on a case: 1 or 0 for a pass, or the score itself).
+On a database-backed stack, a run is kept, and the CLI, `make evals` and the API run and read the kept runs:
+
+```bash
+uv run my-app ai evals run                      # every dataset, on the model in force
+uv run my-app ai evals run starter --note "after the prompt change"
+uv run my-app ai evals run starter --model gpt-4o-mini
+uv run my-app ai evals list                     # kept runs, newest first
+uv run my-app ai evals show 12                  # each case: pass or fail, how long, why it errored
+uv run my-app ai evals compare 11 12            # the cases that flipped, with their scores
+make evals                                      # ai evals run, every dataset
+```
+
+`ai evals run` exits 1 when a case fails. `--scripted` plays the scripts instead of asking a model, and its runs are kept as `ci`. A run uses the model picked in the Overseer, even on a worker that booted before the pick. `--model` stands in for it (on the provider that model needs), except for an agent that pins its own. A model that isn't in the catalog, isn't a chat model, or whose provider has no key is refused before any case runs, the same check `llm use` makes.
+
+| Endpoint | |
+|----------|---|
+| `POST /api/v1/ai/evals/runs` | `{"dataset", "model"?, "note"?}`: starts the run as a job and returns its `job_id` (202). The run goes to the worker when the stack has one, and runs in the webserver otherwise. `/api/v1/jobs/{id}/events` streams each case as it starts (`3 of 12 · reads the letter`), then the run's id. |
+| `GET /api/v1/ai/evals/runs` | Kept runs, newest first (`?dataset=`, `?limit=`). |
+| `GET /api/v1/ai/evals/runs/{id}` | A run and its cases. |
+| `GET /api/v1/ai/evals/runs/{id}/cases/{name}` | A case and each evaluator's score. |
+| `GET /api/v1/ai/evals/compare?a=&b=` | The cases two runs share, and `flipped`: those whose pass or fail changed. |
+
+A run is kept in three tables: `eval_run` (the dataset, model, build, counts, cost, what started it and a `note` on why), `eval_case` (what each case asked, what came back, the tool calls its turn made, or the error that stopped it) and `eval_score` (each evaluator's verdict on a case: 1 or 0 for a pass, or the score itself). Keeping a run deletes its conversations. Runs are small, and nothing deletes them.
+
+From code, `run_evals` scores a dataset and keeps the run, and `eval_runs` reads the kept runs:
 
 ```python
 from app.core.db import get_async_session
-from app.core.time import utcnow
-from app.services.ai.domains.evals import queries
-from app.services.ai.domains.evals.recorder import record_run
+from app.services.ai.service import eval_runs, run_evals
 
-started = utcnow()
-report = await run_dataset("starter")
-
+after = await run_evals("starter", note="after the prompt change")
 async with get_async_session() as session:
-    await record_run(
-        session, report, started_at=started, keep=False, trigger="cli",
-        note="after the prompt change",
-    )
-    after, before = await queries.runs(session, "starter", limit=2)
-    compared = await queries.compare(session, before.id, after.id)
-    for case in compared.flipped:
+    before = (await eval_runs.runs(session, "starter", limit=2))[-1]
+    for case in (await eval_runs.compare(session, before.id, after.id)).flipped:
         print(case.name, case.before, "->", case.after)
 ```
 
-Keeping a run deletes its conversations; with `keep=True` they stay, and each case names its own.
-
-`compare` lines up the cases two runs share by name, with each evaluator's score in both, and `flipped` holds the ones whose pass or fail changed. Runs are small and nothing deletes them. On the memory backend a run is scored but not kept.
+On the memory backend there is nowhere to keep a run, so there is no CLI, API or `make evals`. `run_dataset` still scores a dataset, and `make evals-ci` still plays the scripts.
 
 With the observability component and `LOGFIRE_TOKEN` set, a run reports to Logfire as the `evals` process, where each run shows as an evals table. Without a token, it reports nothing.

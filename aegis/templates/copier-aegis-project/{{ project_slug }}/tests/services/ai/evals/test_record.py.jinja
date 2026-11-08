@@ -103,4 +103,19 @@ async def test_a_case_that_errors_is_kept_as_a_failure(
     assert (run.cases, run.passed, run.failed, run.trigger) == (2, 0, 2, "ci")
     cases = await queries.cases(async_db_session, run.id)
     assert all(not c.passed and "no script" in (c.error or "") for c in cases)
+
+
+async def test_a_run_and_one_of_its_cases_are_read_by_id_and_name(
+    mini: Path, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
+) -> None:
+    answering(monkeypatch)
+    kept = await _kept(async_db_session, mini)
+    assert kept.id
+
+    run = await queries.run(async_db_session, kept.id)
+    case = await queries.case(async_db_session, kept.id, "never deletes")
+
+    assert run is not None and run.dataset == "mini"
+    assert case is not None and case.passed
+    assert await queries.run(async_db_session, kept.id + 1) is None
 {%- endif %}

@@ -1,0 +1,86 @@
+{%- if ai_backend != "memory" -%}
+"""A dataset run and kept, as one call: the CLI's, and a job's on the worker
+(or in this process, without one). Each opens the session the run is kept
+in once the scoring, minutes of model calls, is over."""
+
+from typing import Any
+
+from app.core.config import settings
+from app.core.db import get_async_session
+from app.core.time import utcnow
+from app.services.ai.domains.llm import active_model
+from app.services.ai.domains.llm.llm_service import check_model
+from app.services.ai.models.evals import EvalRun
+from app.services.system import job_store
+from app.services.system.jobs import Report
+
+from .recorder import record_run
+from .runner import run_dataset
+
+
+async def _provider_for(model: str | None) -> str | None:
+    """The provider ``model`` answers on (``check_model``); a model that
+    cannot answer chat here is refused with why."""
+    if model is None:
+        return None
+    async with get_async_session() as session:
+        checked = await check_model(session, model)
+    if not checked.success:
+        raise ValueError(checked.message)
+    return checked.provider
+
+
+async def run_evals(
+    name: str,
+    *,
+    scripted: bool = False,
+    model: str | None = None,
+    note: str | None = None,
+    trigger: str = "cli",
+    report: Report | None = None,
+) -> EvalRun:
+    """Score ``name`` (``run_dataset``) on the model picked in the Overseer,
+    or ``model``, then keep the run; its conversations go with the keeping."""
+    # Headless: the selection is a row only the webserver re-reads per request.
+    await active_model.sync_from_db(settings)
+    provider = await _provider_for(model)
+    started_at = utcnow()
+    scored = await run_dataset(
+        name, scripted=scripted, model=model, provider=provider, report=report
+    )
+    async with get_async_session() as session:
+        return await record_run(
+            session, scored, started_at=started_at, keep=False, trigger=trigger, note=note
+        )
+
+
+async def _job_result(
+    name: str, model: str | None, note: str | None, report: Report
+) -> dict[str, Any]:
+    """A run started as a job, and what its result says of it."""
+    run = await run_evals(name, model=model, note=note, trigger="api", report=report)
+    return {"run_id": run.id, "dataset": run.dataset, "cases": run.cases, "passed": run.passed}
+
+
+async def start_evals(name: str, *, model: str | None, note: str | None) -> str:
+    """Start the run as a job; a model that cannot answer is refused here,
+    not on the worker."""
+    await _provider_for(model)
+    return await job_store.start_job(
+        f"ai-evals:{name}",
+        "run_evals_task",
+        (name, model, note),
+        lambda report: _job_result(name, model, note, report),
+    )
+{%- if include_worker %}
+
+
+async def run_evals_job(
+    job_id: str, name: str, model: str | None, note: str | None
+) -> dict[str, Any]:
+    """The worker's entry."""
+    return await job_store.narrate(
+        job_id, lambda report: _job_result(name, model, note, report)
+    )
+{%- endif %}
+{%- endif %}

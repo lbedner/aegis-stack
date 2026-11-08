@@ -97,6 +97,13 @@ def test_adding_evals_brings_the_harness(project_factory: ProjectFactory) -> Non
     assert (project / f"{AI}/domains/evals/recorder.py").exists()
     assert (project / "evals/starter.yaml").exists()
     assert "evals" in (project / "pyproject.toml").read_text()
+    # And the ways to run and read it: the CLI, the API, make.
+    assert "import evals" in (project / "app/cli/ai/__init__.py").read_text()
+    assert (project / "app/cli/ai/evals.py").exists()
+    router = (project / "app/components/backend/api/ai/router.py").read_text()
+    assert "evals.router" in router
+    assert "eval_runs" in (project / f"{AI}/service/__init__.py").read_text()
+    assert "evals-ci:" in (project / "Makefile").read_text()
 
 
 def test_adding_evals_to_a_langchain_project_is_refused(

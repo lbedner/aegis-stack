@@ -9,6 +9,7 @@ from arq.connections import RedisSettings
 
 from app.components.worker import arq_hooks
 from app.components.worker.tasks.document_tasks import extract_document_task
+from app.components.worker.tasks.eval_tasks import run_evals_task
 from app.components.worker.tasks.rag_tasks import embed_files_task
 from app.components.worker.tasks.service_jobs import service_job_tasks
 from app.components.worker.tasks.simple_system_tasks import (
@@ -39,6 +40,9 @@ class WorkerSettings:
     if present("app.services.rag"):
         # A batch waits for the one model this process embeds with.
         functions.append(func(embed_files_task, timeout=30 * 60))
+    if present("app.services.ai.domains.evals.jobs"):
+        # A run is a model call per case, one after another.
+        functions.append(func(run_evals_task, timeout=30 * 60))
 
     # arq configuration with improved connection settings
     base_settings = RedisSettings.from_dsn(settings.redis_url_effective)

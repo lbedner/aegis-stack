@@ -655,12 +655,17 @@ SERVICES: dict[str, ServiceSpec] = {
                     "tests/components/frontend/test_voice_tab.py",
                     "tests/components/frontend/test_voice_designer.py",
                 ],
-                # The eval harness: its domain, its tables, its tests, the datasets.
+                # The eval harness: its domain, its tables, its tests, the
+                # datasets, and the CLI and API that run and read them.
                 "ai_evals": [
                     "app/services/ai/domains/evals",
                     "app/services/ai/models/evals",
                     "tests/services/ai/evals",
                     "evals",
+                    "app/cli/ai/evals.py",
+                    "app/components/backend/api/ai/evals.py",
+                    "tests/cli/test_ai_evals_cli.py",
+                    "tests/api/test_ai_evals_endpoints.py",
                 ],
             },
         ),
@@ -1402,7 +1407,6 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/frontend/dashboard/modals/documents_activity.py",
                 "tests/api/test_jobs_api.py",
                 "app/services/documents/domains/extraction/dispatch.py",
-                "tests/services/test_job_store.py",
                 "tests/components/frontend/test_follow_job.py",
             ],
             extras={

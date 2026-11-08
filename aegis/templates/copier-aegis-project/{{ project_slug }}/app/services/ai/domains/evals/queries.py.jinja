@@ -1,6 +1,6 @@
 {%- if ai_backend != "memory" -%}
-"""Reading kept runs: newest first, a run's cases, a case's scores, and
-two runs side by side (what flipped)."""
+"""Reading kept runs: newest first or one by id, a run's cases (or one by
+name), a case's scores, and two runs side by side (what flipped)."""
 
 from typing import Any
 
@@ -22,10 +22,21 @@ async def runs(
     return list(await session.exec(query.limit(limit)))
 
 
+async def run(session: AsyncSession, run_id: int) -> EvalRun | None:
+    """One run, by its id."""
+    return await session.get(EvalRun, run_id)
+
+
 async def cases(session: AsyncSession, run_id: int) -> list[EvalCase]:
     """A run's cases, in the order they ran."""
     query = select(EvalCase).where(EvalCase.run_id == run_id).order_by(col(EvalCase.id))
     return list(await session.exec(query))
+
+
+async def case(session: AsyncSession, run_id: int, name: str) -> EvalCase | None:
+    """One of a run's cases, by its name (unique within a dataset)."""
+    query = select(EvalCase).where(EvalCase.run_id == run_id, EvalCase.name == name)
+    return (await session.exec(query)).first()
 
 
 async def scores(session: AsyncSession, case_id: int) -> list[EvalScore]:

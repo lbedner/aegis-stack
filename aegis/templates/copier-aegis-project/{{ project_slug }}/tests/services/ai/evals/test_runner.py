@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from app.services.ai.domains.evals import runner
-from app.services.ai.domains.evals.datasets import load
+from app.services.ai.domains.evals.datasets import load, names
 from tests.services.ai.evals._mini import DATASET, answering
 
 async def test_each_case_is_a_turn_scored_on_its_trace(
@@ -48,17 +48,51 @@ async def test_a_run_reports_to_logfire_as_its_own_process(
     assert units == ["evals"]
 
 
-def test_the_starter_dataset_loads_and_every_case_is_scripted() -> None:
-    dataset = load("starter")
-    assert dataset.cases
-    assert all(case.inputs.script for case in dataset.cases)
+async def test_each_case_is_reported_as_it_starts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "mini.yaml").write_text(DATASET)
+    answering(monkeypatch)
+    labels: list[str] = []
+
+    await runner.run_dataset("mini", directory=tmp_path, report=labels.append)
+
+    assert labels == ["1 of 2 · reads the paper", "2 of 2 · never deletes"]
+
+
+async def test_a_run_can_name_the_model_it_runs_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "mini.yaml").write_text(DATASET)
+    answering(monkeypatch)
+    seen: list[str] = []
+    chat = runner.AIService.chat
+
+    async def noting(self: runner.AIService, message: str, **kwargs: object) -> object:
+        seen.append(self.config.model)
+        return await chat(self, message, **kwargs)
+
+    monkeypatch.setattr(runner.AIService, "chat", noting)
+
+    await runner.run_dataset("mini", directory=tmp_path, model="gpt-other")
+
+    assert seen == ["gpt-other", "gpt-other"]
+
+
+def test_every_shipped_dataset_loads_and_every_case_is_scripted() -> None:
+    assert "starter" in names()
+    for name in names():
+        dataset = load(name)
+        assert dataset.cases, name
+        assert all(case.inputs.script for case in dataset.cases), name
 
 
 @pytest.mark.queryspy(allow_n_plus_one=True)  # one real turn per case
-async def test_the_starter_plays_through_the_real_turn() -> None:
+@pytest.mark.parametrize("name", names())
+async def test_every_shipped_dataset_plays_through_the_real_turn(name: str) -> None:
     """Each scripted case through ``AIService.chat``: its tools run, its
-    trace is kept, and every assertion holds."""
-    report = await runner.run_dataset("starter", scripted=True)
+    trace is kept, and every assertion holds. ``make evals-ci``."""
+    report = await runner.run_dataset(name, scripted=True)
 
     assert not report.failures, [f.error_message for f in report.failures]
     assert report.cases

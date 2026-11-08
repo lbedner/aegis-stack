@@ -39,6 +39,7 @@ def test_a_services_task_is_registered_only_where_the_service_is() -> None:
     for task, service in (
         ("extract_document_task", "app.services.documents"),
         ("embed_files_task", "app.services.rag"),
+        ("run_evals_task", "app.services.ai.domains.evals.jobs"),
     ):
         assert (task in registered) == present(service), task
 

@@ -70,6 +70,8 @@ class SetModelResult(BaseModel):
     vendor: str | None
     provider_updated: bool
     message: str
+    # The provider the model needs, where its vendor names one.
+    provider: str | None = None
 
 
 class LLMDetails(BaseModel):
@@ -201,6 +203,70 @@ async def _not_callable(provider: str) -> str:
     return f"{row.label} has no API key. Set {row.env_var} in .env first."
 
 
+async def check_model(session: AsyncSession, model_id: str) -> SetModelResult:
+    """``model_id`` checked the way ``set_active_model`` checks it, with
+    nothing saved: a chat model, in the catalog or pulled into Ollama, whose
+    provider can be called. ``provider`` is the one it needs."""
+    model = await queries.llm_with_vendor(session, model_id)
+    if model and model.mode != "chat":
+        # The active model answers chat; a voice kind cannot.
+        return _refused(
+            model_id,
+            f"'{model_id}' is a {model.mode} model, not a chat model.",
+            vendor=model.served_by.name if model.served_by else None,
+        )
+    vendor_name = model.served_by.name if model and model.served_by else None
+    if model is None:
+        vendor_name = await _ollama_vendor(model_id)
+        if not vendor_name:
+            return _refused(
+                model_id,
+                f"Model '{model_id}' not found in catalog. Use --force to set anyway.",
+            )
+    # Only a vendor that resolves to a real AIProvider names one: a display
+    # name like "LLM7.io" must become "public", never a bogus AI_PROVIDER
+    # that would crash config loading on the next boot.
+    resolved = AIProvider.from_name(vendor_name) if vendor_name else None
+    provider = resolved.value if resolved is not None else None
+    # A model whose provider cannot be called is refused: stored, it would
+    # fail every answer after it until someone found the row.
+    if provider and provider not in await usable_providers(settings):
+        return _refused(model_id, await _not_callable(provider), vendor=vendor_name)
+    return SetModelResult(
+        success=True,
+        model_id=model_id,
+        vendor=vendor_name,
+        provider_updated=provider is not None,
+        message="",
+        provider=provider,
+    )
+
+
+def _refused(model_id: str, message: str, *, vendor: str | None = None) -> SetModelResult:
+    return SetModelResult(
+        success=False,
+        model_id=model_id,
+        vendor=vendor,
+        provider_updated=False,
+        message=message,
+    )
+
+
+async def _ollama_vendor(model_id: str) -> str | None:
+    """"Ollama" when a local Ollama has ``model_id`` pulled."""
+    try:
+        from app.components.inference.ollama import OllamaClient
+
+        client = OllamaClient()
+        if await client.is_available():
+            pulled = await client.fetch_models()
+            if any(m.model_id == model_id for m in pulled):
+                return "Ollama"
+    except Exception:
+        pass  # Ollama not available: not found anywhere
+    return None
+
+
 async def set_active_model(model_id: str, force: bool = False) -> SetModelResult:
     """Set the active LLM model.
 
@@ -215,76 +281,18 @@ async def set_active_model(model_id: str, force: bool = False) -> SetModelResult
         SetModelResult indicating success/failure and what was changed
     """
     vendor_name: str | None = None
-    provider_updated = False
-
-    if not force:
-        # Lookup model in catalog
-        async with get_async_session() as session:
-            model = await queries.llm_with_vendor(session, model_id)
-            if model and model.mode != "chat":
-                # The active model answers chat; a voice kind cannot.
-                return SetModelResult(
-                    success=False,
-                    model_id=model_id,
-                    vendor=model.served_by.name if model.served_by else None,
-                    provider_updated=False,
-                    message=f"'{model_id}' is a {model.mode} model, not a chat model.",
-                )
-            if model:
-                vendor_name = model.served_by.name if model.served_by else None
-            else:
-                # Model not in catalog - check if it's an Ollama model
-                try:
-                    from app.components.inference.ollama import OllamaClient
-
-                    client = OllamaClient()
-                    if await client.is_available():
-                        ollama_models = await client.fetch_models()
-                        if any(m.model_id == model_id for m in ollama_models):
-                            vendor_name = "Ollama"
-                except Exception:
-                    pass  # Ollama not available, fall through to error
-
-                # If still not found anywhere, suggest --force
-                if not vendor_name:
-                    return SetModelResult(
-                        success=False,
-                        model_id=model_id,
-                        vendor=None,
-                        provider_updated=False,
-                        message=f"Model '{model_id}' not found in catalog. "
-                        "Use --force to set anyway.",
-                    )
-
-    # Prepare updates
-    updates: dict[str, str] = {"AI_MODEL": model_id}
-
-    # Auto-detect provider from the model's vendor, but only persist a value
-    # that resolves to a real AIProvider. A vendor display name like "LLM7.io"
-    # must become "public", never a bogus AI_PROVIDER that would crash config
-    # loading on the next boot.
     provider_value: str | None = None
-    if vendor_name:
-        resolved_provider = AIProvider.from_name(vendor_name)
-        if resolved_provider is not None:
-            provider_value = resolved_provider.value
-            updates["AI_PROVIDER"] = provider_value
-            provider_updated = True
+    if not force:
+        async with get_async_session() as session:
+            checked = await check_model(session, model_id)
+        if not checked.success:
+            return checked
+        vendor_name, provider_value = checked.vendor, checked.provider
 
-    # A model whose provider cannot be called is refused: stored, it would
-    # fail every answer after it until someone found the row.
-    if (
-        provider_value
-        and not force
-        and provider_value not in await usable_providers(settings)
-    ):
-        return SetModelResult(
-            success=False,
-            model_id=model_id,
-            vendor=vendor_name,
-            provider_updated=False,
-            message=await _not_callable(provider_value),
-        )
+    updates: dict[str, str] = {"AI_MODEL": model_id}
+    if provider_value:
+        updates["AI_PROVIDER"] = provider_value
+    provider_updated = provider_value is not None
 
     # Persist. With a catalog database the selection is a row, which every
     # process picks up at startup and this process picks up immediately -

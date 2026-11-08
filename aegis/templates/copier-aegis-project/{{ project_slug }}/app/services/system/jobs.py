@@ -115,6 +115,10 @@ class _Job:
 # job that takes one of these needs no frame, field or route of its own
 # to report progress.
 SetLabel = Callable[[str], Awaitable[None]]
+# The same, sync: work that reports from inside a loop it cannot await in
+# (extraction, between pages) calls it. ``JobHandle.set_label`` is one; on
+# a worker, ``job_store.narrate`` schedules the write.
+Report = Callable[[str], None]
 
 
 async def unwatched(label: str) -> None:

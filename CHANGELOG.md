@@ -21,8 +21,11 @@
   when a token is set. On a database-backed stack `record_run` keeps a
   run (`eval_run`, `eval_case`, `eval_score`) and deletes its
   conversations, and `queries.compare` names the cases that flipped
-  between two runs. Pydantic AI only. (#2004, #1161,
-  #1162)
+  between two runs. `ai evals run|list|show|compare`, `make evals`, and
+  `/api/v1/ai/evals` (a run started there is a job, on the worker where
+  there is one, reporting each case as it starts); `make evals-ci` plays
+  every dataset's scripts. Pydantic AI only. (#2004, #1161, #1162,
+  #1163)
 
 ## [0.19.1] - 2026-11-06
 

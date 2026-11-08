@@ -107,6 +107,21 @@ if present("app.services.rag"):
     embed_files_task = broker.task(embed_files_task)
 
 
+async def run_evals_task(
+    job_id: str, name: str, model: str | None, note: str | None
+) -> dict:
+    """Run and keep an eval dataset; each case lands in the shared job store.
+    The AI service is imported lazily, as the documents one is."""
+    from app.services.ai.service import run_evals_job
+
+    return await run_evals_job(job_id, name, model, note)
+
+
+# Registered only where evals keep their runs: elsewhere it reaches nothing.
+if present("app.services.ai.domains.evals.jobs"):
+    run_evals_task = broker.task(run_evals_task)
+
+
 # The scheduled service jobs, bound here so the registry sees them as this
 # queue's tasks. The scheduler enqueues them by these names.
 globals().update(service_job_tasks(broker))

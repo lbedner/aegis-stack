@@ -1,0 +1,101 @@
+{%- if ai_backend != "memory" -%}
+"""``ai evals``: run a dataset and keep it, list and show kept runs, and
+compare two of them."""
+
+import functools
+from pathlib import Path
+
+import pytest
+
+from app.services.ai.domains.evals import datasets, jobs, runner
+from app.services.ai.domains.llm.llm_service import SetModelResult
+from tests._cli import invoke
+from tests.services.ai.evals._mini import DATASET, answering
+
+
+@pytest.fixture
+def mini(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``mini`` is the one dataset under evals/, answered by a fake chat."""
+    (tmp_path / "mini.yaml").write_text(DATASET)
+    monkeypatch.setattr(
+        "app.cli.ai.evals.eval_datasets",
+        functools.partial(datasets.names, tmp_path),
+    )
+    monkeypatch.setattr(
+        jobs, "run_dataset", functools.partial(runner.run_dataset, directory=tmp_path)
+    )
+
+
+def _run_id(output: str) -> int:
+    return int(output.split("run ")[-1].split()[0])
+
+
+def test_a_run_is_kept_listed_and_shown(
+    mini: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    answering(monkeypatch)
+
+    ran = invoke(["ai", "evals", "run", "mini", "--note", "baseline"])
+    assert ran.exit_code == 0, ran.output
+    assert "2/2" in ran.output
+    run_id = _run_id(ran.output)
+
+    listed = invoke(["ai", "evals", "list"])
+    assert listed.exit_code == 0, listed.output
+    assert "mini" in listed.output and "baseline" in listed.output
+
+    shown = invoke(["ai", "evals", "show", str(run_id)])
+    assert shown.exit_code == 0, shown.output
+    assert "reads the paper" in shown.output and "never deletes" in shown.output
+
+
+def test_a_failing_case_fails_the_command_and_compare_names_it(
+    mini: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    answering(monkeypatch)
+    before = _run_id(invoke(["ai", "evals", "run"]).output)
+    answering(monkeypatch, reads=False)
+
+    ran = invoke(["ai", "evals", "run"])
+    assert ran.exit_code == 1, ran.output
+    assert "1/2" in ran.output
+
+    compared = invoke(["ai", "evals", "compare", str(before), str(_run_id(ran.output))])
+    assert compared.exit_code == 0, compared.output
+    assert "reads the paper" in compared.output
+    assert "never deletes" not in compared.output
+
+
+def test_an_unknown_dataset_is_refused_naming_those_there(mini: None) -> None:
+    ran = invoke(["ai", "evals", "run", "nope"])
+
+    assert ran.exit_code == 1
+    assert "nope" in ran.output and "mini" in ran.output
+
+
+def test_a_model_that_cannot_answer_is_refused(
+    mini: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def check_model(session: object, model_id: str) -> SetModelResult:
+        return SetModelResult(
+            success=False,
+            model_id=model_id,
+            vendor=None,
+            provider_updated=False,
+            message=f"Model '{model_id}' not found in catalog.",
+        )
+
+    monkeypatch.setattr(jobs, "check_model", check_model)
+
+    ran = invoke(["ai", "evals", "run", "mini", "--model", "nope-1"])
+
+    assert ran.exit_code == 1
+    assert "nope-1" in ran.output
+
+
+def test_an_unknown_run_is_refused() -> None:
+    shown = invoke(["ai", "evals", "show", "999"])
+
+    assert shown.exit_code == 1
+    assert "999" in shown.output
+{%- endif %}

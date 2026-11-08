@@ -77,3 +77,13 @@ def test_the_group_is_the_one_shared_defines() -> None:
     package = importlib.import_module("app.cli.ai")
     shared = importlib.import_module("app.cli.ai.shared")
     assert package.app is shared.app
+{%- if ai_evals and ai_backend != "memory" %}
+
+
+def test_the_evals_group_is_mounted_with_its_commands() -> None:
+    package = importlib.import_module("app.cli.ai")
+    [group] = [g for g in package.app.registered_groups if g.name == "evals"]
+    assert group.typer_instance is not None
+    names = {c.name for c in group.typer_instance.registered_commands}
+    assert names == {"run", "list", "show", "compare"}
+{%- endif %}

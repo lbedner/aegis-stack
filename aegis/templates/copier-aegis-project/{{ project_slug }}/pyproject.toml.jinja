@@ -479,6 +479,18 @@ cmd = "uv run pytest"
 [tool.poe.tasks.test-verbose]
 help = "Run tests with verbose output"
 cmd = "uv run pytest -v"
+{%- if ai_evals %}
+
+[tool.poe.tasks.evals-ci]
+help = "Play every dataset under evals/ from its scripts: no model, no network"
+cmd = "uv run pytest -q tests/services/ai/evals/test_runner.py -k every_shipped_dataset"
+{%- if ai_backend != "memory" %}
+
+[tool.poe.tasks.evals]
+help = "Score every dataset under evals/ on the model in force, and keep the runs"
+cmd = "uv run {{ project_slug }} ai evals run"
+{%- endif %}
+{%- endif %}
 
 [tool.poe.tasks.lint]
 help = "Check code style with ruff"

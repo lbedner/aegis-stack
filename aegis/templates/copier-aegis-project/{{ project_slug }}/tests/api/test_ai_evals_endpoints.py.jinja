@@ -1,0 +1,127 @@
+{%- if ai_backend != "memory" -%}
+"""``/api/v1/ai/evals``: start a run as a job, read kept runs and their
+cases, compare two runs."""
+
+from typing import Any
+
+from fastapi.testclient import TestClient
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.components.backend.api.ai import evals as evals_api
+from app.services.ai.models.evals import EvalCase, EvalRun, EvalScore
+
+BASE = "/api/v1/ai/evals"
+
+
+@pytest.fixture
+async def two_runs(async_db_session: AsyncSession) -> tuple[int, int]:
+    """Two runs of ``mini``: the second fails "reads the paper"."""
+    before = EvalRun(dataset="mini", cases=2, passed=2, note="baseline")
+    after = EvalRun(dataset="mini", cases=2, passed=1)
+    async_db_session.add_all([before, after])
+    await async_db_session.flush()
+    assert before.id and after.id
+    cases = [
+        EvalCase(run_id=run.id, name=name, passed=passed)
+        for run, name, passed in (
+            (before, "reads the paper", True),
+            (before, "never deletes", True),
+            (after, "reads the paper", False),
+            (after, "never deletes", True),
+        )
+    ]
+    async_db_session.add_all(cases)
+    await async_db_session.flush()
+    async_db_session.add_all(
+        EvalScore(case_id=case.id, evaluator="ToolCalls", value=float(case.passed))
+        for case in cases
+        if case.id
+    )
+    await async_db_session.flush()
+    return before.id, after.id
+
+
+def test_a_run_is_started_as_a_job(
+    async_client_with_db: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started: list[tuple[Any, ...]] = []
+
+    async def start_evals(name: str, *, model: str | None, note: str | None) -> str:
+        started.append((name, model, note))
+        return "job-1"
+
+    monkeypatch.setattr(evals_api, "start_evals", start_evals)
+
+    response = async_client_with_db.post(
+        f"{BASE}/runs", json={"dataset": "starter", "note": "nightly"}
+    )
+
+    assert response.status_code == 202, response.text
+    assert response.json() == {"job_id": "job-1"}
+    assert started == [("starter", None, "nightly")]
+
+
+def test_a_model_that_cannot_answer_is_refused(
+    async_client_with_db: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def start_evals(name: str, *, model: str | None, note: str | None) -> str:
+        raise ValueError(f"'{model}' is a tts model, not a chat model.")
+
+    monkeypatch.setattr(evals_api, "start_evals", start_evals)
+
+    response = async_client_with_db.post(
+        f"{BASE}/runs", json={"dataset": "starter", "model": "tts-1"}
+    )
+
+    assert response.status_code == 422
+    assert "not a chat model" in response.json()["detail"]
+
+
+def test_an_unknown_dataset_is_not_started(async_client_with_db: TestClient) -> None:
+    response = async_client_with_db.post(f"{BASE}/runs", json={"dataset": "nope"})
+
+    assert response.status_code == 404
+    assert "nope" in response.json()["detail"]
+
+
+def test_kept_runs_are_listed_and_read_with_their_cases(
+    async_client_with_db: TestClient, two_runs: tuple[int, int]
+) -> None:
+    before, after = two_runs
+
+    listed = async_client_with_db.get(f"{BASE}/runs", params={"dataset": "mini"})
+    run = async_client_with_db.get(f"{BASE}/runs/{before}")
+    case = async_client_with_db.get(f"{BASE}/runs/{after}/cases/reads the paper")
+
+    assert [r["id"] for r in listed.json()] == [after, before]
+    assert run.json()["run"]["note"] == "baseline"
+    assert {c["name"] for c in run.json()["cases"]} == {"reads the paper", "never deletes"}
+    assert case.json()["case"]["passed"] is False
+    assert [s["evaluator"] for s in case.json()["scores"]] == ["ToolCalls"]
+
+
+def test_a_missing_run_or_case_is_a_404(
+    async_client_with_db: TestClient, two_runs: tuple[int, int]
+) -> None:
+    before, _ = two_runs
+
+    assert async_client_with_db.get(f"{BASE}/runs/999").status_code == 404
+    assert async_client_with_db.get(f"{BASE}/runs/{before}/cases/nope").status_code == 404
+
+
+def test_compare_names_the_flipped_case(
+    async_client_with_db: TestClient, two_runs: tuple[int, int]
+) -> None:
+    before, after = two_runs
+
+    response = async_client_with_db.get(f"{BASE}/compare", params={"a": before, "b": after})
+
+    assert response.status_code == 200, response.text
+    [flipped] = response.json()["flipped"]
+    assert (flipped["name"], flipped["before"], flipped["after"]) == (
+        "reads the paper",
+        True,
+        False,
+    )
+{%- endif %}

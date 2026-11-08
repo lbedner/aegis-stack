@@ -45,6 +45,12 @@ def test_a_service_using_the_worker_hands_work_to_its_queue(tmp_path: Path) -> N
     assert calls.talks_to(package, (), source_index.at(tmp_path)) == ["component:queue"]
 
 
+def test_a_service_starting_a_job_hands_work_to_its_queue(tmp_path: Path) -> None:
+    """``start_job`` queues on the worker, where the stack has one."""
+    package = _package(tmp_path, "from app.services.system.job_store import start_job")
+    assert calls.talks_to(package, (), source_index.at(tmp_path)) == ["component:queue"]
+
+
 def test_a_service_talks_to_the_providers_whose_keys_it_needs(
     tmp_path: Path,
 ) -> None:

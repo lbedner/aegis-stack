@@ -20,6 +20,9 @@ from app.components.backend.api.ai import analytics
 {%- if ai_voice %}
 from app.components.backend.api.ai import speech
 {%- endif %}
+{%- if ai_evals and ai_backend != "memory" %}
+from app.components.backend.api.ai import evals
+{%- endif %}
 from app.core.config import settings
 {% if ai_voice %}
 {% endif %}
@@ -76,4 +79,7 @@ router.include_router(analytics.router)
 {%- endif %}
 {%- if ai_voice %}
 router.include_router(speech.router)
+{%- endif %}
+{%- if ai_evals and ai_backend != "memory" %}
+router.include_router(evals.router)
 {%- endif %}

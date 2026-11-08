@@ -1,0 +1,102 @@
+{%- if ai_backend != "memory" -%}
+"""Eval runs over HTTP: start one as a job (its progress on the jobs API),
+read kept runs and their cases, compare two runs."""
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, ConfigDict
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.components.backend.api.jobs import JobStartedResponse
+from app.core.db import get_async_db
+from app.services.ai.service import (
+    EvalCase,
+    EvalRun,
+    EvalScore,
+    eval_datasets,
+    eval_runs,
+    start_evals,
+)
+
+router = APIRouter()
+
+
+class StartRun(BaseModel):
+    """A dataset under evals/ to run on the model in force, or ``model``."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    dataset: str
+    model: str | None = None
+    note: str | None = None
+
+
+class RunDetail(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    run: EvalRun
+    cases: list[EvalCase]
+
+
+class CaseDetail(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    case: EvalCase
+    scores: list[EvalScore]
+
+
+@router.post(
+    "/evals/runs",
+    response_model=JobStartedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def start_run(body: StartRun) -> JobStartedResponse:
+    """Run a dataset as a job: the worker's where the stack has one."""
+    if body.dataset not in eval_datasets():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No dataset {body.dataset!r} under evals/",
+        )
+    try:
+        job_id = await start_evals(body.dataset, model=body.model, note=body.note)
+    except ValueError as exc:  # a model that cannot answer chat here
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from None
+    return JobStartedResponse(job_id=job_id)
+
+
+@router.get("/evals/runs", response_model=list[EvalRun])
+async def list_runs(
+    dataset: str | None = None,
+    limit: int = Query(50, ge=1, le=500),
+    db: AsyncSession = Depends(get_async_db),
+) -> list[EvalRun]:
+    """Kept runs, newest first."""
+    return await eval_runs.runs(db, dataset, limit)
+
+
+@router.get("/evals/runs/{run_id}", response_model=RunDetail)
+async def get_run(run_id: int, db: AsyncSession = Depends(get_async_db)) -> RunDetail:
+    run = await eval_runs.run(db, run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    return RunDetail(run=run, cases=await eval_runs.cases(db, run_id))
+
+
+@router.get("/evals/runs/{run_id}/cases/{name}", response_model=CaseDetail)
+async def get_case(
+    run_id: int, name: str, db: AsyncSession = Depends(get_async_db)
+) -> CaseDetail:
+    case = await eval_runs.case(db, run_id, name)
+    if case is None or case.id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+    return CaseDetail(case=case, scores=await eval_runs.scores(db, case.id))
+
+
+@router.get("/evals/compare", response_model=eval_runs.Comparison)
+async def compare(
+    a: int, b: int, db: AsyncSession = Depends(get_async_db)
+) -> eval_runs.Comparison:
+    """The cases two runs share, and which flipped between them."""
+    return await eval_runs.compare(db, a, b)
+{%- endif %}

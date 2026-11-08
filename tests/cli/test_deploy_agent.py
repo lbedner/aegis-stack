@@ -165,6 +165,9 @@ def app_store(monkeypatch: pytest.MonkeyPatch) -> Any:
     run_log = types.ModuleType("app.core.run_log")
     run_log.bind_run = lambda _run_id: contextlib.nullcontext()  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "app.core.run_log", run_log)
+    discovery = types.ModuleType("app.core.discovery")
+    discovery.present = lambda _module: False  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "app.core.discovery", discovery)
     _load("app.services.system.jobs", SYSTEM / "jobs.py", monkeypatch)
     return _load(
         "app.services.system.job_store", SYSTEM / "job_store.py", monkeypatch

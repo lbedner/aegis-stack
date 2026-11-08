@@ -34,3 +34,8 @@ def load(name: str, directory: Path = EVALS_DIR) -> EvalDataset:
     return EvalDataset.from_file(
         directory / f"{name}.yaml", custom_evaluator_types=EVALUATORS
     )
+
+
+def names(directory: Path = EVALS_DIR) -> list[str]:
+    """Every dataset under ``directory``, by the name ``load`` takes."""
+    return sorted(path.stem for path in directory.glob("*.yaml"))

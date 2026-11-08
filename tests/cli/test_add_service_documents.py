@@ -231,8 +231,8 @@ def test_a_worker_project_gets_the_task_registered(
     dispatch = (
         project / "app/services/documents/domains/extraction/dispatch.py"
     ).read_text()
-    # The worker's path: the one front door work reaches the queue by.
-    assert "enqueue_task" in dispatch and "extract_document_task" in dispatch, (
+    # The worker's path: the job store's front door, naming the task.
+    assert "start_job" in dispatch and "extract_document_task" in dispatch, (
         "dispatch does not hand the extraction to the worker"
     )
 

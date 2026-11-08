@@ -17,6 +17,12 @@ from app.core.ontology.model import Kind, node_id
 from app.core.secrets import Secret
 
 _BRACKETED = re.compile(r"\(([^)]+)\)")
+# The shared front doors to the worker (``job_store``): importing one hands
+# work to the queue, as importing the worker itself does. The dry path knows
+# them by their names.
+QUEUE_DOORS = frozenset(
+    f"app.services.system.job_store.{name}" for name in ("start_job", "queue_job")
+)
 
 
 def talks_to(
@@ -79,6 +85,8 @@ def _target(module: str, folder: str) -> str | None:
     """What importing ``module`` says the folder's code talks to, if
     anything: the component or other service that owns it (a core client
     by what it fronts), as a node's id."""
+    if module in QUEUE_DOORS:
+        module = "app.components.worker"
     found = ownership.owner(module) if module.startswith("app.") else None
     if found is None or found.kind == ownership.SHARED:
         return None

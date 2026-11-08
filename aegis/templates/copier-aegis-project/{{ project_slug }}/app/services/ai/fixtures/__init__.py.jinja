@@ -15,6 +15,9 @@ from app.services.finance.service import load_finance_agent_fixtures
 {% if include_meetings and ai_framework == "pydantic-ai" %}
 from app.services.meetings.service import load_meetings_agent_fixtures
 {% endif %}
+{% if ai_evals %}
+from app.services.ai.domains.evals.agents import load_evals_agent_fixtures
+{% endif %}
 
 
 def load_agent_registry_fixtures(session: Session) -> dict[str, int]:
@@ -32,6 +35,9 @@ def load_agent_registry_fixtures(session: Session) -> dict[str, int]:
 {% endif %}
 {% if include_meetings and ai_framework == "pydantic-ai" %}
     counts.update(load_meetings_agent_fixtures(session))
+{% endif %}
+{% if ai_evals %}
+    counts.update(load_evals_agent_fixtures(session))
 {% endif %}
     return counts
 

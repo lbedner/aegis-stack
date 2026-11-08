@@ -12,9 +12,18 @@ import json
 from typing import Any
 
 from pydantic_evals.evaluators import EvaluationReason, Evaluator, EvaluatorContext
+{%- if ai_backend != "memory" %}
+from pydantic_evals.evaluators.llm_as_a_judge import GradingOutput
+
+from app.services.ai.domains.llm.writer import write
+
+from .agents import JUDGE, JUDGING
+{%- endif %}
 
 # Where the runner puts the turn's trace on each case (``set_eval_attribute``).
 TRACE = "tool_trace"
+# Whose an eval run's turns and judging are, so they never mix with a person's.
+EVALS_USER = "evals"
 
 
 @dataclass(frozen=True)
@@ -94,4 +103,31 @@ class AnswerAvoids(Evaluator[Any, Any, Any]):
         return EvaluationReason(not said, f"said {said}" if said else "said none")
 
 
-EVALUATORS = (ToolCalls, ToolOrder, AnswerAvoids)
+{%- if ai_backend != "memory" %}
+
+
+# What AI spend calls the judge's calls.
+JUDGE_ACTION = "eval_judge"
+
+
+@dataclass(repr=False)
+class Judged(Evaluator[Any, Any, Any]):
+    """The model in force says the answer holds ``rubric``, given the
+    message. A judge that fails is the case's evaluator failure, not the run's."""
+
+    rubric: str
+
+    async def evaluate(self, ctx: EvaluatorContext[Any, Any, Any]) -> EvaluationReason:
+        message = ctx.inputs.message
+        text = (
+            f"<Input>{message}</Input>\n<Output>{ctx.output}</Output>\n"
+            f"<Rubric>{self.rubric}</Rubric>"
+        )
+        verdict, _model = await write(
+            JUDGE, JUDGING, GradingOutput, text, action=JUDGE_ACTION, owner_user_id=EVALS_USER
+        )
+        return EvaluationReason(verdict.pass_, verdict.reason)
+{%- endif %}
+
+
+EVALUATORS = (ToolCalls, ToolOrder, AnswerAvoids{% if ai_backend != "memory" %}, Judged{% endif %})

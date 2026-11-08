@@ -66,6 +66,21 @@ async def test_scripted_mode_refuses_a_case_without_a_script(
     assert len(report.failures) == 2
 
 
+async def test_a_run_reports_to_logfire_as_its_own_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Where the stack has observability, a run configures Logfire as the
+    ``evals`` process; the token stays the only switch."""
+    tracing = pytest.importorskip("app.components.backend.middleware.logfire_tracing")
+    units: list[str] = []
+    monkeypatch.setattr(tracing, "configure_logfire", lambda unit: units.append(unit))
+    (tmp_path / "mini.yaml").write_text("cases: []\n")
+
+    await runner.run_dataset("mini", directory=tmp_path)
+
+    assert units == ["evals"]
+
+
 def test_the_starter_dataset_loads_and_every_case_is_scripted() -> None:
     dataset = load("starter")
     assert dataset.cases

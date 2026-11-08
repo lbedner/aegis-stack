@@ -8839,6 +8839,7 @@ host and user to GitHub Actions secrets, and scaffolds
 <ul>
 <li><code>--repo TEXT</code>, GitHub repo as <code>owner/name</code> (default: detected from the <code>origin</code> remote)</li>
 <li><code>--on-tag</code>, Also deploy on pushes of <code>v*</code> tags</li>
+<li><code>--on-merge</code>, Also deploy each merge to main, once CI passes</li>
 <li><code>--force</code>, Overwrite existing GitHub secrets and the workflow (rotates the key)</li>
 <li><code>--dry-run</code>, Print the planned actions without changing anything</li>
 <li><code>--keep-key TEXT</code>, Copy the generated private key here before cleanup (default: it only lives in GitHub secrets)</li>
@@ -8847,7 +8848,8 @@ host and user to GitHub Actions secrets, and scaffolds
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-37-1"><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a>aegis<span class="w"> </span>deploy-cd-setup
 </span><span id="__span-37-2"><a id="__codelineno-37-2" name="__codelineno-37-2" href="#__codelineno-37-2"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--on-tag
-</span><span id="__span-37-3"><a id="__codelineno-37-3" name="__codelineno-37-3" href="#__codelineno-37-3"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--force<span class="w">  </span><span class="c1"># rotate the deploy key</span>
+</span><span id="__span-37-3"><a id="__codelineno-37-3" name="__codelineno-37-3" href="#__codelineno-37-3"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--on-merge
+</span><span id="__span-37-4"><a id="__codelineno-37-4" name="__codelineno-37-4" href="#__codelineno-37-4"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--force<span class="w">  </span><span class="c1"># rotate the deploy key</span>
 </span></code></pre></div></p>
 <hr />
 <h3 id="aegis-deploy-cd-env">aegis deploy-cd-env</h3>

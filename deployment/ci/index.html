@@ -7133,8 +7133,9 @@ own key and a workflow, and <code>aegis deploy-cd-env</code> ships the productio
 <h2 id="set-it-up">Set it up</h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w">                </span><span class="c1"># workflow_dispatch trigger</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--on-tag<span class="w">       </span><span class="c1"># also deploy on v* tag pushes</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--dry-run<span class="w">      </span><span class="c1"># see the plan without touching anything</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--force<span class="w">        </span><span class="c1"># rotate the deploy key</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--on-merge<span class="w">     </span><span class="c1"># also deploy each merge to main, once CI passes</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--dry-run<span class="w">      </span><span class="c1"># see the plan without touching anything</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--force<span class="w">        </span><span class="c1"># rotate the deploy key</span>
 </span></code></pre></div>
 <p>It needs <code>aegis deploy-init</code> to have run (it reads <code>.aegis/deploy.yml</code>), the
 <a href="https://cli.github.com/">GitHub CLI</a> authenticated (<code>gh auth login</code>), and your
@@ -7156,8 +7157,10 @@ own SSH access to the server, which it uses to install the new key. Then it:</p>
 that wrote the workflow. A runner has no <code>aegis</code> of its own.</p>
 <p>The deploy is rolling (<code>aegis deploy --rolling</code>, no downtime), as you would run
 it by hand: Run workflow has a <strong>rolling</strong> box, ticked by default, to untick for
-a standard deploy; a <code>v*</code> tag push (<code>--on-tag</code>) always deploys rolling. Two
-deploys never run at once.</p>
+a standard deploy; a <code>v*</code> tag push (<code>--on-tag</code>) and a merge (<code>--on-merge</code>)
+always deploy rolling. A merge deploys when the <code>CI</code> workflow passes on its push
+to main, at the commit CI tested: a red main or a pull request's run deploys
+nothing. Two deploys never run at once.</p>
 <p>A change to <code>.aegis/deploy.yml</code> reaches CI when you re-run
 <code>aegis deploy-cd-setup --force</code>.</p>
 <h2 id="ship-the-production-env">Ship the production env</h2>

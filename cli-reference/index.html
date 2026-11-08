@@ -8781,7 +8781,8 @@ firewall outside the droplet is the one that holds. It is deleted with the
 droplet.</p>
 <p>A project whose <code>docker-compose.prod.yml</code> takes its host from <code>${DOMAIN}</code> is
 left as it is: each deploy stamps into the server's <code>.env</code>, beside
-<code>BUILD_ID</code>, what provisioning recorded in <code>.aegis/deploy.yml</code>: the server's
+<code>BUILD_ID</code> and the address it deployed to (<code>SERVER_HOST</code>, which Overseer's
+DNS section points a new A record at), what provisioning recorded in <code>.aegis/deploy.yml</code>: the server's
 name as <code>DOMAIN</code>, the certificate's address as <code>ACME_EMAIL</code>, and <code>--allowlist</code>
 as <code>ADMIN_IP_ALLOWLIST</code>. Any other project has HTTPS rendered into its
 files for the name, as <code>aegis ingress-enable</code> does.</p>

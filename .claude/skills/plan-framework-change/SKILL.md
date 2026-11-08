@@ -82,6 +82,7 @@ None. This skill reads; the plan names the files. Where it looks:
 | Service functions | `app/services/system/service_patterns.py`, `async_patterns.py` | Takes its session as a required parameter and opens none (`takes-session`, gated; `jobs.py`/`health.py` open the one); blocking work off the loop (gated) |
 | Charts | `app/services/ai/domains/chat/cards.py` | Bar and pie rows are `{label, value}`; money is integer cents |
 | Twin nodes | `app/core/ontology/model.py`, `app/services/system/staged_paths.py` | A new kind joins `Kind` and the `Node` union; what the map draws is `PLACED` and `registry_of` |
+| Graph walk | `app/core/graph.py` (`node`, `neighbors`, `paths`, `node_id`, `parse_node_id`) | Any graph whose nodes have an `id` and edges a `source` and `target` walks here, its ids `<kind>:<name>` in its own `StrEnum`; no second walker |
 | Map and chip styling | `app/components/web_frontend/templates/components/macros/` | Reuse a macro (`facts`, `stat_row`); every public macro has a catalog example |
 
 Paths in the table are under `aegis/templates/copier-aegis-project/{{ project_slug }}/`

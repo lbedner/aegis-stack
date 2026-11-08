@@ -9,6 +9,8 @@ from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
+from app.core.graph import node_id as node_id
+from app.core.graph import parse_node_id as parse_id
 from app.core.parts import Category
 
 SCHEMA_VERSION = 2
@@ -44,15 +46,9 @@ class Mode(StrEnum):
     ASYNC = "async"  # handed to the queue, never waited on
 
 
-def node_id(kind: Kind, name: str) -> str:
-    """``<kind>:<name>``: ``component:cache``, ``service:ai.voice``."""
-    return f"{kind.value}:{name}"
-
-
 def parse_node_id(found: str) -> tuple[Kind, str]:
-    """``node_id`` the other way: ``(Kind.COMPONENT, "cache")``."""
-    kind, _, name = found.partition(":")
-    return Kind(kind), name
+    """``node_id`` the other way, in the system model's kinds."""
+    return parse_id(found, Kind)
 
 
 class _Node(BaseModel):

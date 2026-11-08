@@ -36,8 +36,8 @@ from app.services.ai.domains.chat import path_card
 from app.services.ai.models.chat_card import ChatCard
 
 MARKER = "chat_card"
-# Money is integer cents; a count is a count.
-Unit = Literal["money", "count"]
+# Money is integer cents.
+Unit = Literal["money", "count", "percent"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -338,8 +338,9 @@ async def draw_card(kind: str, payload: dict[str, Any]) -> Drawn | Refused:
     (from your script, in code mode) - it displays what you give it and
     computes nothing itself.
 
-    Pass data only: layout and colours belong to the kind. Money is integer
-    cents (unit "money", the default); use unit "count" for anything else.
+    Pass data only: layout and colours belong to the kind. A unit is "money"
+    (integer cents), "percent" (0 to 100: "86.1" for 86.1%) or "count";
+    leave it out for the app's default.
     Keep a card within its kind's rows (below) and say the rest in prose.
     Your answer says what the card means, not its rows again, and still
     reads to someone who cannot see it: never a line standing in for it

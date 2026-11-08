@@ -13,7 +13,7 @@ from typing import Any
 
 from markupsafe import Markup
 
-from app.core.formatting import counted
+from app.core.formatting import counted, format_value
 from app.core.time import today as utc_today
 from app.services.system.models import ComponentStatusType
 from app.services.system.ui import get_status_color_name
@@ -82,6 +82,16 @@ def pct(ratio: float | None, digits: int = 0) -> str:
     if ratio is None:
         return ""
     return f"{ratio * 100:.{digits}f}%"
+
+
+def figure(value: float, unit: str) -> str:
+    """A chat card's figure in its unit: money from cents, a percent (0 to
+    100) as the charts read one, a count whole."""
+    if unit == "money":
+        return money(int(value))
+    if unit == "percent":
+        return format_value(value, "percent")
+    return f"{round(value):,}"
 
 
 def cents_to_input(cents: int | None) -> str:
@@ -334,6 +344,7 @@ FILTERS: dict[str, Callable[..., Any]] = {
     "cents_to_input": cents_to_input,
     "short_date": short_date,
     "pct": pct,
+    "figure": figure,
     "markdown": markdown,
     "highlight": highlight,
     "docstring": docstring,

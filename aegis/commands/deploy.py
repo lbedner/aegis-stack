@@ -279,7 +279,9 @@ STAMPED = {
 
 def _upload_env(project_root: Path, host: str, user: str, deploy_path: str) -> str:
     """Copy the deploy env file to the server and stamp BUILD_ID into it,
-    with what provisioning recorded in ``.aegis/deploy.yml`` (``STAMPED``:
+    with the host it deploys to (``SERVER_HOST``: the server's own address,
+    which it has no ``.aegis/deploy.yml`` to read) and what provisioning
+    recorded in ``.aegis/deploy.yml`` (``STAMPED``:
     the name the server answers on, the certificate's email, who may reach
     the Overseer) for the files that read them.
 
@@ -299,7 +301,7 @@ def _upload_env(project_root: Path, host: str, user: str, deploy_path: str) -> s
 
     build = _build_id(project_root)
     config = _load_deploy_config(str(project_root)) or {}
-    stamps = {"BUILD_ID": build} | {
+    stamps = {"BUILD_ID": build, "SERVER_HOST": host} | {
         name: str(config[key]) for key, name in STAMPED.items() if config.get(key)
     }
     typer.echo("Stamping " + " ".join(f"{k}={v}" for k, v in stamps.items()))

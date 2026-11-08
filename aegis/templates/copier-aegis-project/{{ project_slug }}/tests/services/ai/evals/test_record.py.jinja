@@ -1,0 +1,106 @@
+{%- if ai_backend != "memory" -%}
+"""Eval runs kept: a scored run, its cases and their scores in the
+project's tables, its conversations gone unless kept, and two runs compared."""
+
+from pathlib import Path
+
+import pytest
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.time import utcnow
+from app.models.conversation import Conversation
+from app.services.ai.domains.evals import queries, runner
+from app.services.ai.domains.evals.recorder import record_run
+from app.services.ai.models.evals import EvalRun
+from tests.services.ai.evals._mini import DATASET, answering
+
+TALKS = ["c-what does the letter say?", "c-tidy up"]
+
+
+@pytest.fixture
+def mini(tmp_path: Path, async_db_session: AsyncSession) -> Path:
+    """The ``mini`` dataset, and the conversations its turns would leave."""
+    (tmp_path / "mini.yaml").write_text(DATASET)
+    async_db_session.add_all(Conversation(id=talk, user_id="evals") for talk in TALKS)
+    return tmp_path
+
+
+async def _kept(
+    session: AsyncSession, directory: Path, *, keep: bool = False, note: str | None = None
+) -> EvalRun:
+    started = utcnow()
+    report = await runner.run_dataset("mini", directory=directory)
+    return await record_run(
+        session, report, started_at=started, keep=keep, trigger="cli", note=note
+    )
+
+
+async def _talks(session: AsyncSession) -> list[str]:
+    return sorted(await session.exec(select(Conversation.id)))
+
+
+async def test_a_run_is_kept_with_its_cases_and_scores(
+    mini: Path, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
+) -> None:
+    answering(monkeypatch)
+
+    await _kept(async_db_session, mini, note="baseline")
+
+    [run] = await queries.runs(async_db_session)
+    assert (run.dataset, run.cases, run.passed, run.failed) == ("mini", 2, 2, 0)
+    assert (run.total_cost, run.model_id, run.note) == (0.5, "gpt-test", "baseline")
+    cases = {c.name: c for c in await queries.cases(async_db_session, run.id)}
+    assert set(cases) == {"reads the paper", "never deletes"}
+    paper = cases["reads the paper"]
+    assert paper.passed and paper.tool_calls[0]["tool"] == "paper"
+    scores = await queries.scores(async_db_session, paper.id)
+    assert {s.evaluator: s.passed for s in scores} == {"ToolCalls": True, "Contains": True}
+    assert await _talks(async_db_session) == []
+    assert paper.conversation_id is None
+
+
+async def test_kept_conversations_are_named_on_their_cases(
+    mini: Path, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
+) -> None:
+    answering(monkeypatch)
+
+    run = await _kept(async_db_session, mini, keep=True)
+
+    cases = await queries.cases(async_db_session, run.id)
+    assert {c.conversation_id for c in cases} == set(TALKS)
+    assert await _talks(async_db_session) == sorted(TALKS)
+
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # two runs, each written the same way
+async def test_compare_names_exactly_the_cases_that_flipped(
+    mini: Path, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
+) -> None:
+    answering(monkeypatch)
+    before = await _kept(async_db_session, mini, keep=True)
+    answering(monkeypatch, reads=False)
+    after = await _kept(async_db_session, mini, keep=True)
+
+    compared = await queries.compare(async_db_session, before.id, after.id)
+
+    assert [c.name for c in compared.flipped] == ["reads the paper"]
+    [flip] = compared.flipped
+    assert (flip.before, flip.after) == (True, False)
+    tool_calls = next(s for s in flip.scores if s.evaluator == "ToolCalls")
+    assert (tool_calls.before, tool_calls.after) == (1.0, 0.0)
+    assert {c.name for c in compared.cases} == {"reads the paper", "never deletes"}
+
+
+async def test_a_case_that_errors_is_kept_as_a_failure(
+    mini: Path, async_db_session: AsyncSession
+) -> None:
+    started = utcnow()
+    report = await runner.run_dataset("mini", directory=mini, scripted=True)
+    run = await record_run(
+        async_db_session, report, started_at=started, keep=False, trigger="ci", note=None
+    )
+
+    assert (run.cases, run.passed, run.failed, run.trigger) == (2, 0, 2, "ci")
+    cases = await queries.cases(async_db_session, run.id)
+    assert all(not c.passed and "no script" in (c.error or "") for c in cases)
+{%- endif %}

@@ -27,6 +27,7 @@ from .migration_generator import (
     BLOG_MIGRATION,
     CHANGE_QUEUE_MIGRATION,
     DOCUMENTS_MIGRATION,
+    EVALS_MIGRATION,
     FINANCE_AUTH_LINK_MIGRATION,
     FINANCE_MIGRATION,
     INSIGHTS_MIGRATION,
@@ -437,6 +438,7 @@ SERVICES: dict[str, ServiceSpec] = {
             KNOWLEDGE_MIGRATION,
             SENTIMENT_MIGRATION,
             VOICE_MIGRATION,
+            EVALS_MIGRATION,
             # Shared with finance: either one brings the propose/approve queue.
             CHANGE_QUEUE_MIGRATION,
         ],
@@ -653,9 +655,10 @@ SERVICES: dict[str, ServiceSpec] = {
                     "tests/components/frontend/test_voice_tab.py",
                     "tests/components/frontend/test_voice_designer.py",
                 ],
-                # The eval harness: its domain, its tests, the datasets.
+                # The eval harness: its domain, its tables, its tests, the datasets.
                 "ai_evals": [
                     "app/services/ai/domains/evals",
+                    "app/services/ai/models/evals",
                     "tests/services/ai/evals",
                     "evals",
                 ],

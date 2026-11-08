@@ -1,51 +1,18 @@
 """Running a dataset: each case a real turn, scored on its reply."""
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from app.services.ai.domains.evals import runner
 from app.services.ai.domains.evals.datasets import load
-from app.services.ai.models import ConversationMessage, MessageRole
-
-DATASET = """\
-cases:
-  - name: reads the paper
-    inputs:
-      message: what does the letter say?
-    evaluators:
-      - ToolCalls:
-          tool: paper
-          times: 1
-      - Contains: letter
-  - name: never deletes
-    inputs:
-      message: tidy up
-    evaluators:
-      - ToolCalls:
-          tool: delete
-          times: 0
-"""
-
+from tests.services.ai.evals._mini import DATASET, answering
 
 async def test_each_case_is_a_turn_scored_on_its_trace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     (tmp_path / "mini.yaml").write_text(DATASET)
-    asked: list[str] = []
-
-    async def chat(self: Any, message: str, **kwargs: Any) -> ConversationMessage:
-        asked.append(message)
-        trace = [{"tool": "paper", "args": "{}", "result": "x"}]
-        return ConversationMessage(
-            id="m1",
-            role=MessageRole.ASSISTANT,
-            content="The letter says hello.",
-            metadata={"tool_trace": trace if "letter" in message else []},
-        )
-
-    monkeypatch.setattr(runner.AIService, "chat", chat)
+    asked = answering(monkeypatch)
     report = await runner.run_dataset("mini", directory=tmp_path)
 
     assert sorted(asked) == ["tidy up", "what does the letter say?"]

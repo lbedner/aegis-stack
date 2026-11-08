@@ -18,7 +18,11 @@
   answer (`AnswerAvoids`, `Judged`). A case's script plays without a
   model, and the starter dataset plays in the project's tests. `Judged`
   is metered as `eval_judge`, and a run reports to Logfire as `evals`
-  when a token is set. Pydantic AI only. (#2004, #1161)
+  when a token is set. On a database-backed stack `record_run` keeps a
+  run (`eval_run`, `eval_case`, `eval_score`) and deletes its
+  conversations, and `queries.compare` names the cases that flipped
+  between two runs. Pydantic AI only. (#2004, #1161,
+  #1162)
 
 ## [0.19.1] - 2026-11-06
 

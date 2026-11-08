@@ -1,6 +1,7 @@
 """Running a dataset: each case one real turn (``AIService.chat``, the
 agent, tools, context and persona chat builds), scored on its reply and the
-trace the reply keeps."""
+trace the reply keeps. Keeping the run is its caller's, with a session of
+its own (``recorder.record_run``): a run is minutes of model calls."""
 
 from pathlib import Path
 
@@ -12,7 +13,7 @@ from app.services.ai.domains.llm.agents import MODEL_OVERRIDE
 from app.services.ai.service import AIService
 
 from .datasets import EVALS_DIR, CaseInput, load
-from .evaluators import EVALS_USER, TRACE
+from .evaluators import CONVERSATION, COST, EVALS_USER, MODEL, TRACE
 from .script import scripted_model
 
 
@@ -46,7 +47,8 @@ async def run_dataset(
             )
         finally:
             MODEL_OVERRIDE.reset(token)
-        set_eval_attribute(TRACE, reply.metadata.get(TRACE, []))
+        for key in (TRACE, CONVERSATION, COST, MODEL):
+            set_eval_attribute(key, reply.metadata.get(key))
         return reply.content
 
     dataset = load(name, directory)

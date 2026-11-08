@@ -508,6 +508,8 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # all - without it the model registry walks into an unimportable
         # sqlalchemy.
         remove_dir(project_path, "app/services/ai/models/voice")
+        # The eval tables' package: its modules render empty here, its marker stays.
+        remove_dir(project_path, "app/services/ai/models/evals")
         remove_file(project_path, "app/services/ai/domains/voice/profiles.py")
         remove_file(project_path, "app/services/ai/domains/voice/pronunciations.py")
         remove_file(project_path, "app/services/ai/domains/voice/design.py")

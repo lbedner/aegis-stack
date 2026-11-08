@@ -1,0 +1,106 @@
+{%- if ai_backend != "memory" -%}
+"""Reading kept runs: newest first, a run's cases, a case's scores, and
+two runs side by side (what flipped)."""
+
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, computed_field
+from sqlalchemy import Row
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.ai.models.evals import EvalCase, EvalRun, EvalScore
+
+
+async def runs(
+    session: AsyncSession, dataset: str | None = None, limit: int = 50
+) -> list[EvalRun]:
+    """The latest runs, of ``dataset`` where named."""
+    query = select(EvalRun).order_by(col(EvalRun.started_at).desc(), col(EvalRun.id).desc())
+    if dataset:
+        query = query.where(EvalRun.dataset == dataset)
+    return list(await session.exec(query.limit(limit)))
+
+
+async def cases(session: AsyncSession, run_id: int) -> list[EvalCase]:
+    """A run's cases, in the order they ran."""
+    query = select(EvalCase).where(EvalCase.run_id == run_id).order_by(col(EvalCase.id))
+    return list(await session.exec(query))
+
+
+async def scores(session: AsyncSession, case_id: int) -> list[EvalScore]:
+    """A case's verdicts, in the order its evaluators ran."""
+    query = select(EvalScore).where(EvalScore.case_id == case_id).order_by(col(EvalScore.id))
+    return list(await session.exec(query))
+
+
+class ScoreDelta(BaseModel):
+    """One evaluator on a case, in each run (absent where it did not run)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    evaluator: str
+    before: float | None
+    after: float | None
+
+
+class CaseDelta(BaseModel):
+    """A case in both runs: whether it passed in each, and each score."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    before: bool
+    after: bool
+    scores: list[ScoreDelta]
+
+
+class Comparison(BaseModel):
+    """Two runs' shared cases, and those whose pass or fail changed."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    cases: list[CaseDelta]
+
+    @computed_field
+    @property
+    def flipped(self) -> list[CaseDelta]:
+        return [case for case in self.cases if case.before != case.after]
+
+
+async def compare(session: AsyncSession, before: int, after: int) -> Comparison:
+    """The cases ``before`` and ``after`` share, by name, in two queries."""
+    rows = list(
+        await session.exec(
+            select(EvalCase.id, EvalCase.run_id, EvalCase.name, EvalCase.passed)
+            .where(col(EvalCase.run_id).in_([before, after]))
+            .order_by(col(EvalCase.id))
+        )
+    )
+    verdicts = await session.exec(
+        select(EvalScore.case_id, EvalScore.evaluator, EvalScore.value).where(
+            col(EvalScore.case_id).in_([row.id for row in rows])
+        )
+    )
+    by_case: dict[int, dict[str, float]] = {}
+    for case_id, evaluator, value in verdicts:
+        by_case.setdefault(case_id, {})[evaluator] = value
+    old = {row.name: row for row in rows if row.run_id == before}
+    new = {row.name: row for row in rows if row.run_id == after}
+    shared = [_delta(old[name], new[name], by_case) for name in old if name in new]
+    return Comparison(cases=shared)
+
+
+def _delta(old: Row[Any], new: Row[Any], by_case: dict[int, dict[str, float]]) -> CaseDelta:
+    was = by_case.get(old.id, {})
+    now = by_case.get(new.id, {})
+    return CaseDelta(
+        name=old.name,
+        before=old.passed,
+        after=new.passed,
+        scores=[
+            ScoreDelta(evaluator=name, before=was.get(name), after=now.get(name))
+            for name in dict.fromkeys([*was, *now])
+        ],
+    )
+{%- endif %}

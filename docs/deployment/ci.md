@@ -8,6 +8,7 @@ own key and a workflow, and `aegis deploy-cd-env` ships the production env.
 ```bash
 aegis deploy-cd-setup                # workflow_dispatch trigger
 aegis deploy-cd-setup --on-tag       # also deploy on v* tag pushes
+aegis deploy-cd-setup --on-merge     # also deploy each merge to main, once CI passes
 aegis deploy-cd-setup --dry-run      # see the plan without touching anything
 aegis deploy-cd-setup --force        # rotate the deploy key
 ```
@@ -34,8 +35,10 @@ that wrote the workflow. A runner has no `aegis` of its own.
 
 The deploy is rolling (`aegis deploy --rolling`, no downtime), as you would run
 it by hand: Run workflow has a **rolling** box, ticked by default, to untick for
-a standard deploy; a `v*` tag push (`--on-tag`) always deploys rolling. Two
-deploys never run at once.
+a standard deploy; a `v*` tag push (`--on-tag`) and a merge (`--on-merge`)
+always deploy rolling. A merge deploys when the `CI` workflow passes on its push
+to main, at the commit CI tested: a red main or a pull request's run deploys
+nothing. Two deploys never run at once.
 
 A change to `.aegis/deploy.yml` reaches CI when you re-run
 `aegis deploy-cd-setup --force`.

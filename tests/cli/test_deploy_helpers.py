@@ -98,6 +98,33 @@ def test_render_deploy_workflow_on_tag_adds_v_star_trigger() -> None:
     assert "- 'v*'" in out
 
 
+def test_render_deploy_workflow_on_merge_deploys_once_ci_passes_on_main() -> None:
+    """A merge deploys when CI goes green on main: never a red main, never
+    a pull request's run, and the commit CI tested, not a newer one."""
+    workflow = yaml.safe_load(_render_deploy_workflow(on_tag=False, on_merge=True))
+    assert workflow[True]["workflow_run"] == {
+        "workflows": ["CI"],
+        "types": ["completed"],
+        "branches": ["main"],
+    }
+    job = workflow["jobs"]["deploy"]
+    assert job["if"] == (
+        "github.event_name != 'workflow_run' || "
+        "(github.event.workflow_run.conclusion == 'success' && "
+        "github.event.workflow_run.event == 'push')"
+    )
+    checkout = job["steps"][0]
+    assert checkout["with"]["ref"] == (
+        "${{ github.event.workflow_run.head_sha || github.sha }}"
+    )
+
+
+def test_render_deploy_workflow_default_has_no_merge_trigger() -> None:
+    out = _render_deploy_workflow(on_tag=False)
+    assert "workflow_run" not in out
+    assert "if:" not in yaml.safe_load(out)["jobs"]["deploy"]
+
+
 def test_the_workflows_deploy_step_runs_a_command_deploy_accepts() -> None:
     """It once passed ``--yes``, which ``aegis deploy`` has no option for:
     every CD run failed before deploying."""

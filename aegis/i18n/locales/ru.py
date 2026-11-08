@@ -1036,6 +1036,7 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_resume": "только продолжить прерванное создание; никогда не создавать новый сервер",
     "deploy.exec_no_command": "Команда не указана. Укажите её после --, например: aegis deploy-exec -- alembic current",
     "deploy.help_opt_gh_repo": "Репозиторий GitHub в формате owner/name (по умолчанию: автоопределение из git remote origin)",
+    "deploy.help_opt_gh_merge": "Также деплоить каждый merge в main после успешного CI",
     "deploy.help_opt_gh_tags": "Запускать workflow деплоя также при push в теги v*",
     "deploy.help_opt_gh_overwrite": "Перезаписать существующие GitHub Secrets и workflow deploy.yml",
     "deploy.help_opt_dry_run": "Показать планируемые действия без внесения изменений",

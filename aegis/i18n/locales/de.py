@@ -1070,6 +1070,7 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_resume": "nur eine unterbrochene Bereitstellung fortsetzen; nie einen neuen Server anlegen",
     "deploy.exec_no_command": "Kein Befehl angegeben. Nach -- schreiben, z. B.: aegis deploy-exec -- alembic current",
     "deploy.help_opt_gh_repo": "GitHub-Repo als owner/name (Standardwert: automatisch aus git remote origin)",
+    "deploy.help_opt_gh_merge": "Auch jeden Merge nach main deployen, sobald CI erfolgreich ist",
     "deploy.help_opt_gh_tags": "Deploy-Workflow auch bei Push auf v*-Tags auslösen",
     "deploy.help_opt_gh_overwrite": "Vorhandene GitHub-Secrets und deploy.yml-Workflow überschreiben",
     "deploy.help_opt_dry_run": "Geplante Aktionen anzeigen, ohne Änderungen vorzunehmen",

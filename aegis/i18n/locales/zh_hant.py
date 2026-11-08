@@ -907,6 +907,7 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_resume": "僅繼續中途停止的建立；絕不新建伺服器",
     "deploy.exec_no_command": "未提供指令。請寫在 -- 之後，例如：aegis deploy-exec -- alembic current",
     "deploy.help_opt_gh_repo": "GitHub 儲存庫,格式為 owner/name(預設值：從 git remote origin 自動偵測)",
+    "deploy.help_opt_gh_merge": "每次合併到 main 且 CI 通過後也進行部署",
     "deploy.help_opt_gh_tags": "推送 v* 標籤時也觸發部署工作流程",
     "deploy.help_opt_gh_overwrite": "覆寫既有的 GitHub Secrets 與 deploy.yml 工作流程",
     "deploy.help_opt_dry_run": "僅列出預定執行的動作,不實際進行任何變更",

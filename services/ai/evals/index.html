@@ -7181,8 +7181,13 @@
 <td><code>AnswerAvoids: {terms}</code></td>
 <td>The answer contains none of <code>terms</code>, in any case.</td>
 </tr>
+<tr>
+<td><code>Judged: {rubric}</code></td>
+<td>The model in force says the answer meets <code>rubric</code>, given the message.</td>
+</tr>
 </tbody>
 </table>
+<p><code>Judged</code> asks a model even when the case plays a script, so a dataset that uses it costs money on every run. Its calls appear in AI spend as <code>eval_judge</code>. The judge is the <code>eval-judge</code> agent, seeded with the others, so its model and prompt are set in Agents. Until a model is picked there, it runs on the active one. A judge that errors fails its case, never the run. On the memory backend, which keeps no spend, use Pydantic Evals' <code>LLMJudge</code> instead.</p>
 <p>Pydantic Evals' own evaluators work too, such as <code>Contains</code> for something the answer must say.</p>
 <h2 id="scripted-or-real">Scripted or real</h2>
 <p>A case's <code>script</code> is the turn it expects. Each step is one model response, either a tool call or the answer. Played as a script, the case runs through the real turn without a model: it's free, it gives the same result every time, and CI runs it. The project's own tests play the starter this way.</p>
@@ -7193,6 +7198,7 @@
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">report</span><span class="o">.</span><span class="n">print</span><span class="p">()</span>
 </span></code></pre></div>
 <p>An eval run's conversations belong to the user <code>evals</code>, so they never mix with a person's.</p>
+<p>With the observability component and <code>LOGFIRE_TOKEN</code> set, a run reports to Logfire as the <code>evals</code> process, where each run shows as an evals table. Without a token, it reports nothing.</p>
 
 
 

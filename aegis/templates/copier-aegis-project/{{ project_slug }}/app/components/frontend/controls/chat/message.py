@@ -207,7 +207,7 @@ class ChatMessageBubble(ft.Container):
         for nested in entry.get("nested") or []:
             sections.append(
                 SecondaryText(
-                    f"dispatched {nested.get('tool')}({nested.get('args', '')})",
+                    f"dispatched {nested.get('tool')}({str(nested.get('args', ''))[:120]})",
                     size=Theme.Typography.BODY_SMALL,
                 )
             )

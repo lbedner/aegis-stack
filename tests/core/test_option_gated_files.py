@@ -100,3 +100,23 @@ def test_an_option_that_is_off_adds_none_of_its_files(spec: str, group: str) -> 
     gated = set(_expand_directories_to_files(SPECS[spec].files.extras[group]))
     added = set(get_component_files(spec, answers=answers))
     assert not added & gated, sorted(added & gated)[:10]
+
+
+@pytest.mark.parametrize("option", [AnswerKeys.AI_VOICE, AnswerKeys.AI_EVALS])
+def test_init_without_an_ai_option_leaves_none_of_its_files(
+    tmp_path: Any, option: str
+) -> None:
+    """An AI option off: init removes what the AI spec lists under it."""
+    gated = SERVICES["ai"].files.extras[option]
+    for rel in gated:
+        # A listed folder gets a file inside it; a listed file is itself.
+        path = (
+            tmp_path / rel if "." in rel.rsplit("/", 1)[-1] else tmp_path / rel / "x.py"
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("")
+    post_gen_tasks.cleanup_components(
+        tmp_path,
+        {**get_copier_defaults(), AnswerKeys.AI: True, option: False},
+    )
+    assert not [rel for rel in gated if (tmp_path / rel).exists()]

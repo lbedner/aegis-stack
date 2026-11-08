@@ -27,6 +27,7 @@ from aegis.constants import (
 from aegis.i18n import t
 
 from ..cli import brand
+from .ai_service_parser import evals_rule
 from .auth_service_parser import auth_level_answers
 from .component_files import (
     JINJA_EXTENSION,
@@ -447,6 +448,8 @@ class ManualUpdater:
 
             # Update answers with new component
             updated_answers = {**self.answers, **update_data}
+            if rule := evals_rule(updated_answers):
+                raise ValueError(rule)
 
             # Get files for this component
             backend_variant = (

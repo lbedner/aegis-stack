@@ -185,6 +185,7 @@ aegis init my-app --services "ai[pydantic-ai,sqlite,openai,rag,voice]"
 | Providers | `openai`, `anthropic`, `google`, `groq`, `mistral`, `cohere`, `ollama`, `public` | `public` | LLM providers |
 | RAG | flag | disabled | Enable RAG support |
 | Voice | flag | disabled | Enable TTS/STT |
+| Evals | flag | disabled | The eval harness ([Evals](evals.md)); Pydantic AI only |
 
 ### Switching Providers
 
@@ -214,6 +215,7 @@ my-app llm use claude-sonnet-4-20250514  # Auto-detects Anthropic
 - **[RAG](rag.md)** - Index your codebase for AI-powered search
 - **[Cost Tracking](cost-tracking.md)** - Monitor usage and costs
 - **[Voice](voice.md)** - Add speech capabilities
+- **[Evals](evals.md)** - Score the assistant on the tools it calls
 - **[Engines](engines.md)** - Choose between Pydantic AI and LangChain
 - **[Provider Setup](providers.md)** - Configure your AI provider
 - **[API Reference](api.md)** - Complete REST API documentation

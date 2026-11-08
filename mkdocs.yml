@@ -133,6 +133,7 @@ nav:
         - RAG: services/ai/rag.md
         - Cost Tracking: services/ai/cost-tracking.md
         - Voice: services/ai/voice.md
+        - Evals: services/ai/evals.md
         - Engines: services/ai/engines.md
         - Provider Setup: services/ai/providers.md
         - API Reference: services/ai/api.md

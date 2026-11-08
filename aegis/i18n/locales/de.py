@@ -13,6 +13,7 @@ MESSAGES: dict[str, str] = {
     ),
     "validation.unknown_service": "Unbekannter Service: {name}",
     "validation.unknown_services": "Unbekannte Services: {names}",
+    "validation.evals_needs_pydantic_ai": "ai[evals] needs Pydantic AI: its harness scores Pydantic AI tool calls, which {framework} does not record",
     "validation.unknown_component": "Unbekannte Komponente: {name}",
     # ── Init command ───────────────────────────────────────────────────
     "init.title": "Aegis Stack Projektinitialisierung",

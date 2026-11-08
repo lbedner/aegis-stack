@@ -84,6 +84,12 @@ _TRACE_RESULT_CAP = 2_000
 CALL_ID = "call_id"
 
 
+def _trace_args(args: Any) -> str:
+    """A call's arguments as the trace keeps them: JSON, clipped."""
+    text = args if isinstance(args, str) else json.dumps(args)
+    return (text or "")[:_TRACE_RESULT_CAP]
+
+
 def record_tool_call(trace: list[dict[str, Any]], event: FunctionToolCallEvent) -> None:
     """Append a trace entry for a starting tool call (full code kept), with
     the id its result is matched by (``record_tool_result``). A call the
@@ -97,8 +103,7 @@ def record_tool_call(trace: list[dict[str, Any]], event: FunctionToolCallEvent) 
     if (script := script_of(args)) is not None:
         entry["code"] = script[:_TRACE_CODE_CAP]
     else:
-        text = args if isinstance(args, str) else json.dumps(args)
-        entry["args"] = (text or "")[:_TRACE_RESULT_CAP]
+        entry["args"] = _trace_args(args)
     trace.append(entry)
     if get_tool(entry["tool"]) is None:
         steps.heard(entry["tool"], entry.get("code") or entry.get("args", ""))
@@ -130,9 +135,14 @@ def record_tool_result(
     marker = card_component(name, content)
     if marker is not None:
         entry["component"] = marker
-    nested = nested_tool_calls(event)
+    # A script's dispatches keep their arguments as a direct call does; the
+    # trail's one-line preview is ``nested_tool_calls``.
+    nested = sandbox_calls(event.part)
     if nested:
-        entry["nested"] = [{"tool": n, "args": a} for n, a in nested]
+        entry["nested"] = [
+            {"tool": call.tool_name, "args": _trace_args(call.args)}
+            for call, _ in nested
+        ]
     return entry
 
 

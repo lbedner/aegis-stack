@@ -366,6 +366,18 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet", "pydantic-ai"],
     ),
     StackCombination(
+        name="ai_evals",
+        components=["database"],
+        services=["ai[sqlite,evals]"],
+        description="The eval harness: its starter dataset plays in the project's tests",
+        expected_files=[
+            "app/services/ai/domains/evals/runner.py",
+            "evals/starter.yaml",
+        ],
+        expected_docker_services=["webserver"],
+        expected_pyproject_deps=["fastapi", "flet", "pydantic-ai"],
+    ),
+    StackCombination(
         name="insights",
         # Every source, not the default two: `plausible` and `reddit` have
         # collectors of their own that nothing generated.

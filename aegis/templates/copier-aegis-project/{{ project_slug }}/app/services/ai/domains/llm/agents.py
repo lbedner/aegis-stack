@@ -1,6 +1,7 @@
 """Building a PydanticAI agent: the four provider shapes."""
 
 from collections.abc import Sequence
+from contextvars import ContextVar
 import json
 from typing import Any
 
@@ -23,6 +24,16 @@ from app.services.ai.domains.llm.model_factory import (
     model_for,
 )
 from app.services.ai.models import AIProvider
+
+_DEFAULT_PROMPT = (
+    "You are a helpful AI assistant. Provide clear, accurate, "
+    "and concise responses. Be friendly and professional."
+)
+
+# A model every agent built in this context answers on instead of its
+# provider's: the eval harness plays a case's script through the real turn
+# with it. Unset everywhere else.
+MODEL_OVERRIDE: ContextVar[Any | None] = ContextVar("model_override", default=None)
 
 
 async def get_agent(
@@ -53,6 +64,13 @@ async def get_agent(
     Raises:
         ProviderError: If agent creation fails
     """
+    if (override := MODEL_OVERRIDE.get()) is not None:
+        return Agent(
+            model=override,
+            model_settings=_model_settings(config),
+            system_prompt=system_prompt_override or _DEFAULT_PROMPT,
+            **_grant_kwargs(tools, capabilities, agent_name),
+        )
     try:
         # Special handling for PUBLIC provider (anonymous tier works keyless;
         # LLM7_API_KEY unlocks premium models)
@@ -92,10 +110,7 @@ async def get_agent(
         model, _ = await model_for(config, settings)
 
         # Determine system prompt
-        system_prompt = system_prompt_override or (
-            "You are a helpful AI assistant. Provide clear, accurate, "
-            "and concise responses. Be friendly and professional."
-        )
+        system_prompt = system_prompt_override or _DEFAULT_PROMPT
 
         # Create agent with system prompt, model settings, and grants
         agent = Agent(

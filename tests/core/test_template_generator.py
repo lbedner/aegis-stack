@@ -9,6 +9,7 @@ is available.
 from pathlib import Path
 
 from aegis.constants import AnswerKeys, AuthLevels, PostgresProviders, StorageBackends
+from aegis.core.service_resolver import ServiceResolver
 from aegis.core.template_generator import TemplateGenerator
 
 
@@ -449,6 +450,43 @@ class TestTemplateGeneratorRagAndVoice:
         context = gen.get_template_context()
         assert context["ai_rag"] == "yes"
         assert context["ai_voice"] == "yes"
+
+
+class TestTemplateGeneratorEvals:
+    """``ai_evals`` in the template context, from ``ai[evals]``."""
+
+    def test_context_says_no_without_the_flag(self) -> None:
+        gen = TemplateGenerator(
+            project_name="test-project",
+            selected_components=[],
+            selected_services=["ai"],
+        )
+        assert gen.get_template_context()["ai_evals"] == "no"
+
+    def test_context_says_yes_with_the_flag(self) -> None:
+        gen = TemplateGenerator(
+            project_name="test-project",
+            selected_components=["database"],
+            selected_services=["ai[sqlite, evals]"],
+        )
+        assert gen.get_template_context()["ai_evals"] == "yes"
+
+    def test_a_bracketed_framework_reaches_the_context(self) -> None:
+        """``ai[langchain]`` renders LangChain whoever builds the generator,
+        not only an ``aegis init`` that also set the interactive choice."""
+        gen = TemplateGenerator(
+            project_name="test-project",
+            selected_components=["database"],
+            selected_services=["ai[sqlite, langchain, openai]"],
+        )
+        assert gen.get_template_context()["ai_framework"] == "langchain"
+
+    def test_init_refuses_evals_on_langchain(self) -> None:
+        """The harness scores Pydantic AI's tool events and scripts a turn
+        with its ``FunctionModel``; LangChain has neither."""
+        errors = ServiceResolver.validate_services(["ai[langchain, sqlite, evals]"])
+        assert any("Pydantic AI" in e for e in errors), errors
+        assert not ServiceResolver.validate_services(["ai[sqlite, evals]"])
 
 
 class TestTemplateGeneratorAuthLevel:

@@ -1073,6 +1073,7 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_resume": "solo continuar un aprovisionamiento interrumpido; nunca crear un servidor nuevo",
     "deploy.exec_no_command": "No se indicó ningún comando. Escríbelo después de --, p. ej.: aegis deploy-exec -- alembic current",
     "deploy.help_opt_gh_repo": "Repositorio de GitHub como owner/name (por defecto: detectar automáticamente desde git remote origin)",
+    "deploy.help_opt_gh_merge": "Desplegar también cada merge a main, una vez que pase CI",
     "deploy.help_opt_gh_tags": "Disparar también el workflow de despliegue al hacer push de tags v*",
     "deploy.help_opt_gh_overwrite": "Sobrescribir los secretos de GitHub y el workflow deploy.yml existentes",
     "deploy.help_opt_dry_run": "Imprimir las acciones planeadas sin realizar cambios",

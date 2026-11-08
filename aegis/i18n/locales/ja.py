@@ -1054,6 +1054,7 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_resume": "途中で止まった作成のみ再開し、新しいサーバーは作成しません",
     "deploy.exec_no_command": "コマンドが指定されていません。-- の後に記述してください。例: aegis deploy-exec -- alembic current",
     "deploy.help_opt_gh_repo": "GitHub リポジトリ（owner/name 形式。デフォルト：git remote origin から自動検出）",
+    "deploy.help_opt_gh_merge": "main へのマージごとに、CI 成功後にデプロイ",
     "deploy.help_opt_gh_tags": "v* タグへの push 時もデプロイワークフローを起動",
     "deploy.help_opt_gh_overwrite": "既存の GitHub Secrets と deploy.yml ワークフローを上書き",
     "deploy.help_opt_dry_run": "実際には変更せず、予定されている操作のみ表示",

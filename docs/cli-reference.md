@@ -779,6 +779,7 @@ aegis deploy-cd-setup [OPTIONS]
 
 - `--repo TEXT`, GitHub repo as `owner/name` (default: detected from the `origin` remote)
 - `--on-tag`, Also deploy on pushes of `v*` tags
+- `--on-merge`, Also deploy each merge to main, once CI passes
 - `--force`, Overwrite existing GitHub secrets and the workflow (rotates the key)
 - `--dry-run`, Print the planned actions without changing anything
 - `--keep-key TEXT`, Copy the generated private key here before cleanup (default: it only lives in GitHub secrets)
@@ -788,6 +789,7 @@ aegis deploy-cd-setup [OPTIONS]
 ```bash
 aegis deploy-cd-setup
 aegis deploy-cd-setup --on-tag
+aegis deploy-cd-setup --on-merge
 aegis deploy-cd-setup --force  # rotate the deploy key
 ```
 

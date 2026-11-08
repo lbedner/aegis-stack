@@ -1122,6 +1122,7 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_gh_repo": (
         "GitHub repo as owner/name (default: auto-detect from git remote origin)"
     ),
+    "deploy.help_opt_gh_merge": "Also deploy each merge to main, once CI passes",
     "deploy.help_opt_gh_tags": (
         "Also trigger the deploy workflow on pushes to v* tags"
     ),

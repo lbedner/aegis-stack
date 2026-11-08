@@ -1020,6 +1020,7 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_resume": "중단된 프로비저닝만 이어서 진행하며, 새 서버는 만들지 않습니다",
     "deploy.exec_no_command": "명령이 없습니다. -- 뒤에 작성하세요. 예: aegis deploy-exec -- alembic current",
     "deploy.help_opt_gh_repo": "GitHub 저장소 (owner/name 형식, 기본값: git remote origin에서 자동 감지)",
+    "deploy.help_opt_gh_merge": "main 병합마다 CI 통과 후 배포",
     "deploy.help_opt_gh_tags": "v* 태그 푸시 시에도 배포 워크플로 실행",
     "deploy.help_opt_gh_overwrite": "기존 GitHub Secrets와 deploy.yml 워크플로 덮어쓰기",
     "deploy.help_opt_dry_run": "실제 변경 없이 예정된 작업만 출력",

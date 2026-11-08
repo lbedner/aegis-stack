@@ -2281,11 +2281,12 @@ def _key_fingerprint(key_path: Path) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def _render_deploy_workflow(on_tag: bool) -> str:
+def _render_deploy_workflow(on_tag: bool, on_merge: bool = False) -> str:
     """Render the GitHub Actions deploy.yml content.
 
     Always includes ``workflow_dispatch``. ``on_tag`` additionally fires on
-    ``v*`` tag pushes.
+    ``v*`` tag pushes; ``on_merge`` once CI passes on a push to main, at the
+    commit CI tested.
 
     A runner has neither of what a deploy from a laptop leans on: the
     ``aegis`` CLI (no project dependency) and ``.aegis/deploy.yml``
@@ -2297,7 +2298,8 @@ def _render_deploy_workflow(on_tag: bool) -> str:
     ``.env.deploy`` ``deploy-cd-env`` pushed, as it was; never pushed, no
     file is written and the server keeps its ``.env``. A deploy waits for
     the one before it, and is rolling (``--rolling``) as a deploy by hand
-    would be: Run workflow's box, ticked by default; a tag push always.
+    would be: Run workflow's box, ticked by default; a tag push or a merge
+    always.
     """
     triggers = [
         "  workflow_dispatch:",
@@ -2311,6 +2313,21 @@ def _render_deploy_workflow(on_tag: bool) -> str:
         triggers.append("  push:")
         triggers.append("    tags:")
         triggers.append("      - 'v*'")
+    gate = checkout = ""
+    if on_merge:
+        triggers.append("  workflow_run:")
+        triggers.append("    workflows: [CI]")
+        triggers.append("    types: [completed]")
+        triggers.append("    branches: [main]")
+        gate = (
+            "\n    if: github.event_name != 'workflow_run' || "
+            "(github.event.workflow_run.conclusion == 'success' && "
+            "github.event.workflow_run.event == 'push')"
+        )
+        checkout = (
+            "\n      with:"
+            "\n        ref: ${{ github.event.workflow_run.head_sha || github.sha }}"
+        )
     on_block = "\n".join(triggers)
     return f"""name: Deploy
 
@@ -2323,9 +2340,9 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest{gate}
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v6{checkout}
 
     - name: Load deploy SSH key
       uses: webfactory/ssh-agent@v0.9.1
@@ -2377,6 +2394,11 @@ def deploy_cd_setup_command(
         False,
         "--on-tag",
         help=lazy_t("deploy.help_opt_gh_tags"),
+    ),
+    on_merge: bool = typer.Option(
+        False,
+        "--on-merge",
+        help=lazy_t("deploy.help_opt_gh_merge"),
     ),
     force: bool = typer.Option(
         False,
@@ -2572,7 +2594,7 @@ def deploy_cd_setup_command(
         )
     )
     workflow_path.parent.mkdir(parents=True, exist_ok=True)
-    workflow_path.write_text(_render_deploy_workflow(on_tag=on_tag))
+    workflow_path.write_text(_render_deploy_workflow(on_tag=on_tag, on_merge=on_merge))
 
     # _save_deploy_config relies on cwd; pass project_path through directly
     config_path = project_root / DEPLOY_CONFIG_FILE

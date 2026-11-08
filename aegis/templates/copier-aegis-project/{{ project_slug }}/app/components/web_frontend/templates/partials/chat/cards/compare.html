@@ -1,8 +1,9 @@
 {# A before and an after. The change is worked out here, never carried in
    the payload: a figure the assistant could derive is one the assistant could get wrong. Both
    bars scale to the larger; a rise is teal, a fall the error tone, and a
-   figure appearing from zero is new, not an infinite rise. #}
-{% from "partials/chat/cards/_frame.html" import card_frame, amount %}
+   figure appearing from zero is new, not an infinite rise. Two percents
+   differ by points, never by a percent of a percent. #}
+{% from "partials/chat/cards/_frame.html" import card_frame %}
 {% set before = card["before"] %}
 {% set after = card["after"] %}
 {% set peak = [before, after]|max %}
@@ -16,11 +17,11 @@
     <div>
       <div class="flex items-baseline justify-between gap-4 text-xs text-aegis-muted mb-1">
         <span class="truncate">{{ side["label"] }}</span>
-        <span class="font-medium text-aegis-text tabular-nums">{{ amount(side["value"], card["unit"]) }}</span>
+        <span class="font-medium text-aegis-text tabular-nums">{{ side["value"]|figure(card["unit"]) }}</span>
       </div>
       <div class="h-2 rounded bg-aegis-border/60"><div class="h-2 rounded {{ side['tone'] }}" style="width: {{ (100 * side['value'] / peak)|round|int if peak else 0 }}%"></div></div>
     </div>
     {% endfor %}
-    <p data-change class="text-xs {{ 'text-aegis-teal' if up else 'text-error' }}">{% if fresh %}new{% elif pct is none %}no baseline{% else %}{{ "+" if pct >= 0 else "" }}{{ pct }}%{% endif %}</p>
+    <p data-change class="text-xs {{ 'text-aegis-teal' if up else 'text-error' }}">{% if card["unit"] == "percent" %}{{ "%+.1f"|format(after - before) }} pts{% elif fresh %}new{% elif pct is none %}no baseline{% else %}{{ "+" if pct >= 0 else "" }}{{ pct }}%{% endif %}</p>
   </div>
 {% endcall %}

@@ -238,3 +238,42 @@ class TestFetchImage:
 
         async with httpx.AsyncClient() as client:
             assert await safe_fetch.fetch_image(client, "https://cdn.example/") is None
+
+
+class TestFetchText:
+    async def test_a_text_page_comes_back_with_its_type(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        resolving_to(monkeypatch, ["93.184.216.34"])
+        sent = answering(
+            monkeypatch,
+            httpx.Response(200, headers={"content-type": "text/plain"}, text="hello"),
+        )
+
+        content_type, body = await safe_fetch.fetch_text(
+            "https://example.com/a.txt", purpose="test"
+        )
+
+        assert (content_type, body) == ("text/plain", "hello")
+        assert sent[0].headers["user-agent"].endswith("/1.0 (test)")
+
+    @pytest.mark.parametrize(
+        ("response", "reason"),
+        [
+            (httpx.Response(404, text="gone"), "HTTP 404"),
+            (
+                httpx.Response(
+                    200, headers={"content-type": "application/pdf"}, content=b"%PDF"
+                ),
+                "not a text page: application/pdf",
+            ),
+        ],
+    )
+    async def test_anything_but_a_text_200_is_refused_by_name(
+        self, monkeypatch: pytest.MonkeyPatch, response: httpx.Response, reason: str
+    ) -> None:
+        resolving_to(monkeypatch, ["93.184.216.34"])
+        answering(monkeypatch, response)
+
+        with pytest.raises(safe_fetch.UnreadableError, match=reason):
+            await safe_fetch.fetch_text("https://example.com/x", purpose="test")

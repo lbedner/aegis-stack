@@ -655,8 +655,10 @@ def test_upload_env_stamps_the_build_id(
     command = remote[0]
     # Replacing, not appending, on its own line: run for real against a file
     # in tests/cli/test_deploy_record.py (the stamp's own test).
+    # The host it deploys to, so the server knows its own address.
     assert command == deploy_mod._stamp_env_command(
-        "/opt/app/.env", {"BUILD_ID": deploy_mod._build_id(tmp_path)}
+        "/opt/app/.env",
+        {"BUILD_ID": deploy_mod._build_id(tmp_path), "SERVER_HOST": "h"},
     )
     remote.clear()
     (tmp_path / ".aegis").mkdir()
@@ -670,6 +672,7 @@ def test_upload_env_stamps_the_build_id(
             "/opt/app/.env",
             {
                 "BUILD_ID": deploy_mod._build_id(tmp_path),
+                "SERVER_HOST": "h",
                 "DOMAIN": "app.example.com",
                 "ACME_EMAIL": "ops@example.org",
                 "ADMIN_IP_ALLOWLIST": "203.0.113.9/32",

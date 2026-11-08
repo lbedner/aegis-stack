@@ -26,16 +26,15 @@
    colours each mark (the bar card's). One copy for every chart kind. #}
 {% macro card_chart(kind, chart_type, card, card_id, url, large, labels, small="h-48", tones=None) %}
 {% from "components/macros/layout.html" import chart %}
-{% set money = card["unit"] == "money" %}
 {% set values = [] %}
-{% for row in card["rows"] %}{% set _ = values.append(row["value"]|dollars if money else row["value"]) %}{% endfor %}
+{% for row in card["rows"] %}{% set _ = values.append(row["value"]|dollars if card["unit"] == "money" else row["value"]) %}{% endfor %}
 {% set series = {"label": card["measure"], "values": values} %}
 {% if tones %}{% set _ = series.update(tones=tones) %}{% endif %}
 {% call card_frame(kind, card["title"], card["measure"], url, large) %}
   {% if card["rows"] %}
   <div class="px-2 py-2">
     {{ chart("card-" ~ card_id ~ ("-large" if large else ""), chart_type,
-             {"labels": labels, "series": [series], "format": "money" if money else "count"},
+             {"labels": labels, "series": [series], "format": card["unit"]},
              height="h-80" if large else small, label=card["title"]) }}
   </div>
   {% else %}
@@ -43,6 +42,3 @@
   {% endif %}
 {% endcall %}
 {% endmacro %}
-
-{# A figure as the card's unit reads it: money arrives in cents. #}
-{% macro amount(value, unit) %}{{ value|int|money if unit == "money" else "{:,}".format(value|round|int) }}{% endmacro %}

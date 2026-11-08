@@ -705,7 +705,8 @@ droplet.
 
 A project whose `docker-compose.prod.yml` takes its host from `${DOMAIN}` is
 left as it is: each deploy stamps into the server's `.env`, beside
-`BUILD_ID`, what provisioning recorded in `.aegis/deploy.yml`: the server's
+`BUILD_ID` and the address it deployed to (`SERVER_HOST`, which Overseer's
+DNS section points a new A record at), what provisioning recorded in `.aegis/deploy.yml`: the server's
 name as `DOMAIN`, the certificate's address as `ACME_EMAIL`, and `--allowlist`
 as `ADMIN_IP_ALLOWLIST`. Any other project has HTTPS rendered into its
 files for the name, as `aegis ingress-enable` does.

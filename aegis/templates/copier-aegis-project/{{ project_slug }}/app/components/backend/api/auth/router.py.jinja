@@ -22,6 +22,7 @@ from app.components.backend.api.deps import (
     resend_verification_rate_limit,
 {% endif %}
 )
+from app.components.backend.security import honeypot
 from app.components.backend.security.rate_limit import get_client_ip
 from app.core.audit import AuditEmitter
 from app.core.config import settings
@@ -257,8 +258,11 @@ async def request_password_reset(
     Always returns 200 regardless of whether the email exists,
     to avoid leaking account existence information.
     """
-    await user_service.create_password_reset_token(body.email)
-    await audit.emit("auth.password_reset_requested", actor_email=body.email)
+    # The forgot-password page posts its honeypot with the address; a bot
+    # that filled it reads the same answer and no email goes out.
+    if not honeypot.tripped(await request.json(), form="forgot-password"):
+        await user_service.create_password_reset_token(body.email)
+        await audit.emit("auth.password_reset_requested", actor_email=body.email)
     return StatusMessage(detail="If an account exists, a reset token has been created")
 
 

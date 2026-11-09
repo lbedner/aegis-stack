@@ -212,17 +212,17 @@ document.addEventListener('alpine:init', () => {
       error: '',
       sent: '',
 
-      async submit() {
+      async submit(form) {
         if (this.loading) return;
         this.loading = true;
         this.error = '';
         this.sent = '';
-        const email = this.$el.querySelector('input[name=email]').value;
         try {
           await fetch('/api/v1/auth/password-reset/request', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email }),
+            // Every named input of the form: the address, and the honeypot.
+            body: JSON.stringify(Object.fromEntries(new FormData(form))),
           });
         } catch (_) {
           this.loading = false;

@@ -12,11 +12,17 @@ import re
 from pathlib import Path
 
 import pytest
+from app.components.backend.security import honeypot
 from app.components.web_frontend import assets as web_assets
 from app.core.client_session import REFRESH_COOKIE, SESSION_COOKIE
 from fastapi.testclient import TestClient
 
 from tests.shell import has_site, shell_path
+from tests.web.dom import one
+
+# The trap as a page carries it: named once, and kept from the password
+# managers that would fill it for a real person.
+TRAP = f'input[name="{honeypot.FIELD}"][data-1p-ignore]'
 
 
 @pytest.fixture(autouse=True)
@@ -411,6 +417,41 @@ class TestAuthPages:
         # handler as the response object.
         assert SESSION_COOKIE in response.cookies
         assert REFRESH_COOKIE in response.cookies
+
+    def test_a_filled_trap_registers_nobody(
+        self, async_client_with_db: TestClient
+    ) -> None:
+        """A bot that fills the honeypot gets a real submit's redirect and
+        nothing else: no account, no session."""
+        signup = {"email": "bot@example.com", "password": "hunter2hunter2"}
+        one(async_client_with_db.get("/register").text, TRAP)
+
+        trapped = async_client_with_db.post(
+            "/register",
+            data={**signup, honeypot.FIELD: "https://spam.example"},
+            follow_redirects=False,
+        )
+
+        assert trapped.status_code == 303
+        assert trapped.headers["location"] == "{{ '/overseer' if auth_level == 'basic' else '/verify-pending' }}"
+        assert SESSION_COOKIE not in trapped.cookies
+        # The address is still free: an empty trap registers it as before.
+        real = async_client_with_db.post(
+            "/register", data={**signup, honeypot.FIELD: ""}, follow_redirects=False
+        )
+        assert real.headers["location"] == "{{ '/overseer' if auth_level == 'basic' else '/verify-pending' }}"
+        assert SESSION_COOKIE in real.cookies
+{%- if auth_level != "basic" %}
+
+    def test_forgot_password_carries_the_trap_and_posts_its_form(
+        self, async_client_with_db: TestClient
+    ) -> None:
+        one(async_client_with_db.get("/forgot-password").text, TRAP)
+        # The page's script posts every named input of the form, the trap
+        # with the address.
+        script = (web_assets.COMPONENT_DIR / "static/js/auth.js").read_text()
+        assert "new FormData(form)" in script
+{%- endif %}
 
     def test_login_returns_to_the_next_target(
         self, async_client_with_db: TestClient

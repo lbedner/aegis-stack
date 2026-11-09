@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
 from starlette.responses import Response
 
+from app.components.backend.security import honeypot
 from app.components.web_frontend.assets import COMPONENT_DIR, static_url
 from app.components.web_frontend.file_icons import icon_for
 from app.components.web_frontend.filters import FILTERS
@@ -31,6 +32,8 @@ templates = Jinja2Templates(directory=str(COMPONENT_DIR / "templates"))
 
 templates.env.globals["static"] = static_url
 templates.env.globals["icon_for"] = icon_for
+# The one name of the public forms' honeypot input (``honeypot()`` macro).
+templates.env.globals["honeypot_field"] = honeypot.FIELD
 # The themes a page may wear, as the toggle offers them, and the one the
 # stack opens with; a name no theme file has fails here, at boot, naming
 # the ones that exist.

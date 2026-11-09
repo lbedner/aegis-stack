@@ -27,8 +27,9 @@
   every dataset's scripts. Overseer > AI > Evals shows each dataset's
   cases in words before a run, starts one on a model picked from the
   catalog and follows it, opens a run's cases and a case's tool calls,
-  and compares two runs. Pydantic AI only. (#2004, #1161, #1162, #1163,
-  #1164)
+  and compares two runs. The project's `CLAUDE.md` says a regression
+  found in the logs ships with the case that would have caught it.
+  Pydantic AI only. (#2004, #1161, #1162, #1163, #1164, #1165)
 
 ### Fixed
 

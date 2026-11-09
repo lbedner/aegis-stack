@@ -120,6 +120,16 @@ execution history is recorded. See the `add-scheduled-job` skill.
 Protect endpoints with the auth dependencies rather than checking sessions by
 hand. See the `protect-an-endpoint` skill.
 
+{% endif %}{% if ai_evals %}## Evals
+
+A regression found by reading logs (a turn that called the wrong tool, or
+said what it was never told) ships with the case that would have caught it:
+the message from the log and the assertion you wish you had had, in a
+dataset under `evals/`. Give it a `script:` so `make evals-ci` plays it
+without a model.
+{% if ai_backend != "memory" %}`make evals` scores it on the real one and keeps the run.
+{% endif %}See `evals/starter.yaml`.
+
 {% endif %}## Skills
 
 Task procedures live in `.claude/skills/<name>/SKILL.md` and load on demand when

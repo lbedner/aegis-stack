@@ -5,8 +5,8 @@
    server, what can be asked of ``aegis deploy-agent`` for it (deploys
    in one menu; rehearsing, rolling back and destroying folded into More), and, while one runs, its newest
    job (whole under Jobs). #}
-{% from "components/macros/layout.html" import card, dropdown, facts %}
-{% from "pages/overseer/deployments/_macros.html" import agent_note, ask, ask_item, deployed_card, destroy_form, goto, job_panel, note, place %}
+{% from "components/macros/layout.html" import card, dropdown, facts, goto %}
+{% from "pages/overseer/deployments/_macros.html" import agent_note, ask, ask_item, deployed_card, destroy_form, job_panel, note, place %}
 {% if actions.view == "deployed" %}
 {{ deployed_card(actions) }}
 {% elif actions.view == "no-server" %}

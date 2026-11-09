@@ -2,9 +2,9 @@
    server and the last restore drill (ui_deployments.offsite), then the
    scheduled database backups on the backup volume, newest first, or why
    there are none. #}
-{% from "components/macros/layout.html" import card, facts %}
+{% from "components/macros/layout.html" import card, facts, goto %}
 {% from "components/macros/table.html" import data_table %}
-{% from "pages/overseer/deployments/_macros.html" import goto, note %}
+{% from "pages/overseer/deployments/_macros.html" import note %}
 {% if offsite %}
 {% call card("Off the server", id="card-offsite") %}
 {% if offsite.state == "off" %}

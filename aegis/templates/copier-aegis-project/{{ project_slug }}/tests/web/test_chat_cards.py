@@ -19,17 +19,15 @@ from app.components.backend.api.ai.service import ai_service
 from app.components.web_frontend.overseer_ai_chat import OVERSEER
 from app.services.ai.models import AIProvider, MessageRole
 from app.services.ai.models.chat_card import ChatCard
-from app.services.system.models import ComponentStatus
 from tests.web.dom import none, one, select, text
-from tests.web.overseer import sign_in, status_with
+from tests.web.overseer import AI, sign_in, status_with
 
 CARDS = f"{OVERSEER.path}/cards"
 
 
 @pytest.fixture
 def client(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    ai = ComponentStatus(name="ai", message="AI", metadata={"engine": "pydantic-ai"})
-    sign_in(app, monkeypatch, status_with(services=[ai]))
+    sign_in(app, monkeypatch, status_with(services=[AI]))
     return TestClient(app)
 
 

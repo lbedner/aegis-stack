@@ -227,6 +227,7 @@ EXAMPLES: dict[str, dict[str, str]] = {
             </div>""",
         "lazy": """{{ lazy("/partials/overseer/runs/abc123/log", 'data-run-log-of="abc123"', "Loading…") }}""",
         "copy_button": """{{ copy_button("redis://localhost:6379/0") }}""",
+        "goto": """{{ goto("/overseer/ai/evals", "All runs") }}""",
         "command": """<p class="flex items-center gap-2">{{ command("make serve") }}</p>""",
         "sparkline": """{{ sparkline("0.0,20.0 30.0,8.0 60.0,14.0 90.0,2.0 120.0,10.0", extra="w-40 h-6") }}""",
         "copy_icon": """<span class="group inline-flex items-center gap-1.5">redis://localhost:6379/0{{ copy_icon("redis://localhost:6379/0", "opacity-0 group-hover:opacity-100") }}</span>""",

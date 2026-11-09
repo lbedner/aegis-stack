@@ -23,9 +23,8 @@ from app.services.ai.models import (
     ConversationMessage,
     MessageRole,
 )
-from app.services.system.models import ComponentStatus
 from tests.web.dom import one, select, text, triggers
-from tests.web.overseer import sign_in, status_with
+from tests.web.overseer import AI, sign_in, status_with
 
 # An agent is a saved row: its drawer needs an AI persistence backend.
 persisted = pytest.mark.skipif(
@@ -86,8 +85,7 @@ def client(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(chat_surface, "find_conversation", find)
     monkeypatch.setattr(chat_surface, "assistant_name", assistant_name)
     monkeypatch.setattr(chat_surface, "provider_icons", provider_icons)
-    ai = ComponentStatus(name="ai", message="AI", metadata={"engine": "pydantic-ai"})
-    sign_in(app, monkeypatch, status_with(services=[ai]))
+    sign_in(app, monkeypatch, status_with(services=[AI]))
     return TestClient(app)
 
 

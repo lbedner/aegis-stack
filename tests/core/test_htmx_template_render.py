@@ -400,6 +400,7 @@ class TestWebFrontendScaffolding:
                 "code_block",
                 "highlighted",
                 "command",
+                "goto",
                 "confirm",
                 "copy_button",
                 "copy_icon",

@@ -81,6 +81,13 @@ class ToolCalls(Evaluator[Any, Any, Any]):
             passed, f"{self.tool}: {n} matching of {tried or 'no calls'}, wanted {wanted}"
         )
 
+    def explain(self) -> str:
+        held = f" with {json.dumps(self.args)}" if self.args else ""
+        if self.times == 0:
+            return f"never calls {self.tool}{held}"
+        times = {None: "", 1: " once"}.get(self.times, f" {self.times} times")
+        return f"calls {self.tool}{held}{times}"
+
 
 @dataclass(repr=False)
 class ToolOrder(Evaluator[Any, Any, Any]):
@@ -94,6 +101,9 @@ class ToolOrder(Evaluator[Any, Any, Any]):
         passed = all(tool in rest for tool in self.tools)
         return EvaluationReason(passed, f"called {made}")
 
+    def explain(self) -> str:
+        return f"calls {', then '.join(self.tools)}"
+
 
 @dataclass(repr=False)
 class AnswerAvoids(Evaluator[Any, Any, Any]):
@@ -105,6 +115,9 @@ class AnswerAvoids(Evaluator[Any, Any, Any]):
         answer = str(ctx.output).lower()
         said = [term for term in self.terms if term.lower() in answer]
         return EvaluationReason(not said, f"said {said}" if said else "said none")
+
+    def explain(self) -> str:
+        return "never says " + " or ".join(f'"{term}"' for term in self.terms)
 
 
 {%- if ai_backend != "memory" %}
@@ -131,7 +144,20 @@ class Judged(Evaluator[Any, Any, Any]):
             JUDGE, JUDGING, GradingOutput, text, action=JUDGE_ACTION, owner_user_id=EVALS_USER
         )
         return EvaluationReason(verdict.pass_, verdict.reason)
+
+    def explain(self) -> str:
+        return f"a judge agrees: {self.rubric}"
 {%- endif %}
 
 
 EVALUATORS = (ToolCalls, ToolOrder, AnswerAvoids{% if ai_backend != "memory" %}, Judged{% endif %})
+
+
+def explain(evaluator: Evaluator[Any, Any, Any]) -> str:
+    """What an evaluator checks, read before a run: ours in words, a
+    built-in (``Contains``, ``LLMJudge``) by its name and arguments."""
+    if isinstance(evaluator, EVALUATORS):
+        return evaluator.explain()
+    args = evaluator.build_serialization_arguments()
+    held = ", ".join(f"{key}={value!r}" for key, value in args.items())
+    return f"{evaluator.get_serialization_name()}({held})"

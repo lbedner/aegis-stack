@@ -37,12 +37,11 @@ from app.components.web_frontend.routes.partials import chat_live
 from app.core.tools import current_owner_user_id, current_subject
 from app.services.ai.domains.voice import realtime_calls
 from app.services.shared.deps import get_optional_owner_user_id
-from app.services.system.models import ComponentStatus
 from app.services.ai.domains.chat.page_actions import page_action
 from tests._pages import LANDING
 from tests._realtime import ENGINE, VOICE, FakeRealtime
 from tests.web.dom import one
-from tests.web.overseer import sign_in, status_with
+from tests.web.overseer import AI, sign_in, status_with
 
 PAGE = "/overseer/services/ai/chat"
 SOCKET = f"{OVERSEER.path}/live/ws"
@@ -50,8 +49,7 @@ SOCKET = f"{OVERSEER.path}/live/ws"
 
 @pytest.fixture
 def client(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    ai = ComponentStatus(name="ai", message="AI", metadata={"engine": "pydantic-ai"})
-    sign_in(app, monkeypatch, status_with(services=[ai]))
+    sign_in(app, monkeypatch, status_with(services=[AI]))
 
     async def signed_in() -> None:
         return None

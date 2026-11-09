@@ -5,8 +5,8 @@
    being created, or one stopped part way, only its job. A deployed
    server, or a project with a server already, says where to go
    instead. #}
-{% from "components/macros/layout.html" import card %}
-{% from "pages/overseer/deployments/_macros.html" import agent_note, by_hand, deployed_card, goto, job_panel, note, picker, step %}
+{% from "components/macros/layout.html" import card, goto %}
+{% from "pages/overseer/deployments/_macros.html" import agent_note, by_hand, deployed_card, job_panel, note, picker, step %}
 {% from "pages/overseer/deployments/_keys.html" import keys with context %}
 {% if actions.view == "deployed" %}
 {{ deployed_card(actions) }}

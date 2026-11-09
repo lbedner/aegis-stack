@@ -60,6 +60,35 @@ async def catalog(mode: str = "chat") -> list[dict[str, Any]]:
     return [m.model_dump() for m in models]
 
 
+async def model_choices(
+    db: "AsyncSession", current: str | None
+) -> list[dict[str, Any]]:
+    """The chat models as a grouped select's options (an agent's model, an
+    eval run's), by vendor as the picker groups them; ``current`` kept,
+    first, when the catalog no longer lists it, so saving does not drop it.
+    The catalog reads on its own connection, so ``db``'s lock goes first."""
+    # Imported here: the module loads on every AI stack, the database only
+    # comes with a persistence backend, the only one with models to pick.
+    from app.core.db import release_lock
+
+    await release_lock(db)
+    models = await catalog("chat")
+    groups = [
+        {
+            "label": vendor,
+            "options": [
+                {"id": m["model_id"], "name": display_title(m, under_vendor=vendor)}
+                for m in rows
+            ],
+        }
+        for vendor, rows in group_models(models)
+    ]
+    if current and all(m["model_id"] != current for m in models):
+        unlisted = {"id": current, "name": f"{current} (not in the catalog)"}
+        groups.insert(0, {"label": "Chosen", "options": [unlisted]})
+    return groups
+
+
 async def call_models() -> list[dict[str, Any]]:
     """The realtime models a live call can reach: a vendor the call path
     serves, by the vendor's own id (the catalog's routed copies, "gemini/...",

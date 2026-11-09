@@ -9,10 +9,9 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.web_frontend import overseer_scheduler
-from app.core.db import get_async_db
 from app.services.system.models import ComponentStatus
 from tests.web.dom import none, one, select, text
-from tests.web.overseer import sign_in, status_with
+from tests.web.overseer import on_session, sign_in, status_with
 
 SOON = (datetime.now(UTC) + timedelta(hours=5)).isoformat()
 PAST = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
@@ -78,16 +77,13 @@ def signed_in(
         seen.update(kwargs)
         return EXECUTIONS, 60
 
-    async def request_session() -> Any:
-        return REQUEST_SESSION
-
     monkeypatch.setattr(overseer_scheduler, "load_executions", executions)
 
     async def no_stats(**_: Any) -> dict[str, Any]:
         return {}
 
     monkeypatch.setattr(overseer_scheduler, "load_job_stats", no_stats)
-    app.dependency_overrides[get_async_db] = request_session
+    on_session(app, REQUEST_SESSION)
     with TestClient(app) as client:
         yield client
 

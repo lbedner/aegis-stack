@@ -150,3 +150,13 @@ class TestFilesListedUnderTwoGatesNeedBoth:
         files = dependent_files("database", answers, expand=True)
 
         assert self.OFFSITE in files
+
+    def test_an_option_is_a_gate_too(self) -> None:
+        """An option of the owner counts: ai's voice partials sit under
+        ``include_htmx`` and ``ai_voice``, so adding htmx to an AI stack
+        without voice brings none of them (their imports need voice)."""
+        answers = {"include_ai": True, "include_htmx": True, "ai_voice": False}
+
+        files = dependent_files("htmx", answers, expand=True)
+
+        assert not [f for f in files if f.endswith("chat_voices.py")]

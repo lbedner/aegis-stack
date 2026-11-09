@@ -9,6 +9,7 @@ from app.services.ai.domains.evals.evaluators import (
     ToolCalls,
     ToolOrder,
     calls_of,
+    explain,
 )
 
 # The trace ``record_tool_call`` / ``record_tool_result`` build: a direct
@@ -103,3 +104,29 @@ def test_a_scripts_long_arguments_reach_the_trace_whole() -> None:
 
     held = ToolCalls("search", args={"query": query}).evaluate(_ctx(trace=trace))
     assert held.value is True
+
+
+def test_each_check_says_what_it_wants() -> None:
+    """Read before a run: ours in words, a built-in by its arguments."""
+    from pydantic_evals.evaluators import Contains
+
+    assert [
+        explain(e)
+        for e in (
+            ToolCalls("run_code", times=0),
+            ToolCalls("plugins", times=1),
+            ToolCalls("ledger", times=2, args={"months": 3}),
+            ToolCalls("paper"),
+            ToolOrder(["paper", "ledger"]),
+            AnswerAvoids(["$", "refund"]),
+            Contains("letter"),
+        )
+    ] == [
+        "never calls run_code",
+        "calls plugins once",
+        'calls ledger with {"months": 3} 2 times',
+        "calls paper",
+        "calls paper, then ledger",
+        'never says "$" or "refund"',
+        "Contains(value='letter')",
+    ]

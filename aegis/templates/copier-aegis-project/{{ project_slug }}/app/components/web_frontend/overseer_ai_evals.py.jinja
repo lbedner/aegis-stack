@@ -1,0 +1,256 @@
+{%- if ai_backend != "memory" -%}
+"""The Overseer AI page's Evals section: the kept runs, newest first, with a
+Run that starts one as a job (``start_evals``, on the worker where there is
+one) followed here as it goes; one run's cases with each evaluator's score
+and reason, a case opened on what it asked, answered and called; and two
+runs compared, the cases that flipped on top. Reads are the eval queries
+(``eval_runs``) the CLI and the API read. Offered wherever ``ai[...,evals]``
+keeps runs (a database).
+"""
+
+from collections.abc import AsyncIterator, Mapping
+import json
+from typing import TYPE_CHECKING, Any
+
+from fastapi import HTTPException
+
+from app.core.formatting import format_duration_ms, format_relative_time
+from app.services.ai.service import (
+    EvalCase,
+    EvalRun,
+    EvalScore,
+    eval_dataset,
+    eval_datasets,
+    eval_runs,
+    start_evals,
+)
+from app.services.system.jobs import get_job_runner
+
+from .chat_models import model_choices
+from .chat_surface import run as tool_run
+from .overseer_ai_common import PARTIALS, dollars, section_url
+from .overseer_live import job_frames, job_state
+from .rendering import hx_replace, status_cell
+
+if TYPE_CHECKING:
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+SECTION = section_url("evals")
+RUNS_URL = f"{PARTIALS}/evals/runs"
+
+
+async def evals_context(db: "AsyncSession", query: Mapping[str, str]) -> dict[str, Any]:
+    """One run (``run``), two compared (``a`` and ``b``), else every run;
+    each with the section's own address (``section``)."""
+    if query.get("run", "").isdigit():
+        view = await _run(db, int(query["run"]))
+    elif query.get("a", "").isdigit() and query.get("b", "").isdigit():
+        view = await _compare(db, int(query["a"]), int(query["b"]))
+    else:
+        view = await _runs(db, query.get("job"))
+    return view | {"section": SECTION}
+
+
+def _passed(run: EvalRun) -> str:
+    return f"{run.passed} / {run.cases}"
+
+
+def _verdict(passed: bool) -> dict[str, str]:
+    """A case's pass or fail, as a status cell."""
+    return status_cell("Passed" if passed else "Failed", "ok" if passed else "error")
+
+
+def _tone(passed: int, cases: int) -> str:
+    """A run's tone: ok only when every case passed."""
+    return "ok" if passed == cases else "error"
+
+
+def _run_url(run_id: int | None) -> str:
+    return section_url("evals", run=str(run_id))
+
+
+def _run_row(run: EvalRun) -> dict[str, Any]:
+    return {
+        "id": run.id,
+        "name": f"{run.id} · {run.dataset} · {_passed(run)}",
+        "run": {"label": str(run.id), "url": _run_url(run.id)},
+        "dataset": run.dataset,
+        "passed": status_cell(_passed(run), _tone(run.passed, run.cases)),
+        "model": run.model_id,
+        "build": run.build,
+        "cost": dollars(run.total_cost),
+        "when": format_relative_time(run.started_at),
+        "note": run.note,
+    }
+
+
+def _dataset(name: str) -> dict[str, Any]:
+    """A dataset as the Run form offers it: its cases, what each asks and
+    what it checks, read before a run."""
+    found = eval_dataset(name)
+    return {
+        "id": name,
+        "name": name,
+        "about": found.about,
+        "cases": [
+            {
+                "case": c.name,
+                "asks": c.message,
+                "agent": c.agent or "default",
+                "checks": "; ".join(c.checks),
+            }
+            for c in found.cases
+        ],
+    }
+
+
+async def _runs(db: "AsyncSession", job_id: str | None) -> dict[str, Any]:
+    """Every run, the Run form (each dataset's cases, the model to run on),
+    the two-run compare, and a started run's job."""
+    runs = await eval_runs.runs(db)
+    job = await get_job_runner().lookup(job_id) if job_id else None
+    datasets = [_dataset(d) for d in eval_datasets()]
+    return {
+        "view": "runs",
+        "rows": [_run_row(r) for r in runs],
+        "datasets": datasets,
+        # The form that offers them is only there with a dataset to run.
+        "models": await model_choices(db, None) if datasets else [],
+        "start_url": RUNS_URL,
+        "job": job_view(job.as_dict()) if job else None,
+    }
+
+
+def _scores(found: list[EvalScore]) -> list[dict[str, Any]]:
+    return [
+        {
+            "evaluator": s.evaluator,
+            "tone": "ok" if s.passed or (s.passed is None and s.value) else "error",
+            "value": s.value,
+            "reason": s.reason,
+        }
+        for s in found
+    ]
+
+
+def _case_row(run_id: int, case: EvalCase, scores: list[EvalScore]) -> dict[str, Any]:
+    return {
+        "case": case.name,
+        "drawer": f"{RUNS_URL}/{run_id}/cases/{case.name}",
+        "verdict": _verdict(case.passed),
+        "scores": _scores(scores),
+        "took": format_duration_ms(case.duration_ms),
+        "error": case.error,
+    }
+
+
+async def _run(db: "AsyncSession", run_id: int) -> dict[str, Any]:
+    """One run: its facts, its cases with their scores (read at once), and
+    the run before it of the same dataset, to compare with."""
+    run = await eval_runs.run(db, run_id)
+    if run is None or run.id is None:
+        raise HTTPException(status_code=404, detail="No such run.")
+    cases = await eval_runs.cases(db, run.id)
+    by_case: dict[int | None, list[EvalScore]] = {}
+    for score in await eval_runs.run_scores(db, run.id):
+        by_case.setdefault(score.case_id, []).append(score)
+    earlier = await eval_runs.previous(db, run)
+    return {
+        "view": "run",
+        "run": run,
+        "facts": [
+            ("Dataset", run.dataset),
+            ("Passed", _passed(run)),
+            ("Model", run.model_id),
+            ("Build", run.build),
+            ("Cost", dollars(run.total_cost)),
+            ("Started", format_relative_time(run.started_at)),
+            ("Started by", run.trigger),
+            ("Note", run.note),
+        ],
+        "cases": [_case_row(run.id, c, by_case.get(c.id, [])) for c in cases],
+        "compare": earlier and section_url("evals", a=str(earlier), b=str(run.id)),
+    }
+
+
+async def case_context(
+    db: "AsyncSession", run_id: int, name: str
+) -> dict[str, Any] | None:
+    """A case opened: what it asked, what came back, what was expected, the
+    tool calls in order (each as chat's run dialog shows one) and each
+    evaluator's verdict; None where the run has no such case."""
+    found = await eval_runs.case(db, run_id, name)
+    if found is None or found.id is None:
+        return None
+    asked = found.inputs.get("message")
+    return {
+        "case": found,
+        "verdict": _verdict(found.passed),
+        "asked": asked if isinstance(asked, str) else _shown(found.inputs),
+        "expected": None if found.expected is None else _shown(found.expected),
+        "runs": [tool_run(call) for call in found.tool_calls],
+        "scores": _scores(await eval_runs.scores(db, found.id)),
+    }
+
+
+def _shown(value: Any) -> str:
+    return json.dumps(value, indent=2, ensure_ascii=False)
+
+
+async def _compare(db: "AsyncSession", before: int, after: int) -> dict[str, Any]:
+    """Two runs' shared cases, the ones that flipped first."""
+    compared = await eval_runs.compare(db, before, after)
+    flipped = {c.name for c in compared.flipped}
+    rows = sorted(compared.cases, key=lambda c: c.name not in flipped)
+    return {
+        "view": "compare",
+        "before": before,
+        "after": after,
+        "rows": [
+            {
+                "case": c.name,
+                "flipped": c.name in flipped,
+                "before": _verdict(c.before),
+                "after": _verdict(c.after),
+                "scores": c.scores,
+            }
+            for c in rows
+        ],
+        "flipped": len(flipped),
+        "run_url": {r: _run_url(r) for r in (before, after)},
+    }
+
+
+def _ended(done: dict[str, Any]) -> dict[str, Any]:
+    """How a run went: how many passed, and the run to open."""
+    passed, cases = done.get("passed", 0), done.get("cases", 0)
+    run = done.get("run_id")
+    return {
+        "label": f"{passed} of {cases} passed",
+        "tone": _tone(passed, cases),
+        "link": run and _run_url(run),
+    }
+
+
+def job_view(job: dict[str, Any]) -> dict[str, Any]:
+    """A run's job as the section shows it (``job_state``)."""
+    events = f"{PARTIALS}/evals/jobs/{job['job_id']}/events"
+    return job_state(job, events, "Running", _ended)
+
+
+def job_events(job_id: str) -> AsyncIterator[str]:
+    """A run's job over SSE (``job_frames``), the last state reloading the
+    section, so the new run is in its table."""
+    return job_frames(job_id, job_view, hx_replace(SECTION, "#overseer-main"))
+
+
+async def start(form: Mapping[str, str]) -> str:
+    """A run of the form's dataset started as a job: its id. ValueError
+    (``start_evals``) for a dataset not under ``evals/``, or a model that
+    cannot answer."""
+    return await start_evals(
+        form.get("dataset", ""),
+        model=form.get("model") or None,
+        note=form.get("note") or None,
+    )
+{%- endif %}

@@ -72,6 +72,20 @@ class ServiceSpec(PluginSpec):
     kind: PluginKind = PluginKind.SERVICE
 
 
+# The Overseer's Evals section: listed under both ``include_htmx`` and
+# ``ai_evals``, as it needs the frontend and the harness both.
+EVALS_PAGES = [
+    "app/components/web_frontend/overseer_ai_evals.py",
+    "app/components/web_frontend/routes/partials/overseer_ai_evals.py",
+    "app/components/web_frontend/templates/pages/overseer/ai/_evals.html",
+    "app/components/web_frontend/templates/pages/overseer/ai/_evals_case.html",
+    "app/components/web_frontend/templates/pages/overseer/ai/_evals_compare.html",
+    "app/components/web_frontend/templates/pages/overseer/ai/_evals_run.html",
+    "app/components/web_frontend/templates/pages/overseer/ai/_evals_runs.html",
+    "app/components/web_frontend/templates/pages/overseer/ai/_evals_scores.html",
+    "tests/web/test_overseer_ai_evals.py",
+]
+
 # Service registry - single source of truth for all available services
 SERVICES: dict[str, ServiceSpec] = {
     "auth": ServiceSpec(
@@ -631,6 +645,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/components/web_frontend/routes/partials/chat_voices.py",
                     "app/components/web_frontend/routes/partials/chat_live.py",
                     "app/components/web_frontend/static/js/mic-worklet.js",
+                    *EVALS_PAGES,
                 ],
                 "ai_voice": [
                     "app/core/voice_settings.py",
@@ -666,6 +681,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/components/backend/api/ai/evals.py",
                     "tests/cli/test_ai_evals_cli.py",
                     "tests/api/test_ai_evals_endpoints.py",
+                    *EVALS_PAGES,
                 ],
             },
         ),

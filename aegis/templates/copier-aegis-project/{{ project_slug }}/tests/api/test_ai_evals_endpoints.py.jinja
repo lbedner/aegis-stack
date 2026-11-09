@@ -9,37 +9,14 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.backend.api.ai import evals as evals_api
-from app.services.ai.models.evals import EvalCase, EvalRun, EvalScore
+from tests.services.ai.evals import _kept as kept
 
 BASE = "/api/v1/ai/evals"
 
 
 @pytest.fixture
 async def two_runs(async_db_session: AsyncSession) -> tuple[int, int]:
-    """Two runs of ``mini``: the second fails "reads the paper"."""
-    before = EvalRun(dataset="mini", cases=2, passed=2, note="baseline")
-    after = EvalRun(dataset="mini", cases=2, passed=1)
-    async_db_session.add_all([before, after])
-    await async_db_session.flush()
-    assert before.id and after.id
-    cases = [
-        EvalCase(run_id=run.id, name=name, passed=passed)
-        for run, name, passed in (
-            (before, "reads the paper", True),
-            (before, "never deletes", True),
-            (after, "reads the paper", False),
-            (after, "never deletes", True),
-        )
-    ]
-    async_db_session.add_all(cases)
-    await async_db_session.flush()
-    async_db_session.add_all(
-        EvalScore(case_id=case.id, evaluator="ToolCalls", value=float(case.passed))
-        for case in cases
-        if case.id
-    )
-    await async_db_session.flush()
-    return before.id, after.id
+    return await kept.two_runs(async_db_session)
 
 
 def test_a_run_is_started_as_a_job(

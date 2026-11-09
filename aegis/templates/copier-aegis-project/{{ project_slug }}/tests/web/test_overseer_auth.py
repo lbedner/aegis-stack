@@ -11,13 +11,12 @@ import pytest
 from app.components.web_frontend import overseer_auth
 from app.components.web_frontend.routes.partials import overseer_auth as partials
 from app.core.client_session import SESSION_COOKIE
-from app.core.db import get_async_db
 from app.core.security import create_access_token
 from app.models.refresh_token import SessionEnd, SessionHistory
 from app.models.user import User, UserResponse
 from app.services.system.models import ComponentStatus
 from tests.web.dom import none, one, select, text
-from tests.web.overseer import sign_in, status_with
+from tests.web.overseer import on_session, sign_in, status_with
 
 METADATA: dict[str, Any] = {
     "database_available": True,
@@ -142,10 +141,7 @@ def _client(
         assert db is REQUEST_SESSION
         return {2: 1}
 
-    async def request_session() -> Any:
-        return REQUEST_SESSION
-
-    app.dependency_overrides[get_async_db] = request_session
+    on_session(app, REQUEST_SESSION)
     monkeypatch.setattr(overseer_auth, "load_users", users)
     monkeypatch.setattr(overseer_auth, "load_history", history)
     monkeypatch.setattr(overseer_auth, "load_people", people)

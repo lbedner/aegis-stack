@@ -1,11 +1,12 @@
 {%- if ai_backend != "memory" -%}
 """Reading kept runs: newest first or one by id, a run's cases (or one by
-name), a case's scores, and two runs side by side (what flipped)."""
+name), a case's scores or all of a run's, and two runs side by side (what
+flipped)."""
 
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, computed_field
-from sqlalchemy import Row
+from sqlalchemy import Row, func
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -27,6 +28,14 @@ async def run(session: AsyncSession, run_id: int) -> EvalRun | None:
     return await session.get(EvalRun, run_id)
 
 
+async def previous(session: AsyncSession, run: EvalRun) -> int | None:
+    """The id of the run of the same dataset before ``run``, if any."""
+    query = select(func.max(EvalRun.id)).where(
+        EvalRun.dataset == run.dataset, col(EvalRun.id) < run.id
+    )
+    return (await session.exec(query)).one()
+
+
 async def cases(session: AsyncSession, run_id: int) -> list[EvalCase]:
     """A run's cases, in the order they ran."""
     query = select(EvalCase).where(EvalCase.run_id == run_id).order_by(col(EvalCase.id))
@@ -42,6 +51,17 @@ async def case(session: AsyncSession, run_id: int, name: str) -> EvalCase | None
 async def scores(session: AsyncSession, case_id: int) -> list[EvalScore]:
     """A case's verdicts, in the order its evaluators ran."""
     query = select(EvalScore).where(EvalScore.case_id == case_id).order_by(col(EvalScore.id))
+    return list(await session.exec(query))
+
+
+async def run_scores(session: AsyncSession, run_id: int) -> list[EvalScore]:
+    """Every verdict on a run's cases, in one query, in the order they ran."""
+    query = (
+        select(EvalScore)
+        .join(EvalCase, col(EvalCase.id) == EvalScore.case_id)
+        .where(EvalCase.run_id == run_id)
+        .order_by(col(EvalScore.id))
+    )
     return list(await session.exec(query))
 
 

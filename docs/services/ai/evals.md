@@ -96,6 +96,16 @@ async with get_async_session() as session:
         print(case.name, case.before, "->", case.after)
 ```
 
-On the memory backend there is nowhere to keep a run, so there is no CLI, API or `make evals`. `run_dataset` still scores a dataset, and `make evals-ci` still plays the scripts.
+## In the Overseer
+
+With the htmx frontend, Overseer > AI > Evals shows the same runs:
+
+- **Runs:** every kept run, newest first (dataset, passed, model, build, cost), and a Run form that picks a dataset under `evals/`, a model from the catalog (the active one unless picked) and a note. Under the form, each dataset shows what its leading comment says it is and every case: the message it asks, the agent it asks (the default unless the case names one) and what it passes on, in words ("never calls run_code", "calls plugins once", `never says "$"`). A started run is the same job as `POST /api/v1/ai/evals/runs`, and the section follows it case by case until it ends.
+- **A run:** its cases, each with its verdict and every evaluator's score and reason. A case opens on what it asked, what came back, what was expected and the tool calls its turn made, in order. "Compare with the run before" goes to the last run of the same dataset.
+- **Compare:** two runs' shared cases, the ones that flipped first.
+
+With no datasets under `evals/`, the section says to copy the starter.
+
+On the memory backend there is nowhere to keep a run, so there is no CLI, API, Overseer section or `make evals`. `run_dataset` still scores a dataset, and `make evals-ci` still plays the scripts.
 
 With the observability component and `LOGFIRE_TOKEN` set, a run reports to Logfire as the `evals` process, where each run shows as an evals table. Without a token, it reports nothing.

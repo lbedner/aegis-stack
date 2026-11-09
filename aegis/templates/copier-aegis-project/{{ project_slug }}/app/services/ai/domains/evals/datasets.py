@@ -2,10 +2,12 @@
 should do. Pydantic Evals reads the file; a case may use its built-in
 evaluators (``Contains``, ``LLMJudge``) and the trace ones here."""
 
+import hashlib
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 from pydantic_evals import Dataset
+import yaml
 
 from app.core.source_index import ROOT
 
@@ -26,7 +28,15 @@ class CaseInput(BaseModel):
     script: list[Step] = []
 
 
-EvalDataset = Dataset[CaseInput, str, None]
+class CaseMeta(BaseModel):
+    """What a case says of itself: ``why`` it is there."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    why: str | None = None
+
+
+EvalDataset = Dataset[CaseInput, str, CaseMeta]
 
 
 class UnknownDatasetError(LookupError, ValueError):
@@ -48,11 +58,35 @@ def dataset_path(name: str, directory: Path = EVALS_DIR) -> Path:
     return directory / f"{name}.yaml"
 
 
+def remove(name: str, directory: Path = EVALS_DIR) -> None:
+    """Delete ``name``'s file (``UnknownDatasetError`` when there is none,
+    or it went meanwhile); its kept runs stay."""
+    try:
+        dataset_path(name, directory).unlink()
+    except FileNotFoundError:
+        raise UnknownDatasetError(f"No dataset {name!r} under evals/") from None
+
+
+def fingerprint(name: str, directory: Path = EVALS_DIR) -> str:
+    """``name``'s file as it is now: the SHA-256 of its bytes."""
+    return hashlib.sha256(dataset_path(name, directory).read_bytes()).hexdigest()
+
+
 def load(name: str, directory: Path = EVALS_DIR) -> EvalDataset:
-    """``name``'s file, its cases checked against ``CaseInput``."""
-    return EvalDataset.from_file(
-        dataset_path(name, directory), custom_evaluator_types=EVALUATORS
-    )
+    """``name``'s file, its cases checked against ``CaseInput``; ValueError,
+    naming the file, for one that cannot be read."""
+    path = dataset_path(name, directory)
+    try:
+        return EvalDataset.from_file(path, custom_evaluator_types=EVALUATORS)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"evals/{path.name} is not YAML: {exc}") from exc
+
+
+def without(dataset: EvalDataset, kinds: tuple[type, ...]) -> None:
+    """Drop every check of ``kinds`` from ``dataset`` and its cases."""
+    dataset.evaluators = [e for e in dataset.evaluators if not isinstance(e, kinds)]
+    for case in dataset.cases:
+        case.evaluators = [e for e in case.evaluators if not isinstance(e, kinds)]
 
 
 class CaseSummary(BaseModel):
@@ -62,6 +96,7 @@ class CaseSummary(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
+    why: str | None = None
     message: str
     agent: str | None
     checks: list[str]
@@ -99,6 +134,7 @@ def describe(name: str, directory: Path = EVALS_DIR) -> DatasetSummary:
         cases=[
             CaseSummary(
                 name=case.name or "",
+                why=case.metadata and case.metadata.why,
                 message=case.inputs.message,
                 agent=case.inputs.agent,
                 checks=[*(explain(e) for e in case.evaluators), *shared],
@@ -106,3 +142,16 @@ def describe(name: str, directory: Path = EVALS_DIR) -> DatasetSummary:
             for case in dataset.cases
         ],
     )
+
+
+def describe_all(directory: Path = EVALS_DIR) -> list[DatasetSummary]:
+    """Every dataset under ``directory``, as ``describe`` reads it. One
+    that cannot be read says why where its ``about`` goes, with no cases:
+    a bad file hides no other, and can still be opened and deleted."""
+    found: list[DatasetSummary] = []
+    for name in names(directory):
+        try:
+            found.append(describe(name, directory))
+        except ValueError as exc:
+            found.append(DatasetSummary(name=name, about=f"Cannot be read: {exc}", cases=[]))
+    return found

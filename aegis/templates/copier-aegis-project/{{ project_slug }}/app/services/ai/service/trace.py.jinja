@@ -78,7 +78,7 @@ def tool_notice(
 
 # Trace-entry size caps: the trace persists on the message row and rides
 # the final SSE event, so a pathological payload must not bloat either.
-_TRACE_CODE_CAP = 6_000
+TRACE_CODE_CAP = 6_000
 _TRACE_RESULT_CAP = 2_000
 # A call's id, on its entry: what its result is matched by.
 CALL_ID = "call_id"
@@ -101,7 +101,7 @@ def record_tool_call(trace: list[dict[str, Any]], event: FunctionToolCallEvent) 
         entry[CALL_ID] = call_id
     args = event.part.args
     if (script := script_of(args)) is not None:
-        entry["code"] = script[:_TRACE_CODE_CAP]
+        entry["code"] = script[:TRACE_CODE_CAP]
     else:
         entry["args"] = _trace_args(args)
     trace.append(entry)

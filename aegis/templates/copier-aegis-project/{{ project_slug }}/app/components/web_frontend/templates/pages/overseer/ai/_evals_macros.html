@@ -1,0 +1,48 @@
+{# What Datasets, Runs and Compare share: a case as it went in a run
+   (``overseer_ai_evals._result``), opened under its row. #}
+{% from "components/macros/icons.html" import icon %}
+{% from "components/macros/layout.html" import code_block, goto %}
+
+{# A check by its rule; a run kept before rules were says so. #}
+{% macro rule(text) %}{% if text %}{{ text }}{% else %}<span class="text-aegis-muted">rule not recorded</span>{% endif %}{% endmacro %}
+
+{# Each check by its rule, a pass or fail mark and why. #}
+{% macro checks(found) %}
+<ul class="space-y-1">
+  {% for c in found %}
+  <li data-check class="flex items-start gap-2 text-sm">
+    <span data-tone="{{ 'ok' if c.passed else 'error' }}" class="toned mt-0.5 shrink-0">{{ icon("check" if c.passed else "x-mark", label="Passed" if c.passed else "Failed") }}</span>
+    <span>{{ rule(c.rule) }}{% if c.reason %} <span class="text-xs text-aegis-muted">· {{ c.reason }}</span>{% endif %}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+
+{# ``r``: what it asked (where ``asked``), the answer whole, each check,
+   and its calls summed up, each one's arguments (not its output, which
+   can run long) behind the toggle;
+   ``run_link`` names the run it is from. #}
+{% macro case_result(r, asked=True, run_link=False) %}
+<div class="space-y-3 max-w-3xl">
+  {% if asked and r.asked %}<p class="text-sm"><span class="text-xs text-aegis-muted">Asked</span> {{ r.asked }}</p>{% endif %}
+  <p class="text-xs text-aegis-muted">Answer · {{ r.took }}{% if r.cost %} · {{ r.cost }}{% endif %}{% if run_link %} · {{ goto(r.run.url, "run " ~ r.run.id) }}{% endif %}</p>
+  {% if r.error %}<p data-tone="error" class="toned text-sm">{{ r.error }}</p>{% endif %}
+  {% if r.answer %}<p class="text-sm text-aegis-text whitespace-pre-wrap">{{ r.answer }}</p>{% endif %}
+  {{ checks(r.checks) }}
+  {% if r.calls %}
+  <details class="text-sm">
+    <summary class="cursor-pointer text-aegis-text">{{ r.called }} <span class="text-aegis-muted">· arguments</span></summary>
+    <div class="mt-2 space-y-2">
+      {% for run in r.calls %}
+      <div data-tool-call class="rounded border border-aegis-border px-3 py-2 space-y-2">
+        <p class="text-sm font-medium text-aegis-text">{{ loop.index }}. {{ run.tool }}{% if run.failed %} <span class="text-xs text-error">failed</span>{% endif %}</p>
+        {% if run.code %}{{ code_block(run.code, "Script", "python") }}{% elif run.args %}{{ code_block(run.args, "Arguments", "json") }}{% else %}<p class="text-xs text-aegis-muted">No arguments.</p>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% else %}
+  <p class="text-sm text-aegis-muted">{{ r.called }}</p>
+  {% endif %}
+</div>
+{% endmacro %}

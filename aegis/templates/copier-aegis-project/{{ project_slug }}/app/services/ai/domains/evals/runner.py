@@ -9,13 +9,24 @@ from pydantic_evals import set_eval_attribute
 from pydantic_evals.reporting import EvaluationReport
 
 from app.core.config import settings
+from app.services.ai.domains.chat.agent_loader import CODE_MODE_OVERRIDE
 from app.services.ai.domains.llm.agents import MODEL_OVERRIDE
 from app.services.ai.service import AIService
+from app.services.ai.service.turn import HEARS_NOW
 from app.services.system.jobs import Report
 
-from .datasets import EVALS_DIR, CaseInput, load
-from .evaluators import CONVERSATION, COST, EVALS_USER, MODEL, TRACE
-from .script import scripted_model
+from .datasets import EVALS_DIR, CaseInput, CaseMeta, fingerprint, load, without
+from .evaluators import (
+    CONVERSATION,
+    COST,
+    EVALS_USER,
+    FINGERPRINT,
+    GRADED,
+    MODEL,
+    SPANS,
+    TRACE,
+)
+from .script import in_code_mode, scripted_model
 
 
 def _observe() -> None:
@@ -38,9 +49,11 @@ async def run_dataset(
     provider: str | None = None,
     report: Report | None = None,
     directory: Path = EVALS_DIR,
-) -> EvaluationReport[CaseInput, str, None]:
+) -> EvaluationReport[CaseInput, str, CaseMeta]:
     """Every case of ``name``, one at a time: a real model costs money and
-    shares a rate limit. ``scripted`` plays each case's script instead;
+    shares a rate limit. ``scripted`` plays each case's script instead,
+    without the checks a model grades or that read spans (no model plays a
+    script, and no span is kept), a case left with none failing;
     ``model`` (on ``provider``, where it needs another) stands in for the
     configured one where an agent pins none; ``report`` hears each case as
     it starts."""
@@ -51,27 +64,46 @@ async def run_dataset(
         in_force = settings.model_copy(update={"AI_MODEL": model, "AI_PROVIDER": provider})
     service = AIService(in_force)
     dataset = load(name, directory)
-    # Each case's inputs reach the task as the same object, so its name is
+    if scripted:
+        without(dataset, (*GRADED, *SPANS))
+    # Each case's inputs reach the task as the same object, so the case is
     # found by identity: the task is handed only the inputs.
-    named = {id(case.inputs): case.name for case in dataset.cases}
+    cases = {id(case.inputs): case for case in dataset.cases}
     started = 0
 
     async def turn(case: CaseInput) -> str:
         nonlocal started
         started += 1
         if report is not None:
-            report(f"{started} of {len(named)} · {named[id(case)]}")
+            report(f"{started} of {len(cases)} · {cases[id(case)].name}")
         if scripted and not case.script:
             raise ValueError("this case has no script to play")
+        if scripted and not (cases[id(case)].evaluators or dataset.evaluators):
+            raise ValueError("this case has no check a script can be held to")
         token = MODEL_OVERRIDE.set(scripted_model(case.script) if scripted else None)
+        mode = CODE_MODE_OVERRIDE.set(in_code_mode(case.script) if scripted else None)
+        told = HEARS_NOW.set(False)
         try:
+            # An admin's turn: only an admin starts a run (the evals API's gate).
             reply = await service.chat(
-                case.message, user_id=EVALS_USER, agent_slug=case.agent, surface="evals"
+                case.message,
+                user_id=EVALS_USER,
+                agent_slug=case.agent,
+                surface="evals",
+                admin=True,
             )
         finally:
             MODEL_OVERRIDE.reset(token)
+            CODE_MODE_OVERRIDE.reset(mode)
+            HEARS_NOW.reset(told)
         for key in (TRACE, CONVERSATION, COST, MODEL):
             set_eval_attribute(key, reply.metadata.get(key))
         return reply.content
 
-    return await dataset.evaluate(turn, name=name, max_concurrency=1, progress=False)
+    return await dataset.evaluate(
+        turn,
+        name=name,
+        max_concurrency=1,
+        progress=False,
+        metadata={FINGERPRINT: fingerprint(name, directory)},
+    )

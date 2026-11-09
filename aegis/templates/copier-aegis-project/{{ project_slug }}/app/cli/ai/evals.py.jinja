@@ -1,14 +1,33 @@
 {%- if ai_backend != "memory" -%}
 """``ai evals``: score a dataset on the model in force and keep the run,
-then read kept runs back and compare two of them."""
+then read kept runs back and compare two of them; and the datasets
+themselves: read, written by the model, deleted."""
 
+from rich.markup import escape
 import typer
 
 from app.cli import theme
 from app.cli.ai.shared import app
 from app.core.db import get_async_session
-from app.core.formatting import format_duration_ms, format_relative_time
-from app.services.ai.service import EvalRun, eval_datasets, eval_runs, run_evals
+from app.core.formatting import (
+    counted,
+    format_cost,
+    format_duration_ms,
+    format_relative_time,
+)
+from app.services.ai.service import (
+    EVAL_CASES,
+    EvalRun,
+    UnknownDatasetError,
+    eval_called,
+    eval_dataset,
+    eval_dataset_summaries,
+    eval_datasets,
+    eval_runs,
+    generate_eval_dataset,
+    remove_eval_dataset,
+    run_evals,
+)
 
 evals = typer.Typer(
     help="Score datasets under evals/ and keep the runs; read and compare them."
@@ -28,6 +47,29 @@ def _tally(run: EvalRun) -> str:
 
 def _score(value: float | None) -> str:
     return "-" if value is None else f"{value:g}"
+
+
+def _rule(rule: str | None) -> str:
+    """A check by what it checked; a run kept before rules were has none."""
+    return rule or "rule not recorded"
+
+
+async def _failures(run_id: int) -> None:
+    """Each case of the run that failed, with every check that failed and
+    why (or the error that stopped it)."""
+    async with get_async_session() as session:
+        cases = await eval_runs.cases(session, run_id)
+        scores = await eval_runs.run_scores(session, run_id)
+    for case in cases:
+        if case.passed:
+            continue
+        console.print(f"  {_verdict(False)}  {escape(case.name)}")
+        if case.error:
+            console.print(f"      [dim]{escape(case.error)}[/dim]")
+        for score in scores:
+            if score.case_id == case.id and score.passed is False:
+                why = escape(score.reason or "")
+                console.print(f"      {escape(_rule(score.rule))}  [dim]{why}[/dim]")
 
 
 @evals.command("run")
@@ -67,9 +109,83 @@ async def run(
         except ValueError as exc:  # a model that cannot answer chat here
             theme.fail(str(exc))
         console.print(f"  {_tally(kept)} passed  [dim]run {kept.id}[/dim]")
+        if kept.failed:
+            await _failures(kept.id)
         failed += kept.failed
     if failed:
         raise typer.Exit(1)
+
+
+@evals.command("generate")
+async def generate(
+    name: str = typer.Argument(..., help="The new dataset: evals/<name>.yaml"),
+    about: str = typer.Option(
+        ..., "--about", "-a", help="What its cases check, its leading comment"
+    ),
+    cases: int = typer.Option(EVAL_CASES, "--cases", "-n", help="How many cases"),
+    like: str | None = typer.Option(
+        None, "--like", "-l", help="A dataset under evals/ to write like"
+    ),
+) -> None:
+    """Have the model in force write a new dataset, run it once on that
+    model and keep each case that held, with the script its turn took;
+    each one dropped is named with why."""
+    try:
+        with console.status("Starting...") as status:
+            made = await generate_eval_dataset(
+                name, about=about, cases=cases, like=like, report=status.update
+            )
+    except ValueError as exc:  # whatever ``new_path`` refuses, or no case held
+        theme.fail(str(exc))
+    console.print(
+        f"Wrote [bold]evals/{name}.yaml[/bold]: {counted(made.kept, 'case')} of {made.written}"
+        f"  [dim]run {made.run_id}[/dim]"
+    )
+    for dropped in made.dropped:
+        console.print(f"  dropped {escape(dropped.name)}  [dim]{escape(dropped.why)}[/dim]")
+
+
+@evals.command("datasets")
+async def datasets(
+    name: str | None = typer.Argument(None, help="Read this one, with its cases"),
+) -> None:
+    """The datasets under evals/: what each checks and how many cases it
+    has; or one of them, each case with what it asks and passes on."""
+    if name is None:
+        found = eval_dataset_summaries()
+        if not found:
+            console.print("[dim]No datasets under evals/: ai evals generate[/dim]")
+            return
+        table = theme.keyed_table(("Dataset", "Checks", "Cases"), [d.name for d in found])
+        for dataset in found:
+            table.add_row(dataset.name, escape(dataset.about), str(len(dataset.cases)))
+        console.print(table)
+        return
+    try:
+        dataset = eval_dataset(name)
+    except ValueError as exc:  # not under evals/, or a file that cannot be read
+        theme.fail(str(exc))
+    console.print(f"[bold]{dataset.name}[/bold]  [dim]{escape(dataset.about)}[/dim]")
+    table = theme.keyed_table(("Case", "Asks", "Passes if"), [c.name for c in dataset.cases])
+    for case in dataset.cases:
+        table.add_row(escape(case.name), escape(case.message), escape("; ".join(case.checks)))
+    console.print(table)
+
+
+@evals.command("delete")
+async def delete(
+    name: str = typer.Argument(..., help="The dataset: evals/<name>.yaml"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask first"),
+) -> None:
+    """Delete a dataset's file; its kept runs stay."""
+    if not yes and not typer.confirm(f"Delete evals/{name}.yaml? Its kept runs stay."):
+        console.print("Cancelled")
+        return
+    try:
+        remove_eval_dataset(name)
+    except UnknownDatasetError as exc:
+        theme.fail(str(exc))
+    console.print(f"Deleted [bold]evals/{name}.yaml[/bold]")
 
 
 @evals.command("list")
@@ -78,10 +194,11 @@ async def list_runs(
         None, "--dataset", "-d", help="Only this dataset's runs"
     ),
     limit: int = typer.Option(20, "--limit", "-n", help="How many, newest first"),
+    model: str | None = typer.Option(None, "--model", "-m", help="Only runs on this model"),
 ) -> None:
     """Kept runs, newest first."""
     async with get_async_session() as session:
-        kept = await eval_runs.runs(session, dataset, limit)
+        kept = await eval_runs.runs(session, dataset, limit, model=model)
     if not kept:
         console.print("[dim]No runs kept yet: ai evals run[/dim]")
         return
@@ -101,14 +218,43 @@ async def list_runs(
     console.print(table)
 
 
+async def _case(run_id: int, name: str) -> None:
+    """One case of a run: its verdict, what it answered, every check with
+    why it passed or failed, and the tools it called."""
+    async with get_async_session() as session:
+        found = await eval_runs.case(session, run_id, name)
+        scores = await eval_runs.scores(session, found.id) if found and found.id else []
+    if found is None:
+        theme.fail(f"No case {name!r} in run {run_id}")
+    cost = "" if found.cost is None else f" · {format_cost(found.cost)}"
+    took = format_duration_ms(found.duration_ms)
+    console.print(f"{_verdict(found.passed)}  [bold]{escape(found.name)}[/bold]  [dim]{took}{cost}[/dim]")
+    if found.error:
+        console.print(f"[dim]{escape(found.error)}[/dim]")
+    console.print(escape(found.output or ""))
+    for score in scores:
+        mark = _score(score.value) if score.passed is None else _verdict(score.passed)
+        why = escape(score.reason or "")
+        console.print(f"  {mark}  {escape(_rule(score.rule))}  [dim]{why}[/dim]")
+    console.print(f"[dim]{escape(eval_called(found.tool_calls))}[/dim]")
+
+
 @evals.command("show")
-async def show(run_id: int = typer.Argument(..., help="The run's id")) -> None:
-    """A run's cases: each verdict, how long it took, why it errored."""
+async def show(
+    run_id: int = typer.Argument(..., help="The run's id"),
+    case: str | None = typer.Argument(None, help="Read this case of it, in full"),
+) -> None:
+    """A run's cases: each verdict, how long it took, why it errored; then
+    each case that failed with every check that failed, in words, and why.
+    With a case's name, that case: its answer, every check, its calls."""
     async with get_async_session() as session:
         kept = await eval_runs.run(session, run_id)
         cases = await eval_runs.cases(session, run_id) if kept else []
     if kept is None:
         theme.fail(f"No run {run_id}")
+    if case is not None:
+        await _case(run_id, case)
+        return
     console.print(
         f"[bold]{kept.dataset}[/bold]  {_tally(kept)} passed  "
         f"[dim]{kept.model_id or '-'} · build {kept.build} · "
@@ -125,6 +271,7 @@ async def show(run_id: int = typer.Argument(..., help="The run's id")) -> None:
             case.error or "",
         )
     console.print(table)
+    await _failures(run_id)
 
 
 @evals.command("compare")
@@ -132,17 +279,24 @@ async def compare(
     before: int = typer.Argument(..., help="The earlier run"),
     after: int = typer.Argument(..., help="The later run"),
 ) -> None:
-    """The cases whose verdict flipped between two runs, with their scores."""
+    """The cases that changed between two runs (flipped first, then a rule
+    changed, added, removed), with their scores."""
     async with get_async_session() as session:
         comparison = await eval_runs.compare(session, before, after)
-    if not comparison.flipped:
-        console.print(f"Nothing flipped between run {before} and run {after}.")
+    if comparison.dataset_changed:
+        console.print("[dim]The dataset file changed between these runs.[/dim]")
+    if not comparison.cases:
+        console.print(f"No differences between run {before} and run {after}.")
         return
-    for case in comparison.flipped:
-        console.print(f"{case.name}: {_verdict(case.before)} -> {_verdict(case.after)}")
+    for case in comparison.cases:
+        if case.before and case.after and case.change == "flipped":
+            was, now = _verdict(case.before.passed), _verdict(case.after.passed)
+            console.print(f"{escape(case.name)}: {was} -> {now}")
+        else:
+            console.print(f"{escape(case.name)}: {case.change}")
         for score in case.scores:
             console.print(
-                f"  [dim]{score.evaluator}: "
+                f"  [dim]{escape(_rule(score.rule))}: "
                 f"{_score(score.before)} -> {_score(score.after)}[/dim]"
             )
 {%- endif %}

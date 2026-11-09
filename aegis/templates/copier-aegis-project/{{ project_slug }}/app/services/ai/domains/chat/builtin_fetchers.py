@@ -67,10 +67,15 @@ async def app_map(ctx: FetchContext) -> str | None:
     parts for an admin, its tables and the changes to them for anyone, as
     the ``ontology`` tool answers each; for an admin, also the aggregates
     the ``aggregate`` tool reads. The model is built once a process."""
-    model = await twin()
     if not await caller_is_admin():
-        return text(summary(model.domain()))
-    return "\n\n".join(part for part in (text(summary(model)), listed()) if part)
+        return text(summary((await twin()).domain()))
+    return await whole_app()
+
+
+async def whole_app() -> str:
+    """The app as an admin's map has it: its parts, its tables and the
+    aggregates read from them."""
+    return "\n\n".join(part for part in (text(summary(await twin())), listed()) if part)
 
 
 # Built-in registration: importing this module makes these fetchers

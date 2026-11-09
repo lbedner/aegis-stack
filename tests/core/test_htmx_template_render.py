@@ -431,6 +431,7 @@ class TestWebFrontendScaffolding:
                 "progress",
                 "ranked_rows",
                 "resource_bar",
+                "section_tabs",
                 "sidebar_icon",
                 "stat_row",
                 "stat_tile",

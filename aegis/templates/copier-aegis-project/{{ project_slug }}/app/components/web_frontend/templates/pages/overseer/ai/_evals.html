@@ -1,9 +1,11 @@
-{# Evals (overseer_ai_evals): every kept run and the Run that starts one;
-   one run's cases (``?run=``); or two runs compared (``?a=&b=``), each of
-   those two a step back to every run. Each view's body is its own
-   partial, ``_evals_<view>.html``. #}
-{% from "components/macros/layout.html" import goto %}
+{# Evals (overseer_ai_evals), in three tabs, each its own URL (``?tab=``):
+   Datasets (``_evals_datasets``, or one opened, ``?dataset=``,
+   ``_evals_dataset``), Runs (``_evals_runs``, or one opened, ``?run=``,
+   ``_evals_run``) and Compare (``_evals_compare``); a run's job over
+   Datasets and Runs while it runs. #}
+{% from "components/macros/layout.html" import section_tabs %}
 <div class="space-y-4 max-w-5xl">
-  {% if view != "runs" %}<p class="text-xs">{{ goto(section, "All runs") }}</p>{% endif %}
+  {{ section_tabs(tabs, "Evals views", "ai-evals-tabs") }}
+  {% if job %}{% with card_id = "ai-evals-job" %}{% include "pages/overseer/ai/_job_card.html" %}{% endwith %}{% endif %}
   {% include "pages/overseer/ai/_evals_" ~ view ~ ".html" %}
 </div>

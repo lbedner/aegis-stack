@@ -222,16 +222,32 @@ if TYPE_CHECKING:
 {%- if ai_evals and ai_backend != "memory" %}
     from app.services.ai.domains.evals import queries as eval_runs
     from app.services.ai.domains.evals.datasets import (
+        DatasetSummary as EvalDatasetSummary,
         UnknownDatasetError,
         describe as eval_dataset,
+        describe_all as eval_dataset_summaries,
         names as eval_datasets,
+        remove as remove_eval_dataset,
+    )
+    from app.services.ai.domains.evals.evaluators import called as eval_called
+    from app.services.ai.domains.evals.generator import (
+        ABOUT_MIN as EVAL_ABOUT_MIN,
+        CASES as EVAL_CASES,
+        MOST_CASES as EVAL_MOST_CASES,
+        NAME as EVAL_NAME,
+        NAME_HINT as EVAL_NAME_HINT,
     )
     from app.services.ai.domains.evals.jobs import (
+        JOB_PREFIX as EVALS_JOB,
+        WRITING_PREFIX as EVALS_WRITING_JOB,
 {%- if include_worker %}
+        generate_evals_job,
         run_evals_job,
 {%- endif %}
+        generate_evals as generate_eval_dataset,
         run_evals,
         start_evals,
+        start_generate_evals,
     )
     from app.services.ai.models.evals import EvalCase, EvalRun, EvalScore
 {%- endif %}

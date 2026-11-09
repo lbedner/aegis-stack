@@ -10,6 +10,7 @@ from app.services.ai.domains.evals.evaluators import (
     ToolOrder,
     calls_of,
     explain,
+    rule_of,
 )
 
 # The trace ``record_tool_call`` / ``record_tool_result`` build: a direct
@@ -107,7 +108,7 @@ def test_a_scripts_long_arguments_reach_the_trace_whole() -> None:
 
 
 def test_each_check_says_what_it_wants() -> None:
-    """Read before a run: ours in words, a built-in by its arguments."""
+    """Read before a run, in words."""
     from pydantic_evals.evaluators import Contains
 
     assert [
@@ -125,8 +126,81 @@ def test_each_check_says_what_it_wants() -> None:
         "never calls run_code",
         "calls plugins once",
         'calls ledger with {"months": 3} 2 times',
-        "calls paper",
+        "calls paper at least once",
         "calls paper, then ledger",
         'never says "$" or "refund"',
-        "Contains(value='letter')",
+        'says "letter"',
     ]
+
+
+def test_every_built_in_check_says_what_it_wants() -> None:
+    """Each check Pydantic Evals reads from a dataset file, in words."""
+    from datetime import timedelta
+
+    from pydantic_evals.evaluators import (
+        ArgumentCorrectness,
+        Contains,
+        Equals,
+        EqualsExpected,
+        GEval,
+        HasMatchingSpan,
+        IsInstance,
+        LLMJudge,
+        MaxDuration,
+        MaxModelRequests,
+        MaxToolCalls,
+        ToolCorrectness,
+        TrajectoryMatch,
+    )
+
+    assert [
+        explain(e)
+        for e in (
+            Contains("Letter", case_sensitive=False),
+            Contains(["a", "b"]),
+            Equals("yes"),
+            EqualsExpected(),
+            IsInstance("str"),
+            MaxDuration(2.5),
+            MaxDuration(timedelta(minutes=1)),
+            LLMJudge("is polite"),
+            GEval("clarity", ["read it"], score_range=(1, 10)),
+            HasMatchingSpan({"name_equals": "chat"}),
+            ToolCorrectness(["health", "errors"]),
+            ToolCorrectness(["health"], allow_extra=True),
+            TrajectoryMatch(["health", "errors"]),
+            TrajectoryMatch(["health", "errors"], order="any_order"),
+            ArgumentCorrectness("health", {"component": "backend"}),
+            MaxToolCalls(3),
+            MaxModelRequests(2),
+        )
+    ] == [
+        'says "Letter" (any case)',
+        'contains ["a", "b"]',
+        'answers exactly "yes"',
+        "answers exactly what is expected",
+        "answers a str",
+        "answers within 2.5s",
+        "answers within 60s",
+        "a judge agrees: is polite",
+        "a judge scores clarity from 1 to 10",
+        'a span matches {"name_equals": "chat"}',
+        "calls exactly health, errors",
+        "calls health, others allowed",
+        "calls health, then errors",
+        "calls health, errors, in any order",
+        'calls health with {"component": "backend"}',
+        "calls at most 3 tools",
+        "makes at most 2 model requests",
+    ]
+
+
+def test_a_result_reads_the_rule_of_the_check_it_came_from() -> None:
+    """A kept score's rule, from the spec Pydantic Evals puts on its result;
+    a check this app does not know reads by its name and arguments."""
+    from pydantic_evals.evaluators.spec import EvaluatorSpec
+
+    assert rule_of(EvaluatorSpec(name="Contains", arguments=("letter",))) == 'says "letter"'
+    times = EvaluatorSpec(name="ToolCalls", arguments={"tool": "paper", "times": 1})
+    assert rule_of(times) == "calls paper once"
+    assert rule_of(EvaluatorSpec(name="Mine", arguments={"x": 1})) == "Mine(x=1)"

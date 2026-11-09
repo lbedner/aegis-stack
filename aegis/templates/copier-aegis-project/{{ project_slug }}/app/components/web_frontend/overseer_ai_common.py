@@ -5,6 +5,7 @@ Usage, Sentiment, Providers), ``overseer_ai_catalog`` and
 ``overseer_ai_agents`` import it at the top.
 """
 
+from collections.abc import Mapping
 from importlib.util import find_spec
 from typing import Any
 from urllib.parse import quote
@@ -29,6 +30,21 @@ PARTIALS = "/partials/overseer/ai"
 def section_url(section: str, **query: str | list[str] | None) -> str:
     """One of the AI page's sections, its filters in the query string."""
     return with_query(f"{PAGE}/{section}", **query)
+
+
+def tab_links(
+    section: str, tabs: Mapping[str, str], current: str, default: str
+) -> list[dict[str, Any]]:
+    """A section's tab row (``section_tabs``): each tab's label, its address
+    (``?tab=``, none for ``default``) and whether it is the one shown."""
+    return [
+        {
+            "label": label,
+            "url": section_url(section, tab=None if key == default else key),
+            "active": key == current,
+        }
+        for key, label in tabs.items()
+    ]
 
 
 async def get_current_config() -> Any:

@@ -23,6 +23,9 @@ class EvalRun(SQLModel, table=True):
     model_id: str | None = None
     # The app's build it ran against (``settings.BUILD_ID``).
     build: str | None = None
+    # The dataset file it ran (SHA-256 of its bytes): two runs of an edited
+    # dataset are told apart. None on a run kept before it was recorded.
+    dataset_sha256: str | None = None
     started_at: datetime = Field(default_factory=utcnow, index=True)
     finished_at: datetime = Field(default_factory=utcnow)
     cases: int = 0
@@ -54,6 +57,8 @@ class EvalCase(SQLModel, table=True):
     expected: Any | None = Field(default=None, sa_column=Column(JSON))
     passed: bool = False
     duration_ms: float = 0.0
+    # What its turn cost, where the reply said.
+    cost: float | None = None
     tool_calls: list[Any] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     # Why it did not run, where it did not.
     error: str | None = None
@@ -73,6 +78,9 @@ class EvalScore(SQLModel, table=True):
         )
     )
     evaluator: str
+    # What the evaluator checked, in words (``evaluators.explain``), as the
+    # dataset said when it ran. None on a score kept before it was recorded.
+    rule: str | None = None
     value: float
     passed: bool | None = None
     reason: str | None = None

@@ -11,6 +11,23 @@
     - name: Install dependencies
       run: uv sync
 {% endmacro -%}
+{#- A postgres stack's database, as a service container beside the job. #}
+{%- macro postgres() %}    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: {{ project_slug }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL_LOCAL: postgresql://postgres:postgres@localhost:5432/{{ project_slug }}
+{%- endmacro -%}
 name: CI
 
 on:
@@ -84,21 +101,7 @@ jobs:
       pull-requests: write  # her comment
       issues: write
 {%- if reviews and include_database and database_engine == "postgres" %}
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: {{ project_slug }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      DATABASE_URL_LOCAL: postgresql://postgres:postgres@localhost:5432/{{ project_slug }}
+{{ postgres() }}
 {%- endif %}
     steps:
     - uses: actions/checkout@v6
@@ -167,3 +170,41 @@ jobs:
     - name: Illiana's verdict
       if: vars.ILLIANA_BLOCKS == 'true'
       run: exit "{% raw %}${{ steps.findings.outputs.code }}{% endraw %}"
+{%- if ai_evals and ai_backend != "memory" %}
+
+  # The evals (evals/), scored on a real model once the repository names
+  # one: vars.AI_MODEL, with vars.AI_PROVIDER (else the first provider)
+  # and the provider's key as a secret. vars.EVALS_RUNNER picks the runner,
+  # a self-hosted one beside a local Ollama (vars.OLLAMA_BASE_URL) included.
+{%- set key_names = {"openrouter": "OPEN_ROUTER_API_KEY", "public": "LLM7_API_KEY"} %}
+{%- set providers = ai_providers.split(",") | map("trim") | select | list %}
+  evals:
+    name: Evals
+    needs: [test]
+    # A fork's pull request gets no secrets.
+    if: vars.AI_MODEL != '' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: {% raw %}${{ vars.EVALS_RUNNER || 'ubuntu-latest' }}{% endraw %}
+    timeout-minutes: 30
+{%- if include_database and database_engine == "postgres" %}
+{{ postgres() }}
+{%- else %}
+    env:
+{%- endif %}
+      AI_PROVIDER: {% raw %}${{ vars.AI_PROVIDER || '{% endraw %}{{ providers[0] if providers else "public" }}{% raw %}' }}{% endraw %}
+      AI_MODEL: {% raw %}${{ vars.AI_MODEL }}{% endraw %}
+{%- for provider in providers if provider != "ollama" %}
+{%- set key = key_names.get(provider, provider | upper ~ "_API_KEY") %}
+      {{ key }}: {% raw %}${{ secrets.{% endraw %}{{ key }}{% raw %} }}{% endraw %}
+{%- endfor %}
+{%- if "ollama" in providers %}
+      OLLAMA_BASE_URL_LOCAL: {% raw %}${{ vars.OLLAMA_BASE_URL }}{% endraw %}
+{%- endif %}
+    steps:
+    - uses: actions/checkout@v6
+
+{{ setup() }}
+    - name: Score every dataset
+      run: |
+        uv run alembic -c alembic/alembic.ini upgrade head
+        uv run {{ project_slug }} ai evals run
+{%- endif %}

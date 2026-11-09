@@ -1,6 +1,11 @@
 {%- if ai_backend != "memory" -%}
 """Eval runs over HTTP: start one as a job (its progress on the jobs API),
-read kept runs and their cases, compare two runs."""
+read kept runs and their cases, compare two runs; and the datasets:
+read, a new one written by the model as a job, one deleted. Admins
+only: each turn of a run reads as an admin (``run_dataset``)."""
+
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
@@ -9,15 +14,36 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.components.backend.api.jobs import JobStartedResponse
 from app.core.db import get_async_db
 from app.services.ai.service import (
+    EVAL_CASES,
     EvalCase,
+    EvalDatasetSummary,
     EvalRun,
     EvalScore,
     UnknownDatasetError,
+    eval_dataset,
+    eval_dataset_summaries,
     eval_runs,
+    remove_eval_dataset,
     start_evals,
+    start_generate_evals,
 )
+from app.services.shared.deps import get_admin_actor, get_admin_reader
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_admin_reader)])
+
+
+@contextmanager
+def as_http() -> Iterator[None]:
+    """A dataset not under evals/ is a 404; whatever else is refused (a
+    ValueError, saying why) a 422."""
+    try:
+        yield
+    except UnknownDatasetError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from None
 
 
 class StartRun(BaseModel):
@@ -28,6 +54,18 @@ class StartRun(BaseModel):
     dataset: str
     model: str | None = None
     note: str | None = None
+
+
+class NewDataset(BaseModel):
+    """A dataset for the model in force to write: ``evals/<name>.yaml``,
+    its cases checking ``about``, written like dataset ``like``."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    about: str
+    cases: int = EVAL_CASES
+    like: str | None = None
 
 
 class RunDetail(BaseModel):
@@ -48,30 +86,64 @@ class CaseDetail(BaseModel):
     "/evals/runs",
     response_model=JobStartedResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(get_admin_actor)],
 )
 async def start_run(body: StartRun) -> JobStartedResponse:
     """Run a dataset as a job: the worker's where the stack has one."""
-    try:
+    with as_http():  # 422: a model that cannot answer chat here
         job_id = await start_evals(body.dataset, model=body.model, note=body.note)
-    except UnknownDatasetError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
-        ) from None
-    except ValueError as exc:  # a model that cannot answer chat here
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from None
     return JobStartedResponse(job_id=job_id)
+
+
+@router.post(
+    "/evals/datasets",
+    response_model=JobStartedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(get_admin_actor)],
+)
+async def write_dataset(body: NewDataset) -> JobStartedResponse:
+    """Have the model write a dataset as a job, keeping the cases that
+    hold. 404 for an unknown ``like``; 422 for whatever else ``new_path``
+    refuses."""
+    with as_http():
+        job_id = await start_generate_evals(
+            body.name, about=body.about, cases=body.cases, like=body.like
+        )
+    return JobStartedResponse(job_id=job_id)
+
+
+@router.get("/evals/datasets", response_model=list[EvalDatasetSummary])
+async def list_datasets() -> list[EvalDatasetSummary]:
+    """Every dataset under evals/: what it checks, and its cases."""
+    return eval_dataset_summaries()
+
+
+@router.get("/evals/datasets/{name}", response_model=EvalDatasetSummary)
+async def get_dataset(name: str) -> EvalDatasetSummary:
+    with as_http():
+        return eval_dataset(name)
+
+
+@router.delete(
+    "/evals/datasets/{name}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(get_admin_actor)],
+)
+async def delete_dataset(name: str) -> None:
+    """Delete a dataset's file; its kept runs stay."""
+    with as_http():
+        remove_eval_dataset(name)
 
 
 @router.get("/evals/runs", response_model=list[EvalRun])
 async def list_runs(
     dataset: str | None = None,
+    model: str | None = None,
     limit: int = Query(50, ge=1, le=500),
     db: AsyncSession = Depends(get_async_db),
 ) -> list[EvalRun]:
-    """Kept runs, newest first."""
-    return await eval_runs.runs(db, dataset, limit)
+    """Kept runs, newest first, of ``dataset`` and on ``model`` where named."""
+    return await eval_runs.runs(db, dataset, limit, model=model)
 
 
 @router.get("/evals/runs/{run_id}", response_model=RunDetail)
@@ -96,6 +168,7 @@ async def get_case(
 async def compare(
     a: int, b: int, db: AsyncSession = Depends(get_async_db)
 ) -> eval_runs.Comparison:
-    """The cases two runs share, and which flipped between them."""
+    """The cases that changed between two runs (flipped first, then a rule
+    changed, added, removed), and whether the dataset file did."""
     return await eval_runs.compare(db, a, b)
 {%- endif %}

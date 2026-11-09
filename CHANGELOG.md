@@ -20,16 +20,46 @@
   is metered as `eval_judge`, and a run reports to Logfire as `evals`
   when a token is set. On a database-backed stack `record_run` keeps a
   run (`eval_run`, `eval_case`, `eval_score`) and deletes its
-  conversations, and `queries.compare` names the cases that flipped
-  between two runs. `ai evals run|list|show|compare`, `make evals`, and
+  conversations, each check's rule in words, each case's cost and the
+  dataset file's SHA-256; `queries.compare` names the cases that changed
+  between two runs (flipped, a rule changed, added, removed) and whether
+  the dataset did. `ai evals run|list|show|compare`, `make evals`, and
   `/api/v1/ai/evals` (a run started there is a job, on the worker where
   there is one, reporting each case as it starts); `make evals-ci` plays
-  every dataset's scripts. Overseer > AI > Evals shows each dataset's
-  cases in words before a run, starts one on a model picked from the
-  catalog and follows it, opens a run's cases and a case's tool calls,
-  and compares two runs. The project's `CLAUDE.md` says a regression
+  every dataset's scripts. Every check, Pydantic Evals' own included,
+  reads in words, and a case's `metadata.why` says why it is there.
+  Overseer > AI > Evals is three tabs: Datasets (each in a row; one opened
+  on its cases, their last result and a Run on a model picked from the
+  catalog, followed as it goes), Runs (filtered by dataset and model; a
+  run opened on its cases, failed first, each with its answer, its checks
+  and its tool calls) and Compare (only what changed, flips first, both
+  answers side by side). The project's `CLAUDE.md` says a regression
   found in the logs ships with the case that would have caught it.
-  Pydantic AI only. (#2004, #1161, #1162, #1163, #1164, #1165)
+  `ai evals generate` (and New dataset on the Datasets tab) has the
+  model in force write a dataset, told what the assistant is told (its
+  prompt, the app's map), the app's tools and their arguments, what the
+  cases under `evals/` already ask (it repeats none) and, with `--like`, a dataset to write like; each case runs
+  once on that model and is kept only if it passes, with the script its
+  turn took, then only if that script passes as CI plays it; the file
+  is written once, at the end (`POST /api/v1/ai/evals/datasets` starts
+  the same job). A dataset's page deletes its file, once confirmed
+  (`DELETE /api/v1/ai/evals/datasets/{name}`); its kept runs stay. The CLI,
+  the API and Overseer each read, write and delete datasets
+  (`ai evals datasets`, `ai evals delete`, `GET /api/v1/ai/evals/datasets`). A scripted run leaves out the checks that read spans,
+  and a case left with no check fails instead of passing unchecked. A script
+  plays in the code mode it was recorded in, whatever the agent is set
+  to now.
+  `evals/system.yaml` asks what the app is made of, how it is doing,
+  what broke, and what it cannot see. `Judged` is shown what the turn
+  read (its tool calls and their results) beside the answer, and
+  `ai evals run` names each failing case with every check that failed and
+  why. Eval turns read as an admin, so `/api/v1/ai/evals` is admins
+  only, and are not told what is wrong right now, so a case scores the
+  same whatever the app's health. A scripted run leaves out the checks a model grades, and the
+  generated CI's `Evals` job scores every dataset on a real model once
+  `vars.AI_MODEL` is set (`vars.EVALS_RUNNER` for a self-hosted runner
+  beside Ollama). Pydantic AI only. (#2004, #1161, #1162, #1163, #1164,
+  #1165)
 - **A second layout can be interactive.** `base.html`'s htmx, Alpine and
   stylesheet head, its body kit (loading bar, icons, toasts, dialog,
   drawer, `app.js`) and the chat scripts are the `layout.html` macros
@@ -42,6 +72,13 @@
 
 ### Fixed
 
+- **Temperature on reasoning models** is decided from the model's
+  pydantic-ai profile, not a list of name prefixes: a model reasoning by
+  default (o-series, gpt-5, gpt-5.5+, gpt-6) gets none, so pydantic-ai no
+  longer warns on every call, and gpt-5.1 to 5.4, which reason only when
+  asked, keep the configured one.
+- **Usage recording** reads pydantic-ai's `RunUsage` as the property it
+  is, without the deprecated call that warned on every turn.
 - **`aegis add htmx` on an AI stack without voice** no longer writes the
   voice partials (`chat_voices.py`, `chat_live.py`), whose imports need
   `ai_voice`. A file listed under two extras groups now needs both when

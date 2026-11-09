@@ -1,8 +1,0 @@
-{# Each evaluator's verdict on a case (``scores``): its name in its tone,
-   and why, where it said. #}
-{% from "components/macros/layout.html" import badge %}
-<ul class="space-y-0.5">
-  {% for s in scores %}
-  <li>{{ badge(s.evaluator, s.tone) }}{% if s.reason %} <span class="text-xs text-aegis-muted">{{ s.reason }}</span>{% endif %}</li>
-  {% endfor %}
-</ul>

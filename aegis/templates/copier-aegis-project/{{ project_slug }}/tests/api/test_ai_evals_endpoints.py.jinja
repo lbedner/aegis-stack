@@ -1,17 +1,68 @@
 {%- if ai_backend != "memory" -%}
 """``/api/v1/ai/evals``: start a run as a job, read kept runs and their
-cases, compare two runs."""
+cases, compare two runs; read the datasets, have the model write one,
+delete one. Admins only, since each turn reads as one."""
 
+import functools
+from pathlib import Path
 from typing import Any
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.backend.api.ai import evals as evals_api
+from app.services.ai.domains.evals import datasets
+from app.services.shared.deps import get_admin_actor, get_admin_reader
+from tests._audit import as_admin
 from tests.services.ai.evals import _kept as kept
+from tests.services.ai.evals._mini import mini_in
 
 BASE = "/api/v1/ai/evals"
+
+
+@pytest.fixture(autouse=True)
+def admin(async_client_with_db: TestClient) -> TestClient:
+    return as_admin(async_client_with_db)
+
+
+def test_anyone_else_is_refused(
+    async_client_with_db: TestClient, two_runs: tuple[int, int]
+) -> None:
+    def refused() -> None:
+        raise HTTPException(status_code=403)
+
+    overrides = async_client_with_db.app.dependency_overrides
+    overrides[get_admin_actor] = overrides[get_admin_reader] = refused
+    before, after = two_runs
+    started = async_client_with_db.post(f"{BASE}/runs", json={"dataset": "mini"})
+    written = async_client_with_db.post(
+        f"{BASE}/datasets", json={"name": "ops", "about": "Reads what it is given."}
+    )
+    reads = [
+        f"{BASE}/datasets",
+        f"{BASE}/datasets/starter",
+        f"{BASE}/runs",
+        f"{BASE}/runs/{before}",
+        f"{BASE}/runs/{after}/cases/reads the paper",
+        f"{BASE}/compare?a={before}&b={after}",
+    ]
+    assert started.status_code == written.status_code == 403
+    assert [async_client_with_db.get(url).status_code for url in reads] == [403] * 6
+
+
+@pytest.fixture
+def mini(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``mini`` is the one dataset under evals/: no test here reads, takes
+    the name of or deletes one of the project's own."""
+    mini_in(tmp_path, monkeypatch)
+    for name, read in (
+        ("eval_dataset", datasets.describe),
+        ("eval_dataset_summaries", datasets.describe_all),
+        ("remove_eval_dataset", datasets.remove),
+    ):
+        monkeypatch.setattr(evals_api, name, functools.partial(read, directory=tmp_path))
 
 
 @pytest.fixture
@@ -55,6 +106,65 @@ def test_a_model_that_cannot_answer_is_refused(
     assert "not a chat model" in response.json()["detail"]
 
 
+def test_a_dataset_is_written_as_a_job(
+    async_client_with_db: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asked: list[dict[str, Any]] = []
+
+    async def start(name: str, **kwargs: Any) -> str:
+        asked.append({"name": name, **kwargs})
+        return "job-1"
+
+    monkeypatch.setattr(evals_api, "start_generate_evals", start)
+
+    response = async_client_with_db.post(
+        f"{BASE}/datasets", json={"name": "ops", "about": "Reads.", "like": "starter"}
+    )
+
+    assert response.status_code == 202, response.text
+    assert response.json() == {"job_id": "job-1"}
+    assert asked == [{"name": "ops", "about": "Reads.", "cases": 5, "like": "starter"}]
+
+
+@pytest.mark.parametrize(
+    ("body", "status"),
+    [
+        ({"name": "mini", "about": "Reads what it is given."}, 422),
+        ({"name": "Bad Name", "about": "Reads what it is given."}, 422),
+        ({"name": "ops", "about": "Reads what it is given.", "cases": 500}, 422),
+        ({"name": "ops", "about": "Reads what it is given.", "like": "nope"}, 404),
+        ({"name": "ops", "about": "s"}, 422),
+    ],
+)
+def test_a_dataset_that_cannot_be_written_is_not_started(
+    async_client_with_db: TestClient, mini: None, body: dict[str, Any], status: int
+) -> None:
+    response = async_client_with_db.post(f"{BASE}/datasets", json=body)
+
+    assert response.status_code == status, response.text
+
+
+def test_a_dataset_is_deleted_and_then_is_not_there(
+    async_client_with_db: TestClient, mini: None, tmp_path: Path
+) -> None:
+    assert async_client_with_db.delete(f"{BASE}/datasets/mini").status_code == 204
+    assert not (tmp_path / "mini.yaml").exists()
+    assert async_client_with_db.delete(f"{BASE}/datasets/mini").status_code == 404
+
+
+def test_datasets_are_listed_and_read_with_their_cases(
+    async_client_with_db: TestClient, mini: None
+) -> None:
+    listed = async_client_with_db.get(f"{BASE}/datasets")
+    assert listed.status_code == 200, listed.text
+    assert [d["name"] for d in listed.json()] == ["mini"]
+
+    read = async_client_with_db.get(f"{BASE}/datasets/mini")
+    assert read.status_code == 200, read.text
+    assert read.json()["cases"][0]["checks"]
+    assert async_client_with_db.get(f"{BASE}/datasets/nope").status_code == 404
+
+
 def test_an_unknown_dataset_is_not_started(async_client_with_db: TestClient) -> None:
     response = async_client_with_db.post(f"{BASE}/runs", json={"dataset": "nope"})
 
@@ -72,6 +182,8 @@ def test_kept_runs_are_listed_and_read_with_their_cases(
     case = async_client_with_db.get(f"{BASE}/runs/{after}/cases/reads the paper")
 
     assert [r["id"] for r in listed.json()] == [after, before]
+    by_model = async_client_with_db.get(f"{BASE}/runs", params={"model": "gpt-test"})
+    assert [r["id"] for r in by_model.json()] == [before]
     assert run.json()["run"]["note"] == "baseline"
     assert {c["name"] for c in run.json()["cases"]} == {"reads the paper", "never deletes"}
     assert case.json()["case"]["passed"] is False
@@ -96,9 +208,7 @@ def test_compare_names_the_flipped_case(
 
     assert response.status_code == 200, response.text
     [flipped] = response.json()["flipped"]
-    assert (flipped["name"], flipped["before"], flipped["after"]) == (
-        "reads the paper",
-        True,
-        False,
-    )
+    assert (flipped["name"], flipped["change"]) == ("reads the paper", "flipped")
+    assert (flipped["before"]["passed"], flipped["after"]["passed"]) == (True, False)
+    assert flipped["after"]["output"] == "I could not find it."
 {%- endif %}

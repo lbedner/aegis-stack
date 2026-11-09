@@ -1,35 +1,39 @@
 {%- if ai_backend != "memory" -%}
-"""``ai evals``: run a dataset and keep it, list and show kept runs, and
-compare two of them."""
+"""``ai evals``: run a dataset and keep it, list and show kept runs (and
+one case of one), compare two of them; read the datasets, have the model
+write one, delete one."""
 
 import functools
 from pathlib import Path
 
 import pytest
 
-from app.services.ai.domains.evals import datasets, jobs, runner
+from app.services.ai.domains.evals import datasets, jobs
 from app.services.ai.domains.llm.llm_service import SetModelResult
 from tests._cli import invoke
-from tests.services.ai.evals._mini import DATASET, answering
+from tests.services.ai.evals._mini import ABOUT, answering, mini_in, writing
 
 
 @pytest.fixture
 def mini(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``mini`` is the one dataset under evals/, answered by a fake chat."""
-    (tmp_path / "mini.yaml").write_text(DATASET)
-    monkeypatch.setattr(
-        "app.cli.ai.evals.eval_datasets",
-        functools.partial(datasets.names, tmp_path),
-    )
-    monkeypatch.setattr(
-        jobs, "run_dataset", functools.partial(runner.run_dataset, directory=tmp_path)
-    )
+    mini_in(tmp_path, monkeypatch)
+    for name, read in (
+        ("eval_datasets", datasets.names),
+        ("eval_dataset", datasets.describe),
+        ("eval_dataset_summaries", datasets.describe_all),
+        ("remove_eval_dataset", datasets.remove),
+    ):
+        monkeypatch.setattr(
+            f"app.cli.ai.evals.{name}", functools.partial(read, directory=tmp_path)
+        )
 
 
 def _run_id(output: str) -> int:
     return int(output.split("run ")[-1].split()[0])
 
 
+@pytest.mark.queryspy(allow_n_plus_one=True)  # each command reads the run
 def test_a_run_is_kept_listed_and_shown(
     mini: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -48,7 +52,16 @@ def test_a_run_is_kept_listed_and_shown(
     assert shown.exit_code == 0, shown.output
     assert "reads the paper" in shown.output and "never deletes" in shown.output
 
+    case = invoke(["ai", "evals", "show", str(run_id), "reads the paper"])
+    assert case.exit_code == 0, case.output
+    assert "The letter says hello." in case.output
+    assert "calls paper once" in case.output and 'says "letter"' in case.output
+    assert "called paper once" in case.output
+    missing = invoke(["ai", "evals", "show", str(run_id), "nope"])
+    assert missing.exit_code == 1 and "nope" in missing.output
 
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # each command reads the run
 def test_a_failing_case_fails_the_command_and_compare_names_it(
     mini: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -59,11 +72,26 @@ def test_a_failing_case_fails_the_command_and_compare_names_it(
     ran = invoke(["ai", "evals", "run"])
     assert ran.exit_code == 1, ran.output
     assert "1/2" in ran.output
+    # The failing case is named where it failed, CI's log included, with
+    # each check that failed, in words, and why; one that passed is left out.
+    assert "fail  reads the paper" in ran.output
+    assert "calls paper once  paper: 0 matching of no calls, wanted 1" in ran.output
+    assert 'says "letter"' not in ran.output
+    assert "never deletes" not in ran.output
+    # As ``show`` prints it too.
+    shown = invoke(["ai", "evals", "show", str(_run_id(ran.output))])
+    assert "calls paper once  paper: 0 matching" in shown.output
+    by_model = invoke(["ai", "evals", "list", "--model", "nope"])
+    assert "No runs kept yet" in by_model.output
 
     compared = invoke(["ai", "evals", "compare", str(before), str(_run_id(ran.output))])
     assert compared.exit_code == 0, compared.output
-    assert "reads the paper" in compared.output
+    assert "reads the paper: pass -> fail" in compared.output
+    assert "calls paper once: 1 -> 0" in compared.output
     assert "never deletes" not in compared.output
+
+    alike = invoke(["ai", "evals", "compare", str(before), str(before)])
+    assert "No differences" in alike.output
 
 
 def test_an_unknown_dataset_is_refused_naming_those_there(mini: None) -> None:
@@ -91,6 +119,49 @@ def test_a_model_that_cannot_answer_is_refused(
 
     assert ran.exit_code == 1
     assert "nope-1" in ran.output
+
+
+def test_a_dataset_is_written_by_the_model_keeping_what_held(
+    mini: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    answering(monkeypatch)
+    writing(monkeypatch)
+
+    made = invoke(
+        ["ai", "evals", "generate", "ops", "--about", ABOUT, "--like", "mini"]
+    )
+
+    assert made.exit_code == 0, made.output
+    assert "evals/ops.yaml: 1 case of 3" in made.output
+    assert "dropped checks health" in made.output
+    taken = invoke(["ai", "evals", "generate", "mini", "--about", ABOUT])
+    assert taken.exit_code == 1 and "already exists" in taken.output
+
+
+def test_datasets_are_listed_and_one_is_read_with_its_cases(mini: None) -> None:
+    listed = invoke(["ai", "evals", "datasets"])
+    assert listed.exit_code == 0, listed.output
+    assert "mini" in listed.output and "2" in listed.output
+
+    read = invoke(["ai", "evals", "datasets", "mini"])
+    assert read.exit_code == 0, read.output
+    assert "what does the letter say?" in read.output
+    assert "calls paper once" in read.output
+
+    unknown = invoke(["ai", "evals", "datasets", "nope"])
+    assert unknown.exit_code == 1 and "nope" in unknown.output
+
+
+def test_a_dataset_is_deleted_once_confirmed(mini: None, tmp_path: Path) -> None:
+    kept = invoke(["ai", "evals", "delete", "mini"], input="n\n")
+    assert "Cancelled" in kept.output and (tmp_path / "mini.yaml").exists()
+
+    gone = invoke(["ai", "evals", "delete", "mini", "--yes"])
+    assert gone.exit_code == 0, gone.output
+    assert not (tmp_path / "mini.yaml").exists()
+
+    unknown = invoke(["ai", "evals", "delete", "mini", "--yes"])
+    assert unknown.exit_code == 1 and "mini" in unknown.output
 
 
 def test_an_unknown_run_is_refused() -> None:

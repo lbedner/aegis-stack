@@ -2,7 +2,6 @@
 """A dataset run and kept as one call, and run as a job: on the worker
 where the stack has one, else in this process."""
 
-import functools
 from pathlib import Path
 {%- if include_worker %}
 from typing import Any
@@ -12,17 +11,14 @@ import pytest
 
 from app.core.db import get_async_session
 from app.services.ai.domains.evals import jobs, queries, runner
-from app.services.ai.domains.evals.datasets import (
-    UnknownDatasetError,
-    dataset_path,
-)
+from app.services.ai.domains.evals.datasets import UnknownDatasetError
 from app.services.ai.domains.llm.llm_service import SetModelResult
 {%- if include_worker %}
 from app.services.system import job_store
 {%- else %}
 from app.services.system.jobs import get_job_runner
 {%- endif %}
-from tests.services.ai.evals._mini import DATASET, answering
+from tests.services.ai.evals._mini import answering, mini_in
 
 
 def _checked(success: bool, provider: str | None = None) -> SetModelResult:
@@ -39,14 +35,8 @@ def _checked(success: bool, provider: str | None = None) -> SetModelResult:
 @pytest.fixture
 def mini(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """``mini`` is the dataset every run here plays, answered by a fake chat."""
-    (tmp_path / "mini.yaml").write_text(DATASET)
+    mini_in(tmp_path, monkeypatch)
     answering(monkeypatch)
-    monkeypatch.setattr(
-        jobs, "run_dataset", functools.partial(runner.run_dataset, directory=tmp_path)
-    )
-    monkeypatch.setattr(
-        jobs, "dataset_path", functools.partial(dataset_path, directory=tmp_path)
-    )
 
 
 async def test_a_dataset_not_under_evals_is_refused_before_it_is_started(

@@ -1,8 +1,11 @@
 {%- if ai_backend != "memory" -%}
 """A dataset run and kept, as one call: the CLI's, and a job's on the worker
 (or in this process, without one). Each opens the session the run is kept
-in once the scoring, minutes of model calls, is over."""
+in once the scoring, minutes of model calls, is over. A dataset written by
+the model (``generate_evals``) is run here too, so nothing it keeps fails."""
 
+from pathlib import Path
+import tempfile
 from typing import Any
 
 from app.core.config import settings
@@ -14,9 +17,28 @@ from app.services.ai.models.evals import EvalRun
 from app.services.system import job_store
 from app.services.system.jobs import Report
 
-from .datasets import dataset_path
+from .datasets import EVALS_DIR, dataset_path
+from .generator import (
+    CASES,
+    Dropped,
+    Generated,
+    held,
+    keep,
+    new_path,
+    publish,
+    write_cases,
+    written,
+)
 from .recorder import record_run
 from .runner import run_dataset
+from .script import Step
+
+# A run's job is named this and its dataset's name.
+JOB_PREFIX = "ai-evals:"
+# A dataset being written is a job named this and the dataset's name.
+WRITING_PREFIX = f"{JOB_PREFIX}new:"
+# What a written dataset's runs say of themselves.
+WRITTEN = "written by generate"
 
 
 async def _provider_for(model: str | None) -> str | None:
@@ -39,15 +61,22 @@ async def run_evals(
     note: str | None = None,
     trigger: str = "cli",
     report: Report | None = None,
+    directory: Path | None = None,
 ) -> EvalRun:
-    """Score ``name`` (``run_dataset``) on the model picked in the Overseer,
-    or ``model``, then keep the run; its conversations go with the keeping."""
+    """Score ``name`` (``run_dataset``; under ``evals/``, or ``directory``)
+    on the model picked in the Overseer, or ``model``, then keep the run;
+    its conversations go with the keeping."""
     # Headless: the selection is a row only the webserver re-reads per request.
     await active_model.sync_from_db(settings)
     provider = await _provider_for(model)
     started_at = utcnow()
     scored = await run_dataset(
-        name, scripted=scripted, model=model, provider=provider, report=report
+        name,
+        scripted=scripted,
+        model=model,
+        provider=provider,
+        report=report,
+        directory=directory or EVALS_DIR,
     )
     async with get_async_session() as session:
         return await record_run(
@@ -67,13 +96,84 @@ async def start_evals(name: str, *, model: str | None, note: str | None) -> str:
     """Start the run as a job; a dataset not under ``evals/``
     (``UnknownDatasetError``) or a model that cannot answer is refused here, not
     on the worker."""
-    dataset_path(name)
+    dataset_path(name, EVALS_DIR)
     await _provider_for(model)
     return await job_store.start_job(
-        f"ai-evals:{name}",
+        f"{JOB_PREFIX}{name}",
         "run_evals_task",
         (name, model, note),
         lambda report: _job_result(name, model, note, report),
+    )
+
+
+async def _held(run_id: int) -> tuple[dict[str, list[Step]], list[Dropped]]:
+    """``held`` of a kept run, in a session of its own."""
+    async with get_async_session() as session:
+        return await held(session, run_id)
+
+
+async def generate_evals(
+    name: str,
+    *,
+    about: str,
+    cases: int = CASES,
+    like: str | None = None,
+    report: Report | None = None,
+) -> Generated:
+    """Write ``evals/<name>.yaml``: the model in force writes the cases
+    (``write_cases``), each runs once on it, those that held are kept with
+    the scripts their turns took, and the scripts are played as CI plays
+    them (``make evals-ci``), keeping those that pass. All of it on a draft
+    out of sight: the file is there only once nothing in it fails.
+    ValueError (``new_path``) before any model is called, and when no case
+    holds."""
+    path = new_path(name, about, cases, like, EVALS_DIR)
+    say = report or (lambda _label: None)
+    say("Writing cases...")
+    dataset, dropped = await write_cases(about, cases, like, EVALS_DIR)
+    with tempfile.TemporaryDirectory() as drafts:
+        folder = Path(drafts)
+        draft = folder / path.name
+        draft.write_text(written(dataset, about))
+        real = await run_evals(
+            name, trigger="generate", note=WRITTEN, report=report, directory=folder
+        )
+        scripts, failed = await _held(real.id)
+        dropped += failed
+        keep(dataset, scripts, dropped)
+        draft.write_text(written(dataset, about))
+        say("Playing the scripts...")
+        played = await run_evals(
+            name, scripted=True, trigger="ci", note=WRITTEN, directory=folder
+        )
+        if played.failed:
+            playable, unplayable = await _held(played.id)
+            dropped += unplayable
+            keep(dataset, {n: scripts[n] for n in playable}, dropped)
+    publish(dataset, about, path)
+    return Generated(kept=len(dataset.cases), dropped=dropped, run_id=real.id)
+
+
+async def _generated_result(
+    name: str, about: str, cases: int, like: str | None, report: Report
+) -> dict[str, Any]:
+    """A dataset written as a job, and what its result says of it: the
+    cases kept of those written, and the run that decided."""
+    made = await generate_evals(name, about=about, cases=cases, like=like, report=report)
+    return {"run_id": made.run_id, "dataset": name, "kept": made.kept, "written": made.written}
+
+
+async def start_generate_evals(
+    name: str, *, about: str, cases: int = CASES, like: str | None = None
+) -> str:
+    """Write the dataset as a job (``generate_evals``); what ``new_path``
+    refuses is refused here, not on the worker."""
+    new_path(name, about, cases, like, EVALS_DIR)
+    return await job_store.start_job(
+        f"{WRITING_PREFIX}{name}",
+        "generate_evals_task",
+        (name, about, cases, like),
+        lambda report: _generated_result(name, about, cases, like, report),
     )
 {%- if include_worker %}
 
@@ -84,6 +184,15 @@ async def run_evals_job(
     """The worker's entry."""
     return await job_store.narrate(
         job_id, lambda report: _job_result(name, model, note, report)
+    )
+
+
+async def generate_evals_job(
+    job_id: str, name: str, about: str, cases: int, like: str | None
+) -> dict[str, Any]:
+    """The worker's entry for a dataset written by the model."""
+    return await job_store.narrate(
+        job_id, lambda report: _generated_result(name, about, cases, like, report)
     )
 {%- endif %}
 {%- endif %}

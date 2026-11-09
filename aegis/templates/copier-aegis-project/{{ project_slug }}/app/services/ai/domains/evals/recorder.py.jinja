@@ -14,25 +14,28 @@ from app.core.time import utcnow
 from app.services.ai.domains.chat.conversation import delete_conversations
 from app.services.ai.models.evals import EvalCase, EvalRun, EvalScore
 
-from .datasets import CaseInput
-from .evaluators import CONVERSATION, COST, MODEL, TRACE
+from .datasets import CaseInput, CaseMeta
+from .evaluators import CONVERSATION, COST, FINGERPRINT, MODEL, TRACE, rule_of
 
-Report = EvaluationReport[CaseInput, str, None]
+Report = EvaluationReport[CaseInput, str, CaseMeta]
+Case = ReportCase[CaseInput, str, CaseMeta]
 
 
-def _passed(case: ReportCase[CaseInput, str, None]) -> bool:
+def _passed(case: Case) -> bool:
     """Every assertion held and no evaluator failed to say."""
     return not case.evaluator_failures and all(
         r.value is True for r in case.assertions.values()
     )
 
 
-def _scores(case_id: int, case: ReportCase[CaseInput, str, None]) -> list[dict[str, Any]]:
-    """An assertion as 1 or 0 with its pass; a score as it is."""
+def _scores(case_id: int, case: Case) -> list[dict[str, Any]]:
+    """An assertion as 1 or 0 with its pass; a score as it is; each with
+    the rule it was scored on."""
     held = [
         {
             "case_id": case_id,
             "evaluator": name,
+            "rule": rule_of(r.source),
             "value": 1.0 if r.value else 0.0,
             "passed": r.value is True,
             "reason": r.reason,
@@ -43,6 +46,7 @@ def _scores(case_id: int, case: ReportCase[CaseInput, str, None]) -> list[dict[s
         {
             "case_id": case_id,
             "evaluator": name,
+            "rule": rule_of(r.source),
             "value": float(r.value),
             "passed": None,
             "reason": r.reason,
@@ -52,9 +56,7 @@ def _scores(case_id: int, case: ReportCase[CaseInput, str, None]) -> list[dict[s
     return held + scored
 
 
-def _row(
-    run_id: int, case: ReportCase[CaseInput, str, None] | ReportCaseFailure[CaseInput, str, None]
-) -> dict[str, Any]:
+def _row(run_id: int, case: Case | ReportCaseFailure[CaseInput, str, CaseMeta]) -> dict[str, Any]:
     """What a case and a case that errored both keep; nothing run yet."""
     return {
         "run_id": run_id,
@@ -64,17 +66,19 @@ def _row(
         "output": None,
         "passed": False,
         "duration_ms": 0.0,
+        "cost": None,
         "tool_calls": [],
         "error": None,
         "conversation_id": None,
     }
 
 
-def _case(run_id: int, case: ReportCase[CaseInput, str, None], keep: bool) -> dict[str, Any]:
+def _case(run_id: int, case: Case, keep: bool) -> dict[str, Any]:
     return _row(run_id, case) | {
         "output": case.output,
         "passed": _passed(case),
         "duration_ms": case.task_duration * 1000,
+        "cost": case.attributes.get(COST),
         "tool_calls": case.attributes.get(TRACE) or [],
         "conversation_id": case.attributes.get(CONVERSATION) if keep else None,
     }
@@ -97,6 +101,7 @@ async def record_run(
         dataset=report.name,
         model_id=next((a[MODEL] for a in attributes if a.get(MODEL)), None),
         build=settings.BUILD_ID,
+        dataset_sha256=(report.experiment_metadata or {}).get(FINGERPRINT),
         started_at=started_at,
         finished_at=utcnow(),
         cases=len(report.cases) + len(report.failures),

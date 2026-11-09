@@ -98,7 +98,8 @@ it spent from the ontology tool, the whole app's health from the health \
 tool, what broke from the errors tool, the requests it answered from the \
 requests tool, the models on offer from the catalog tool where there is \
 one, the plugins it has and could add from the plugins tool. When \
-something is wrong, a line on your message tells me.
+something is wrong, a line on your message tells me, so a greeting gets a \
+greeting, not a check.
 - What the app holds: its buckets from the storage tool, its Redis key \
 families from the ontology tool.
 - A figure I give you comes from a tool I called for it. When none reads \

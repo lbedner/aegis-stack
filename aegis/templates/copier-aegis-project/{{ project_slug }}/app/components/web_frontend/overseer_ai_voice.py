@@ -17,7 +17,7 @@ from urllib.parse import urlencode
 
 from fastapi import UploadFile
 
-from .overseer_ai_common import PARTIALS, icon_url, section_url
+from .overseer_ai_common import PARTIALS, icon_url, section_url, tab_links
 
 if TYPE_CHECKING:
     # Only a stack with a database has it; a voice-only one does not.
@@ -71,15 +71,12 @@ async def voice_context(db: "AsyncSession", query: Mapping[str, str]) -> dict[st
         tab = "models"
     frame = {
         "tab": tab,
-        "tabs": [
-            {
-                "label": label,
-                "url": section_url("voice", tab=None if key == "profiles" else key),
-                "active": key == tab,
-            }
-            for key, label in TABS.items()
-            if key == "models" or _designs() is not None
-        ],
+        "tabs": tab_links(
+            "voice",
+            {k: v for k, v in TABS.items() if k == "models" or _designs() is not None},
+            tab,
+            "profiles",
+        ),
     }
     if tab == "models":
         return frame | await _models(db)

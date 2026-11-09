@@ -125,12 +125,13 @@ def row_text(markup: Markup, rows: str, needle: str) -> str:
 
 def table_rows(markup: Markup, table: str = "table") -> list[dict[str, HtmlElement]]:
     """Each body row of ``table`` as ``{header label: cell}``, so tests read
-    cells by name instead of counting columns."""
+    cells by name instead of counting columns; a row's opened detail
+    (``data_table``'s ``detail``) is not a row."""
     root = one(markup, table)
     headers = [text(th) for th in select(root, "thead th")]
     return [
         dict(zip(headers, tr.getchildren(), strict=False))
-        for tr in select(root, "tbody tr")
+        for tr in select(root, "tbody tr:not([data-detail])")
     ]
 
 

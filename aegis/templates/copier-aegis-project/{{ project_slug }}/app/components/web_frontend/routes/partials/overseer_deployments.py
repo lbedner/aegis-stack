@@ -291,11 +291,17 @@ async def _record(record_id: str) -> Any:
 )
 async def confirm_delete_record(request: Request, record_id: str) -> Response:
     r = await _record(record_id)
+    # A wildcard only answers for names with no record of their own.
+    body = (
+        "Subdomains without their own record stop resolving."
+        if r.host.startswith("*")
+        else f"It stops pointing at {r.value}."
+    )
     return dialog(
         request,
         "pages/overseer/_confirm.html",
         title=f"Delete {r.type} {dns.label(r.host, dns.domain())}?",
-        body=f"It points at {r.value}; names under it stop resolving.",
+        body=body,
         url=f"{overseer_deployments.DNS_RECORDS}/{r.provider_id}",
         label="Delete",
         method="delete",

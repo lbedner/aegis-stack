@@ -401,6 +401,33 @@ def test_a_line_in_a_hidden_tab_shows_its_tab_and_a_reread_keeps_it() -> None:
     }
 
 
+ROWS_HARNESS = (
+    STUBS
+    + """
+require(APP_JS);
+// A row ``opens_rows`` opens (or shuts) before the click reaches the page.
+const row = (key, open) => {
+  const attrs = open ? { 'data-open': '' } : {};
+  return { dataset: { row: key }, attrs, hasAttribute: (k) => k in attrs,
+           setAttribute: (k, v) => { attrs[k] = v; } };
+};
+const at = (target) => ({ target: { closest: (sel) => (sel === 'tr.log-row[data-row]' ? target : null) } });
+fire('click', at(row('41', true)));
+fire('click', at(row('42', false)));
+const again = [row('41', false), row('42', false), row('43', false)];
+const table = { querySelectorAll: (sel) => (sel === 'tr.log-row[data-row]' ? again : []) };
+fire('htmx:load', { detail: { elt: table } });
+console.log(JSON.stringify(again.map((r) => 'data-open' in r.attrs)));
+"""
+)
+
+
+def test_a_row_opened_stays_open_when_its_table_re_sends_itself() -> None:
+    """Transactions re-sends its table every second: the statement a click
+    opened stays open, by the row's key; one shut, or new, stays shut."""
+    assert run(ROWS_HARNESS, APP_JS=APP_JS) == [True, False, False]
+
+
 MARK_HARNESS = (
     STUBS
     + """

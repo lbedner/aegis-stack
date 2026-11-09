@@ -1,4 +1,5 @@
-{# What Rows and Query share: the note saying why the app's data is hidden
+{# What Rows and Query share (and Transactions and Activity, their cells,
+   ``copy_cell``): the note saying why the app's data is hidden
    (``exposure.refusal``), and rows read like Logs (``rows_scroller``): one
    line each, cut at the edge like a log line, a click opening one, a
    column holding a secret shown as hidden. ``found`` is a page
@@ -10,8 +11,8 @@
    header a link, every other header sorting the rows shown (rows.js),
    which ``export_menu`` exports. #}
 {% from "components/macros/icons.html" import icon %}
-{% from "components/macros/layout.html" import dropdown, menu_heading, menu_item %}
-{% from "pages/overseer/_macros.html" import opens_rows %}
+{% from "components/macros/layout.html" import dropdown, highlighted, menu_heading, menu_item %}
+{% from "pages/overseer/_macros.html" import cell_copy, opens_rows, row_cell %}
 
 {% macro rows_off_note(reason) %}
 <p data-rows-off class="text-sm text-aegis-muted">A table's rows are the app's data: {{ reason }}</p>
@@ -41,7 +42,7 @@
   <tbody id="{{ body }}" {{ opens_rows() }}>
     {% for row in found.rows %}
     <tr class="log-row">
-      {% for cell in row %}{% set column = found.columns[loop.index0] %}<td class="px-3 py-1 max-w-xs {{ 'text-aegis-muted' if column in found.masked else 'text-aegis-text' }}"{% if column in found.masked %} title="Hidden: it holds a secret"{% endif %}><div class="log-line">{{ cell }}</div></td>{% endfor %}
+      {% for cell in row %}{% set column = found.columns[loop.index0] %}<td class="{{ row_cell('max-w-xs ' ~ ('text-aegis-muted' if column in found.masked else 'text-aegis-text')) }}"{% if column in found.masked %} title="Hidden: it holds a secret"{% endif %}><div class="log-line">{{ cell }}</div></td>{% endfor %}
     </tr>
     {% if links and links[loop.index0] %}
     <tr data-links><td colspan="{{ found.columns|length }}" class="px-3 pb-2"><div class="flex flex-wrap gap-x-4 gap-y-1">{% for link in links[loop.index0] %}<a href="{{ link.url }}" {{ hx_replace(link.url, "#database-table") }} class="text-aegis-teal hover:underline">{{ link.label }}</a>{% endfor %}</div></td></tr>
@@ -50,4 +51,22 @@
   </tbody>
 </table>
 {% if not found.rows %}<p class="px-3 py-4 text-sm text-aegis-muted">{{ empty }}</p>{% endif %}
+{%- endmacro %}
+
+
+{# A cell of Transactions and Activity (``data-<attr>``), copied whole by
+   its copy, past the cut: a name (a process, a container) kept to one
+   line, whole on hover; or, ``opens``, a longer value (the code holding
+   it) cut at the edge like a log line, a click opening it (``opens_rows``),
+   and with ``lang`` (a statement) opened highlighted in place of the
+   line. "-" when there is none. #}
+{% macro copy_cell(value, attr, opens=False, lang=None) %}
+{% set opens = opens or lang %}
+<td data-{{ attr }} class="{{ row_cell('font-mono ' ~ ('max-w-0' if opens else 'whitespace-nowrap')) }}"{% if value and not opens %} title="{{ value }}"{% endif %}>{% if value %}<div class="flex items-start">
+  <div class="min-w-0 flex-1">
+    <div data-{{ attr }}-line class="{{ ('log-line' ~ (' log-trace-hint' if lang)) if opens else 'truncate' }}">{{ value }}</div>
+    {% if lang %}<div class="log-trace">{{ highlighted(value, lang, wrap=True) }}</div>{% endif %}
+  </div>
+  {{- cell_copy(value) -}}
+</div>{% else %}<span class="text-aegis-muted">-</span>{% endif %}</td>
 {%- endmacro %}

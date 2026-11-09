@@ -454,7 +454,7 @@
   .log-line [data-field-key] { @apply text-info; }
   .log-line [data-field-value] { color: var(--aegis-chart-5); }
   :is(.logs-wrap, .log-row[data-open]) .log-line { @apply whitespace-normal break-all; }
-  /* What a row holds beyond its line (a trace; a table row's keys, the row under it) shows while it is open. */
+  /* What a row holds beyond its line (a trace; a statement, in place of its cut line; a table row's keys, the row under it) shows while it is open. */
   .log-row:not([data-open]) .log-trace, .log-row:not([data-open]) + tr[data-links], :is(.logs-wrap, .log-row[data-open]) .log-trace-hint { @apply hidden; }
   .logs-wrap .log-row .log-trace { @apply block; }
   .volume-bar span { @apply block w-full bg-current; }

@@ -254,15 +254,30 @@ function restoreFolds(root) {
     if (fold.dataset.fold in folds) fold.open = folds[fold.dataset.fold];
   }
 }
-// The tabs picked and the folds left, back on whatever htmx brings in;
-// again the moment new content is in, before the browser paints it: htmx
-// fires ``load`` only once the swap settles, a frame later, and a view
-// re-reading itself every few seconds would flash its first tab, and shut
-// the folds held open, each time.
+// A row a click opened (``opens_rows``) with a ``data-row`` key stays open
+// the same way, so a table that re-sends itself (Transactions over SSE,
+// every second) keeps the statement open. Read once the click has reached
+// the page, after ``opens_rows`` opened or shut it.
+const openRows = {};
+document.addEventListener('click', (event) => {
+  const row = event.target.closest?.('tr.log-row[data-row]');
+  if (row) openRows[row.dataset.row] = row.hasAttribute('data-open');
+});
+function restoreRows(root) {
+  for (const row of root.querySelectorAll('tr.log-row[data-row]')) {
+    if (openRows[row.dataset.row]) row.setAttribute('data-open', '');
+  }
+}
+// The tabs picked, the folds left and the rows opened, back on whatever
+// htmx brings in; again the moment new content is in, before the browser
+// paints it: htmx fires ``load`` only once the swap settles, a frame later,
+// and a view re-reading itself every few seconds would flash its first
+// tab, and shut the folds held open, each time.
 function restoreView(root) {
   if (!root?.querySelectorAll) return;
   restoreTabs(root);
   restoreFolds(root);
+  restoreRows(root);
 }
 document.body.addEventListener('htmx:load', (event) => restoreView(event.detail.elt));
 document.body.addEventListener('htmx:afterSwap', () => restoreView(document.body));

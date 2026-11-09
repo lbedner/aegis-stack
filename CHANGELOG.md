@@ -30,6 +30,15 @@
   and compares two runs. The project's `CLAUDE.md` says a regression
   found in the logs ships with the case that would have caught it.
   Pydantic AI only. (#2004, #1161, #1162, #1163, #1164, #1165)
+- **A second layout can be interactive.** `base.html`'s htmx, Alpine and
+  stylesheet head, its body kit (loading bar, icons, toasts, dialog,
+  drawer, `app.js`) and the chat scripts are the `layout.html` macros
+  `interactive_head`, `interactive_body` and `chat_scripts`, so a
+  public site's own layout can host a chat mount. `ChatSurface.approvals`
+  leaves the change queue off a mount whose agent only reads, and
+  `chat_action(slug)` (the AI facade) is the one spelling of an agent's
+  chat turn in the ledger, for its recorders and a budget. `fold` moves
+  from the deployments page to `layout.html`.
 
 ### Fixed
 
@@ -37,6 +46,11 @@
   voice partials (`chat_voices.py`, `chat_live.py`), whose imports need
   `ai_voice`. A file listed under two extras groups now needs both when
   the second is an option (`ai_voice`, `ai_evals`), not only a part.
+- **One agent's budget counts that agent.** `BudgetGuard` on one agent's
+  action matched every agent whose slug began with it (`finance-analyst`
+  counted `finance-analyst-deep`); a family is a prefix ending in `:`.
+- **A link into a fold opens it**, as one into a hidden tab already did,
+  and so does arriving at an address that names it.
 
 ## [0.19.1] - 2026-11-06
 

@@ -38,9 +38,9 @@ class BudgetGuard:
     """Checks one user's daily spend for an action family against a ceiling."""
 
     def __init__(self, action_prefix: str, daily_budget_usd: float) -> None:
-        # ``action_prefix`` matches the ledger's ``action`` column as a LIKE
-        # pattern ("chat:" -> "chat:%"), so a surface can budget its own
-        # family without touching insight ("insight:%") spend.
+        # ``action_prefix`` is a family ending in ":" ("chat:", never
+        # touching insight spend), or one action: ``chat_action`` of one
+        # agent counts that agent alone (``spend_since``).
         self.action_prefix = action_prefix
         self.daily_budget_usd = daily_budget_usd
 

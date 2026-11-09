@@ -28,7 +28,7 @@ const fire = (name, event) => (handlers[name] || []).forEach((fn) => fn(event));
 global.Event = class { constructor(name) { this.type = name; } };
 global.CustomEvent = class extends global.Event {
   constructor(name, init) { super(name); this.detail = init && init.detail; } };
-global.window = { location: { origin: 'http://app', pathname: '/', search: '' },
+global.window = { location: { origin: 'http://app', pathname: '/', search: '', hash: '' },
                   addEventListener: on, dispatchEvent: () => {} };
 global.document = { addEventListener: on, getElementById: () => null,
                     querySelector: () => null, querySelectorAll: () => [],
@@ -377,7 +377,7 @@ const view = (shown) => {
   return { tabs, buttons, panels };
 };
 const first = view('notes');
-revealTab({ closest: () => first.panels[1] });
+revealTab({ closest: (s) => (s === '[data-tab-panel]' ? first.panels[1] : null) });
 revealTab({ closest: () => null });
 const reread = view('notes');
 fire('htmx:load', { detail: { elt: reread.tabs } });
@@ -399,6 +399,26 @@ def test_a_line_in_a_hidden_tab_shows_its_tab_and_a_reread_keeps_it() -> None:
         "selected": ["false", "true"],
         "kept": [True, False],
     }
+
+
+FOLDS_HARNESS = (
+    STUBS
+    + """
+const { revealTab } = require(APP_JS);
+// A line two folds deep: each fold it sits in opens, nothing above them.
+const page = { closest: () => null };
+const outer = { open: false, parentElement: page };
+const inner = { open: false, parentElement: { closest: (s) => (s === 'details' ? outer : null) } };
+revealTab({ closest: (s) => (s === 'details' ? inner : null) });
+console.log(JSON.stringify([inner.open, outer.open]));
+"""
+)
+
+
+def test_a_line_linked_to_in_a_fold_opens_every_fold_around_it() -> None:
+    """A link to a line inside folds opens
+    each fold it sits in, so the line is there to land on."""
+    assert run(FOLDS_HARNESS, APP_JS=APP_JS) == [True, True]
 
 
 ROWS_HARNESS = (

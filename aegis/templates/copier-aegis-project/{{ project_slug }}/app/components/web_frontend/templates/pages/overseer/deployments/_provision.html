@@ -5,7 +5,8 @@
    offer the size and the price is theirs. The price shown is typed back
    to create the server. #}
 {% from "components/macros/form.html" import action, checkbox, field, select, text_input %}
-{% from "pages/overseer/deployments/_macros.html" import asks, by_hand, failed, fold, reloads, waiting %}
+{% from "components/macros/layout.html" import fold %}
+{% from "pages/overseer/deployments/_macros.html" import asks, by_hand, failed, reloads, waiting %}
 <div data-provision="{{ p.provider }}" data-part data-write hx-disinherit="*" hx-swap="outerHTML" hx-include="find form" class="space-y-3"{{ reloads(p.reload) }}>
   <p data-provision-heading class="text-sm font-semibold text-aegis-text">New server on {{ p.name }}</p>
   {{ by_hand(p.own, "own", title="Already have a server?") }}

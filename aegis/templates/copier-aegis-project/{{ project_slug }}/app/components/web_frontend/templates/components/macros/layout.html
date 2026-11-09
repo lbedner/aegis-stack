@@ -4,9 +4,9 @@
 
        {% from "components/macros/layout.html" import card, stat_tile, dialog, dropdown %}
 #}
-{% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/feedback.html" import empty_state, toast_region %}
 {% from "components/macros/form.html" import action, cancel_button %}
-{% from "components/macros/icons.html" import icon %}
+{% from "components/macros/icons.html" import icon, sprite %}
 
 {# Rendered markdown's typography (``|markdown``): an answer in the chat or
    from a meeting's agent, styled once. #}
@@ -385,6 +385,15 @@
 {% macro fold_mark(classes="") -%}
 <span aria-hidden="true" class="fold-mark {{ classes }}">›</span>
 {%- endmacro %}
+{# What most can leave folded: ``label`` the line that opens it, the
+   caller's body under it, ``attrs`` on its ``<details>`` and ``classes``
+   its type and place. #}
+{% macro fold(label, attrs="", classes="text-sm") %}
+<details {{ attrs }} class="{{ classes }}">
+  <summary class="cursor-pointer text-aegis-muted hover:text-aegis-text transition-colors">{{ label }}</summary>
+  <div class="mt-3">{{ caller() }}</div>
+</details>
+{% endmacro %}
 
 {% macro chart_dot(n) -%}
 <span data-dot class="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style="background: var(--aegis-chart-{{ n }})" aria-hidden="true"></span>
@@ -681,3 +690,53 @@
   {% endfor %}
 </dl>
 {% endmacro %}
+
+
+{# What an interactive page loads in its head: htmx (and its SSE
+   extension), Alpine and the app's styles. base.html and any other layout
+   that needs htmx share this one copy; ``interactive_body`` is its other
+   half. #}
+{% macro interactive_head() %}
+{# htmx. History snapshots are disabled deliberately: htmx's default
+   back-button behavior saves the live DOM to localStorage and re-injects
+   it on history navigation. This DOM is full of Alpine-expanded
+   templates (x-if/x-for clones, x-teleport copies) and script tags —
+   restoring a snapshot re-runs scripts ("identifier already declared")
+   and makes Alpine re-expand already-expanded templates, duplicating the
+   whole page once per back/forward press. historyCacheSize 0 makes every
+   restore a cache miss; refreshOnHistoryMiss turns a miss into a clean
+   full-page load instead of an AJAX restore. #}
+{# responseHandling (first matching rule wins, RegExp.test semantics):
+   a 422 carries a re-rendered form and must swap (app.js toasts one that
+   is JSON instead); other 4xx/5xx never
+   swap and raise htmx:responseError, which app.js turns into a toast. #}
+<meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true, "attributesToSettle": [], "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "422", "swap": true}, {"code": "[45]..", "swap": false, "error": true}, {"code": "...", "swap": true}]}'>
+<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
+{# SSE extension (hx-ext="sse") for job progress streams; registers
+   against the global htmx, so it must follow core. #}
+<script src="https://unpkg.com/htmx-ext-sse@2.2.3/sse.js" integrity="sha384-fw+eTlCc7suMV/1w/7fr2/PmwElUIt5i82bi+qTiLXvjRXZ2/FkiTNA/w0MhXnGI" crossorigin="anonymous"></script>
+
+{# Alpine.js — the collapse plugin MUST load before core so its directive
+   is registered when Alpine inits. Both deferred, plugin first. #}
+<script src="https://unpkg.com/@alpinejs/collapse@3.14.8/dist/cdn.min.js" integrity="sha384-NArNwzWsUSF+kY2lgW4YriEkjLqi+J+za6HrENUn/3nZqkBnWbxV22kCJEK5Uu6n" crossorigin="anonymous" defer></script>
+<script src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js" integrity="sha384-X9kJyAubVxnP0hcA+AMMs21U445qsnqhnUF8EBlEpP3a42Kh/JwWjlv2ZcvGfphb" crossorigin="anonymous" defer></script>
+
+<link rel="stylesheet" href="{{ static('css/app.css') }}">
+{% endmacro %}
+
+
+{# ``interactive_head``'s other half, at the end of the body: the loading
+   bar along the top (app.js) and the icons ``icon()`` draws, once a page,
+   then where toasts, dialogs and drawers arrive. #}
+{% macro interactive_body() %}
+<div id="page-progress" class="aegis-page-progress" aria-hidden="true"></div>
+{{ sprite() }}
+{{ toast_region() }}
+{{ dialog() }}
+{{ drawer() }}
+<script src="{{ static('js/app.js') }}"></script>
+{% endmacro %}
+
+
+{# The chat surface's scripts, after app.js: wherever a chat mount shows. #}
+{% macro chat_scripts() %}<script src="{{ static('js/chat.js') }}"></script><script src="{{ static('js/call-state.js') }}"></script><script src="{{ static('js/mentions.js') }}"></script><script src="{{ static('js/taps.js') }}"></script><script src="{{ static('js/voice.js') }}"></script>{% endmacro %}

@@ -35,7 +35,7 @@ from app.services.ai.domains.chat.module_context import ContextModuleProvider
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
 from app.services.ai.domains.chat.tools import resolve_tools
 from app.services.ai.models.agents import Agent
-from app.services.ai.domains.spend.recording import record_usage
+from app.services.ai.domains.spend.recording import chat_action, record_usage
 {% elif ai_backend != "memory" %}
 from dataclasses import dataclass, replace
 
@@ -382,7 +382,7 @@ def build_chat_agent(
             max_tokens=config.max_tokens,
         ),
         tool_calls_limit=effective_limit,
-        action=f"chat:{config.slug}",
+        action=chat_action(config.slug),
         recorder=recorder,
         capabilities=effective_capabilities,
         name=config.slug,

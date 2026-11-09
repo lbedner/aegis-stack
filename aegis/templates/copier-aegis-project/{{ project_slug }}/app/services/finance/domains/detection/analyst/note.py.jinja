@@ -84,6 +84,7 @@ async def run_analyst_note(
     from app.core.db import release_lock
     from app.services.ai.service import (
         active_model,
+        chat_action,
         extract_usage,
         model_for,
         record_usage,
@@ -137,7 +138,7 @@ async def run_analyst_note(
         result = await agent.run(snapshot)
         commentary = result.output
         await record_usage(
-            action=f"chat:{ANALYST_SURFACE}",
+            action=chat_action(ANALYST_SURFACE),
             model_name=model_name,
             usage=extract_usage(result),
             user_id=user_id_for(owner_user_id),

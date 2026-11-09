@@ -91,6 +91,10 @@ class ChatSurface:
     # its ``bind`` may turn them back on for the request of someone who
     # runs the install (an admin).
     operator_controls: bool = True
+    # Whether its agent proposes changes for someone to approve: the queue
+    # of them beside the thread. A mount whose agent only reads leaves it
+    # out.
+    approvals: bool = True
     # Whether its users may call, on what the install calls with. None
     # follows ``operator_controls``; True lets in a caller with no controls
     # (a signed-out visitor), and ``bind`` may decide it per request.
@@ -438,7 +442,7 @@ async def surface_context(chat: ChatSurface) -> dict[str, Any]:
         "operator": chat.operator_controls,
         "agent_url": agent_url(chat),
         # The change queue lives with a persisted AI backend.
-        "approvals": CARDS.PATH if CARDS else None,
+        "approvals": CARDS.PATH if CARDS and chat.approvals else None,
     }
 
 

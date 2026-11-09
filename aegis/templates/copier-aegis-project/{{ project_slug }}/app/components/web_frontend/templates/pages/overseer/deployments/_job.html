@@ -4,8 +4,8 @@
    folded. On a card: only that one runs, with a link to it (the card's
    controls hide meanwhile, input.css). A provision that stopped part way
    offers, on both, to resume it or destroy what it made. #}
-{% from "components/macros/layout.html" import copy_button, goto, progress %}
-{% from "pages/overseer/deployments/_macros.html" import fold, stopped %}
+{% from "components/macros/layout.html" import copy_button, fold, goto, progress %}
+{% from "pages/overseer/deployments/_macros.html" import stopped %}
 {% if job %}
 {% set whole = job.whole %}
 <div data-deploy-job="{{ job.action }}" data-status="{{ job.status }}" class="space-y-3">

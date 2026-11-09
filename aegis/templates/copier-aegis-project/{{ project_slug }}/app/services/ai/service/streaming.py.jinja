@@ -40,6 +40,9 @@ from app.services.ai.domains.chat.cards import attach_cards, card_stage
 from app.services.ai.domains.chat.user_memory import memory_user
 {%- endif %}
 from app.services.ai.domains.llm.providers import ProviderNotInstalledError
+{%- if ai_backend != "memory" %}
+from app.services.ai.domains.spend.recording import chat_action
+{%- endif %}
 from app.services.ai.models import (
     ConversationMessage,
     MessageRole,
@@ -199,10 +202,8 @@ class StreamingMixin(ChatMixin):
             llm, messages, tools = setup.llm, setup.messages, setup.tools or {}
 {%- endif %}
 
-            # Start streaming
             start_time = datetime.now(UTC)
 
-            # Generate a message ID for the streaming response
             message_id = str(uuid.uuid4())
 
             # Turn state the bookkeeping after the stream reads, whichever
@@ -409,7 +410,7 @@ class StreamingMixin(ChatMixin):
             answered_by = agent_config.model_id or current.model
             # One price lookup: the ledger row's cost is the message's.
             cost = await self._record_usage(
-                f"chat:{agent_config.slug}",
+                chat_action(agent_config.slug),
                 stream_usage,
                 user_id,
                 duration_ms=response_time_ms,

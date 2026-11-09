@@ -3702,6 +3702,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#in-the-overseer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In the Overseer
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -7138,6 +7149,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#in-the-overseer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In the Overseer
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -7269,7 +7291,15 @@
 </span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="k">for</span> <span class="n">case</span> <span class="ow">in</span> <span class="p">(</span><span class="k">await</span> <span class="n">eval_runs</span><span class="o">.</span><span class="n">compare</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">before</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">after</span><span class="o">.</span><span class="n">id</span><span class="p">))</span><span class="o">.</span><span class="n">flipped</span><span class="p">:</span>
 </span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>        <span class="nb">print</span><span class="p">(</span><span class="n">case</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">case</span><span class="o">.</span><span class="n">before</span><span class="p">,</span> <span class="s2">&quot;-&gt;&quot;</span><span class="p">,</span> <span class="n">case</span><span class="o">.</span><span class="n">after</span><span class="p">)</span>
 </span></code></pre></div>
-<p>On the memory backend there is nowhere to keep a run, so there is no CLI, API or <code>make evals</code>. <code>run_dataset</code> still scores a dataset, and <code>make evals-ci</code> still plays the scripts.</p>
+<h2 id="in-the-overseer">In the Overseer</h2>
+<p>With the htmx frontend, Overseer &gt; AI &gt; Evals shows the same runs:</p>
+<ul>
+<li><strong>Runs:</strong> every kept run, newest first (dataset, passed, model, build, cost), and a Run form that picks a dataset under <code>evals/</code>, a model from the catalog (the active one unless picked) and a note. Under the form, each dataset shows what its leading comment says it is and every case: the message it asks, the agent it asks (the default unless the case names one) and what it passes on, in words ("never calls run_code", "calls plugins once", <code>never says "$"</code>). A started run is the same job as <code>POST /api/v1/ai/evals/runs</code>, and the section follows it case by case until it ends.</li>
+<li><strong>A run:</strong> its cases, each with its verdict and every evaluator's score and reason. A case opens on what it asked, what came back, what was expected and the tool calls its turn made, in order. "Compare with the run before" goes to the last run of the same dataset.</li>
+<li><strong>Compare:</strong> two runs' shared cases, the ones that flipped first.</li>
+</ul>
+<p>With no datasets under <code>evals/</code>, the section says to copy the starter.</p>
+<p>On the memory backend there is nowhere to keep a run, so there is no CLI, API, Overseer section or <code>make evals</code>. <code>run_dataset</code> still scores a dataset, and <code>make evals-ci</code> still plays the scripts.</p>
 <p>With the observability component and <code>LOGFIRE_TOKEN</code> set, a run reports to Logfire as the <code>evals</code> process, where each run shows as an evals table. Without a token, it reports nothing.</p>
 
 

@@ -262,6 +262,12 @@ VOICE_ACTIONS: dict[str, str] = {
 }
 
 
+def chat_action(agent_slug: str) -> str:
+    """What the ledger records an agent's chat turn as: the one spelling the
+    recorders write and a budget for that agent (``BudgetGuard``) counts."""
+    return f"chat:{agent_slug}"
+
+
 async def speech_cost(
     model: str,
     *,

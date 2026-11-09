@@ -293,12 +293,12 @@ def _web_frontend_tree() -> Path:
     )
 
 
-def _appearance_head() -> str:
-    """The head macro every layout shares (components/macros/layout.html)."""
+def _layout_macro(name: str) -> str:
+    """One macro of the kit every layout shares (components/macros/layout.html)."""
     macros = (
         _web_frontend_tree() / "templates/components/macros/layout.html"
     ).read_text()
-    start = macros.index("{% macro appearance_head(")
+    start = macros.index(f"{{% macro {name}(")
     return macros[start : macros.index("{% endmacro %}", start)]
 
 
@@ -396,7 +396,11 @@ class TestWebFrontendScaffolding:
                 "chart_dot",
                 "chart_panel",
                 "chip",
+                "fold",
                 "fold_mark",
+                "interactive_head",
+                "interactive_body",
+                "chat_scripts",
                 "code_block",
                 "highlighted",
                 "command",
@@ -479,14 +483,18 @@ class TestWebFrontendScaffolding:
         """Assets go through static() so they pick up fingerprinted URLs once
         an asset build exists, rather than being hardcoded."""
         html = (_web_frontend_tree() / "templates/base.html").read_text()
-        for asset in ("css/app.css", "js/app.js", "favicon.png"):
-            assert f"static('{asset}')" in html, asset
-        # The theme script and the stylesheet come through the head macro
-        # every layout shares.
-        head = _appearance_head()
-        for asset in ("js/theme.js", "dist/app.css"):
-            assert f"static('{asset}')" in head, asset
-        assert "appearance_head(default_theme)" in html
+        assert "static('favicon.png')" in html
+        # The rest come through the macros every layout shares.
+        shared = {
+            "appearance_head(default_theme)": ("js/theme.js", "dist/app.css"),
+            "interactive_head()": ("css/app.css",),
+            "interactive_body()": ("js/app.js",),
+        }
+        for call, assets in shared.items():
+            assert call in html, call
+            kit = _layout_macro(call.split("(")[0])
+            for asset in assets:
+                assert f"static('{asset}')" in kit, asset
 
     def test_landing_extends_the_base_layout(self) -> None:
         html = (_web_frontend_tree() / "templates/pages/landing.html").read_text()
@@ -636,7 +644,7 @@ class TestNodePipeline:
     def test_theme_script_precedes_the_stylesheet(self) -> None:
         """Applies the stored theme before first paint; no dark flash for a
         light-theme user. Sync on purpose."""
-        head = _appearance_head()
+        head = _layout_macro("appearance_head")
         assert head.index("js/theme.js") < head.index("dist/app.css")
         html = (_web_frontend_tree() / "templates/base.html").read_text()
         assert "theme_toggle()" in html

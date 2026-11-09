@@ -28,7 +28,7 @@ from app.services.ai.models import (
 )
 from app.services.ai.domains.chat.page_actions import page_action
 from tests._pages import LANDING
-from tests.web.dom import one
+from tests.web.dom import none, one
 
 MOUNT = ChatSurface(path="/chat", user="", surface="metrics", agent_slug="illiana")
 
@@ -225,6 +225,20 @@ def test_a_mount_may_take_calls_without_the_operator_controls(
         assert 'id="chat-live"' in drawer
         # The engine and its cost are the operator's to see.
         assert "data-call-engine" not in drawer and "data-call-cost" not in drawer
+
+
+@pytest.mark.skipif(not chat_surface.PERSISTED, reason="no queue without a database")
+def test_a_mount_whose_agent_only_reads_has_no_approvals(
+    turns: list[dict[str, Any]], client: TestClient
+) -> None:
+    """The queue of proposed changes waiting on someone sits beside the
+    thread, unless the mount says its agent proposes none (``approvals``)."""
+    app = FastAPI()
+    app.include_router(chat_router(replace(MOUNT, approvals=False), allow))
+    reading = TestClient(app, headers={"x-user": "7", "x-project": "3"})
+
+    none(reading.get("/chat/drawer").text, "[data-approvals]")
+    one(client.get("/chat/drawer").text, "[data-approvals]")
 
 
 @pytest.mark.skipif(not chat_surface.HAS_VOICE, reason="no voice, no quiet to count")

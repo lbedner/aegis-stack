@@ -281,16 +281,36 @@ function restoreView(root) {
 }
 document.body.addEventListener('htmx:load', (event) => restoreView(event.detail.elt));
 document.body.addEventListener('htmx:afterSwap', () => restoreView(document.body));
-// Something in a hidden panel is shown before it is reached: a note's
-// line in the transcript, a ``data-scroll-to`` target, a search hit.
+// Something in a hidden panel or a shut fold is shown before it is
+// reached: a note's line in the transcript, a ``data-scroll-to`` target, a
+// search hit, a fold's contents linked to. Whether it was hidden.
 function revealTab(target) {
+  let hidden = false;
   const panel = target?.closest('[data-tab-panel]');
-  if (panel?.hidden) showTab(panel.parentElement, panel.dataset.tabPanel);
+  if (panel?.hidden) {
+    showTab(panel.parentElement, panel.dataset.tabPanel);
+    hidden = true;
+  }
+  for (let fold = target?.closest('details'); fold; fold = fold.parentElement.closest('details')) {
+    hidden ||= !fold.open;
+    fold.open = true;
+  }
+  return hidden;
 }
+const hashed = (hash) => document.getElementById(hash.slice(1));
+// A link is followed after its click, so the browser scrolls to what the
+// click revealed; an address arrived at (a load, back, a typed hash) was
+// scrolled to while it was still hidden, so it is scrolled to again.
 document.addEventListener('click', (event) => {
   const link = event.target.closest('a[href^="#"]');
-  if (link && link.hash.length > 1) revealTab(document.getElementById(link.hash.slice(1)));
+  if (link) revealTab(hashed(link.hash));
 });
+function revealHash() {
+  const target = hashed(window.location.hash);
+  if (revealTab(target)) target.scrollIntoView();
+}
+window.addEventListener('hashchange', revealHash);
+revealHash();
 
 // Any ``data-scroll-to`` button brings the element its selector names into
 // view (a list's first or last row), scrolling only what it must.
@@ -324,6 +344,7 @@ document.body.addEventListener('htmx:beforeHistorySave', () => {
 });
 document.body.addEventListener('htmx:pushedIntoHistory', () => {
   if (leftPath !== window.location.pathname && !window.location.hash) window.scrollTo(0, 0);
+  revealHash();
   markCurrent(document.querySelectorAll('#overseer-nav a[href]'), window.location.pathname);
   // Overseer > Code swaps only its file: the tree's link is the address.
   markCurrent(document.querySelectorAll('[data-code-tree] a[href]'), window.location.pathname + window.location.search);

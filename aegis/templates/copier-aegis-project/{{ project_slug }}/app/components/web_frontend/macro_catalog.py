@@ -28,7 +28,18 @@ FILES = {
 # Macros that act on the whole page (a second #dialog or toast region, an
 # out-of-band swap, a live request) are shown as code only.
 CODE_ONLY = frozenset(
-    {"dialog", "drawer", "drawer_sync", "confirm", "toast_region", "oob", "pager"}
+    {
+        "dialog",
+        "drawer",
+        "drawer_sync",
+        "confirm",
+        "toast_region",
+        "oob",
+        "pager",
+        "interactive_head",
+        "chat_scripts",
+        "interactive_body",
+    }
 )
 
 # An optional comment directly above ``{% macro name(...) %}``.
@@ -94,6 +105,15 @@ EXAMPLES: dict[str, dict[str, str]] = {
         # A layout's <head>, not a page's: shown here as it renders (the
         # theme script, the theme's faces if any, the stylesheet).
         "appearance_head": "{{ appearance_head(default_theme) }}",
+        "interactive_head": """
+            {# In a layout's <head>, before its own head blocks. #}
+            {{ interactive_head() }}""",
+        "interactive_body": """
+            {# At the end of a layout's <body>, after interactive_head in its head. #}
+            {{ interactive_body() }}""",
+        "chat_scripts": """
+            {# After app.js, wherever a chat mount shows. #}
+            {{ chat_scripts() }}""",
         "modal_scrim": """
             <div x-data="{ open: false }">
               <button type="button" class="chip" @click="open = true">Open</button>
@@ -189,6 +209,10 @@ EXAMPLES: dict[str, dict[str, str]] = {
               <span class="inline-flex items-center gap-2">{{ chart_dot(4) }} Grace</span>
               <span class="inline-flex items-center gap-2">{{ chart_dot(7) }} Linus</span>
             </span>""",
+        "fold": """
+            {% call fold("More options") %}
+              <p class="text-aegis-muted">What most can leave folded.</p>
+            {% endcall %}""",
         "fold_mark": """
             <details open class="text-sm">
               <summary class="list-none cursor-pointer flex items-center gap-2">{{ fold_mark() }} Two quotes</summary>

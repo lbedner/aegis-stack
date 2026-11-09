@@ -45,7 +45,11 @@ from pydantic_ai.usage import UsageLimits
 from app.core.chat_transcript import as_markers, card_component, trail_label
 from app.core.log import logger
 from app.services.ai.domains.chat.user_memory import memory_user
-from app.services.ai.domains.spend.recording import extract_usage, record_usage
+from app.services.ai.domains.spend.recording import (
+    chat_action,
+    extract_usage,
+    record_usage,
+)
 
 from .context import ContextProvider, compose_context, gather_context
 from .models import (
@@ -95,7 +99,7 @@ class ToolChatAgent(Generic[DepsT]):
         context_providers: Sequence[ContextProvider[DepsT]] = (),
         model_settings: ModelSettings | None = None,
         tool_calls_limit: int = 4,
-        action: str = "chat:generic",
+        action: str = chat_action("generic"),
         recorder: Callable[..., float | Awaitable[float]] = record_usage,
         capabilities: Sequence[Any] = (),
         name: str | None = None,

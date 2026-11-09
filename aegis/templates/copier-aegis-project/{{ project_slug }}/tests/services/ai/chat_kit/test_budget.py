@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.domains.chat.chat_kit import BudgetGuard
+from app.services.ai.domains.spend.recording import chat_action
 from app.services.ai.models.llm import LLMUsage
 
 
@@ -47,6 +48,21 @@ async def test_at_or_over_budget_blocks(async_db_session: AsyncSession) -> None:
     assert status.allowed is False
     assert status.spent_usd == 0.26
     assert status.remaining_usd == 0.0
+
+
+async def test_one_agents_budget_counts_that_agent_alone(
+    async_db_session: AsyncSession,
+) -> None:
+    # "chat:" is the family; one agent's action is that agent, not every
+    # slug it begins (finance-analyst is not finance-analyst-deep).
+    await _add_usage(async_db_session, user_id="u1", action="chat:analyst", cost=0.10)
+    await _add_usage(
+        async_db_session, user_id="u1", action="chat:analyst-deep", cost=5.0
+    )
+    status = await BudgetGuard(chat_action("analyst"), 0.25).check(
+        async_db_session, "u1"
+    )
+    assert status.spent_usd == 0.10
 
 
 async def test_only_this_action_family_counts(async_db_session: AsyncSession) -> None:

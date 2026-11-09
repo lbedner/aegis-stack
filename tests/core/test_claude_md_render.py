@@ -118,3 +118,17 @@ def test_no_emojis_codenames_or_em_dashes() -> None:
     lowered = rendered.lower()
     for token in _BANNED_CODENAMES:
         assert token.lower() not in lowered, f"banned token present: {token}"
+
+
+def test_evals_section_says_a_regression_ships_with_its_case() -> None:
+    assert "## Evals" not in _render_claude_md(_ctx(include_ai=True, ai_evals=False))
+
+    rendered = _render_claude_md(
+        _ctx(include_ai=True, ai_evals=True, ai_backend="memory")
+    )
+    assert "## Evals" in rendered
+    assert "evals/" in rendered and "make evals-ci" in rendered
+    assert "make evals " not in rendered  # memory keeps no runs: no `make evals`
+
+    kept = _render_claude_md(_ctx(include_ai=True, ai_evals=True, ai_backend="sqlite"))
+    assert "`make evals`" in kept

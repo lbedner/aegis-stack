@@ -15,21 +15,14 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
-from app.services.system.jobs import get_job_runner
-
 from .overseer_ai_common import PARTIALS, section_url
 from .overseer_code import file_url
-from .overseer_live import frame
-from .rendering import drawer_state, fragment, hx_dialog, hx_post, with_query
+from .overseer_live import job_frames, job_state
+from .rendering import drawer_state, hx_dialog, hx_drawer, hx_post, with_query
 
 COLLECTION_PARAM = "collection"
 SOURCES_URL = f"{PARTIALS}/sources"  # where the sources dialog posts
 TOP_K_CHOICES = (3, 5, 10, 20)
-# A collection's indexing job on its drawer: pushed as it changes (``JOB_EVENT``),
-# the stream closed once it ends (``JOB_DONE``); how far, read off its label.
-JOB_EVENT = "ai-collection-job"
-JOB_DONE = "ai-collection-job-done"
-JOB_TEMPLATE = "pages/overseer/ai/_collection_job.html"
 
 
 def _service() -> Any:
@@ -133,43 +126,26 @@ def idle(collection: str) -> None:
 
 
 def job_view(collection: str, job: dict[str, Any]) -> dict[str, Any]:
-    """A collection's indexing job as its drawer shows it: running (how far,
-    and the stream to follow it on), or how it ended."""
+    """A collection's indexing job as its drawer shows it (``job_state``):
+    ended, how many files and chunks, and any it could not read."""
     from app.services.rag import sources
 
-    status, label = job["status"], job["label"]
-    title = {"running": "Indexing", "failed": "Failed"}.get(status, "Done")
-    view = {"status": status, "title": title, "label": label, "ratio": None}
-    if status == "running":
-        if found := sources.progress_of(label):
-            done, total = found
-            view["ratio"] = done / max(total, 1)
-        events = f"{PARTIALS}/collections/{collection}/jobs/{job['job_id']}/events"
-        return view | {"events": events, "event": JOB_EVENT, "done": JOB_DONE}
-    if status == "failed":
-        return view | {"label": job["error"] or "Indexing failed", "tone": "error"}
-    done = job["result"] or {}
-    said = f"{done.get('files', 0):,} files, {done.get('chunks', 0):,} chunks."
-    if unread := done.get("unread") or []:
-        said += f" Could not read: {sources.some(unread)}"
-        return view | {"label": said, "tone": "warn"}
-    return view | {"label": said, "tone": "muted"}
+    def ended(done: dict[str, Any]) -> dict[str, Any]:
+        said = f"{done.get('files', 0):,} files, {done.get('chunks', 0):,} chunks."
+        if unread := done.get("unread") or []:
+            said += f" Could not read: {sources.some(unread)}"
+            return {"label": said, "tone": "warn"}
+        return {"label": said, "tone": "muted"}
+
+    events = f"{PARTIALS}/collections/{collection}/jobs/{job['job_id']}/events"
+    return job_state(job, events, "Indexing", ended)
 
 
-async def job_events(collection: str, job_id: str) -> AsyncIterator[str]:
-    """A collection's indexing job over SSE, pushed as it changes (the job
-    runner's own updates, nothing polled): its state each time, the last
-    one loading the drawer again, then ``JOB_DONE``, which closes the
-    stream."""
-    runner = get_job_runner()
-    queue = await runner.subscribe_any(job_id)
-    if queue is None:
-        return
-    async for snapshot in runner.follow(job_id, queue):
-        job = job_view(collection, snapshot)
-        html = fragment(JOB_TEMPLATE, job=job, drawer=drawer_url(collection))
-        yield frame(JOB_EVENT, html)
-    yield frame(JOB_DONE, "done")
+def job_events(collection: str, job_id: str) -> AsyncIterator[str]:
+    """A collection's indexing job over SSE (``job_frames``), the last
+    state loading the drawer again."""
+    drawer = hx_drawer(drawer_url(collection))
+    return job_frames(job_id, lambda job: job_view(collection, job), drawer)
 
 
 def drawer_url(collection: str) -> str:

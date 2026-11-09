@@ -22,6 +22,7 @@ from app.services.system.models import ComponentStatus
 
 from .chat_surface import HAS_VOICE, PERSISTED
 from .overseer_ai_common import (
+    HAS_EVALS,
     HAS_RAG,
     dollars,
     get_current_config,
@@ -52,6 +53,7 @@ SECTIONS = (
         else ()
     ),
     *((("Voice", {"voice": "Voice"}),) if HAS_VOICE else ()),
+    *((("Evals", {"evals": "Evals"}),) if HAS_EVALS else ()),
     (
         "Configuration",
         ({"catalog": "Catalog"} if PERSISTED else {}) | {"providers": "Providers"},
@@ -297,6 +299,10 @@ async def section_context(
         from . import overseer_ai_voice
 
         return await overseer_ai_voice.voice_context(req.db, req.query)
+    if section == "evals":
+        from . import overseer_ai_evals
+
+        return await overseer_ai_evals.evals_context(req.db, req.query)
     if section == "catalog":
         from . import overseer_ai_catalog
 

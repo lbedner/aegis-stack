@@ -1,0 +1,9 @@
+{# Evals (overseer_ai_evals): every kept run and the Run that starts one;
+   one run's cases (``?run=``); or two runs compared (``?a=&b=``), each of
+   those two a step back to every run. Each view's body is its own
+   partial, ``_evals_<view>.html``. #}
+{% from "components/macros/layout.html" import goto %}
+<div class="space-y-4 max-w-5xl">
+  {% if view != "runs" %}<p class="text-xs">{{ goto(section, "All runs") }}</p>{% endif %}
+  {% include "pages/overseer/ai/_evals_" ~ view ~ ".html" %}
+</div>

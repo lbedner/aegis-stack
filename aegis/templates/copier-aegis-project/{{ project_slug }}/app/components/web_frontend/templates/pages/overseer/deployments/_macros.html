@@ -24,9 +24,6 @@
 
 {# ``reload`` (overseer_deploy_actions: url, trigger) as the hx attributes
    a fragment asks again with, or nothing once it is ready. #}
-{# A link to another part of Overseer, swapped into its main area. #}
-{% macro goto(url, label, attrs="") %}<a {{ attrs|safe }} href="{{ url }}" {{ hx_replace(url, "#overseer-main") }} class="text-aegis-teal hover:underline">{{ label }}</a>{% endmacro %}
-
 {% macro reloads(reload) %}{% if reload %} hx-get="{{ reload.url }}" hx-trigger="{{ reload.trigger }}"{% endif %}{% endmacro %}
 
 {# What a part of the new-server form waits on the agent for, over a

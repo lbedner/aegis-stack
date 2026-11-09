@@ -1,0 +1,12 @@
+{# A section's job in its card (``card_id``): followed while it runs,
+   pushed as it changes and closed once it ends (``job.events``). #}
+{% from "components/macros/layout.html" import card %}
+{% call card(job.title, id=card_id) %}
+{% if job.events %}
+<div hx-ext="sse" sse-connect="{{ job.events }}" sse-close="{{ job.done }}">
+  <div sse-swap="{{ job.event }}" hx-target="this">{% include "pages/overseer/ai/_job.html" %}</div>
+</div>
+{% else %}
+{% include "pages/overseer/ai/_job.html" %}
+{% endif %}
+{% endcall %}

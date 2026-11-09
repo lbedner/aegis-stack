@@ -24,9 +24,8 @@ from app.services.ai.domains.chat.context_modules import (  # noqa: E402
     serialize_context_module,
 )
 from app.services.ai.models.agents import ContextModule  # noqa: E402
-from app.services.system.models import ComponentStatus  # noqa: E402
 from tests.web.dom import one, select, text, triggers  # noqa: E402
-from tests.web.overseer import sign_in, status_with  # noqa: E402
+from tests.web.overseer import AI, sign_in, status_with  # noqa: E402
 
 PAGE = "/overseer/services/ai"
 PARTIALS = "/partials/overseer/ai"
@@ -63,8 +62,7 @@ def client(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         ]
 
     monkeypatch.setattr(overseer_ai_agents, "agent_rows", agents)
-    ai = ComponentStatus(name="ai", message="AI", metadata={"engine": "pydantic-ai"})
-    sign_in(app, monkeypatch, status_with(services=[ai]))
+    sign_in(app, monkeypatch, status_with(services=[AI]))
     return TestClient(app)
 
 

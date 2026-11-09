@@ -21,9 +21,8 @@ from app.services.ai.domains.spend.schemas import (  # noqa: E402
     ModelSpend,
     SpendLedger,
 )
-from app.services.system.models import ComponentStatus  # noqa: E402
 from tests.web.dom import one, select, text  # noqa: E402
-from tests.web.overseer import sign_in, status_with  # noqa: E402
+from tests.web.overseer import AI, sign_in, status_with  # noqa: E402
 
 PAGE = "/overseer/services/ai"
 
@@ -78,8 +77,7 @@ def client(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(overseer_ai_costs, "user_spend", user_spend)
     monkeypatch.setattr(overseer_ai_costs, "user_names", user_names)
     monkeypatch.setattr(overseer_ai_costs, "today", lambda: date(2026, 9, 10))
-    ai = ComponentStatus(name="ai", message="AI", metadata={"engine": "pydantic-ai"})
-    sign_in(app, monkeypatch, status_with(services=[ai]))
+    sign_in(app, monkeypatch, status_with(services=[AI]))
     test_client = TestClient(app)
     test_client.asked = asked  # type: ignore[attr-defined]
     return test_client

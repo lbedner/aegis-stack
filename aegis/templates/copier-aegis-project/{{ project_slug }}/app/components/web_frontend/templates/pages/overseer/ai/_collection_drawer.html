@@ -22,18 +22,7 @@
       {{ menu_item("Delete collection", delete, danger=True) }}
     {% endcall %}
   </div>
-  {% if job %}
-  {% call card(job.title, id="ai-collection-job") %}
-  {% if job.events %}
-  {# Followed while it runs, pushed as it changes; closed once it ends. #}
-  <div hx-ext="sse" sse-connect="{{ job.events }}" sse-close="{{ job.done }}">
-    <div sse-swap="{{ job.event }}" hx-target="this">{% include "pages/overseer/ai/_collection_job.html" %}</div>
-  </div>
-  {% else %}
-  {% include "pages/overseer/ai/_collection_job.html" %}
-  {% endif %}
-  {% endcall %}
-  {% endif %}
+  {% if job %}{% with card_id = "ai-collection-job" %}{% include "pages/overseer/ai/_job_card.html" %}{% endwith %}{% endif %}
   {% call card("Files", id="ai-collection-files") %}
     {{ data_table([
       {"key": "source", "label": "Source", "kind": "file"},

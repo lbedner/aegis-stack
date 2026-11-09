@@ -114,13 +114,14 @@ def test_sections(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
     from app.components.web_frontend.overseer_ai import PERSISTED
 
     activity = ["Usage", "Costs", "Sentiment"] if PERSISTED else []
-    from app.components.web_frontend.overseer_ai_common import HAS_RAG
+    from app.components.web_frontend.overseer_ai_common import HAS_EVALS, HAS_RAG
 
     agents = ["Agents", "Memory"] if PERSISTED else []
     knowledge = ["Knowledge", "Search"] if HAS_RAG else []
     from app.components.web_frontend.chat_surface import HAS_VOICE
 
     voice = ["Voice"] if HAS_VOICE else []
+    evals = ["Evals"] if HAS_EVALS else []
     catalog = ["Catalog"] if PERSISTED else []
     assert [text(a) for a in select(html, "#overseer-subnav nav a")] == [
         "Overview",
@@ -129,6 +130,7 @@ def test_sections(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
         *agents,
         *knowledge,
         *voice,
+        *evals,
         *catalog,
         "Providers",
         # Its settings group, when this stack has one (a database backend or voice).

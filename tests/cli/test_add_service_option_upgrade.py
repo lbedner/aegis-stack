@@ -17,6 +17,7 @@ from .conftest import ProjectFactory
 
 AI = "app/services/ai"
 SPEECH = "app/components/backend/api/ai/speech.py"
+EVALS_PAGE = "app/components/web_frontend/overseer_ai_evals.py"
 
 
 def _add_voice(project: Path) -> None:
@@ -104,6 +105,25 @@ def test_adding_evals_brings_the_harness(project_factory: ProjectFactory) -> Non
     assert "evals.router" in router
     assert "eval_runs" in (project / f"{AI}/service/__init__.py").read_text()
     assert "evals-ci:" in (project / "Makefile").read_text()
+    # The Overseer's Evals section needs the htmx frontend, which this lacks.
+    assert not (project / EVALS_PAGE).exists()
+
+    added = ManualUpdater(project).add_component("htmx", None, run_post_gen=False)
+
+    assert added.success, added.error_message
+    assert "evals_context" in (project / EVALS_PAGE).read_text()
+
+
+def test_the_frontend_brings_no_evals_section_without_evals(
+    project_factory: ProjectFactory,
+) -> None:
+    project = project_factory("base_with_ai_sqlite_service")
+
+    result = ManualUpdater(project).add_component("htmx", None, run_post_gen=False)
+
+    assert result.success, result.error_message
+    page = project / EVALS_PAGE
+    assert not page.exists() or not page.read_text().strip()
 
 
 def test_adding_evals_to_a_langchain_project_is_refused(

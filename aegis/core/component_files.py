@@ -285,9 +285,10 @@ def dependent_files(
     from .services import SERVICES
 
     specs = {**SERVICES, **COMPONENTS}
-    # Every gate is a spec's own flag; other group names describe a variant
-    # (``scheduler_persistence``) and gate nothing.
-    gates = {AnswerKeys.include_key(name) for name in specs}
+    # Every group is an answer that gates (a spec's flag, or an option like
+    # ``ai_voice``), but ``scheduler_persistence``, which names a variant.
+    groups = {group for spec in specs.values() for group in spec.files.extras or {}}
+    gates = groups - {SCHEDULER_PERSISTENCE}
     key = AnswerKeys.include_key(component)
     paths = [
         path
@@ -306,7 +307,8 @@ def _other_gates_hold(
 
     A spec may list one file under two answer keys, meaning it needs both:
     deploy's off-site copy sits under ``include_database`` and
-    ``include_scheduler``, since it is the scheduled backup sent onwards.
+    ``include_scheduler``, since it is the scheduled backup sent onwards;
+    ai's voice partials under ``include_htmx`` and ``ai_voice``.
     Honouring only the group that brought the file in wrote ``offsite.py``
     into a deploy stack with no scheduler, where the backup module it
     imports renders empty (aegis issue #1873).

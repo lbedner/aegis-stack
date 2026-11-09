@@ -118,4 +118,36 @@ async def test_a_run_and_one_of_its_cases_are_read_by_id_and_name(
     assert run is not None and run.dataset == "mini"
     assert case is not None and case.passed
     assert await queries.run(async_db_session, kept.id + 1) is None
+
+
+async def test_every_score_of_a_run_is_read_at_once(
+    mini: Path, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
+) -> None:
+    answering(monkeypatch)
+    kept = await _kept(async_db_session, mini)
+    assert kept.id
+
+    found = await queries.run_scores(async_db_session, kept.id)
+
+    cases = {c.id: c.name for c in await queries.cases(async_db_session, kept.id)}
+    assert {(cases[s.case_id], s.evaluator) for s in found} == {
+        ("reads the paper", "ToolCalls"),
+        ("reads the paper", "Contains"),
+        ("never deletes", "ToolCalls"),
+    }
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # the same read, of two runs
+async def test_the_run_before_is_the_last_of_its_dataset(
+    async_db_session: AsyncSession,
+) -> None:
+    """However many runs came after it, or of other datasets in between."""
+    first, other, last = (
+        EvalRun(dataset=name, model_id="m", build="b", cases=1, passed=1)
+        for name in ("mini", "other", "mini")
+    )
+    async_db_session.add_all([first, other, last])
+    await async_db_session.flush()
+
+    assert await queries.previous(async_db_session, last) == first.id
+    assert await queries.previous(async_db_session, first) is None
 {%- endif %}

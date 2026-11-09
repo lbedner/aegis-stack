@@ -4,6 +4,7 @@ holding exactly the components a test hands in."""
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
@@ -32,6 +33,8 @@ PREFIXES = ("/overseer", "/partials/overseer")
 
 # The Cache, healthy: a page with containers behind it (Redis).
 CACHE = ComponentStatus(name=ComponentName.CACHE, message="Connected", metadata={})
+# The AI service, up, for a page that offers its sections.
+AI = ComponentStatus(name="ai", message="AI", metadata={"engine": "pydantic-ai"})
 
 
 async def sent_events(stream: AsyncIterator[str]) -> list[str]:
@@ -45,6 +48,17 @@ def frame_html(frame: str) -> str:
     return "\n".join(
         line.removeprefix("data: ") for line in lines if line.startswith("data: ")
     )
+
+
+def on_session(app: FastAPI, session: Any) -> None:
+    """Every route on ``session``, the test's own: what a route writes is
+    what the test reads."""
+    from app.core.db import get_async_db
+
+    async def same_session() -> AsyncIterator[Any]:
+        yield session
+
+    app.dependency_overrides[get_async_db] = same_session
 
 
 def page_html(client: TestClient, path: str) -> str:

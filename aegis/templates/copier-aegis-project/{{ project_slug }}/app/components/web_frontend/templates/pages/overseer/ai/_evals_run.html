@@ -1,0 +1,24 @@
+{# Evals > one run: what it ran on and how it went, then each case with its
+   verdict and each evaluator's score; a case opens on its trace in the
+   dialog. Compare goes to the run of the same dataset before it. #}
+{% from "components/macros/layout.html" import card, facts as fact_list, goto %}
+{% from "components/macros/table.html" import data_table %}
+{% macro case_name(row) -%}
+<button type="button" {{ hx_dialog(row.drawer) }} class="text-aegis-text hover:text-aegis-teal">{{ row.case }}</button>
+{%- endmacro %}
+{% macro score_cell(row) %}{% with scores = row.scores %}{% include "pages/overseer/ai/_evals_scores.html" %}{% endwith %}{% endmacro %}
+{% call card("Run " ~ run.id, id="ai-evals-run") %}
+{{ fact_list(facts) }}
+{% if compare %}<p class="mt-3 text-xs">{{ goto(compare, "Compare with the run before", "data-evals-compare") }}</p>{% endif %}
+{% endcall %}
+<div id="ai-evals-cases">
+  {% call card(None, id="ai-evals-cases-card") %}
+  {{ data_table([
+    {"key": "case", "label": "Case", "render": case_name, "row": True},
+    {"key": "verdict", "label": "Verdict", "kind": "status"},
+    {"key": "scores", "label": "Scores", "render": score_cell, "row": True, "wrap": True},
+    {"key": "took", "label": "Took", "align": "right"},
+    {"key": "error", "label": "Error", "wrap": True},
+  ], cases, empty="This run kept no cases") }}
+  {% endcall %}
+</div>

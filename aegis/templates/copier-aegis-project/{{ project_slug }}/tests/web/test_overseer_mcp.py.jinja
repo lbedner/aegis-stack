@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.core.tools import load_tools, register_tool
 from app.services.system.models import ComponentStatus, ComponentStatusType
 from tests.web.dom import one, select, text
-from tests.web.overseer import sign_in, status_with
+from tests.web.overseer import on_session, sign_in, status_with
 
 PAGE = "/overseer/components/mcp"
 MCP = ComponentStatus(
@@ -176,7 +176,6 @@ def made(
 
     from app.components.mcp import tokens
     from app.components.mcp.models.tokens import McpToken
-    from app.core.db import get_async_db
 
     when = datetime(2026, 10, 5, 9, 30, tzinfo=UTC)
     calls: list[tuple[int, str, str]] = []
@@ -196,10 +195,7 @@ def made(
         calls.append((user_id, name, scope))
         return row, "mcp_the-value-shown-once"
 
-    async def request_session() -> Any:
-        return REQUEST_SESSION
-
-    app.dependency_overrides[get_async_db] = request_session
+    on_session(app, REQUEST_SESSION)
     monkeypatch.setattr(tokens, "live", live)
     monkeypatch.setattr(tokens, "create", create)
     return calls

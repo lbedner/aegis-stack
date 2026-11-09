@@ -1,0 +1,21 @@
+{# Evals > two runs compared: the cases both ran, the ones whose pass or
+   fail flipped on top, each evaluator's score in both. #}
+{% from "components/macros/layout.html" import card, goto %}
+{% from "components/macros/table.html" import data_table %}
+{% macro case_name(row) -%}
+{% if row.flipped %}<span data-flipped class="font-medium">{{ row.case }}</span>{% else %}{{ row.case }}{% endif %}
+{%- endmacro %}
+{% macro score_cell(row) -%}
+<ul class="space-y-0.5 text-xs">{% for s in row.scores %}<li><span class="text-aegis-muted">{{ s.evaluator }}</span> {{ s.before if s.before is not none else "-" }} to {{ s.after if s.after is not none else "-" }}</li>{% endfor %}</ul>
+{%- endmacro %}
+<p class="text-xs text-aegis-muted">{{ goto(run_url[before], "Run " ~ before) }} to {{ goto(run_url[after], "Run " ~ after) }}: {{ flipped }} flipped</p>
+<div id="ai-evals-compare">
+  {% call card(None, id="ai-evals-compare-card") %}
+  {{ data_table([
+    {"key": "case", "label": "Case", "render": case_name, "row": True},
+    {"key": "before", "label": "Before", "kind": "status"},
+    {"key": "after", "label": "After", "kind": "status"},
+    {"key": "scores", "label": "Scores", "render": score_cell, "row": True},
+  ], rows, empty="These runs share no cases") }}
+  {% endcall %}
+</div>

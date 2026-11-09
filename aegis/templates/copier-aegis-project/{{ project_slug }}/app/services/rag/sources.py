@@ -15,7 +15,6 @@ import asyncio
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-import re
 
 from app.services.rag import embedding, knowable
 from app.services.rag.config import get_rag_service
@@ -32,8 +31,6 @@ from app.services.rag.uploads import (
 from app.services.system.jobs import JobHandle, JobSnapshot, get_job_runner
 
 JOB = "rag-sources:"  # a collection's indexing job's name: this, then its name
-# How far a job has got, as its label says it and as it is read back.
-PROGRESS = re.compile(r"Indexing (\d+) of (\d+) files")
 Report = Callable[[str], None]
 
 
@@ -47,12 +44,6 @@ def listed(text: str | None, *, dotted: bool = False) -> list[str]:
 
 def progress(done: int, total: int) -> str:
     return f"Indexing {done} of {total} files..."
-
-
-def progress_of(label: str) -> tuple[int, int] | None:
-    """How many files of how many a job's label says are done, if it does."""
-    found = PROGRESS.search(label)
-    return (int(found[1]), int(found[2])) if found else None
 
 
 def some(names: list[str]) -> str:

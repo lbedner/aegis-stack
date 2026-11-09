@@ -1,0 +1,15 @@
+{# A section's job (``job``, overseer_live.job_state): how far it has got
+   while it runs (a bar that sweeps until it knows), then how it ended and
+   what it made to open (``job.link``). Pushed as it changes; the last one
+   pushed (``reload``, hx attributes) loads the section's view once more,
+   so it shows what the job made. #}
+{% from "components/macros/layout.html" import goto, progress %}
+<div data-job data-status="{{ job.status }}" class="space-y-2">
+  {% if job.status == "running" %}
+  <p class="text-sm text-aegis-text">{{ job.label }}</p>
+  {{ progress(job.ratio, label=job.title) }}
+  {% else %}
+  <p data-tone="{{ job.tone }}" class="toned text-sm">{{ job.label }}{% if job.link %} {{ goto(job.link, "Open") }}{% endif %}</p>
+  {% if reload %}<div {{ reload }} hx-trigger="load"></div>{% endif %}
+  {% endif %}
+</div>

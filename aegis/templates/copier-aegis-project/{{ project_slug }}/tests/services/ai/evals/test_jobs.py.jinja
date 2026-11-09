@@ -12,6 +12,10 @@ import pytest
 
 from app.core.db import get_async_session
 from app.services.ai.domains.evals import jobs, queries, runner
+from app.services.ai.domains.evals.datasets import (
+    UnknownDatasetError,
+    dataset_path,
+)
 from app.services.ai.domains.llm.llm_service import SetModelResult
 {%- if include_worker %}
 from app.services.system import job_store
@@ -40,6 +44,16 @@ def mini(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         jobs, "run_dataset", functools.partial(runner.run_dataset, directory=tmp_path)
     )
+    monkeypatch.setattr(
+        jobs, "dataset_path", functools.partial(dataset_path, directory=tmp_path)
+    )
+
+
+async def test_a_dataset_not_under_evals_is_refused_before_it_is_started(
+    mini: None,
+) -> None:
+    with pytest.raises(UnknownDatasetError, match="there: mini"):
+        await jobs.start_evals("nope", model=None, note=None)
 
 
 async def test_a_run_is_scored_then_kept(mini: None) -> None:
@@ -51,7 +65,11 @@ async def test_a_run_is_scored_then_kept(mini: None) -> None:
     assert (run.note, run.trigger) == ("nightly", "cli")
     assert labels == ["1 of 2 · reads the paper", "2 of 2 · never deletes"]
     async with get_async_session() as session:
-        assert [kept.id for kept in await queries.runs(session)] == [run.id]
+        assert run.id is not None
+        assert [case.name for case in await queries.cases(session, run.id)] == [
+            "reads the paper",
+            "never deletes",
+        ]
 
 
 async def test_a_model_that_cannot_answer_is_refused_before_anything_runs(
@@ -91,7 +109,7 @@ async def test_a_named_model_runs_on_the_provider_it_needs(
 
 
 async def test_a_started_run_is_handed_to_the_worker(
-    monkeypatch: pytest.MonkeyPatch,
+    mini: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     queued: list[tuple[Any, ...]] = []
 

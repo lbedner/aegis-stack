@@ -1,0 +1,13 @@
+{# One tool run's detail (``run``, chat_surface.run): whether it failed, the
+   script or the arguments, and the output. A chat's run dialog shows it,
+   and each call of an eval case's trace. #}
+{% from "components/macros/layout.html" import code_block %}
+<div class="space-y-4">
+  {% if run.failed %}<p class="text-xs text-error">This run failed.</p>{% endif %}
+  {% if run.code %}{{ code_block(run.code, "Script", "python") }}{% endif %}
+  {% if run.args %}{{ code_block(run.args, "Arguments", "json") }}{% endif %}
+  {% if run.output %}{{ code_block(run.output, "Output") }}{% endif %}
+  {% if not run.code and not run.args and not run.output %}
+  <p class="text-sm text-aegis-muted">No detail recorded for this call.</p>
+  {% endif %}
+</div>

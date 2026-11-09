@@ -4,7 +4,13 @@ import asyncio
 
 import pytest
 
-from app.services.system.jobs import JobHandle, JobRunner, JobSnapshot, now_iso
+from app.services.system.jobs import (
+    JobHandle,
+    JobRunner,
+    JobSnapshot,
+    now_iso,
+    progress_of,
+)
 
 
 class TestJobRunner:
@@ -301,3 +307,10 @@ class TestSharedStore:
         assert isinstance(
             RedisJobStore.from_url("redis://redis:6379")._redis, FakeRedis
         )
+
+
+def test_how_far_a_job_is_is_read_off_its_label() -> None:
+    """The first "N of M" a label says, whatever the words around it."""
+    assert progress_of("Indexing 50 of 200 files...") == (50, 200)
+    assert progress_of("3 of 12 · reads 1 of 2 pages") == (3, 12)
+    assert progress_of("Reading...") is None

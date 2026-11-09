@@ -22,10 +22,9 @@ from app.components.web_frontend.routes.partials import chat_voices
 from app.core.config import settings
 from app.services.ai.domains.voice import profiles
 from app.services.ai.models.voice import VoiceProfile
-from app.services.system.models import ComponentStatus
 from tests._voice_catalog import keep_voice_settings
 from tests.web.dom import none, one, oob, select, text, triggers
-from tests.web.overseer import sign_in, status_with
+from tests.web.overseer import AI, on_session, sign_in, status_with
 
 VOICES = f"{OVERSEER.path}/voices"
 # A realtime model a live call can run on.
@@ -38,14 +37,8 @@ def client(
 ) -> TestClient:
     """Signed in to the Overseer, on the test's own session: the routes and
     the assertions read one database."""
-    from app.core.db import get_async_db
-
-    async def same_session() -> Any:
-        yield async_db_session
-
-    app.dependency_overrides[get_async_db] = same_session
-    ai = ComponentStatus(name="ai", message="AI", metadata={"engine": "pydantic-ai"})
-    sign_in(app, monkeypatch, status_with(services=[ai]))
+    on_session(app, async_db_session)
+    sign_in(app, monkeypatch, status_with(services=[AI]))
     return TestClient(app)
 
 

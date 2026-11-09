@@ -1,0 +1,27 @@
+{# One case of a run, in the dialog: what it asked, what came back and what
+   was expected, then the tool calls in the order the turn made them (the
+   trace a person reads to see why, each as chat's run dialog shows one),
+   and each evaluator's verdict. #}
+{% from "components/macros/layout.html" import code_block, dialog_title %}
+<div id="ai-evals-case" class="space-y-4">
+  {{ dialog_title(case.name, verdict.label) }}
+  {{ code_block(asked, caption="Asked", wrap=True) }}
+  {% if case.error %}<p data-tone="error" class="toned text-sm">{{ case.error }}</p>{% endif %}
+  {% if case.output %}{{ code_block(case.output, caption="Answered", wrap=True) }}{% endif %}
+  {% if expected %}{{ code_block(expected, caption="Expected", wrap=True) }}{% endif %}
+  <section class="space-y-2">
+    <h3 class="text-xxs text-aegis-muted caps">Tool calls</h3>
+    {% for run in runs %}
+    <div data-tool-call class="rounded border border-aegis-border px-3 py-2 space-y-2">
+      <p class="text-sm font-medium text-aegis-text">{{ loop.index }}. {{ run.tool }}</p>
+      {% include "partials/chat/run_body.html" %}
+    </div>
+    {% else %}
+    <p class="text-xs text-aegis-muted">No tools were called.</p>
+    {% endfor %}
+  </section>
+  <section class="space-y-2">
+    <h3 class="text-xxs text-aegis-muted caps">Verdicts</h3>
+    {% include "pages/overseer/ai/_evals_scores.html" %}
+  </section>
+</div>

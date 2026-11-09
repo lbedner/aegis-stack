@@ -21,6 +21,7 @@ from app.components.web_frontend import (
 from app.components.web_frontend.chat_surface import HAS_VOICE, PERSISTED
 from app.components.web_frontend.overseer_access import Db, overseer_db
 from app.components.web_frontend.overseer_ai_common import (
+    HAS_EVALS,
     HAS_RAG,
     PARTIALS,
     section_url,
@@ -477,3 +478,7 @@ for part, present in (
 ):
     if present:
         router.include_router(part)
+if HAS_EVALS:
+    from app.components.web_frontend.routes.partials import overseer_ai_evals
+
+    router.include_router(overseer_ai_evals.router)

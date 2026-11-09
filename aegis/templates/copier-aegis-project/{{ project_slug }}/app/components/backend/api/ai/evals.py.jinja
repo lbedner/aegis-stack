@@ -12,7 +12,7 @@ from app.services.ai.service import (
     EvalCase,
     EvalRun,
     EvalScore,
-    eval_datasets,
+    UnknownDatasetError,
     eval_runs,
     start_evals,
 )
@@ -51,13 +51,12 @@ class CaseDetail(BaseModel):
 )
 async def start_run(body: StartRun) -> JobStartedResponse:
     """Run a dataset as a job: the worker's where the stack has one."""
-    if body.dataset not in eval_datasets():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No dataset {body.dataset!r} under evals/",
-        )
     try:
         job_id = await start_evals(body.dataset, model=body.model, note=body.note)
+    except UnknownDatasetError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from None
     except ValueError as exc:  # a model that cannot answer chat here
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)

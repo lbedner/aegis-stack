@@ -18,6 +18,7 @@ import pytest
 pytest.importorskip("app.services.rag", reason="no RAG in this stack")
 
 from app.components.web_frontend import overseer_ai_rag  # noqa: E402
+from app.components.web_frontend.overseer_live import JOB_DONE, JOB_EVENT  # noqa: E402
 from app.services.rag import knowable, sources  # noqa: E402
 from app.services.rag.knowable import Knowable  # noqa: E402
 from app.services.rag.models import (  # noqa: E402
@@ -27,7 +28,6 @@ from app.services.rag.models import (  # noqa: E402
 )
 from app.services.rag.uploads import PATTERN  # noqa: E402
 from app.services.system.jobs import JobSnapshot  # noqa: E402
-from app.services.system.models import ComponentStatus  # noqa: E402
 from tests.services.rag.fakes import FakeIndex, index_fixture  # noqa: E402, F401
 from tests.web.dom import (  # noqa: E402
     checked,
@@ -38,7 +38,7 @@ from tests.web.dom import (  # noqa: E402
     text,
     triggers,
 )
-from tests.web.overseer import sign_in, status_with  # noqa: E402
+from tests.web.overseer import AI, sign_in, status_with  # noqa: E402
 
 # What the twin offers, and each pick's files of a type (a folder, to the
 # fake index): what ``rag.knowable`` hands the form, and reads for a pick.
@@ -97,8 +97,7 @@ def client(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(overseer_ai_rag, "service_status", lambda: (STATUS, []))
     monkeypatch.setattr(knowable, "knowable", lambda: KNOWABLE)
     monkeypatch.setattr(knowable, "paths_of", _read)
-    ai = ComponentStatus(name="ai", message="AI", metadata={"engine": "pydantic-ai"})
-    sign_in(app, monkeypatch, status_with(services=[ai]))
+    sign_in(app, monkeypatch, status_with(services=[AI]))
     return TestClient(app)
 
 
@@ -368,7 +367,7 @@ def test_a_running_job_is_followed_on_the_drawer(
 
     stream = one(html, "#ai-collection-job [sse-connect]")
     assert stream.get("sse-connect").endswith("/collections/fresh/jobs/j1/events")
-    assert stream.get("sse-close") == overseer_ai_rag.JOB_DONE
+    assert stream.get("sse-close") == JOB_DONE
     assert one(stream, "progress").get("value") == "0.25"
     assert not select(html, "[hx-trigger*='every']")  # never polled
 
@@ -419,10 +418,10 @@ async def test_the_job_is_pushed_until_it_ends() -> None:
         frames.append(sent)
         go.set()
 
-    assert frames[0].startswith(f"event: {overseer_ai_rag.JOB_EVENT}")
+    assert frames[0].startswith(f"event: {JOB_EVENT}")
     assert any("2 files" in f for f in frames)
     assert "/collections/docs/drawer" in frames[-2]
-    assert frames[-1].startswith(f"event: {overseer_ai_rag.JOB_DONE}")
+    assert frames[-1].startswith(f"event: {JOB_DONE}")
 
 
 def test_a_source_is_removed(

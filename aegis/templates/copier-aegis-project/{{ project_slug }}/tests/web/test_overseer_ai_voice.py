@@ -26,10 +26,9 @@ from app.components.web_frontend import overseer_ai_voice  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.services.ai.domains.voice import profiles  # noqa: E402
 from app.services.ai.models.voice import VoiceProfile  # noqa: E402
-from app.services.system.models import ComponentStatus  # noqa: E402
 from tests._voice_catalog import keep_voice_settings, only_profile  # noqa: E402
 from tests.web.dom import one, select, text, triggers  # noqa: E402
-from tests.web.overseer import sign_in, status_with  # noqa: E402
+from tests.web.overseer import AI, on_session, sign_in, status_with  # noqa: E402
 
 PAGE = "/overseer/services/ai"
 PARTIALS = "/partials/overseer/ai"
@@ -40,16 +39,10 @@ ROWS = "#ai-voice-rows tr"
 def client(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
 ) -> TestClient:
-    from app.core.db import get_async_db
-
-    async def same_session() -> Any:
-        yield async_db_session
-
-    app.dependency_overrides[get_async_db] = same_session
+    on_session(app, async_db_session)
     keep_voice_settings(monkeypatch)
     monkeypatch.setattr(settings, "OPENAI_API_KEY", None)
-    ai = ComponentStatus(name="ai", message="AI", metadata={"engine": "pydantic-ai"})
-    sign_in(app, monkeypatch, status_with(services=[ai]))
+    sign_in(app, monkeypatch, status_with(services=[AI]))
     return TestClient(app)
 
 

@@ -21,6 +21,7 @@ from collections import OrderedDict
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+import re
 from typing import TYPE_CHECKING, Any
 import uuid
 
@@ -35,6 +36,9 @@ if TYPE_CHECKING:
 _DEFAULT_MAX_FINISHED = 200
 
 JobWork = Callable[["JobHandle"], Awaitable[dict[str, Any] | None]]
+
+# How far a job has got, where its label says so: "Indexing 3 of 12 files".
+PROGRESS = re.compile(r"(\d+) of (\d+)")
 
 
 @dataclass
@@ -70,6 +74,12 @@ class JobSnapshot:
 
 def now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def progress_of(label: str) -> tuple[int, int] | None:
+    """How many of how many a job's label says are done, if it does."""
+    found = PROGRESS.search(label)
+    return (int(found[1]), int(found[2])) if found else None
 
 
 class _Job:

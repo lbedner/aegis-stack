@@ -220,7 +220,11 @@ if TYPE_CHECKING:
 {%- endif %}
 {%- if ai_evals and ai_backend != "memory" %}
     from app.services.ai.domains.evals import queries as eval_runs
-    from app.services.ai.domains.evals.datasets import names as eval_datasets
+    from app.services.ai.domains.evals.datasets import (
+        UnknownDatasetError,
+        describe as eval_dataset,
+        names as eval_datasets,
+    )
     from app.services.ai.domains.evals.jobs import (
 {%- if include_worker %}
         run_evals_job,

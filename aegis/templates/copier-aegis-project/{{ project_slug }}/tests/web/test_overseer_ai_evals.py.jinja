@@ -1,0 +1,238 @@
+{%- if ai_backend != "memory" -%}
+"""The Overseer AI page's Evals section: the kept runs, newest first, and a
+Run that starts one as a job followed as it goes; one run's cases with
+their scores, a case opened on its trace; and two runs compared, what
+flipped on top."""
+
+import asyncio
+from typing import Any
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.components.web_frontend import chat_models, overseer_ai_evals
+from app.components.web_frontend.overseer_live import JOB_DONE
+from app.services.ai.domains.evals.datasets import CaseSummary, DatasetSummary
+from app.services.system.jobs import get_job_runner
+from tests.services.ai.evals import _kept as kept
+from tests.web.dom import location, none, one, select, table_rows, text, triggers
+from tests.web.overseer import AI, on_session, page_html, sign_in, status_with
+
+PAGE = "/overseer/services/ai/evals"
+PARTIALS = "/partials/overseer/ai"
+
+
+@pytest.fixture
+def client(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
+) -> TestClient:
+    on_session(app, async_db_session)
+    sign_in(app, monkeypatch, status_with(services=[AI]))
+    return TestClient(app)
+
+
+@pytest.fixture
+async def two_runs(async_db_session: AsyncSession) -> tuple[int, int]:
+    return await kept.two_runs(async_db_session)
+
+
+@pytest.fixture(autouse=True)
+def _datasets(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The datasets under ``evals/``: ``mini`` alone."""
+    monkeypatch.setattr(overseer_ai_evals, "eval_datasets", lambda: ["mini"])
+    monkeypatch.setattr(overseer_ai_evals, "eval_dataset", lambda name: MINI)
+
+    async def catalog(mode: str = "chat") -> list[dict[str, Any]]:
+        return [{"model_id": "qwen3:4b", "title": "qwen3:4b", "vendor": "Ollama"}]
+
+    monkeypatch.setattr(chat_models, "catalog", catalog)
+
+
+MINI = DatasetSummary(
+    name="mini",
+    about="Reads what it is given.",
+    cases=[
+        CaseSummary(
+            name="reads the paper",
+            message="what does the letter say?",
+            agent=None,
+            checks=["calls paper once", "Contains(value='letter')"],
+        )
+    ],
+)
+
+
+def test_the_runs_are_listed_newest_first(
+    client: TestClient, two_runs: tuple[int, int]
+) -> None:
+    before, after = two_runs
+    rows = table_rows(page_html(client, PAGE), "#ai-evals-runs table")
+
+    assert [text(r["Run"]) for r in rows] == [str(after), str(before)]
+    newest = rows[0]
+    assert text(newest["Passed"]) == "1 / 2"
+    assert text(newest["Model"]) == "gpt-other" and text(newest["Build"]) == "def456"
+    assert one(newest["Run"], "a").get("href").endswith(f"?run={after}")
+
+
+def test_with_no_runs_it_says_how_to_start_one(client: TestClient) -> None:
+    html = page_html(client, PAGE)
+
+    assert "No runs yet" in text(one(html, "#ai-evals-runs"))
+    assert [
+        o.get("value")
+        for o in select(html, "#ai-evals-start select[name=dataset] option")
+    ] == ["mini"]
+
+
+def test_each_dataset_shows_its_cases_before_a_run(client: TestClient) -> None:
+    html = page_html(client, PAGE)
+
+    shown = one(html, "#ai-evals-dataset-mini")
+    assert "Reads what it is given." in text(shown)
+    (case,) = table_rows(shown, "table")
+    assert text(case["Case"]) == "reads the paper"
+    assert text(case["Asks"]) == "what does the letter say?"
+    assert text(case["Passes if"]) == "calls paper once; Contains(value='letter')"
+
+
+def test_the_model_is_picked_from_the_catalog(client: TestClient) -> None:
+    picker = one(page_html(client, PAGE), "#ai-evals-start select[name=model]")
+
+    assert text(select(picker, "option")[0]) == "The active model"
+    assert [g.get("label") for g in select(picker, "optgroup")] == ["Ollama"]
+    assert one(picker, "optgroup option").get("value") == "qwen3:4b"
+
+
+def test_with_no_datasets_it_says_to_copy_the_starter(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(overseer_ai_evals, "eval_datasets", lambda: [])
+
+    html = page_html(client, PAGE)
+
+    assert "evals/" in text(one(html, "#ai-evals-start"))
+    none(html, "#ai-evals-start select")
+
+
+def test_a_run_opens_with_its_cases_and_their_scores(
+    client: TestClient, two_runs: tuple[int, int]
+) -> None:
+    before, after = two_runs
+    html = page_html(client, f"{PAGE}?run={after}")
+
+    rows = {text(r["Case"]): r for r in table_rows(html, "#ai-evals-cases table")}
+    assert set(rows) == {"reads the paper", "never deletes"}
+    failed = rows["reads the paper"]
+    assert text(failed["Verdict"]) == "Failed"
+    assert "paper was called 0 times" in text(failed["Scores"])
+    # The run before it of the same dataset, to compare with.
+    compare = one(html, "a[data-evals-compare]").get("href")
+    assert f"a={before}" in compare and f"b={after}" in compare
+
+
+def test_a_run_that_is_not_kept_is_a_404(client: TestClient) -> None:
+    assert client.get(PAGE, params={"run": 999}).status_code == 404
+
+
+def test_a_case_opens_on_what_it_asked_answered_and_called(
+    client: TestClient, two_runs: tuple[int, int]
+) -> None:
+    before, _ = two_runs
+    response = client.get(f"{PARTIALS}/evals/runs/{before}/cases/reads the paper")
+
+    assert response.status_code == 200, response.text
+    drawer = text(one(response.text, "#ai-evals-case"))
+    assert "what does the letter say?" in drawer
+    assert "The letter says hello." in drawer
+    [call] = select(response.text, "#ai-evals-case [data-tool-call]")
+    assert "paper" in text(call) and '"page": 1' in text(call) and "Dear Leo" in text(call)
+
+
+def test_two_runs_are_compared_what_flipped_first(
+    client: TestClient, two_runs: tuple[int, int]
+) -> None:
+    before, after = two_runs
+    html = page_html(client, f"{PAGE}?a={before}&b={after}")
+
+    rows = table_rows(html, "#ai-evals-compare table")
+    assert [text(r["Case"]) for r in rows] == ["reads the paper", "never deletes"]
+    assert [bool(select(r["Case"], "[data-flipped]")) for r in rows] == [True, False]
+    assert (text(rows[0]["Before"]), text(rows[0]["After"])) == ("Passed", "Failed")
+
+
+@pytest.mark.usefixtures("client")
+def test_a_run_is_started_as_a_job_the_section_follows(
+    hx: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started: list[tuple[Any, ...]] = []
+
+    async def start_evals(name: str, *, model: str | None, note: str | None) -> str:
+        started.append((name, model, note))
+        return "job-1"
+
+    monkeypatch.setattr(overseer_ai_evals, "start_evals", start_evals)
+
+    response = hx.post(
+        f"{PARTIALS}/evals/runs",
+        data={"dataset": "mini", "model": "", "note": "nightly"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert started == [("mini", None, "nightly")]
+    assert location(response).endswith("?job=job-1")
+
+
+@pytest.mark.usefixtures("client")
+def test_a_model_that_cannot_answer_is_the_toast(
+    hx: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def start_evals(name: str, *, model: str | None, note: str | None) -> str:
+        raise ValueError(f"'{model}' is a tts model, not a chat model.")
+
+    monkeypatch.setattr(overseer_ai_evals, "start_evals", start_evals)
+
+    response = hx.post(
+        f"{PARTIALS}/evals/runs", data={"dataset": "mini", "model": "tts-1"}
+    )
+
+    toast = triggers(response)["toast"]
+    assert toast["tone"] == "error" and "not a chat model" in toast["text"]
+
+
+@pytest.mark.usefixtures("client")
+def test_an_unknown_dataset_is_the_toast(hx: TestClient) -> None:
+    response = hx.post(f"{PARTIALS}/evals/runs", data={"dataset": "nope"})
+
+    assert triggers(response)["toast"]["tone"] == "error"
+
+
+async def test_a_running_job_is_followed_until_it_ends(client: TestClient) -> None:
+    """Shown with how far it has got, pushed as it changes (nothing polled);
+    the last state reloads the section, so the new run is in the table."""
+    go = asyncio.Event()
+
+    async def work(handle: Any) -> dict[str, Any]:
+        handle.set_label("1 of 2 · reads the paper")
+        await go.wait()
+        return {"run_id": 7, "dataset": "mini", "cases": 2, "passed": 2}
+
+    job_id = get_job_runner().start("ai-evals:mini", work, label="Queued...")
+    await asyncio.sleep(0)
+
+    html = page_html(client, f"{PAGE}?job={job_id}")
+    stream = one(html, "#ai-evals-job [sse-connect]")
+    assert stream.get("sse-connect").endswith(f"/evals/jobs/{job_id}/events")
+    assert not select(html, "[hx-trigger*='every']")
+
+    frames: list[str] = []
+    async for sent in overseer_ai_evals.job_events(job_id):
+        frames.append(sent)
+        go.set()
+
+    assert any("1 of 2" in f for f in frames)
+    assert "2 of 2 passed" in frames[-2] and f"job={job_id}" not in frames[-2]
+    assert frames[-1].startswith(f"event: {JOB_DONE}")
+{%- endif %}

@@ -621,6 +621,9 @@
 <div hx-get="{{ url }}" hx-trigger="intersect once" hx-swap="innerHTML" {{ attrs|safe }}>{{ placeholder }}</div>
 {% endmacro %}
 
+{# A link to another part of Overseer, swapped into its main area. #}
+{% macro goto(url, label, attrs="") %}<a {{ attrs|safe }} href="{{ url }}" {{ hx_replace(url, "#overseer-main") }} class="text-aegis-teal hover:underline">{{ label }}</a>{% endmacro %}
+
 {# A command to run, in monospace, with its copy button. #}
 {% macro command(value) %}<code class="font-mono text-aegis-text">{{ value }}</code>{{ copy_button(value) }}{% endmacro %}
 

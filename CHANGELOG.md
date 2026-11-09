@@ -24,8 +24,18 @@
   between two runs. `ai evals run|list|show|compare`, `make evals`, and
   `/api/v1/ai/evals` (a run started there is a job, on the worker where
   there is one, reporting each case as it starts); `make evals-ci` plays
-  every dataset's scripts. Pydantic AI only. (#2004, #1161, #1162,
-  #1163)
+  every dataset's scripts. Overseer > AI > Evals shows each dataset's
+  cases in words before a run, starts one on a model picked from the
+  catalog and follows it, opens a run's cases and a case's tool calls,
+  and compares two runs. Pydantic AI only. (#2004, #1161, #1162, #1163,
+  #1164)
+
+### Fixed
+
+- **`aegis add htmx` on an AI stack without voice** no longer writes the
+  voice partials (`chat_voices.py`, `chat_live.py`), whose imports need
+  `ai_voice`. A file listed under two extras groups now needs both when
+  the second is an option (`ai_voice`, `ai_evals`), not only a part.
 
 ## [0.19.1] - 2026-11-06
 

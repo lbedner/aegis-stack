@@ -19,6 +19,8 @@ from .rendering import with_query
 # RAG is file-based (Chroma), so it needs no database: offered wherever
 # ``ai[...,rag]`` installed it.
 HAS_RAG = find_spec("app.services.rag") is not None
+# Evals keep runs only with a database; the section ships with them.
+HAS_EVALS = find_spec("app.components.web_frontend.overseer_ai_evals") is not None
 
 PAGE = page_url("services", "ai")
 PARTIALS = "/partials/overseer/ai"

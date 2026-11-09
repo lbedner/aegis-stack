@@ -1,0 +1,49 @@
+{%- if ai_backend != "memory" -%}
+"""Fragments for the Overseer AI page's Evals section: a run started as a
+job (``start_evals``), the job followed over SSE, and one case of a run
+opened in the dialog. Mounted by ``overseer_ai``'s router where the
+section is (``HAS_EVALS``)."""
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
+
+from app.components.web_frontend import overseer_ai_evals
+from app.components.web_frontend.overseer_access import Db, overseer_db
+from app.components.web_frontend.overseer_ai_common import section_url
+from app.components.web_frontend.overseer_live import event_stream, heartbeat
+from app.components.web_frontend.rendering import (
+    dialog,
+    form_fields,
+    go_to,
+    toast_response,
+)
+
+router = APIRouter(prefix="/evals")
+
+
+@router.post("/runs")
+async def start_run(request: Request) -> Response:
+    """A run of the form's dataset, as a job the section follows; a dataset
+    not under evals/ or a model that cannot answer is the toast."""
+    try:
+        job_id = await overseer_ai_evals.start(await form_fields(request))
+    except ValueError as exc:
+        return toast_response(str(exc), "error")
+    return go_to(section_url("evals", job=job_id), "Run started.", target="#overseer-main")
+
+
+@router.get("/runs/{run_id}/cases/{name}", response_class=HTMLResponse)
+async def case_dialog(
+    request: Request, run_id: int, name: str, db: Db = Depends(overseer_db)
+) -> Response:
+    context = await overseer_ai_evals.case_context(db, run_id, name)
+    if context is None:
+        raise HTTPException(status_code=404, detail="No such case.")
+    return dialog(request, "pages/overseer/ai/_evals_case.html", **context)
+
+
+@router.get("/jobs/{job_id}/events")
+async def job_events(job_id: str) -> StreamingResponse:
+    """A run's job, pushed to the section as it changes."""
+    return event_stream(heartbeat(overseer_ai_evals.job_events(job_id)))
+{%- endif %}

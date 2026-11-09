@@ -14,33 +14,32 @@
    debug line steps back. Each row carries what the page's filters match
    (``data-facet-*``: its level, service, container and application
    service), so they narrow it with no request (app.js). #}
-{% from "components/macros/layout.html" import chart_dot, copy_icon, highlighted %}
-{% from "pages/overseer/_macros.html" import own_frame %}
-{% set _copy = "ml-1.5 align-middle text-aegis-muted hover:text-aegis-text opacity-0 group-hover/cell:opacity-100 focus:opacity-100" %}
+{% from "components/macros/layout.html" import chart_dot, highlighted %}
+{% from "pages/overseer/_macros.html" import cell_copy, own_frame, row_cell %}
 {% for row in rows %}
 {% set tone = tones.get(row.level) %}
 <tr{% if row.ms %} data-at="{{ row.ms }}"{% endif %} data-facet-level="{{ row.level or 'none' }}" data-facet-service="{{ row.page }}" data-facet-container="{{ row.instance }}"{% if row.app_service %} data-facet-app_service="{{ row.app_service }}"{% endif %}{% if row.app_component %} data-facet-app_component="{{ row.app_component }}"{% endif %} class="log-row{% if tone == 'muted' %} opacity-60{% endif %}"{% if tone %} data-tone="{{ tone }}"{% endif %}>
-  <td class="group/cell px-3 py-1 whitespace-nowrap text-aegis-muted font-mono border-l-2 border-l-transparent">{{ row.at }}{{ copy_icon(row.at, _copy) }}</td>
-  <td class="group/cell px-3 py-1 whitespace-nowrap truncate" data-service title="{{ row.instance }}">
+  <td class="{{ row_cell('whitespace-nowrap text-aegis-muted font-mono border-l-2 border-l-transparent') }}">{{ row.at }}{{ cell_copy(row.at) }}</td>
+  <td class="{{ row_cell('whitespace-nowrap truncate') }}" data-service title="{{ row.instance }}">
     {% if mixed %}{{ chart_dot(row.color + 1) }}{% endif %}
     {%- if row.app_service %}<span data-app-service class="text-aegis-text">{{ links.get(row.app_service, {}).get("title", row.app_service) if links else row.app_service }}</span>{% if links %}<span class="text-aegis-muted"> · </span>{% endif %}{% endif %}
     {%- if links %}{% set service = links[row.page] %}<a href="{{ service.url }}" {{ hx_replace(service.url, "#overseer-main") }} class="{{ 'text-aegis-muted' if row.app_service else 'text-aegis-text' }} hover:text-aegis-teal">{{ service.title }}</a>{% endif %}
     {%- if row.source %}<span class="text-aegis-muted">{{ " · " if links }}{{ row.source }}</span>{% endif %}
-    {{- copy_icon(row.instance, _copy) -}}
+    {{- cell_copy(row.instance) -}}
   </td>
-  <td class="group/cell px-3 py-1 w-full max-w-0 font-mono">
+  <td class="{{ row_cell('w-full max-w-0 font-mono') }}">
     <div class="log-line">
       {%- if row.level %}<span data-level="{{ row.level }}"{% if tone %} data-tone="{{ tone }}"{% endif %} class="toned mr-2">{{ row.level }}</span>{% endif -%}
       <span data-message class="text-aegis-text">{{ row.message }}</span>
       {%- if row.logger %}<span data-logger class="ml-2">[{{ row.logger }}]</span>{% endif -%}
       {%- for key, value in row.fields %}<span class="ml-2"><span data-field-key>{{ key }}=</span><span data-field-value>{{ value }}</span></span>{% endfor -%}
       {%- if row.trace %}<span class="log-trace-hint ml-2 text-xxs text-aegis-muted">traceback</span>{% endif -%}
-      {{- copy_icon(row.copy_text, _copy) -}}
+      {{- cell_copy(row.copy_text) -}}
     </div>
     {% if row.trace %}
     <div data-log-trace class="log-trace mt-1">
       {% set own = own_frames(row.trace) %}
-      <p class="text-xxs text-aegis-muted">Traceback{% if own %} in {{ own_frame(own[0]) }}{% endif %}{{ copy_icon(row.trace, _copy) }}</p>
+      <p class="text-xxs text-aegis-muted">Traceback{% if own %} in {{ own_frame(own[0]) }}{% endif %}{{ cell_copy(row.trace) }}</p>
       <div class="mt-1">{{ highlighted(row.trace, "pytb", wrap=True)|code_frames }}</div>
     </div>
     {% endif %}

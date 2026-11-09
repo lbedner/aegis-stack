@@ -1,5 +1,5 @@
 {# Pieces shared by Overseer pages. #}
-{% from "components/macros/layout.html" import card, chart_panel, facts, health_badge %}
+{% from "components/macros/layout.html" import card, chart_panel, copy_icon, facts, health_badge %}
 {% from "components/macros/form.html" import action, range_form %}
 
 {# A page's live charts (``overseer_live.chart_panel``): the range chips,
@@ -73,6 +73,19 @@
    scrolling inside it, so what is above stays put; a click on a row (not a link, not a selection) opens it. #}
 {% macro rows_scroller(classes="overflow-auto", height="h-[calc(100vh-16rem)] min-h-[24rem]") %}
 <div data-scroll class="{{ classes }} {{ height }} border-t border-aegis-border">{{ caller() }}</div>
+{%- endmacro %}
+{# A cell of those rows (Logs, Transactions, Activity, a table's Rows,
+   Voice > Models): dense on its hairline row (``.log-row``), ``classes``
+   after; a ``cell_copy`` in it, the value whole, shows while the cell is
+   hovered. #}
+{% macro row_cell(classes="") %}group/cell px-3 py-1{{ " " ~ classes if classes }}{% endmacro %}
+{% macro cell_copy(value) %}{{ copy_icon(value, "ml-1.5 align-middle text-aegis-muted hover:text-aegis-text opacity-0 group-hover/cell:opacity-100 focus:opacity-100") }}{% endmacro %}
+{# Their header, over them as they scroll: a caps label a column, the
+   ``right`` ones set right, ``actions`` an unnamed column after. #}
+{% macro rows_head(labels, right=(), actions=False) %}
+<thead class="sticky top-0 bg-aegis-bg text-xxs text-aegis-muted caps border-b border-aegis-border">
+  <tr>{% for label in labels %}<th scope="col" class="px-3 py-1.5 font-medium {{ 'text-right' if label in right else 'text-left' }}">{{ label }}</th>{% endfor %}{% if actions %}<th scope="col"><span class="sr-only">Actions</span></th>{% endif %}</tr>
+</thead>
 {%- endmacro %}
 {% macro opens_rows() %}x-on:click="$event.target.closest('a, button') || getSelection().toString() || $event.target.closest('tr.log-row')?.toggleAttribute('data-open')"{% endmacro %}
 

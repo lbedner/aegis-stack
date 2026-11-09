@@ -25,7 +25,7 @@ _ACTIVITY = text(
     "SELECT pid, application_name, state,"
     " EXTRACT(EPOCH FROM now() - xact_start) AS xact_seconds,"
     " NULLIF(concat_ws(': ', wait_event_type, wait_event), '') AS wait,"
-    " pg_blocking_pids(pid) AS blocked_by, left(query, 300) AS query"
+    " pg_blocking_pids(pid) AS blocked_by, query"
     " FROM pg_stat_activity"
     " WHERE datname = current_database() AND pid <> pg_backend_pid()"
     " AND backend_type = 'client backend'"

@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from lxml.html import HtmlElement
 import pytest
 
 from app.components.web_frontend import (
@@ -754,6 +755,14 @@ class TestActivity:
     def test_nothing_recorded_says_so(self, postgres: TestClient) -> None:
         assert "Nothing" in text(one(_get(postgres, "activity"), "#database-activity"))
 
+    def test_reads_like_logs_and_copies_the_process_and_code(
+        self, sqlite: TestClient
+    ) -> None:
+        html = _get(sqlite, "activity")
+        _reads_like_logs(html, "#database-activity")
+        locked = select(html, "#database-activity tbody tr")[0]
+        assert _copies(locked) == ["worker:12", "app/services/ai/jobs.py:40 in score"]
+
 
 def _row(**changes: Any) -> dict[str, Any]:
     return {
@@ -779,6 +788,22 @@ def _transactions(
     monkeypatch.setattr(db_transactions, "current", current)
 
 
+def _reads_like_logs(html: str, section: str) -> None:
+    """Rows as Logs draws them: on the page, not a card; fixed columns, so
+    no name wraps; dense hairline rows a click opens."""
+    none(html, f"{section} section")
+    table = one(html, f"{section} table")
+    assert "table-fixed" in (table.get("class") or "")
+    assert select(table, "colgroup col")
+    assert one(table, "tbody").get("x-on:click")  # ``opens_rows``
+    for row in select(table, "tbody tr"):
+        assert "log-row" in (row.get("class") or "")
+
+
+def _copies(row: HtmlElement) -> list[str | None]:
+    return [button.get("data-copy") for button in select(row, "[data-copy]")]
+
+
 class TestTransactions:
     def test_sqlite_names_the_holder_marks_it_and_restarts_its_container(
         self, sqlite: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -792,12 +817,12 @@ class TestTransactions:
         )
         assert "worker:268" in text(held) and "analyze_sentiment_job" in text(held)
         assert one(held, "[data-open-for] [data-tone]").get("data-tone") == "error"
-        restart = one(held, "button")
+        restart = one(held, "button[hx-get]")
         assert restart.get("hx-get") == overseer_container.RESTART.format(
             name="app-worker-system-1"
         )
         assert restart.get("data-write") is not None  # ``operator_refusal``
-        assert not select(short, "button")
+        none(short, "button[hx-get]")
         assert one(short, "[data-open-for] [data-tone]").get("data-tone") != "error"
 
     def test_postgres_shows_every_connection_and_ends_one(
@@ -820,12 +845,46 @@ class TestTransactions:
         _transactions(monkeypatch, rows, postgres=True)
         html = _get(postgres, "transactions")
         holder, waiter = select(html, "#database-transactions tbody tr")
-        end = one(holder, "button")
+        end = one(holder, "button[hx-get]")
         assert end.get("hx-get") == overseer_database.END_CONFIRM.format(pid=41)
         assert end.get("data-write") is not None  # ``operator_refusal``
         assert "41" in text(one(waiter, "[data-blocked-by]"))
         assert "UPDATE llm_model" in text(waiter)
         assert "2 connections" in text(one(html, "#database-transactions"))
+
+    def test_postgres_reads_like_logs_and_copies_the_whole_statement(
+        self, postgres: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The Query cell is one line cut at the edge; opened, the whole
+        statement as SQL; its copy takes the whole of it, as do Process's
+        and PID's."""
+        statement = "SELECT id, name FROM llm_model WHERE name = $1 " + "AND 1 = 1 " * 40
+        row = _row(pid=41, process="pg_dump", code="", container=None, query=statement)
+        _transactions(monkeypatch, [row], postgres=True)
+        html = _get(postgres, "transactions")
+        _reads_like_logs(html, "#database-transactions")
+        (held,) = select(html, "#database-transactions tbody tr")
+        assert _copies(held) == ["41", "pg_dump", statement]
+        assert held.get("data-row") == "transaction:41"  # stays open (app.js)
+        process = one(held, "[data-process]")
+        assert "whitespace-nowrap" in (process.get("class") or "")
+        assert process.get("title") == "pg_dump"
+        query = one(held, "[data-query]")
+        assert "log-line" in (one(query, "[data-query-line]").get("class") or "")
+        assert select(query, ".log-trace .highlight")  # highlighted as SQL
+
+    def test_sqlite_copies_the_process_container_and_code(
+        self, sqlite: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _transactions(monkeypatch, [_row()], postgres=False)
+        html = _get(sqlite, "transactions")
+        _reads_like_logs(html, "#database-transactions")
+        (held,) = select(html, "#database-transactions tbody tr")
+        assert _copies(held) == [
+            "worker:268",
+            "app-worker-system-1",
+            "app/services/ai/jobs.py:44 in analyze_sentiment_job",
+        ]
 
     def test_nothing_held_says_so(
         self, sqlite: TestClient, monkeypatch: pytest.MonkeyPatch

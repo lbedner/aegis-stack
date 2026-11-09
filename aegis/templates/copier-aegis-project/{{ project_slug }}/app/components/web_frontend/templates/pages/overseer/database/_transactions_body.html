@@ -1,35 +1,53 @@
-{# The open transactions (db_transactions): on Postgres every connection,
-   with what it waits on and whom it blocks, ended one by one; on SQLite
-   each one held a while (db_activity.SHOWN_AFTER), with where its code is
-   now, ended by restarting its container. Red past the slow threshold. #}
+{# The open transactions (db_transactions), read like Logs: on Postgres
+   every connection, with what it waits on and whom it blocks, ended one by
+   one; on SQLite each one held a while (db_activity.SHOWN_AFTER), with
+   where its code is now, ended by restarting its container. Fixed
+   columns keep each name on one line; the statement (or the code) is cut
+   at the edge, a click opens it (kept open as the table re-sends itself,
+   ``data-row``), and its copy takes it whole. Red past
+   the slow threshold. #}
 {% from "components/macros/form.html" import action %}
-{% from "components/macros/layout.html" import badge, card %}
-{% from "components/macros/table.html" import data_table %}
-{% macro open_for(value) %}<span data-open-for>{{ badge(value.label, value.tone) }}</span>{% endmacro %}
-{% macro blocked_by(value) %}<span data-blocked-by>{{ value|join(", ") if value else "-" }}</span>{% endmacro %}
-{% macro end(row) -%}
-{% if row.end_url %}{{ action("End" if row.pid else "Restart", hx_dialog(row.end_url, "data-write"), "warn") }}{% endif %}
+{% from "components/macros/layout.html" import badge %}
+{% from "pages/overseer/_macros.html" import opens_rows, row_cell, rows_head %}
+{% from "pages/overseer/database/_macros.html" import copy_cell %}
+{% set cell = row_cell("whitespace-nowrap truncate") %}
+{# How the transaction stands, either engine: its state, how long open. #}
+{% macro held(row) %}
+<td class="{{ cell }}" title="{{ row.state }}">{{ row.state }}</td>
+<td class="{{ cell }}"><span data-open-for>{{ badge(row.open_for.label, row.open_for.tone) }}</span></td>
 {%- endmacro %}
-{% if transactions_postgres %}
-{% set columns = [
-  {"key": "pid", "label": "PID", "align": "right"},
-  {"key": "process", "label": "Process", "kind": "code"},
-  {"key": "state", "label": "State"},
-  {"key": "open_for", "label": "Open for", "render": open_for},
-  {"key": "wait", "label": "Waiting on"},
-  {"key": "blocked_by", "label": "Blocked by", "render": blocked_by},
-  {"key": "query", "label": "Query", "kind": "code", "wrap": True},
-] %}
-{% else %}
-{% set columns = [
-  {"key": "process", "label": "Process", "kind": "code"},
-  {"key": "container", "label": "Container", "kind": "code"},
-  {"key": "code", "label": "Code", "kind": "code", "wrap": True},
-  {"key": "state", "label": "State"},
-  {"key": "open_for", "label": "Open for", "render": open_for},
-] %}
-{% endif %}
-{% call card("Transactions", subtitle=transactions_summary) %}
-  <p class="text-xs text-aegis-muted mb-2">{% if transactions_postgres %}Every connection to this database, the longest open transaction first. Red past {{ threshold }} s. End rolls its transaction back and closes it.{% else %}SQLite has one writer: a transaction held here makes every other process wait. Each one held past {{ shown_after|round|int }} s, with the code holding it, red past {{ threshold }} s. SQLite cannot end another process's transaction, so Restart restarts the container holding it.{% endif %}</p>
-  {{ data_table(columns, transactions, empty="Nothing held right now", actions=end) }}
-{% endcall %}
+<div class="space-y-3">
+  <p class="text-xs text-aegis-muted">{{ transactions_summary }} · {% if transactions_postgres %}Every connection to this database, the longest open transaction first. Red past {{ threshold }} s. End rolls its transaction back and closes it.{% else %}SQLite has one writer: a transaction held here makes every other process wait. Each one held past {{ shown_after|round|int }} s, with the code holding it, red past {{ threshold }} s. SQLite cannot end another process's transaction, so Restart restarts the container holding it.{% endif %}</p>
+  {% if transactions %}
+  <table class="w-full text-xs table-fixed">
+    {% if transactions_postgres %}
+    <colgroup><col class="w-20"><col class="w-40"><col class="w-36"><col class="w-24"><col class="w-36"><col class="w-20"><col><col class="w-20"></colgroup>
+    {{ rows_head(["PID", "Process", "State", "Open for", "Waiting on", "Blocked by", "Query"], actions=True) }}
+    {% else %}
+    <colgroup><col class="w-40"><col class="w-48"><col><col class="w-48"><col class="w-24"><col class="w-24"></colgroup>
+    {{ rows_head(["Process", "Container", "Code", "State", "Open for"], actions=True) }}
+    {% endif %}
+    <tbody {{ opens_rows() }}>
+      {% for row in transactions %}
+      <tr class="log-row" data-row="transaction:{{ row.pid or row.process }}">
+        {% if transactions_postgres %}{{ copy_cell(row.pid, "pid") }}{% endif %}
+        {{ copy_cell(row.process, "process") }}
+        {% if transactions_postgres %}
+        {{ held(row) }}
+        <td class="{{ cell }}" title="{{ row.wait or '' }}">{{ row.wait or "-" }}</td>
+        {% set blocked = row.blocked_by|join(", ") if row.blocked_by else "-" %}<td class="{{ cell }}" title="{{ blocked }}"><span data-blocked-by>{{ blocked }}</span></td>
+        {{ copy_cell(row.query, "query", lang="sql") }}
+        {% else %}
+        {{ copy_cell(row.container, "container") }}
+        {{ copy_cell(row.code, "code", opens=True) }}
+        {{ held(row) }}
+        {% endif %}
+        <td class="{{ row_cell('whitespace-nowrap text-right') }}">{% if row.end_url %}{{ action("End" if row.pid else "Restart", hx_dialog(row.end_url, "data-write"), "warn") }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-sm text-aegis-muted">Nothing held right now</p>
+  {% endif %}
+</div>

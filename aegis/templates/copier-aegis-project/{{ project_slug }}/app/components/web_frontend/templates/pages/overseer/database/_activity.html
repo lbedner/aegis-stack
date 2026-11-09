@@ -1,15 +1,28 @@
 {# Slow transactions and lock failures from the last hour
-   (app.core.db_activity), each with the process and the app code behind it. #}
-{% from "components/macros/layout.html" import card %}
-{% from "components/macros/table.html" import data_table %}
-<div id="database-activity">
-{% call card("Activity") %}
-  <p class="text-xs text-aegis-muted mb-2">Transactions held longer than {{ threshold }} s, and statements that found the database locked, in the last hour, with the code behind each.</p>
-  {{ data_table([
-    {"key": "when", "label": "When"},
-    {"key": "what", "label": "What"},
-    {"key": "process", "label": "Process", "kind": "code"},
-    {"key": "caller", "label": "Code", "kind": "code"},
-  ], activity, empty="Nothing slow or locked in the last hour") }}
-{% endcall %}
+   (app.core.db_activity), each with the process and the app code behind
+   it, read like Logs as Transactions is: the code cut at the edge, a
+   click opens it, a copy takes it whole. #}
+{% from "pages/overseer/_macros.html" import opens_rows, row_cell, rows_head %}
+{% from "pages/overseer/database/_macros.html" import copy_cell %}
+{% set cell = row_cell("whitespace-nowrap truncate") %}
+<div id="database-activity" class="space-y-3">
+  <p class="text-xs text-aegis-muted">Transactions held longer than {{ threshold }} s, and statements that found the database locked, in the last hour, with the code behind each.</p>
+  {% if activity %}
+  <table class="w-full text-xs table-fixed">
+    <colgroup><col class="w-32"><col class="w-32"><col class="w-40"><col></colgroup>
+    {{ rows_head(["When", "What", "Process", "Code"]) }}
+    <tbody {{ opens_rows() }}>
+      {% for row in activity %}
+      <tr class="log-row">
+        <td class="{{ cell }} text-aegis-muted">{{ row.when }}</td>
+        <td class="{{ cell }}">{{ row.what }}</td>
+        {{ copy_cell(row.process, "process") }}
+        {{ copy_cell(row.caller, "code", opens=True) }}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-sm text-aegis-muted">Nothing slow or locked in the last hour</p>
+  {% endif %}
 </div>

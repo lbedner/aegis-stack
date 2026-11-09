@@ -1,9 +1,10 @@
 """The Overseer Database page: the Flet database modal's tabs, Activity included."""
 
-from collections.abc import Generator
+from collections.abc import AsyncIterator, Generator
 from datetime import UTC, datetime
 import json
 from typing import Any
+from unittest.mock import AsyncMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -17,7 +18,8 @@ from app.components.web_frontend import (
     overseer_database_saved,
     overseer_zoom,
 )
-from app.core import exposure
+from app.core import db_activity, exposure, series
+from app.core.cache import get_cache
 from app.core.config import settings
 from app.core.ontology import Kind, current
 from app.core.ontology.model import ObjectNode
@@ -31,6 +33,7 @@ from app.services.system import (
 from app.services.system.models import ComponentStatus
 from app.services.system.service_pieces import Piece
 from app.services.system.ui import registry_key
+from tests import _db_activity as activity
 from tests._audit import recording
 from tests._ontology import model_of
 from tests.web.dom import none, one, select, table_rows, table_text, text
@@ -89,22 +92,6 @@ SQLITE: dict[str, Any] = {
     "wal_enabled": True,
     "pragma_settings": {"journal_mode": "wal", "foreign_keys": True, "synchronous": 1},
     "comprehensive_pragma": {"page_size": 4096, "db_efficiency": 97.5},
-    "activity": [
-        {
-            "kind": "locked",
-            "seconds": None,
-            "process": "worker:12",
-            "caller": "app/services/ai/jobs.py:40 in score",
-            "at": "2026-10-02T12:00:05+00:00",
-        },
-        {
-            "kind": "slow",
-            "seconds": 34.2,
-            "process": "webserver:7",
-            "caller": "app/services/ai/chat.py:88 in stream_turn",
-            "at": "2026-10-02T12:00:00+00:00",
-        },
-    ],
 }
 
 
@@ -740,26 +727,160 @@ class TestSettings:
         assert rows["db_efficiency"] == "97.50%"
 
 
+# The worker's container and its page, by its hostname
+# (``db_transactions.containers``).
+WORKER = "app-worker-system-1"
+
+
+@pytest.fixture
+async def kept(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[None]:
+    """A lock failure in the worker's container, from a process whose name
+    is no page's (only its container says where it ran), and a slow
+    transaction elsewhere this hour, and one five hours back."""
+    await get_cache().invalidate(db_activity.KEY)
+    locked = activity.event(
+        "app/services/ai/jobs.py:40 in score", seconds=None, kind="locked", ago=5
+    )
+    await activity.kept(
+        locked | {"process": "taskiq:12", "host": "worker-host"},
+        activity.event(
+            "app/services/ai/chat.py:88 in stream_turn",
+            seconds=34.2,
+            process="webserver:7",
+            ago=30,
+        ),
+        activity.event(
+            "app/services/payment/health.py:38 in check",
+            seconds=3.0,
+            process="scheduler:3",
+            ago=5 * 3600,
+        ),
+    )
+    monkeypatch.setattr(
+        db_transactions,
+        "containers",
+        AsyncMock(
+            return_value={
+                "worker-host": db_transactions.SampledContainer("worker", WORKER)
+            }
+        ),
+    )
+    yield
+    await get_cache().invalidate(db_activity.KEY)
+
+
+def _activity(client: TestClient, query: str = "") -> str:
+    return _get(client, "activity" + (f"?{query}" if query else ""))
+
+
+def _codes(html: str, table: str) -> list[str]:
+    return [row["Code"].split(" in ")[0] for row in table_text(html, f"{table} table")]
+
+
+@pytest.mark.usefixtures("kept")
 class TestActivity:
     def test_slow_transactions_and_lock_waits_name_their_caller(
         self, sqlite: TestClient
     ) -> None:
-        rows = [text(r) for r in select(_get(sqlite, "activity"), "tbody tr")]
+        rows = [
+            text(r)
+            for r in select(_activity(sqlite), "#database-activity-rows tbody tr")
+        ]
+        assert len(rows) == 2  # the last hour, by default
         assert (
-            "Locked" in rows[0] and "worker:12" in rows[0] and "jobs.py:40" in rows[0]
+            "Locked" in rows[0] and "taskiq:12" in rows[0] and "jobs.py:40" in rows[0]
         )
-        assert "34.2" in rows[1] and "chat.py:88 in stream_turn" in rows[1]
+        assert "Held 34s" in rows[1] and "chat.py:88 in stream_turn" in rows[1]
 
-    def test_nothing_recorded_says_so(self, postgres: TestClient) -> None:
-        assert "Nothing" in text(one(_get(postgres, "activity"), "#database-activity"))
+    def test_by_code_the_longest_held_first(self, sqlite: TestClient) -> None:
+        html = _activity(sqlite)
+        assert _codes(html, "#database-activity-groups") == [
+            "app/services/ai/chat.py:88",
+            "app/services/ai/jobs.py:40",
+        ]
+        first = text(select(html, "#database-activity-groups tbody tr")[0])
+        assert "34s" in first and "webserver" in first
+
+    def test_each_table_is_headed(self, sqlite: TestClient) -> None:
+        html = _activity(sqlite)
+        assert text(one(html, "#database-activity-groups h3")) == "By code"
+        assert text(one(html, "#database-activity-rows h3")) == "Each, newest first"
 
     def test_reads_like_logs_and_copies_the_process_and_code(
         self, sqlite: TestClient
     ) -> None:
-        html = _get(sqlite, "activity")
-        _reads_like_logs(html, "#database-activity")
-        locked = select(html, "#database-activity tbody tr")[0]
-        assert _copies(locked) == ["worker:12", "app/services/ai/jobs.py:40 in score"]
+        html = _activity(sqlite)
+        _reads_like_logs(html, "#database-activity-rows")
+        _reads_like_logs(html, "#database-activity-groups")
+        locked = select(html, "#database-activity-rows tbody tr")[0]
+        assert _copies(locked) == ["taskiq:12", "app/services/ai/jobs.py:40 in score"]
+
+    def test_the_container_charts_windows_reach_further_back(
+        self, sqlite: TestClient
+    ) -> None:
+        html = _activity(sqlite)
+        chips = select(html, "#database-activity input[name=window]")
+        assert [int(c.get("value")) for c in chips] == [
+            seconds for seconds, _ in series.HISTORY_WINDOWS
+        ]
+        assert (
+            one(html, "#database-activity input[name=window][checked]").get("value")
+            == "3600"
+        )
+        wider = _activity(sqlite, "window=21600")
+        assert "payment/health.py:38" in text(one(wider, "#database-activity-rows"))
+
+    def test_only_the_windows_it_keeps_are_offered(
+        self, sqlite: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setitem(
+            settings.__dict__, "DATABASE_ACTIVITY_RETENTION_SECONDS", 86400
+        )
+        chips = select(_activity(sqlite), "#database-activity input[name=window]")
+        assert int(chips[-1].get("value")) == 86400
+
+    @pytest.mark.parametrize(
+        ("query", "codes"),
+        [
+            ("kind=locked", ["app/services/ai/jobs.py:40"]),
+            ("q=stream_turn", ["app/services/ai/chat.py:88"]),
+            ("q=webserver", ["app/services/ai/chat.py:88"]),
+            (f"container={WORKER}", ["app/services/ai/jobs.py:40"]),
+            ("service=worker", ["app/services/ai/jobs.py:40"]),
+            ("service=server", ["app/services/ai/chat.py:88"]),
+            ("app_service=payment&window=21600", ["app/services/payment/health.py:38"]),
+        ],
+    )
+    def test_filters_narrow_the_rows_and_the_groups(
+        self, sqlite: TestClient, query: str, codes: list[str]
+    ) -> None:
+        """Kind, the Services picker Logs and Errors share (where it ran,
+        in which container, whose code it is), and any text it shows."""
+        html = _activity(sqlite, query)
+        assert _codes(html, "#database-activity-groups") == codes
+        assert _codes(html, "#database-activity-rows") == codes
+
+    def test_nothing_in_the_window_says_so(self, postgres: TestClient) -> None:
+        html = _activity(postgres, "kind=self_wait")
+        assert "Nothing slow or locked in the last hour" in text(
+            one(html, "#database-activity")
+        )
+
+    def test_it_stays_live_with_its_filters(self, sqlite: TestClient) -> None:
+        stream = one(
+            _activity(sqlite, "kind=locked"), "#database-activity [sse-connect]"
+        )
+        url = stream.get("sse-connect")
+        assert url.startswith(overseer_database.ACTIVITY_EVENTS)
+        assert "kind=locked" in url and "window=3600" in url
+
+    async def test_the_stream_sends_what_the_filters_keep(self) -> None:
+        query = {"kind": "locked", "window": "3600"}
+        frames = [
+            f async for f in overseer_database.activity_events(query, max_frames=1)
+        ]
+        assert frames[0].startswith(f"event: {overseer_database.ACTIVITY_EVENT}")
+        assert "jobs.py:40" in frames[0] and "chat.py:88" not in frames[0]
 
 
 def _row(**changes: Any) -> dict[str, Any]:
@@ -906,3 +1027,33 @@ class TestTransactions:
         dialog = postgres.get(overseer_database.END_CONFIRM.format(pid=41)).text
         form = one(dialog, "[hx-post]")
         assert form.get("hx-post") == overseer_database.END_API.format(pid=41)
+
+
+@pytest.mark.parametrize("module", ["overseer_database", "ui_database"])
+def test_the_page_imports_what_ships_with_a_database_where_it_uses_it(
+    module: str,
+) -> None:
+    """The page and its helpers ship with every stack; what reads the
+    database's own records ships only with a database, so they import it
+    inside the functions that use it."""
+    import ast
+    import importlib
+    import inspect
+
+    database_only = {
+        "app.core.db_activity",
+        "app.services.system.db_transactions",
+        "app.services.system.db_activity_search",
+    }
+    found = importlib.import_module(
+        f"app.components.web_frontend.{module}"
+        if module.startswith("overseer")
+        else f"app.services.system.{module}"
+    )
+    imported = {
+        name
+        for node in ast.parse(inspect.getsource(found)).body
+        if isinstance(node, ast.ImportFrom) and node.module
+        for name in (node.module, *(f"{node.module}.{a.name}" for a in node.names))
+    }
+    assert not imported & database_only

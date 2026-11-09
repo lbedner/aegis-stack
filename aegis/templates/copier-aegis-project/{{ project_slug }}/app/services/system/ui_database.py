@@ -9,8 +9,8 @@ import re
 from datetime import datetime
 from typing import Any
 
-from app.core import credential
-from app.core.formatting import format_relative_time
+from app.core import credential, series
+from app.core.formatting import format_relative_time, format_span
 
 # Docker service names a developer reaches as localhost from the host.
 _DOCKER_HOSTS = ("@db:", "@postgres:", "@postgresql:", "@database:", "@redis:")
@@ -214,22 +214,58 @@ def _sqlite_settings(metadata: dict[str, Any]) -> list[tuple[str, Any, str]]:
     ]
 
 
-# What each kind of ``db_activity`` record says; a slow one says how long.
-_ACTIVITY_WHAT = {"locked": "Locked", "self_wait": "Waits on itself"}
+# Each kind of ``db_activity`` record, as Slow & locked's filter names it;
+# a slow one's row says how long instead.
+ACTIVITY_KINDS = {"slow": "Slow", "locked": "Locked", "self_wait": "Waits on itself"}
 
 
-def activity(metadata: dict[str, Any]) -> list[dict[str, str]]:
-    """Slow transactions and lock failures (``app.core.db_activity``),
-    newest first, for the Activity tab."""
+def activity(events: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Slow transactions and lock failures (``app.core.db_activity``), in
+    the order given (newest first), for Slow & locked."""
     return [
         {
             "when": format_relative_time(event["at"]),
-            "what": _ACTIVITY_WHAT.get(event["kind"]) or f"Held {event['seconds']} s",
+            "what": what(event),
             "process": event["process"],
             "caller": event["caller"],
         }
-        for event in metadata.get("activity", [])
+        for event in events
     ]
+
+
+def what(event: dict[str, Any]) -> str:
+    """What happened, as a row says it: how long it was held, or its kind."""
+    if event["kind"] == "slow":
+        return f"Held {_held(event['seconds'])}"
+    return ACTIVITY_KINDS.get(event["kind"], event["kind"])
+
+
+def nothing_in(seconds: int) -> str:
+    """What Slow & locked says, in both UIs, when its window kept nothing."""
+    return f"Nothing slow or locked in {series.phrase(seconds)}"
+
+
+def activity_groups(groups: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """``db_activity.grouped`` as Slow & locked shows it, in both UIs: each
+    code site's count, seconds held in all and at most, when last, and the
+    processes it ran in."""
+    return [
+        {
+            "code": group["code"],
+            "count": f"{group['count']:,}",
+            "held": _held(group["held_s"]),
+            "longest": _held(group["longest_s"]),
+            "last": format_relative_time(group["last"]),
+            "processes": ", ".join(group["processes"]),
+        }
+        for group in groups
+    ]
+
+
+def _held(seconds: float | None) -> str:
+    """Time held, as Transactions shows it, or a dash for lock failures,
+    which hold nothing."""
+    return (format_span(seconds) if seconds else None) or "-"
 
 
 def settings(metadata: dict[str, Any]) -> list[dict[str, str]]:

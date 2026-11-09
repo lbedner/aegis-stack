@@ -75,7 +75,7 @@ BUDGET: dict[str, int] = {
     # the off-site backup's four settings (#1482), with the deploy ones.
     # +6: the S3 public endpoint setting (storage). A setting is not logic,
     # but the ratchet is per file — splitting this module is its own job.
-    "core/config.py.jinja": 822,
+    "core/config.py.jinja": 823,
     # declare.py is unchanged at 408 and under the 500 cap. It trips the
     # SHARE rule only because detect.py - the other big file in
     # recurring/ - became a package, leaving declare the largest thing

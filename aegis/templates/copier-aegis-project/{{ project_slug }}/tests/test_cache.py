@@ -207,6 +207,7 @@ class TestCappedLists:
             for value in ({"n": 1}, {"n": 2}, {"n": 3})
         ]
         assert await cache.listed("replays:recent") == [{"n": 3}, {"n": 2}]
+        assert await cache.listed("replays:recent", newest=1) == [{"n": 3}]
         assert pushed_out == [[], [], [{"n": 1}]]
         assert await cache.listed("replays:none") == []
 

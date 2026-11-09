@@ -9,6 +9,15 @@
 
 ### Added
 
+- **Slow & locked keeps a week, by code.** What `db_activity` records (slow
+  queries, lock waits) stays for `DATABASE_ACTIVITY_RETENTION_SECONDS` (a
+  week by default) on one capped list, each record carrying its container's
+  host and the service or component that owns its code. Overseer > Database
+  > Slow & locked filters it by kind, by the Services picker Logs and Errors
+  share, and by text; groups it by code site (count, time held in all and at
+  most, last seen, processes); then lists the newest 200 rows, live. The
+  database health check carries the last hour's eight costliest code sites,
+  and the Flet tab shows the same groups.
 - **Editable approval cards, and what an approval does after it lands.** A
   change type can let the reader correct a card before approving it
   (`ChangeExecutor.editable`, narrowed by `edits`, with `choices` drawing a

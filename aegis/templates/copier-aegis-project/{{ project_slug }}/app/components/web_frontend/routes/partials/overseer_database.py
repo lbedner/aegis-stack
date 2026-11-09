@@ -34,6 +34,12 @@ async def transactions_events() -> StreamingResponse:
     return event_stream(overseer_database.events())
 
 
+@router.get(overseer_database.ACTIVITY_EVENTS, include_in_schema=False)
+async def activity_events(request: Request) -> StreamingResponse:
+    """Slow & locked over SSE, as its filters keep it."""
+    return event_stream(overseer_database.activity_events(request.query_params))
+
+
 @router.get(overseer_database.END_CONFIRM, response_class=HTMLResponse)
 async def confirm_end(request: Request, pid: int) -> Response:
     """Confirm ending one Postgres connection."""

@@ -363,6 +363,8 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "tests/core/test_db_activity.py",
                 "app/services/system/db_transactions.py",
                 "tests/services/test_db_transactions.py",
+                "app/services/system/db_activity_search.py",
+                "tests/_db_activity.py",
                 "app/services/system/db_rows.py",
                 "tests/services/test_db_rows.py",
                 "app/services/system/db_query.py",

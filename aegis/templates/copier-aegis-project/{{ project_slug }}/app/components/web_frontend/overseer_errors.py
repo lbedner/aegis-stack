@@ -69,9 +69,7 @@ class ErrorRow(BaseModel):
 
 def parameters(query: Mapping[str, str]) -> dict[str, str | list[str]]:
     """The list's filters, which every link and the stream carry."""
-    return {key: query.get(key, "") for key in FILTERS} | {
-        key: ui_logs.listed(query, key) for key in ui_logs.PICKS
-    }
+    return {key: query.get(key, "") for key in FILTERS} | ui_logs.picks(query)
 
 
 def labels(sources: list[dict[str, Any]]) -> dict[str, str]:
@@ -158,18 +156,16 @@ def detail(context: dict[str, Any], query: Mapping[str, str]) -> str:
     )
 
 
-async def _sources() -> list[dict[str, Any]]:
-    return ui_logs.sources(await ui_logs.containers())
-
-
 async def list_fragment(query: Mapping[str, str]) -> str:
-    return render(await ui_errors.load(query), query, labels(await _sources()))
+    return render(
+        await ui_errors.load(query), query, labels(await ui_logs.every_source())
+    )
 
 
 async def section_context(
     section: str, component: ComponentStatus, req: SectionRequest
 ) -> dict[str, Any]:
-    sources = await _sources()
+    sources = await ui_logs.every_source()
     drawer = (
         with_query(
             DETAIL,
@@ -198,7 +194,7 @@ async def section_context(
 async def updates(query: Mapping[str, str]) -> AsyncIterator[str]:
     """The list again whenever an error arrives or retention drops some,
     and every ``RECONCILE_SECONDS`` for its relative times."""
-    names = labels(await _sources())
+    names = labels(await ui_logs.every_source())
     if reason := unavailable_reason():
         yield frame(EVENT, render(ui_errors.empty("disabled", reason), query, names))
         return

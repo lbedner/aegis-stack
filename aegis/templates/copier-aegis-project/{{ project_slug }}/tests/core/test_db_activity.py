@@ -21,6 +21,8 @@ from app.core.cache import get_cache
 from app.core.config import settings
 from app.core.source_index import ROOT
 from app.services.system.models import ComponentStatus
+from tests._db_activity import event as _event
+from tests._db_activity import kept as _kept
 
 
 @pytest.fixture(autouse=True)
@@ -28,11 +30,14 @@ async def clean(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[None]:
     monkeypatch.setitem(settings.__dict__, "DATABASE_SLOW_TRANSACTION_SECONDS", 0.05)
     monkeypatch.setattr(db_activity, "SHOWN_AFTER", 0.05)
     monkeypatch.setattr(db_activity, "SWEEP", 0.05)
-    for prefix in (db_activity.PREFIX, db_activity.HELD):
-        await get_cache().invalidate_prefix(prefix)
+    await _forget()
     yield
-    for prefix in (db_activity.PREFIX, db_activity.HELD):
-        await get_cache().invalidate_prefix(prefix)
+    await _forget()
+
+
+async def _forget() -> None:
+    await get_cache().invalidate(db_activity.KEY)
+    await get_cache().invalidate_prefix(db_activity.HELD)
 
 
 @pytest.fixture
@@ -50,7 +55,7 @@ def engine(path: Path) -> Iterator[Engine]:
 
 async def _recorded() -> list[dict]:
     await asyncio.sleep(0)  # records are written on the loop
-    return await db_activity.recent()
+    return await db_activity.recent(3600)
 
 
 async def test_a_transaction_held_too_long_names_its_caller(engine: Engine) -> None:
@@ -60,7 +65,14 @@ async def test_a_transaction_held_too_long_names_its_caller(engine: Engine) -> N
     (event,) = await _recorded()
     assert event["kind"] == "slow" and event["seconds"] >= 0.1
     assert "test_a_transaction_held_too_long_names_its_caller" in event["caller"]
-    assert event["process"]
+    assert event["process"] and event["host"] == db_activity.HOST
+
+
+def test_a_record_names_who_owns_its_code() -> None:
+    """Owned as a log line is, when it is recorded, so the Services picker
+    Logs and Errors share narrows it the same way."""
+    found = _event("app/services/payment/health.py:38 in check")
+    assert (found["app_service"], found["app_component"]) == ("payment", None)
 
 
 async def test_an_async_session_names_its_caller(path: Path) -> None:
@@ -168,9 +180,7 @@ def test_the_activity_view_says_it_plainly() -> None:
     from app.services.system import ui_database
 
     event = {"kind": "self_wait", "seconds": None, "process": "p", "caller": "c"}
-    (row,) = ui_database.activity(
-        {"activity": [event | {"at": "2026-10-09T12:00:00+00:00"}]}
-    )
+    (row,) = ui_database.activity([event | {"at": "2026-10-09T12:00:00+00:00"}])
     assert row["what"] == "Waits on itself"
 
 
@@ -206,16 +216,94 @@ async def test_zero_turns_it_off(
     assert await _recorded() == []
 
 
-async def test_the_database_health_carries_it(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_the_database_health_carries_the_hour_by_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """What Illiana reads (``health``): the last hour grouped by the code
+    behind it, never the rows, so a busy hour still fits."""
     from app.services.system import health_db
 
     checked = ComponentStatus(name="database", message="Connected", metadata={"a": 1})
     monkeypatch.setattr(health_db, "_check_engine", AsyncMock(return_value=checked))
-    monkeypatch.setattr(
-        db_activity, "recent", AsyncMock(return_value=[{"kind": "slow"}])
-    )
+    await _kept(_event("a.py:1 in f", seconds=3.0, ago=60))
     status = await health_db.check_database_health()
-    assert status.metadata == {"a": 1, "activity": [{"kind": "slow"}]}
+    activity = status.metadata["activity"]
+    assert activity["window_s"] == 3600
+    assert [g["code"] for g in activity["by_code"]] == ["a.py:1 in f"]
+
+
+async def test_what_happened_outlasts_the_hour() -> None:
+    """Kept for the retention (a week by default), as container history is,
+    and read by window."""
+    await _kept(_event("old.py:1 in f", ago=2 * 3600), _event("new.py:1 in g", ago=60))
+    assert [e["caller"] for e in await db_activity.recent(3600)] == ["new.py:1 in g"]
+    assert [e["caller"] for e in await db_activity.recent(6 * 3600)] == [
+        "new.py:1 in g",
+        "old.py:1 in f",
+    ]
+
+
+async def test_past_the_retention_it_is_gone(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(settings.__dict__, "DATABASE_ACTIVITY_RETENTION_SECONDS", 600)
+    await _kept(_event("old.py:1 in f", ago=900), _event("new.py:1 in g", ago=60))
+    assert [e["caller"] for e in await db_activity.recent(3600)] == ["new.py:1 in g"]
+
+
+async def test_a_window_reads_back_only_as_far_as_it_reaches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The newest first, a slice at a time (health asks for the hour every
+    few seconds; the list keeps a week): it reads further back while the
+    slice is still inside the window, and stops past it."""
+    monkeypatch.setattr(db_activity, "FIRST_READ", 2)
+    reads: list[int | None] = []
+    listed = get_cache().listed
+
+    async def counted(key: str, newest: int | None = None) -> list[object]:
+        reads.append(newest)
+        return await listed(key, newest)
+
+    monkeypatch.setattr(get_cache(), "listed", counted)
+    await _kept(
+        _event("old.py:1 in f", ago=2 * 3600),
+        *(_event(f"new.py:{n} in g", ago=60 + n) for n in range(5)),
+    )
+    assert len(await db_activity.recent(3600)) == 5
+    assert reads == [2, 8]
+
+
+def test_grouped_by_code_the_longest_held_first() -> None:
+    events = [
+        _event("ingest.py:330 in refresh", seconds=2.2),
+        _event("ingest.py:330 in refresh", seconds=7.7, ago=120),
+        _event("pages.py:523 in sitemap", seconds=78.7, process="webserver:24"),
+        _event("jobs.py:40 in score", seconds=None, kind="locked"),
+    ]
+    groups = db_activity.grouped(events)
+    assert [g["code"] for g in groups] == [
+        "pages.py:523 in sitemap",
+        "ingest.py:330 in refresh",
+        "jobs.py:40 in score",
+    ]
+    ingest = groups[1]
+    assert (ingest["count"], ingest["held_s"], ingest["longest_s"]) == (2, 9.9, 7.7)
+    assert ingest["last"] == events[0]["at"]
+    assert groups[2]["kinds"] == ["locked"]
+    assert groups[0]["processes"] == ["webserver"]
+
+
+async def test_the_summary_fits_what_illiana_is_given() -> None:
+    """``health`` drops a detail longer than ``DETAIL_CHARS``: the summary
+    keeps the costliest code sites, however busy the hour."""
+    import json
+
+    from app.services.system.node_now import DETAIL_CHARS
+
+    long = "app/services/search/pypi_daily_ingest.py:{} in refresh_pypi_daily"
+    await _kept(*(_event(long.format(n), seconds=2.0 + n) for n in range(50)))
+    summary = await db_activity.summary()
+    assert len(json.dumps(summary)) <= DETAIL_CHARS
+    assert summary["by_code"][0]["code"] == long.format(49)
 
 
 def test_a_statement_is_a_hop_to_the_database_and_to_its_tables(

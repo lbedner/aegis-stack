@@ -7,7 +7,7 @@ window reads the containers again; levels, services, containers, order, a
 range and the search filter on the page (app.js ``data-facets``), so every
 line comes, carrying what each filter matches."""
 
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Collection, Iterable, Mapping, Sequence
 from typing import Any
 
 from app.core import series
@@ -121,6 +121,15 @@ def _option(
     return {"value": value, "label": label, "checked": checked, "name": name}
 
 
+def options(
+    choices: Iterable[tuple[str, str]], picked: Collection[str]
+) -> list[dict[str, Any]]:
+    """A ``checklist``'s options, ``(value, label)`` each: Levels, Kinds."""
+    return [
+        _option(value, label, value in picked, name=None) for value, label in choices
+    ]
+
+
 def _links(sources: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
     """Each page's title and Overseer URL, for a line's service cell."""
     return {
@@ -157,10 +166,7 @@ async def _context(
         "logs_events": events,
         "logs_windows": ui_logs.WINDOWS,
         "logs_window": window,
-        "logs_levels": [
-            {"value": value, "label": label, "checked": value in levels}
-            for value, label in ui_logs.LEVEL_CHOICES
-        ],
+        "logs_levels": options(ui_logs.LEVEL_CHOICES, levels),
         "logs_q": query.get("q", ""),
         "logs_orders": ORDERS,
         "logs_order": order,

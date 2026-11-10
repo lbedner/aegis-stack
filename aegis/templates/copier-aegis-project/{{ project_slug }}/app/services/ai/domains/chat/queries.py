@@ -325,6 +325,17 @@ async def context_entry(
     ).first()
 
 
+async def context_entries_of(
+    session: AsyncSession, module_id: int
+) -> Sequence[ContextModuleEntry]:
+    """Every subject's entry in one module."""
+    return (
+        await session.exec(
+            select(ContextModuleEntry).where(ContextModuleEntry.module_id == module_id)
+        )
+    ).all()
+
+
 async def context_entries_for(
     session: AsyncSession, module_ids: Iterable[int], subject: str
 ) -> dict[int, str]:

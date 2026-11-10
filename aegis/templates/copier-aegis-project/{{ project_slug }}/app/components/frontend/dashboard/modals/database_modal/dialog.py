@@ -39,7 +39,9 @@ class DatabaseDetailDialog(BaseDetailPopup):
                     text="Migrations", content=MigrationsTab(database_component, page)
                 ),
                 ft.Tab(text="Settings", content=SettingsTab(database_component, page)),
-                ft.Tab(text="Activity", content=ActivityTab(database_component, page)),
+                ft.Tab(
+                    text="Slow & locked", content=ActivityTab(database_component, page)
+                ),
             ],
             expand=True,
         )

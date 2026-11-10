@@ -321,6 +321,24 @@ class TestAddServiceAIBackendMigrations:
         )
 
     @pytest.mark.slow
+    def test_add_memory_scheduler_does_not_create_alembic(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """A memory scheduler keeps no tables. An empty ``alembic/`` beside
+        the database's own models fails the project's revision check, and
+        init makes none for it (aegis-stack#1424)."""
+        project_path = project_factory("base_with_database")
+        alembic_dir = project_path / "alembic"
+        assert not alembic_dir.exists()
+
+        result = run_aegis_command(
+            "add", "scheduler", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.returncode == 0, f"add failed: {result.stderr}"
+        assert not alembic_dir.exists()
+
+    @pytest.mark.slow
     def test_add_ai_sqlite_creates_alembic(
         self, project_factory: ProjectFactory
     ) -> None:

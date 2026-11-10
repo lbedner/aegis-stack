@@ -21,6 +21,7 @@ from aegis.constants import (
     WorkerBackends,
 )
 from aegis.core.build_reporter import BuildReporter
+from aegis.core.component_files import SERVICES_CARD_FILE, shows_services_card
 from aegis.core.components import COMPONENTS, ComponentType
 from aegis.core.file_manifest import (
     apply_cleanup_path,
@@ -29,7 +30,7 @@ from aegis.core.file_manifest import (
 )
 from aegis.core.overseer_url import local_overseer_url
 from aegis.core.project_map import render_project_map
-from aegis.core.services import SERVICE_ANSWER_KEYS, SERVICES
+from aegis.core.services import SERVICES
 from aegis.core.template_cleanup import run_resilient
 from aegis.i18n import t
 
@@ -655,12 +656,8 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     # (comms / payment / insights / auth-dashboard primary cleanups handled
     # by the Pattern A loop above.)
 
-    # Remove services_card.py only if NO services are enabled
-    # ServicesCard shows all services, so keep if ANY service is enabled
-    if not any(is_enabled(key) for key in SERVICE_ANSWER_KEYS):
-        remove_file(
-            project_path, "app/components/frontend/dashboard/cards/services_card.py"
-        )
+    if not shows_services_card(context):
+        remove_file(project_path, SERVICES_CARD_FILE)
 
     # Remove Alembic directory only if NOTHING needs migrations. The same
     # function that picks which services get a revision answers this, so a

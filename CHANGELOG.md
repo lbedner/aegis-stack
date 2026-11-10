@@ -100,6 +100,14 @@
 
 ### Fixed
 
+- **`aegis add` and `remove` leave `make check` green** (#1424). The
+  `alembic/` directory a project's first migration brings made ruff count
+  the `alembic` library first-party and re-sort every module importing it;
+  generated projects now pin it there (`known-first-party`). The bootstrap
+  formats the `alembic/env.py` it writes, which landed after the add's
+  format pass. A memory scheduler no longer creates an empty `alembic/`
+  that failed the revision check beside the database's own models. Removing
+  the last service or plugin takes `services_card.py` with it, as init does.
 - **`aegis add` writes only what the component changes** (#2029). A file the
   add does not change was created whenever it was missing, so an add run
   from a newer template than the project's (the same version string passes

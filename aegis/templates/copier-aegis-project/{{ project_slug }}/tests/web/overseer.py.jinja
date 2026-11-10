@@ -11,7 +11,7 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 import pytest
 
-from app.components.web_frontend import overseer_nav
+from app.components.web_frontend import overseer_nav, overseer_sections
 {%- if not include_auth %}
 from app.components.web_frontend.overseer_access import overseer_gate
 {%- endif %}
@@ -111,12 +111,14 @@ def status_with(
 
 def reported_only(monkeypatch: pytest.MonkeyPatch) -> None:
     """The sidebar as the snapshot has it: no entry for a health check
-    another test registered (a Scheduler, a Worker) that this one leaves out."""
+    another test registered (a Scheduler, a Worker) that this one leaves out,
+    or for a page the app's own service declares (``SERVICE_PAGES``)."""
     monkeypatch.setattr(
         overseer_nav,
         "registered_health_names",
         lambda: {"components": (), "services": ()},
     )
+    monkeypatch.setattr(overseer_sections, "SERVICE_PAGES", frozenset())
 
 
 def sign_in(

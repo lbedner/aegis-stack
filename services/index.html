@@ -7506,7 +7506,7 @@ not what it is called:</p>
 <tbody>
 <tr>
 <td><code>health.py</code></td>
-<td>what the dashboard shows</td>
+<td>what the dashboard shows: <code>HEALTH</code>, its check, registered at startup</td>
 <td>required</td>
 </tr>
 <tr>
@@ -7557,6 +7557,11 @@ not what it is called:</p>
 <tr>
 <td><code>aggregates.py</code></td>
 <td>what it holds, as figures an agent reads: <code>AGGREGATES</code>, each a count or sum by label, never rows</td>
+<td>optional</td>
+</tr>
+<tr>
+<td><code>overseer.py</code></td>
+<td>its own Overseer page: <code>OVERSEER</code>, an <code>OverseerPage</code> (<code>app.core.overseer_pages</code>) naming the page's module and partials by import path, its templates in <code>pages/overseer/&lt;service&gt;/</code></td>
 <td>optional</td>
 </tr>
 <tr>

@@ -7146,7 +7146,7 @@ Illiana and MCP clients use, and a node's <code>now</code> in the <a href="../tw
 <div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a> startup                          running
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a> -------                          -------
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a> component / service              sampler (one per web process)
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>   | register_health_check()        | runs every registered check
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>   | registers / declares HEALTH    | runs every registered check
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>   v                                v
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a> health registry  ------------&gt;  SystemStatus (a tree)
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>                                    | only what changed, over SSE
@@ -7154,8 +7154,8 @@ Illiana and MCP clients use, and a node's <code>now</code> in the <a href="../tw
 </span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>                                 open Overseer pages
 </span></code></pre></div>
 <ol>
-<li><strong>Registration.</strong> As the app starts, each component and service registers
-   its health check with the health registry.</li>
+<li><strong>Registration.</strong> As the app starts, each component registers, and each
+   service declares, its health check with the health registry.</li>
 <li><strong>Aggregation.</strong> The registry runs every check and gathers the results into
    one tree: the app, its components and services, and their sub-checks.</li>
 <li><strong>Push.</strong> One sampler per web process reads the tree and pushes to open
@@ -7208,13 +7208,15 @@ in <code>metadata</code>. A service keeps it in its <code>health.py</code>:</p>
 </span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>        <span class="n">message</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">pending</span><span class="si">}</span><span class="s2"> pending&quot;</span><span class="p">,</span>
 </span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>        <span class="n">metadata</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;pending&quot;</span><span class="p">:</span> <span class="n">pending</span><span class="p">},</span>
 </span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="p">)</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="n">HEALTH</span> <span class="o">=</span> <span class="n">check_orders_service_health</span>
 </span></code></pre></div>
-<p>and registers it at startup in <code>app/components/backend/startup/component_health.py</code>,
-beside the others:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.orders.health</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_orders_service_health</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">register_service_health_check</span><span class="p">(</span><span class="s2">&quot;orders&quot;</span><span class="p">,</span> <span class="n">check_orders_service_health</span><span class="p">)</span>
-</span></code></pre></div>
-<p>A component registers with <code>register_health_check</code> the same way. Keep a check
+<p><code>HEALTH</code> is what registers it: at startup every service's <code>health.py</code> is
+found on disk and its <code>HEALTH</code> registered under the service's folder name,
+an app's own service's too, so no framework file changes.</p>
+<p>A component instead calls <code>register_health_check(name, check)</code> from a
+startup hook. Keep a check
 fast (the sampler runs every check), and return <code>UNHEALTHY</code> with the error as
 the message rather than raising.</p>
 

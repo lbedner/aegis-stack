@@ -10,9 +10,15 @@ column here is a stand-in that records the comparison rather than a
 SQLAlchemy column.
 """
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from app.services.shared.queries import owner_filters, stored_owner, visible_to
+from app.services.shared.queries import (
+    owner_filters,
+    stored_owner,
+    visible_to,
+    within,
+)
 
 
 class _Clause:
@@ -55,3 +61,25 @@ def test_no_owner_is_stored_as_zero() -> None:
 
 def test_an_owner_is_stored_as_itself() -> None:
     assert stored_owner(7) == 7
+
+
+class _Timestamp:
+    def __ge__(self, other: object) -> Any:
+        return (">=", other)
+
+    def __lt__(self, other: object) -> Any:
+        return ("<", other)
+
+
+def test_a_window_is_bounded_on_the_columns_clock() -> None:
+    """The timestamp columns store naive UTC, and Postgres refuses an aware
+    bound against them: an aware window (an API's ``?start_time=...Z``) is
+    compared as the same instant in naive UTC."""
+    east = timezone(timedelta(hours=2))
+    start = datetime(2026, 11, 9, 2, tzinfo=east)
+    end = datetime(2026, 11, 10)
+
+    assert within(_Timestamp(), start, end) == [
+        (">=", datetime(2026, 11, 9, 0)),
+        ("<", end),
+    ]

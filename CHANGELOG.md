@@ -110,6 +110,14 @@
   migrations, not with any later one. The scheduler/worker shared tests
   are gated in their templates, so the add that brings either writes
   them (init used to remove them in code the add never mirrored).
+- **Overseer > AI > Usage, and `GET /api/v1/ai/usage/stats` with a
+  `start_time`, read empty on Postgres**: a timezone-aware bound met a naive
+  timestamp column and Postgres refused it. The page now passes the naive
+  UTC midnight every other window uses (`ranges.start`), and `within()`,
+  the window every query shares, takes any aware bound to naive UTC.
+- **The system eval "what the app is made of"** judges whether the backend
+  is named instead of matching the word "backend", which a real model as
+  often calls "an HTTP API".
 - **Temperature on reasoning models** is decided from the model's
   pydantic-ai profile, not a list of name prefixes: a model reasoning by
   default (o-series, gpt-5, gpt-5.5+, gpt-6) gets none, so pydantic-ai no

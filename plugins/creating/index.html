@@ -7256,7 +7256,9 @@ runs <code>aegis add scraper</code>.</p>
   <code>app/core/plugin_queue_defaults.py</code> and merge into <code>DEFAULT_QUEUES</code>, so they
   are the project's own default from the moment the plugin lands; a project
   that wants something else still sets <code>WORKER_QUEUES</code> in its environment, which
-  wins.</li>
+  wins. A worker whose work needs more than the stack's 512M names it too,
+  <code>WorkerQueueWiring("media", concurrency=1, memory="1G")</code>, as its compose
+  default; <code>&lt;QUEUE&gt;_WORKER_MEMORY</code> in the environment still wins.</li>
 </ul>
 <p>The reference plugin, <code>aegis-stack-crawl4ai</code>, exercises most of that surface
 and is the best example to read.</p>

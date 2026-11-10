@@ -317,6 +317,7 @@ def test_a_delete_is_confirmed_then_audited(
     audit = recording(client)
     confirm = client.get(f"{RECORDS}/2/confirm-delete").text
     assert text(one(confirm, "h2")) == "Delete A www.example.com?"
+    assert f"It stops pointing at {SERVER}." in confirm
     assert one(confirm, "[hx-delete]").get("hx-delete") == f"{RECORDS}/2"
     assert client.delete(f"{RECORDS}/2").status_code == 204
     assert registrar.records == [APEX]
@@ -326,6 +327,19 @@ def test_a_delete_is_confirmed_then_audited(
         "requested",
     )
     assert client.get(f"{RECORDS}/2/confirm-delete").status_code == 404
+
+
+def test_deleting_the_wildcard_spares_the_named_records(
+    registrar: FakeRegistrar, app: FastAPI
+) -> None:
+    """Only names without their own record go; www keeps resolving."""
+    registrar.records.append(
+        RetrievedRecord(
+            provider_id="9", host="*", type="CNAME", value="park.example.net", ttl=600
+        )
+    )
+    confirm = TestClient(app).get(f"{RECORDS}/9/confirm-delete").text
+    assert "Subdomains without their own record stop resolving." in confirm
 
 
 def test_without_keys_it_says_where_to_set_them(

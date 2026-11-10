@@ -233,18 +233,20 @@ class TestClassification:
         )
         assert plan.action == FileAction.SKIP
 
-    def test_missing_untouched_file_backfills_as_create(
+    def test_missing_untouched_file_is_left_to_update(
         self, engine: RenderDiffEngine
     ) -> None:
-        """BASE == OURS but absent on disk: an older project that predates
-        this template file gains it (mirrors the update-path backfill)."""
+        """BASE == OURS but absent on disk: this operation does not touch
+        it. Either the project predates the file (a newer CLI), and creating
+        it alone is half an ``aegis update`` (its siblings stay old), or the
+        project deleted it. Neither is an add's to undo."""
         plan = _plan_for(
             engine,
             {"include_thing": False},
             {"include_thing": True},
             "unconditional.py",
         )
-        assert plan.action == FileAction.CREATE
+        assert plan.action == FileAction.SKIP
 
     def test_pristine_file_is_overwritten(self, engine: RenderDiffEngine) -> None:
         (engine.project_path / "plain.py").write_text(
@@ -378,9 +380,9 @@ class TestPythonFormattingParity:
         # normalize to double quotes the same way `make fix` would at init.
         messy = engine.template_root / PROJECT_SLUG / "messy.py.jinja"
         messy.parent.mkdir(parents=True, exist_ok=True)
-        messy.write_text("VALUE = 'hi'\n")
+        messy.write_text("{% if include_thing %}VALUE = 'hi'\n{% endif %}")
 
-        plans = engine.plan({}, {})
+        plans = engine.plan({"include_thing": False}, {"include_thing": True})
         plan = next(p for p in plans if p.rel_path == "messy.py")
         result = engine.apply([plan])
 

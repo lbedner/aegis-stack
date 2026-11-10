@@ -17,8 +17,9 @@ answers axis instead: same template, old ``.copier-answers.yml`` vs new.
     absent/empty in BASE, present in OURS  -> create
     present in BASE, empty/absent in OURS  -> delete if pristine, else preserve + warn
     BASE == OURS                           -> skip (operation doesn't touch this file),
-                                               except missing-on-disk -> create (backfill
-                                               for a project that predates this file)
+                                               missing on disk included: a file the
+                                               project predates is ``aegis update``'s
+                                               to bring, with the files it goes with
     pristine (THEIRS == BASE)              -> overwrite
     else                                   -> 3-way merge (clean or conflict markers)
 
@@ -399,14 +400,21 @@ class RenderDiffEngine:
         project_file: Path,
         policy: FilePolicy,
     ) -> FilePlan:
-        theirs_exists = project_file.exists()
-        theirs = project_file.read_text() if theirs_exists else ""
-
         base_empty = base == ""
         ours_empty = ours == ""
 
         if base_empty and ours_empty:
             return FilePlan(rel_path, FileAction.SKIP, policy=policy)
+        if (
+            not base_empty
+            and not ours_empty
+            and normalize_for_compare(base) == normalize_for_compare(ours)
+        ):
+            # Not this operation's file; a missing one is ``aegis update``'s.
+            return FilePlan(rel_path, FileAction.SKIP, policy=policy)
+
+        theirs_exists = project_file.exists()
+        theirs = project_file.read_text() if theirs_exists else ""
 
         if base_empty and not ours_empty:
             # Component/file being added.
@@ -443,14 +451,6 @@ class RenderDiffEngine:
             if self._pristine(rel_path, theirs, base):
                 return FilePlan(rel_path, FileAction.DELETE, policy=policy)
             return FilePlan(rel_path, FileAction.PRESERVE, policy=policy)
-
-        if normalize_for_compare(base) == normalize_for_compare(ours):
-            # This operation doesn't change this file's content.
-            if not theirs_exists:
-                # Older project that predates this file at its current
-                # (unchanged-by-this-op) configuration — backfill it.
-                return FilePlan(rel_path, FileAction.CREATE, ours, policy=policy)
-            return FilePlan(rel_path, FileAction.SKIP, policy=policy)
 
         # base and ours both present and differ — this operation touches
         # this file.
@@ -495,10 +495,9 @@ class RenderDiffEngine:
         only when nothing else claims ownership of any path in it. A
         caller managing component-owned files separately (``ManualUpdater``
         alongside ``FileManifest``, aegis-stack#918) must pass an explicit
-        scope — otherwise the engine will "backfill create" a component's
-        own files into a project that never selected that component, the
-        first time it renders non-empty for reasons unrelated to that
-        component's own gate.
+        scope — otherwise the engine creates, overwrites or merges a
+        component's own files in a project that never selected that
+        component, the first time this operation changes their render.
         """
         return [
             self._classify(

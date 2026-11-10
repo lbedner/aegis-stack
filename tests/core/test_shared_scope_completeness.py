@@ -14,7 +14,7 @@ every existing project after a stack change, silently.
 
 Most of the answer is now derived rather than declared, so most of this
 is self-maintaining. The one hand-maintained input left is
-``_ENGINE_UNSAFE_PATHS`` — ten paths the engine must not touch because
+``_ENGINE_UNSAFE_PATHS`` — two paths the engine must not touch because
 some other mechanism owns their existence — and that is exactly what
 these tests scrutinize: a wrong entry there is now the only way to
 silently drop a file.
@@ -196,19 +196,7 @@ class TestExclusionsStayHonest:
                     # Copier's own bookkeeping; needs `_copier_conf` to render.
                     ".copier-answers.yml",
                     # Cross-cutting; owned by the migration bootstrap.
-                    "alembic/alembic.ini",
                     "alembic/env.py",
-                    "alembic/script.py.mako",
-                    "alembic/versions/.gitkeep",
-                    # Regenerated at runtime by `make serve`.
-                    ".env.ports",
-                    # Restored by ManualUpdater's cross-spec ensure-hooks.
-                    "app/components/frontend/dashboard/cards/services_card.py",
-                    ".claude/skills/add-model-and-migration/SKILL.md",
-                    # Post-gen aggregate conditions, no restoration hook —
-                    # excluded to match the pre-engine behavior exactly.
-                    "docs/components/api-load-testing.md",
-                    "tests/services/test_health_logic.py",
                 }
             )
             == _ENGINE_UNSAFE_PATHS

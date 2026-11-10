@@ -72,6 +72,16 @@
 
 ### Fixed
 
+- **`aegis add` writes only what the component changes** (#2029). A file the
+  add does not change was created whenever it was missing, so an add run
+  from a newer template than the project's (the same version string passes
+  the version gate) created every file that template had added, without
+  the changes to the files they go with. Those now come with `aegis
+  update`, the always-on skills for a project that predates them among
+  them; the migration skill comes with the add that brings the first
+  migrations, not with any later one. The scheduler/worker shared tests
+  are gated in their templates, so the add that brings either writes
+  them (init used to remove them in code the add never mirrored).
 - **Temperature on reasoning models** is decided from the model's
   pydantic-ai profile, not a list of name prefixes: a model reasoning by
   default (o-series, gpt-5, gpt-5.5+, gpt-6) gets none, so pydantic-ai no

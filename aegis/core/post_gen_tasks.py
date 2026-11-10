@@ -420,11 +420,6 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
             continue
         _spec.post_render(project_path, context)
 
-    # Remove shared component integration tests only when BOTH scheduler AND worker disabled
-    if not is_enabled(AnswerKeys.SCHEDULER) and not is_enabled(AnswerKeys.WORKER):
-        remove_file(project_path, "tests/services/test_component_integration.py")
-        remove_file(project_path, "tests/services/test_health_logic.py")
-
     # Note: per-spec primary cleanup for database / redis / ingress /
     # observability / auth / AI / comms / payment / insights is now driven
     # by the Pattern A loop above, sourced from each spec's

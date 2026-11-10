@@ -134,7 +134,7 @@ def test_each_check_says_what_it_wants() -> None:
 
 
 def test_every_built_in_check_says_what_it_wants() -> None:
-    """Each check Pydantic Evals reads from a dataset file, in words."""
+    """Each check Pydantic Evals reads from a dataset, in words."""
     from datetime import timedelta
 
     from pydantic_evals.evaluators import (

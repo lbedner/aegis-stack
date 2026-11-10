@@ -1,20 +1,37 @@
-"""Datasets: ``evals/<name>.yaml``, each case a message and what its turn
-should do. Pydantic Evals reads the file; a case may use its built-in
-evaluators (``Contains``, ``LLMJudge``) and the trace ones here."""
+"""Datasets, kept in the database (``EvalDatasetRecord``): each its YAML
+as written, each case a message and what its turn should do. Pydantic
+Evals reads the YAML; a case may use its built-in evaluators (``Contains``,
+``LLMJudge``) and the trace ones here. YAML is how a dataset comes in
+(``add``, ``add_file``, the shipped ``evals/*.yaml`` by ``seed_missing``)
+and goes out (``text``)."""
 
 import hashlib
-from pathlib import Path
+from pathlib import Path, PurePath
+import re
 
 from pydantic import BaseModel, ConfigDict
 from pydantic_evals import Dataset
+from sqlalchemy.exc import IntegrityError
+from sqlmodel.ext.asyncio.session import AsyncSession
 import yaml
 
+from app.core.log import logger
 from app.core.source_index import ROOT
+from app.core.time import utcnow
+from app.services.ai.models.evals import EvalDatasetRecord
 
+from . import queries
 from .evaluators import EVALUATORS, explain
 from .script import Step
 
+# The datasets the app ships, seeded where missing (``seed_missing``).
 EVALS_DIR = ROOT / "evals"
+# A dataset's name: what a URL, a file and a CLI argument all carry as is.
+# The hyphen is escaped for the form's ``pattern``, which a browser reads too.
+NAME = re.compile(r"[a-z0-9][a-z0-9_\-]*")
+NAME_HINT = "lowercase letters, digits, - and _"
+# What a dataset's YAML is sent as.
+YAML_TYPE = "application/yaml"
 
 
 class CaseInput(BaseModel):
@@ -40,46 +57,25 @@ EvalDataset = Dataset[CaseInput, str, CaseMeta]
 
 
 class UnknownDatasetError(LookupError, ValueError):
-    """A name that is not a dataset under ``evals/``."""
+    """A name that is no dataset here."""
 
 
-def names(directory: Path = EVALS_DIR) -> list[str]:
-    """Every dataset under ``directory``, by the name ``load`` takes."""
-    return sorted(path.stem for path in directory.glob("*.yaml"))
-
-
-def dataset_path(name: str, directory: Path = EVALS_DIR) -> Path:
-    """``<directory>/<name>.yaml``, for a name ``names`` lists only: never
-    a file outside it (``../``)."""
-    known = names(directory)
-    if name not in known:
-        there = ", ".join(known) or "none"
-        raise UnknownDatasetError(f"No dataset {name!r} under evals/ (there: {there})")
-    return directory / f"{name}.yaml"
-
-
-def remove(name: str, directory: Path = EVALS_DIR) -> None:
-    """Delete ``name``'s file (``UnknownDatasetError`` when there is none,
-    or it went meanwhile); its kept runs stay."""
+def parse(name: str, written: str) -> EvalDataset:
+    """``written`` as a dataset, its cases checked against ``CaseInput``;
+    ValueError, naming ``name``, for what cannot be read."""
     try:
-        dataset_path(name, directory).unlink()
-    except FileNotFoundError:
-        raise UnknownDatasetError(f"No dataset {name!r} under evals/") from None
-
-
-def fingerprint(name: str, directory: Path = EVALS_DIR) -> str:
-    """``name``'s file as it is now: the SHA-256 of its bytes."""
-    return hashlib.sha256(dataset_path(name, directory).read_bytes()).hexdigest()
-
-
-def load(name: str, directory: Path = EVALS_DIR) -> EvalDataset:
-    """``name``'s file, its cases checked against ``CaseInput``; ValueError,
-    naming the file, for one that cannot be read."""
-    path = dataset_path(name, directory)
-    try:
-        return EvalDataset.from_file(path, custom_evaluator_types=EVALUATORS)
+        return EvalDataset.from_text(
+            written, fmt="yaml", default_name=name, custom_evaluator_types=EVALUATORS
+        )
     except yaml.YAMLError as exc:
-        raise ValueError(f"evals/{path.name} is not YAML: {exc}") from exc
+        raise ValueError(f"Dataset {name!r} is not YAML: {exc}") from exc
+    except ExceptionGroup as group:  # a check it names that is none here
+        raise ValueError(f"Dataset {name!r}: {group.exceptions[0]}") from group
+
+
+def fingerprint(written: str) -> str:
+    """A dataset as written: the SHA-256 of its text."""
+    return hashlib.sha256(written.encode()).hexdigest()
 
 
 def without(dataset: EvalDataset, kinds: tuple[type, ...]) -> None:
@@ -113,24 +109,24 @@ class DatasetSummary(BaseModel):
     cases: list[CaseSummary]
 
 
-def _about(path: Path) -> str:
-    """The file's leading comment, up to its first blank comment line."""
+def about(written: str) -> str:
+    """A dataset's leading comment, up to its first blank comment line."""
     said: list[str] = []
-    for line in path.read_text().splitlines():
+    for line in written.splitlines():
         if not line.startswith("#") or not line.strip("# "):
             break
         said.append(line.strip("# "))
     return " ".join(said)
 
 
-def describe(name: str, directory: Path = EVALS_DIR) -> DatasetSummary:
-    """``name`` as ``load`` reads it, each case's checks its own and then
-    the dataset's, which hold for every case."""
-    dataset = load(name, directory)
+def summary(name: str, written: str) -> DatasetSummary:
+    """``written`` as ``parse`` reads it, each case's checks its own and
+    then the dataset's, which hold for every case."""
+    dataset = parse(name, written)
     shared = [explain(e) for e in dataset.evaluators]
     return DatasetSummary(
         name=name,
-        about=_about(dataset_path(name, directory)),
+        about=about(written),
         cases=[
             CaseSummary(
                 name=case.name or "",
@@ -144,14 +140,173 @@ def describe(name: str, directory: Path = EVALS_DIR) -> DatasetSummary:
     )
 
 
-def describe_all(directory: Path = EVALS_DIR) -> list[DatasetSummary]:
-    """Every dataset under ``directory``, as ``describe`` reads it. One
-    that cannot be read says why where its ``about`` goes, with no cases:
-    a bad file hides no other, and can still be opened and deleted."""
-    found: list[DatasetSummary] = []
-    for name in names(directory):
-        try:
-            found.append(describe(name, directory))
-        except ValueError as exc:
-            found.append(DatasetSummary(name=name, about=f"Cannot be read: {exc}", cases=[]))
+def summed(name: str, written: str) -> DatasetSummary:
+    """``summary``; one that cannot be read (a check it names has gone)
+    says why where its ``about`` goes, with no cases, so it hides no other
+    and can still be opened, exported and deleted."""
+    try:
+        return summary(name, written)
+    except ValueError as exc:
+        return DatasetSummary(name=name, about=f"Cannot be read: {exc}", cases=[])
+
+
+def summaries(kept: dict[str, str]) -> list[DatasetSummary]:
+    """Each of ``kept`` (``texts``), ``summed``."""
+    return [summed(name, written) for name, written in kept.items()]
+
+
+async def texts(session: AsyncSession) -> dict[str, str]:
+    """Every dataset's YAML as written, by name, in one read."""
+    return await queries.dataset_texts(session)
+
+
+async def names(session: AsyncSession) -> list[str]:
+    """Every dataset, by name (its YAML left unread)."""
+    return await queries.dataset_names(session)
+
+
+def unknown(name: str) -> UnknownDatasetError:
+    """Why ``name`` cannot be read: there is no such dataset."""
+    return UnknownDatasetError(f"No dataset {name!r}")
+
+
+def taken(name: str) -> ValueError:
+    """Why ``name`` cannot be a new dataset: there is one."""
+    return ValueError(f"Dataset {name!r} already exists")
+
+
+def check_name(name: str) -> None:
+    """ValueError for a ``name`` that is not one (``NAME``)."""
+    if not NAME.fullmatch(name):
+        raise ValueError(f"{name!r} is not a dataset name: {NAME_HINT}")
+
+
+def name_of(filename: str) -> str:
+    """The dataset a file is: ``ops.yaml`` (or ``ops.yml``) is ``ops``."""
+    return PurePath(filename).stem
+
+
+def _checked(name: str, written: str) -> DatasetSummary:
+    """``written`` as dataset ``name`` is kept, summed up; ValueError for a
+    name that is not one, or YAML that is no dataset."""
+    check_name(name)
+    return summary(name, written)
+
+
+async def _record(session: AsyncSession, name: str) -> EvalDatasetRecord:
+    record = await queries.dataset_record(session, name)
+    if record is None or record.deleted_at is not None:
+        raise unknown(name)
+    return record
+
+
+async def text(session: AsyncSession, name: str) -> str:
+    """``name``'s YAML, as it was written (``UnknownDatasetError`` for no
+    such dataset)."""
+    return (await _record(session, name)).text
+
+
+async def describe(session: AsyncSession, name: str) -> DatasetSummary:
+    """``name``, summed up (``summary``)."""
+    return summary(name, await text(session, name))
+
+
+async def describe_all(session: AsyncSession) -> list[DatasetSummary]:
+    """Every dataset, summed up (``summaries``), in one read."""
+    return summaries(await texts(session))
+
+
+async def add(
+    session: AsyncSession, name: str, written: str, *, replace: bool = False
+) -> DatasetSummary:
+    """Keep ``written`` as dataset ``name``, over the one there where
+    ``replace``: it, summed up. ValueError for a name that is not one or
+    is taken, or YAML that is no dataset. A deleted dataset's name is free
+    again."""
+    found = _checked(name, written)
+    record = await queries.dataset_record(session, name)
+    if record is not None and record.deleted_at is None and not replace:
+        raise taken(name)
+    if record is None:
+        record = EvalDatasetRecord(name=name, text=written)
+    else:
+        record.text, record.created_at, record.deleted_at = written, utcnow(), None
+    session.add(record)
+    try:
+        await session.flush()
+    except IntegrityError:  # added meanwhile, by another process
+        await session.rollback()  # so a caller can still answer, and commit
+        raise taken(name) from None
     return found
+
+
+async def add_file(
+    session: AsyncSession, filename: str, data: bytes, *, replace: bool = False
+) -> str:
+    """Keep a YAML file as the dataset its name says (``name_of``), as
+    ``add`` does: that name. ValueError for a file that is not text too."""
+    try:
+        written = data.decode()
+    except UnicodeDecodeError:
+        raise ValueError(f"{filename} is not text") from None
+    name = name_of(filename)
+    await add(session, name, written, replace=replace)
+    return name
+
+
+async def remove(session: AsyncSession, name: str) -> None:
+    """Delete ``name`` (``UnknownDatasetError`` when there is none); its
+    kept runs stay, and its row with them (``seed_missing``)."""
+    record = await _record(session, name)
+    record.deleted_at = utcnow()
+    session.add(record)
+    await session.flush()
+
+
+def shipped(directory: Path = EVALS_DIR) -> dict[str, str]:
+    """The datasets the app ships, by name (``name_of``): each file's text."""
+    return {name_of(path.name): path.read_text() for path in sorted(directory.glob("*.yaml"))}
+
+
+def _readable(name: str, written: str) -> bool:
+    try:
+        _checked(name, written)
+    except ValueError as exc:
+        logger.warning(f"Shipped eval dataset skipped: {exc}")
+        return False
+    return True
+
+
+def _as_seeded(row: EvalDatasetRecord, written: str) -> bool:
+    """Whether ``row`` was seeded and is still as it was, with its file
+    since changed to ``written``."""
+    return (
+        row.deleted_at is None
+        and row.shipped == fingerprint(row.text)
+        and row.text != written
+    )
+
+
+async def seed_missing(session: AsyncSession, directory: Path = EVALS_DIR) -> int:
+    """Add each shipped dataset (``shipped``) whose name this database has
+    never had, bring each one still as seeded up to its file, and say how
+    many. One edited, deleted or imported here stays as it is; one that
+    cannot be read is skipped, hiding no other; none are written where
+    another process seeded them first."""
+    rows = {row.name: row for row in await queries.dataset_rows(session)}
+    seeded = 0
+    for name, written in shipped(directory).items():
+        row = rows.get(name)
+        if (row is not None and not _as_seeded(row, written)) or not _readable(name, written):
+            continue
+        row = row or EvalDatasetRecord(name=name, text=written)
+        row.text, row.shipped, row.created_at = written, fingerprint(written), utcnow()
+        session.add(row)
+        seeded += 1
+    try:
+        await session.flush()
+    except IntegrityError as exc:  # two seeding at once (webservers, or ``ai evals``)
+        await session.rollback()
+        logger.warning(f"Eval datasets seeded elsewhere first: {exc.orig}")
+        return 0
+    return seeded

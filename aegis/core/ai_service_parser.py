@@ -63,9 +63,16 @@ def is_ai_service_with_options(service_string: str) -> bool:
 def evals_rule(answers: Mapping[str, Any]) -> str | None:
     """Why these answers cannot have the eval harness, or None: it scores
     Pydantic AI's tool events and scripts a turn with its ``FunctionModel``,
-    which LangChain has neither of."""
-    evals = answers.get(AnswerKeys.AI_EVALS) in (True, "yes")
+    which LangChain has neither of, and keeps its datasets and runs as
+    rows, which the memory backend has nowhere to put."""
+    if answers.get(AnswerKeys.AI_EVALS) not in (True, "yes"):
+        return None
     framework = answers.get(AnswerKeys.AI_FRAMEWORK, AIFrameworks.PYDANTIC_AI)
-    if evals and framework != AIFrameworks.PYDANTIC_AI:
+    if framework != AIFrameworks.PYDANTIC_AI:
         return t("validation.evals_needs_pydantic_ai", framework=framework)
+    if (
+        answers.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
+        == StorageBackends.MEMORY
+    ):
+        return t("validation.evals_needs_database")
     return None

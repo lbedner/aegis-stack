@@ -1,13 +1,14 @@
 {%- if ai_backend != "memory" -%}
 """Eval runs over HTTP: start one as a job (its progress on the jobs API),
 read kept runs and their cases, compare two runs; and the datasets:
-read, a new one written by the model as a job, one deleted. Admins
-only: each turn of a run reads as an admin (``run_dataset``)."""
+read, a new one written by the model as a job, one deleted, one imported
+from YAML or exported as it. Admins only: each turn of a run reads as an
+admin (``run_dataset``)."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -15,13 +16,16 @@ from app.components.backend.api.jobs import JobStartedResponse
 from app.core.db import get_async_db
 from app.services.ai.service import (
     EVAL_CASES,
+    EVAL_YAML_TYPE,
     EvalCase,
     EvalDatasetSummary,
     EvalRun,
     EvalScore,
     UnknownDatasetError,
+    add_eval_dataset,
     eval_dataset,
     eval_dataset_summaries,
+    eval_dataset_text,
     eval_runs,
     remove_eval_dataset,
     start_evals,
@@ -34,8 +38,8 @@ router = APIRouter(dependencies=[Depends(get_admin_reader)])
 
 @contextmanager
 def as_http() -> Iterator[None]:
-    """A dataset not under evals/ is a 404; whatever else is refused (a
-    ValueError, saying why) a 422."""
+    """No such dataset is a 404; whatever else is refused (a ValueError,
+    saying why) a 422."""
     try:
         yield
     except UnknownDatasetError as exc:
@@ -47,7 +51,7 @@ def as_http() -> Iterator[None]:
 
 
 class StartRun(BaseModel):
-    """A dataset under evals/ to run on the model in force, or ``model``."""
+    """A dataset to run on the model in force, or ``model``."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -57,8 +61,8 @@ class StartRun(BaseModel):
 
 
 class NewDataset(BaseModel):
-    """A dataset for the model in force to write: ``evals/<name>.yaml``,
-    its cases checking ``about``, written like dataset ``like``."""
+    """A dataset for the model in force to write: ``name``, its cases
+    checking ``about``, written like dataset ``like``."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -66,6 +70,17 @@ class NewDataset(BaseModel):
     about: str
     cases: int = EVAL_CASES
     like: str | None = None
+
+
+class ImportedDataset(BaseModel):
+    """A dataset's YAML (``text``, Pydantic Evals' format) to keep as
+    ``name``, over the one there where ``replace``."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    text: str
+    replace: bool = False
 
 
 class RunDetail(BaseModel):
@@ -103,7 +118,7 @@ async def start_run(body: StartRun) -> JobStartedResponse:
 )
 async def write_dataset(body: NewDataset) -> JobStartedResponse:
     """Have the model write a dataset as a job, keeping the cases that
-    hold. 404 for an unknown ``like``; 422 for whatever else ``new_path``
+    hold. 404 for an unknown ``like``; 422 for whatever else ``check_new``
     refuses."""
     with as_http():
         job_id = await start_generate_evals(
@@ -112,16 +127,39 @@ async def write_dataset(body: NewDataset) -> JobStartedResponse:
     return JobStartedResponse(job_id=job_id)
 
 
+@router.post(
+    "/evals/datasets/import",
+    response_model=EvalDatasetSummary,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(get_admin_actor)],
+)
+async def import_dataset(
+    body: ImportedDataset, db: AsyncSession = Depends(get_async_db)
+) -> EvalDatasetSummary:
+    """Keep ``text`` as dataset ``name``: 422 for a name that is taken or
+    not one, or YAML that is no dataset."""
+    with as_http():
+        return await add_eval_dataset(db, body.name, body.text, replace=body.replace)
+
+
 @router.get("/evals/datasets", response_model=list[EvalDatasetSummary])
-async def list_datasets() -> list[EvalDatasetSummary]:
-    """Every dataset under evals/: what it checks, and its cases."""
-    return eval_dataset_summaries()
+async def list_datasets(db: AsyncSession = Depends(get_async_db)) -> list[EvalDatasetSummary]:
+    """Every dataset: what it checks, and its cases."""
+    return await eval_dataset_summaries(db)
 
 
 @router.get("/evals/datasets/{name}", response_model=EvalDatasetSummary)
-async def get_dataset(name: str) -> EvalDatasetSummary:
+async def get_dataset(name: str, db: AsyncSession = Depends(get_async_db)) -> EvalDatasetSummary:
     with as_http():
-        return eval_dataset(name)
+        return await eval_dataset(db, name)
+
+
+@router.get("/evals/datasets/{name}/yaml", response_class=Response)
+async def export_dataset(name: str, db: AsyncSession = Depends(get_async_db)) -> Response:
+    """The dataset's YAML as it was written: what ``import`` reads back."""
+    with as_http():
+        written = await eval_dataset_text(db, name)
+    return Response(written, media_type=EVAL_YAML_TYPE)
 
 
 @router.delete(
@@ -129,10 +167,10 @@ async def get_dataset(name: str) -> EvalDatasetSummary:
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(get_admin_actor)],
 )
-async def delete_dataset(name: str) -> None:
-    """Delete a dataset's file; its kept runs stay."""
+async def delete_dataset(name: str, db: AsyncSession = Depends(get_async_db)) -> None:
+    """Delete a dataset; its kept runs stay."""
     with as_http():
-        remove_eval_dataset(name)
+        await remove_eval_dataset(db, name)
 
 
 @router.get("/evals/runs", response_model=list[EvalRun])
@@ -169,6 +207,6 @@ async def compare(
     a: int, b: int, db: AsyncSession = Depends(get_async_db)
 ) -> eval_runs.Comparison:
     """The cases that changed between two runs (flipped first, then a rule
-    changed, added, removed), and whether the dataset file did."""
+    changed, added, removed), and whether the dataset did."""
     return await eval_runs.compare(db, a, b)
 {%- endif %}

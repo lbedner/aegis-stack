@@ -4,8 +4,6 @@
 in once the scoring, minutes of model calls, is over. A dataset written by
 the model (``generate_evals``) is run here too, so nothing it keeps fails."""
 
-from pathlib import Path
-import tempfile
 from typing import Any
 
 from app.core.config import settings
@@ -17,15 +15,14 @@ from app.services.ai.models.evals import EvalRun
 from app.services.system import job_store
 from app.services.system.jobs import Report
 
-from .datasets import EVALS_DIR, dataset_path
+from .datasets import add, names, summaries, text, texts, unknown
 from .generator import (
     CASES,
     Dropped,
     Generated,
+    check_new,
     held,
     keep,
-    new_path,
-    publish,
     write_cases,
     written,
 )
@@ -53,6 +50,13 @@ async def _provider_for(model: str | None) -> str | None:
     return checked.provider
 
 
+async def _text(name: str) -> str:
+    """Dataset ``name``'s YAML (``UnknownDatasetError`` for none), in a
+    session of its own."""
+    async with get_async_session() as session:
+        return await text(session, name)
+
+
 async def run_evals(
     name: str,
     *,
@@ -61,22 +65,19 @@ async def run_evals(
     note: str | None = None,
     trigger: str = "cli",
     report: Report | None = None,
-    directory: Path | None = None,
+    written: str | None = None,
 ) -> EvalRun:
-    """Score ``name`` (``run_dataset``; under ``evals/``, or ``directory``)
+    """Score dataset ``name`` (``run_dataset``; as kept, or as ``written``)
     on the model picked in the Overseer, or ``model``, then keep the run;
     its conversations go with the keeping."""
+    if written is None:
+        written = await _text(name)
     # Headless: the selection is a row only the webserver re-reads per request.
     await active_model.sync_from_db(settings)
     provider = await _provider_for(model)
     started_at = utcnow()
     scored = await run_dataset(
-        name,
-        scripted=scripted,
-        model=model,
-        provider=provider,
-        report=report,
-        directory=directory or EVALS_DIR,
+        name, written, scripted=scripted, model=model, provider=provider, report=report
     )
     async with get_async_session() as session:
         return await record_run(
@@ -93,10 +94,11 @@ async def _job_result(
 
 
 async def start_evals(name: str, *, model: str | None, note: str | None) -> str:
-    """Start the run as a job; a dataset not under ``evals/``
-    (``UnknownDatasetError``) or a model that cannot answer is refused here, not
-    on the worker."""
-    dataset_path(name, EVALS_DIR)
+    """Start the run as a job; no such dataset (``UnknownDatasetError``) or
+    a model that cannot answer is refused here, not on the worker."""
+    async with get_async_session() as session:
+        if name not in await names(session):
+            raise unknown(name)
     await _provider_for(model)
     return await job_store.start_job(
         f"{JOB_PREFIX}{name}",
@@ -120,37 +122,40 @@ async def generate_evals(
     like: str | None = None,
     report: Report | None = None,
 ) -> Generated:
-    """Write ``evals/<name>.yaml``: the model in force writes the cases
+    """Write dataset ``name``: the model in force writes the cases
     (``write_cases``), each runs once on it, those that held are kept with
     the scripts their turns took, and the scripts are played as CI plays
-    them (``make evals-ci``), keeping those that pass. All of it on a draft
-    out of sight: the file is there only once nothing in it fails.
-    ValueError (``new_path``) before any model is called, and when no case
-    holds."""
-    path = new_path(name, about, cases, like, EVALS_DIR)
+    them (``make evals-ci``), keeping those that pass. All of it on a draft:
+    the dataset is kept only once nothing in it fails, and only if its name
+    is still free. ValueError (``check_new``) before any model is called,
+    and when no case holds."""
+    async with get_async_session() as session:
+        kept = await texts(session)
+    check_new(kept, name, about, cases, like)
     say = report or (lambda _label: None)
     say("Writing cases...")
-    dataset, dropped = await write_cases(about, cases, like, EVALS_DIR)
-    with tempfile.TemporaryDirectory() as drafts:
-        folder = Path(drafts)
-        draft = folder / path.name
-        draft.write_text(written(dataset, about))
-        real = await run_evals(
-            name, trigger="generate", note=WRITTEN, report=report, directory=folder
-        )
-        scripts, failed = await _held(real.id)
-        dropped += failed
-        keep(dataset, scripts, dropped)
-        draft.write_text(written(dataset, about))
-        say("Playing the scripts...")
-        played = await run_evals(
-            name, scripted=True, trigger="ci", note=WRITTEN, directory=folder
-        )
-        if played.failed:
-            playable, unplayable = await _held(played.id)
-            dropped += unplayable
-            keep(dataset, {n: scripts[n] for n in playable}, dropped)
-    publish(dataset, about, path)
+    like_text = None if like is None else kept[like]
+    dataset, dropped = await write_cases(about, cases, like_text, summaries(kept))
+    real = await run_evals(
+        name,
+        trigger="generate",
+        note=WRITTEN,
+        report=report,
+        written=written(dataset, about),
+    )
+    scripts, failed = await _held(real.id)
+    dropped += failed
+    keep(dataset, scripts, dropped)
+    say("Playing the scripts...")
+    final = written(dataset, about)
+    played = await run_evals(name, scripted=True, trigger="ci", note=WRITTEN, written=final)
+    if played.failed:
+        playable, unplayable = await _held(played.id)
+        dropped += unplayable
+        keep(dataset, {n: scripts[n] for n in playable}, dropped)
+        final = written(dataset, about)
+    async with get_async_session() as session:
+        await add(session, name, final)
     return Generated(kept=len(dataset.cases), dropped=dropped, run_id=real.id)
 
 
@@ -166,9 +171,10 @@ async def _generated_result(
 async def start_generate_evals(
     name: str, *, about: str, cases: int = CASES, like: str | None = None
 ) -> str:
-    """Write the dataset as a job (``generate_evals``); what ``new_path``
+    """Write the dataset as a job (``generate_evals``); what ``check_new``
     refuses is refused here, not on the worker."""
-    new_path(name, about, cases, like, EVALS_DIR)
+    async with get_async_session() as session:
+        check_new(await names(session), name, about, cases, like)
     return await job_store.start_job(
         f"{WRITING_PREFIX}{name}",
         "generate_evals_task",

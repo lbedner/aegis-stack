@@ -1,9 +1,15 @@
 {%- if ai_backend != "memory" -%}
 """``ai evals``: score a dataset on the model in force and keep the run,
 then read kept runs back and compare two of them; and the datasets
-themselves: read, written by the model, deleted."""
+themselves: read, written by the model, deleted, imported from YAML and
+exported as it."""
+
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from pathlib import Path
 
 from rich.markup import escape
+from sqlmodel.ext.asyncio.session import AsyncSession
 import typer
 
 from app.cli import theme
@@ -19,21 +25,32 @@ from app.services.ai.service import (
     EVAL_CASES,
     EvalRun,
     UnknownDatasetError,
+    add_eval_dataset_file,
     eval_called,
     eval_dataset,
     eval_dataset_summaries,
-    eval_datasets,
+    eval_dataset_text,
+    eval_dataset_texts,
     eval_runs,
     generate_eval_dataset,
     remove_eval_dataset,
     run_evals,
+    seed_eval_datasets,
 )
 
-evals = typer.Typer(
-    help="Score datasets under evals/ and keep the runs; read and compare them."
-)
+evals = typer.Typer(help="Score datasets and keep the runs; read and compare them.")
 app.add_typer(evals, name="evals")
 console = theme.console()
+NONE_YET = "No datasets: ai evals generate, or ai evals import"
+
+
+@asynccontextmanager
+async def _seeded() -> AsyncIterator[AsyncSession]:
+    """A session on the datasets, the shipped ones added first where
+    missing (as at startup), so a fresh clone or CI reads what it runs."""
+    async with get_async_session() as session:
+        await seed_eval_datasets(session)
+        yield session
 
 
 def _verdict(passed: bool) -> str:
@@ -75,7 +92,7 @@ async def _failures(run_id: int) -> None:
 @evals.command("run")
 async def run(
     datasets: list[str] | None = typer.Argument(
-        None, help="Datasets under evals/ (every one when none is named)"
+        None, help="Datasets to run (every one when none is named)"
     ),
     model: str | None = typer.Option(
         None, "--model", "-m", help="This model instead of the one in force"
@@ -85,14 +102,15 @@ async def run(
         False, "--scripted", help="Play each case's script: no model, no network"
     ),
 ) -> None:
-    """Score each dataset and keep its run; exits 1 when a case fails."""
-    known = eval_datasets()
+    """Score each dataset and keep its run; exits 1 when a case fails, or
+    there is no dataset to run."""
+    async with _seeded() as session:
+        known = await eval_dataset_texts(session)
+    if not known:
+        theme.fail(NONE_YET)
     unknown = sorted(set(datasets or ()) - set(known))
     if unknown:
-        theme.fail(
-            f"No dataset {', '.join(unknown)} under evals/ "
-            f"(there: {', '.join(known) or 'none'})"
-        )
+        theme.fail(f"No dataset {', '.join(unknown)} (there: {', '.join(known)})")
     failed = 0
     for name in datasets or known:
         console.print(f"[bold]{name}[/bold]")
@@ -105,6 +123,7 @@ async def run(
                     note=note,
                     trigger="ci" if scripted else "cli",
                     report=status.update,
+                    written=known[name],
                 )
         except ValueError as exc:  # a model that cannot answer chat here
             theme.fail(str(exc))
@@ -118,27 +137,29 @@ async def run(
 
 @evals.command("generate")
 async def generate(
-    name: str = typer.Argument(..., help="The new dataset: evals/<name>.yaml"),
+    name: str = typer.Argument(..., help="The new dataset's name"),
     about: str = typer.Option(
         ..., "--about", "-a", help="What its cases check, its leading comment"
     ),
     cases: int = typer.Option(EVAL_CASES, "--cases", "-n", help="How many cases"),
     like: str | None = typer.Option(
-        None, "--like", "-l", help="A dataset under evals/ to write like"
+        None, "--like", "-l", help="A dataset to write like"
     ),
 ) -> None:
     """Have the model in force write a new dataset, run it once on that
     model and keep each case that held, with the script its turn took;
     each one dropped is named with why."""
+    async with _seeded():  # so ``--like`` finds a shipped one
+        pass
     try:
         with console.status("Starting...") as status:
             made = await generate_eval_dataset(
                 name, about=about, cases=cases, like=like, report=status.update
             )
-    except ValueError as exc:  # whatever ``new_path`` refuses, or no case held
+    except ValueError as exc:  # whatever ``check_new`` refuses, or no case held
         theme.fail(str(exc))
     console.print(
-        f"Wrote [bold]evals/{name}.yaml[/bold]: {counted(made.kept, 'case')} of {made.written}"
+        f"Wrote [bold]{name}[/bold]: {counted(made.kept, 'case')} of {made.written}"
         f"  [dim]run {made.run_id}[/dim]"
     )
     for dropped in made.dropped:
@@ -149,12 +170,13 @@ async def generate(
 async def datasets(
     name: str | None = typer.Argument(None, help="Read this one, with its cases"),
 ) -> None:
-    """The datasets under evals/: what each checks and how many cases it
-    has; or one of them, each case with what it asks and passes on."""
+    """The datasets: what each checks and how many cases it has; or one of
+    them, each case with what it asks and passes on."""
     if name is None:
-        found = eval_dataset_summaries()
+        async with _seeded() as session:
+            found = await eval_dataset_summaries(session)
         if not found:
-            console.print("[dim]No datasets under evals/: ai evals generate[/dim]")
+            console.print(f"[dim]{NONE_YET}[/dim]")
             return
         table = theme.keyed_table(("Dataset", "Checks", "Cases"), [d.name for d in found])
         for dataset in found:
@@ -162,8 +184,9 @@ async def datasets(
         console.print(table)
         return
     try:
-        dataset = eval_dataset(name)
-    except ValueError as exc:  # not under evals/, or a file that cannot be read
+        async with _seeded() as session:
+            dataset = await eval_dataset(session, name)
+    except ValueError as exc:  # no such dataset, or one that cannot be read
         theme.fail(str(exc))
     console.print(f"[bold]{dataset.name}[/bold]  [dim]{escape(dataset.about)}[/dim]")
     table = theme.keyed_table(("Case", "Asks", "Passes if"), [c.name for c in dataset.cases])
@@ -174,18 +197,59 @@ async def datasets(
 
 @evals.command("delete")
 async def delete(
-    name: str = typer.Argument(..., help="The dataset: evals/<name>.yaml"),
+    name: str = typer.Argument(..., help="The dataset"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask first"),
 ) -> None:
-    """Delete a dataset's file; its kept runs stay."""
-    if not yes and not typer.confirm(f"Delete evals/{name}.yaml? Its kept runs stay."):
+    """Delete a dataset; its kept runs stay."""
+    if not yes and not typer.confirm(f"Delete dataset {name}? Its kept runs stay."):
         console.print("Cancelled")
         return
     try:
-        remove_eval_dataset(name)
+        async with _seeded() as session:
+            await remove_eval_dataset(session, name)
     except UnknownDatasetError as exc:
         theme.fail(str(exc))
-    console.print(f"Deleted [bold]evals/{name}.yaml[/bold]")
+    console.print(f"Deleted [bold]{name}[/bold]")
+
+
+@evals.command("import")
+async def import_datasets(
+    files: list[Path] = typer.Argument(
+        ..., help="YAML files, each a dataset named by its file", exists=True, dir_okay=False
+    ),
+    replace: bool = typer.Option(
+        False, "--replace", help="Over a dataset of the same name (a file edited)"
+    ),
+) -> None:
+    """Keep each file as the dataset its name says (``ops.yaml`` is
+    ``ops``), each in its own session; exits 1 when one is refused, the
+    rest kept."""
+    refused = 0
+    for path in files:
+        try:
+            async with get_async_session() as session:
+                name = await add_eval_dataset_file(
+                    session, path.name, path.read_bytes(), replace=replace
+                )
+        except ValueError as exc:  # taken, not a name, not text, or not a dataset
+            theme.bad(f"✗ {exc}")
+            refused += 1
+            continue
+        console.print(f"Imported [bold]{name}[/bold]")
+    if refused:
+        raise typer.Exit(1)
+
+
+@evals.command("export")
+async def export_dataset(name: str = typer.Argument(..., help="The dataset")) -> None:
+    """A dataset's YAML as it was written, to stdout (``> ops.yaml`` keeps
+    it as a file ``ai evals import`` reads back)."""
+    try:
+        async with _seeded() as session:
+            written = await eval_dataset_text(session, name)
+    except UnknownDatasetError as exc:
+        theme.fail(str(exc))
+    typer.echo(written, nl=False)
 
 
 @evals.command("list")
@@ -284,7 +348,7 @@ async def compare(
     async with get_async_session() as session:
         comparison = await eval_runs.compare(session, before, after)
     if comparison.dataset_changed:
-        console.print("[dim]The dataset file changed between these runs.[/dim]")
+        console.print("[dim]The dataset changed between these runs.[/dim]")
     if not comparison.cases:
         console.print(f"No differences between run {before} and run {after}.")
         return

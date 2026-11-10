@@ -185,7 +185,7 @@ aegis init my-app --services "ai[pydantic-ai,sqlite,openai,rag,voice]"
 | Providers | `openai`, `anthropic`, `google`, `groq`, `mistral`, `cohere`, `ollama`, `public` | `public` | LLM providers |
 | RAG | flag | disabled | Enable RAG support |
 | Voice | flag | disabled | Enable TTS/STT |
-| Evals | flag | disabled | The eval harness ([Evals](evals.md)); Pydantic AI only |
+| Evals | flag | disabled | The eval harness ([Evals](evals.md)); Pydantic AI and a database only |
 
 ### Switching Providers
 

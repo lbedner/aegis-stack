@@ -9,6 +9,16 @@
 
 ### Added
 
+- **A plugin's worker names its memory.** `WorkerQueueWiring(..., memory="1G")`
+  is the compose default for its `worker-<queue>` container, in place of the
+  stack's 512M; `<QUEUE>_WORKER_MEMORY` still wins. A value that is not
+  Docker's spelling is refused at the spec.
+- **Hooks a plugin's Overseer page uses.** A section that is the thing itself
+  is headed by the page's name (`page_titled`); `primary_button(...,
+  filled=True)` is a page's one action, filled with the accent; the dialog
+  is as wide as a table, a picture or a video marked `data-snug` (one marker
+  where the table and the documents page each had their own); and the icon sprite carries
+  `gif`, `film`, `photo`, `musical-note` and `exclamation-triangle`.
 - **`range_chips(..., multiple=True)`.** A row of chips can be ticks instead of
   one exclusive pick: `days` holds the values ticked and the row is a
   `data-checklist`, so over a list it narrows the rows with no request

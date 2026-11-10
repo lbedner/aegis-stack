@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from jinja2 import Environment, FileSystemLoader
 
 from aegis.core.component_files import get_copier_defaults, get_template_path
@@ -36,6 +37,17 @@ def _plugin() -> dict[str, Any]:
         kind=PluginKind.SERVICE,
         description="d",
         worker_queues=["crawler"],
+    )
+    return serialize_plugin_to_answer(spec)
+
+
+def _media(*queues: str | WorkerQueueWiring) -> dict[str, Any]:
+    """The answer a ``media`` plugin with these queues writes."""
+    spec = PluginSpec(
+        name="media",
+        kind=PluginKind.SERVICE,
+        description="d",
+        worker_queues=list(queues),
     )
     return serialize_plugin_to_answer(spec)
 
@@ -120,33 +132,24 @@ class TestPluginQueueConcurrency:
         assert serialized["worker_queue_settings"] == []
 
     def test_a_wiring_carries_its_concurrency(self) -> None:
-        spec = PluginSpec(
-            name="media",
-            kind=PluginKind.SERVICE,
-            description="d",
-            worker_queues=[
-                WorkerQueueWiring(name="media", concurrency=2, max_wait_seconds=900)
-            ],
+        serialized = _media(
+            WorkerQueueWiring(name="media", concurrency=2, max_wait_seconds=900)
         )
-
-        serialized = serialize_plugin_to_answer(spec)
 
         assert serialized["worker_queues"] == ["media"]
         assert serialized["worker_queue_settings"] == [
-            {"name": "media", "concurrency": 2, "max_wait_seconds": 900}
+            {"name": "media", "concurrency": 2, "max_wait_seconds": 900, "memory": None}
         ]
 
     def test_the_defaults_module_renders_the_plugin_number(self) -> None:
-        spec = PluginSpec(
-            name="media",
-            kind=PluginKind.SERVICE,
-            description="d",
-            worker_queues=[WorkerQueueWiring(name="media", concurrency=2)],
-        )
         rendered = _render(
             "app/core/plugin_queue_defaults.py",
             include_worker=True,
-            **{PLUGINS_ANSWER_KEY: [serialize_plugin_to_answer(spec)]},
+            **{
+                PLUGINS_ANSWER_KEY: [
+                    _media(WorkerQueueWiring(name="media", concurrency=2))
+                ]
+            },
         )
 
         assert '"media"' in rendered
@@ -175,3 +178,52 @@ class TestPluginQueueConcurrency:
         )
 
         assert "Field(default_factory=DEFAULT_QUEUES.copy)" in rendered
+
+
+class TestPluginQueueMemory:
+    """A plugin's worker ships the memory its work needs, not 512M.
+
+    A 1080p ffmpeg encode peaked at 520 MB: the media worker was killed on
+    its first real job until the project edited its generated compose file
+    by hand, which the next ``aegis update`` would undo.
+    """
+
+    @staticmethod
+    def _worker(*queues: str | WorkerQueueWiring) -> str:
+        """The ``worker-media`` service a compose file renders."""
+        compose = _render(
+            "docker-compose.yml",
+            include_worker=True,
+            include_redis=True,
+            worker_backend="arq",
+            **{PLUGINS_ANSWER_KEY: [_media(*queues)]},
+        )
+        return compose[compose.index("  worker-media:") :].split("\n\n")[0]
+
+    def test_the_worker_gets_it_and_the_env_still_wins(self) -> None:
+        worker = self._worker(WorkerQueueWiring(name="media", memory="1G"))
+
+        assert "memory: ${MEDIA_WORKER_MEMORY:-1G}" in worker
+
+    def test_a_queue_that_names_none_keeps_the_default(self) -> None:
+        assert "memory: ${MEDIA_WORKER_MEMORY:-512M}" in self._worker("media")
+
+    def test_memory_alone_adds_no_concurrency(self) -> None:
+        """The defaults module is concurrency's: a queue that set only its
+        memory keeps the project's default number of jobs."""
+        rendered = _render(
+            "app/core/plugin_queue_defaults.py",
+            include_worker=True,
+            **{
+                PLUGINS_ANSWER_KEY: [
+                    _media(WorkerQueueWiring(name="media", memory="1G"))
+                ]
+            },
+        )
+
+        assert "QueueWorker(" not in rendered
+
+    def test_memory_is_dockers_spelling(self) -> None:
+        """Rendered into compose as is, so it is refused at the spec."""
+        with pytest.raises(ValueError, match="memory"):
+            _media(WorkerQueueWiring(name="media", memory="lots"))

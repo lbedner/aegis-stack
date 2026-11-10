@@ -52,7 +52,9 @@ It declares:
   `app/core/plugin_queue_defaults.py` and merge into `DEFAULT_QUEUES`, so they
   are the project's own default from the moment the plugin lands; a project
   that wants something else still sets `WORKER_QUEUES` in its environment, which
-  wins.
+  wins. A worker whose work needs more than the stack's 512M names it too,
+  `WorkerQueueWiring("media", concurrency=1, memory="1G")`, as its compose
+  default; `<QUEUE>_WORKER_MEMORY` in the environment still wins.
 
 The reference plugin, `aegis-stack-crawl4ai`, exercises most of that surface
 and is the best example to read.

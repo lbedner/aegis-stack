@@ -308,6 +308,7 @@ services:
 {%- endif %}
 {%- for p in _plugins | default([]) %}
 {%- for q in p.worker_queues | default([]) %}
+{%- set memory = p.worker_queue_settings | default([]) | selectattr("name", "equalto", q) | map(attribute="memory") | first | default("512M", true) %}
 
   worker-{{ q }}:
     <<: *app
@@ -332,7 +333,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: {{ "${" ~ q | upper ~ "_WORKER_MEMORY:-512M}" }}
+          memory: {{ "${" ~ q | upper ~ "_WORKER_MEMORY:-" ~ memory ~ "}" }}
           cpus: '{{ "${" ~ q | upper ~ "_WORKER_CPUS:-0.5}" }}'
     profiles:
       - dev

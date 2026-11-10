@@ -247,7 +247,7 @@ class TestTheCards:
         assert [text(c) for c in select(html, "td.whitespace-normal")] == [
             "Paid late; letter sent"
         ]
-        one(html, "[data-card=table][data-fit]")
+        one(html, "[data-card=table][data-snug]")
 
     def test_a_card_opens_larger_in_the_dialog(
         self, hx: TestClient, drawn: dict[str, str]

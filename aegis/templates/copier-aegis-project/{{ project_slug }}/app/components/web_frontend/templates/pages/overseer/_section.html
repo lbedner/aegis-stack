@@ -9,8 +9,11 @@
 {# A section may say what it is for (``section_subtitle``) and put its own
    verbs in the header (``<folder>/_<section>_actions.html``). #}
 {% set subtitle = section_subtitle if section_subtitle is defined else (message if current == "overview" else none) %}
-{# A page of one section heads it with its own name: it has no sub-menu. #}
-{% call page_header(item.title if page.single else page.labels[current], subtitle) %}{% include "pages/overseer/" ~ page.folder ~ "/_" ~ current|replace("-", "_") ~ "_actions.html" ignore missing %}{% endcall %}
+{# A page of one section heads it with its own name: it has no sub-menu.
+   A section that is the thing itself is headed by its name
+   (``page_titled``). #}
+{% set title = item.title if page.single or page_titled|default(false) else page.labels[current] %}
+{% call page_header(title, subtitle) %}{% include "pages/overseer/" ~ page.folder ~ "/_" ~ current|replace("-", "_") ~ "_actions.html" ignore missing %}{% endcall %}
 {# A section every page may have (the Container section) falls back to one
    shared ``_<section>.html``; a page whose sections share one partial
    (Patterns) names it, ``section_partial``. #}

@@ -127,26 +127,19 @@ def serialize_plugin_to_answer(
 
 
 def _serialize_queue_settings(spec: PluginSpec) -> list[dict[str, Any]]:
-    """The numbers a plugin's queues bring, for the rendered defaults module.
+    """The settings a plugin's queues bring, for the rendered defaults
+    module (concurrency, wait) and the compose file (memory).
 
     A bare queue name contributes nothing: its worker keeps the project's
-    default. Entries carry only what the plugin actually set, so the
-    generated ``QueueWorker(...)`` shows the plugin author's numbers and
-    lets the model's own defaults fill the rest.
+    defaults. Unset values stay None, so each reader fills its own.
     """
     settings: list[dict[str, Any]] = []
     for queue in spec.worker_queues:
         if not isinstance(queue, WorkerQueueWiring):
             continue
-        if queue.concurrency is None and queue.max_wait_seconds is None:
-            continue
-        settings.append(
-            {
-                "name": queue.name,
-                "concurrency": queue.concurrency,
-                "max_wait_seconds": queue.max_wait_seconds,
-            }
-        )
+        entry = asdict(queue)
+        if any(value is not None for key, value in entry.items() if key != "name"):
+            settings.append(entry)
     return settings
 
 

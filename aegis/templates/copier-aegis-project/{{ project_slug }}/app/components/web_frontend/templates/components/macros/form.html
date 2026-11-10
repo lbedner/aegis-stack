@@ -10,19 +10,23 @@
 {# One button height: a primary button (Save) stands as tall as an action
    (Read pages). Only a form's full-width submit (sign in) is larger. #}
 {%- set _button_size = "px-2.5 py-1 text-xs" -%}
-{%- set _primary_button_classes -%}
-text-aegis-text border border-aegis-teal bg-aegis-teal/10 rounded hover:bg-aegis-teal/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2
+{%- set _button_shape -%}
+border border-aegis-teal rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2
 {%- endset -%}
+{%- set _primary_button_classes = "text-aegis-text bg-aegis-teal/10 hover:bg-aegis-teal/20 " ~ _button_shape -%}
+{# A page's one action (Make it), filled with the accent: one per view. #}
+{%- set _filled_button_classes = "text-aegis-bg bg-aegis-teal font-medium hover:bg-aegis-teal/90 " ~ _button_shape -%}
 
 
 {# Inline primary button (no loading spinner). Defaults to ``type="button"``
    so it doesn't accidentally submit a form it's nested inside — pass
    ``type="submit"`` explicitly when you want submit semantics. ``attrs``
    lets the caller pass other attributes (Alpine ``@click``,
-   ``:disabled``, ``aria-*``), never a ``type=`` (refused). #}
-{% macro primary_button(label, type="button", attrs="") %}
+   ``:disabled``, ``aria-*``), never a ``type=`` (refused). ``filled``
+   is the page's one action. #}
+{% macro primary_button(label, type="button", attrs="", filled=False) %}
 <button type="{{ type }}" {{ attrs|button_attrs|safe }}
-  class="{{ _primary_button_classes }} {{ _button_size }}">{{ label }}</button>
+  class="{{ _filled_button_classes if filled else _primary_button_classes }} {{ _button_size }}">{{ label }}</button>
 {% endmacro %}
 
 

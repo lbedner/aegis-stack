@@ -1,6 +1,7 @@
 """Layout macros: card, stat_tile, chart_panel, dialog, badge, dropdown, confirm."""
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -96,6 +97,12 @@ class TestDialog:
         one(dialog, "#dialog-body")
         assert one(dialog, "button[aria-label='Close']") is not None
 
+    def test_a_picture_is_as_wide_as_itself(self) -> None:
+        """A table or a result in the dialog (``data-snug``) is not cut to
+        max-w-md."""
+        dialog = one(render("{{ dialog() }}"), "dialog#dialog")
+        assert "has-[[data-snug]]:w-fit" in (dialog.get("class") or "").split()
+
     def test_mounted_once_by_the_base_layout(self, shell: str) -> None:
         page = shell
         one(page, "dialog#dialog")
@@ -182,6 +189,29 @@ class TestPageHeader:
         header = one(html, "header")
         assert text(one(header, "h1")) == "Budget" and "the month" in text(header)
         one(header, "#r")
+
+    def test_a_section_may_name_itself(self) -> None:
+        """``page_titled`` heads a section with the page's name: a page
+        whose Overview is the thing itself reads "Media", not "Overview"."""
+        page = SimpleNamespace(
+            single=False, labels={"overview": "Overview"}, folder="none", live=False
+        )
+        item = SimpleNamespace(title="Media", component=SimpleNamespace(message=""))
+        section = templates.env.get_template("pages/overseer/_section.html")
+
+        def heading(**context: object) -> str:
+            html = section.render(
+                item=item,
+                page=page,
+                current="overview",
+                header_message=None,
+                section_partial="components/macros/icons.html",
+                **context,
+            )
+            return text(one(one(html, "header"), "h1"))
+
+        assert heading() == "Overview"
+        assert heading(page_titled=True) == "Media"
 
     def test_figures_are_a_definition_list_the_stat_helper_reads(self) -> None:
         html = render(
@@ -320,6 +350,19 @@ def test_a_primary_button_is_as_tall_as_an_action() -> None:
         return {c for c in classes if c.startswith(("text-xs", "text-sm", "py-", "px-"))}
 
     assert size(save) == size(read)
+
+
+def test_a_filled_button_is_the_pages_one_action() -> None:
+    """Make it: the accent as its fill, as tall as every other button."""
+    html = render(
+        '{% from "components/macros/form.html" import primary_button %}'
+        '{{ primary_button("Make it", filled=True) }}{{ primary_button("Save") }}'
+    )
+    made, save = (set((b.get("class") or "").split()) for b in select(html, "button"))
+    assert "bg-aegis-teal" in made and "bg-aegis-teal" not in save
+    assert {c for c in made if c.startswith(("py-", "px-", "text-xs"))} == {
+        c for c in save if c.startswith(("py-", "px-", "text-xs"))
+    }
 
 
 class TestButtonType:

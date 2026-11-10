@@ -9,7 +9,6 @@ gives them a home. Registered only in projects with the AI service (see
 ``overseer_sections``).
 """
 
-from datetime import UTC, datetime, time
 from typing import Any
 
 from app.components.backend.api.ai.service import ai_service
@@ -190,11 +189,7 @@ def _call(r: RecentActivity, icon_url: str | None) -> dict[str, Any]:
 
 async def _usage(db: Any, query: dict[str, str]) -> dict[str, Any]:
     days = series.window_of(query.get("days"), ranges.WINDOWS, DEFAULT_DAYS)
-    start = ranges.since(days)
-    stats = await usage_stats(
-        start_time=datetime.combine(start, time.min, tzinfo=UTC) if start else None,
-        recent_limit=RECENT_CALLS,
-    )
+    stats = await usage_stats(start_time=ranges.start(days), recent_limit=RECENT_CALLS)
     # Each model's vendor, from the breakdown; the recent calls fall in the
     # same window, so it places them too. One lookup for both tables.
     vendor_of = {m.model_id: m.vendor for m in stats.models}

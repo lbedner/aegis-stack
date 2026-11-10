@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any
+
+from app.core.time import as_stored
 
 
 def day_of(value: date | str) -> str:
@@ -15,7 +17,9 @@ def day_of(value: date | str) -> str:
 def within(column: Any, start: Any | None, end: Any | None) -> list[Any]:
     """Clauses keeping ``column`` in ``[start, end)``, for ``.where(*...)``:
     a row at ``end`` is the next window's, so adjacent windows never count
-    it twice. An open end (``None``) is no bound."""
+    it twice. An open end (``None``) is no bound. A datetime bound is taken
+    to the columns' clock (naive UTC), which Postgres insists on."""
+    start, end = (as_stored(b) if isinstance(b, datetime) else b for b in (start, end))
     clauses = []
     if start is not None:
         clauses.append(column >= start)

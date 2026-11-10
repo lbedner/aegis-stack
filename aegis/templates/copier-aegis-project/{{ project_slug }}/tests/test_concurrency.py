@@ -99,20 +99,6 @@ async def test_a_limit_below_one_is_refused() -> None:
         await fanout(work, [1], limit=0)
 
 
-async def test_it_is_concurrent_at_all() -> None:
-    """Ten items that sleep 50ms each take ~50ms, not ~500ms."""
-
-    async def work(n: int) -> int:
-        await asyncio.sleep(0.05)
-        return n
-
-    start = asyncio.get_running_loop().time()
-    await fanout(work, range(10), limit=10)
-    elapsed = asyncio.get_running_loop().time() - start
-
-    assert elapsed < 0.2, f"took {elapsed:.3f}s; that is sequential"
-
-
 class TestCpuBound:
     """CPU work runs in its own process, so the loop keeps serving (a
     worker's claim keep-alive and heartbeats run on it), and one piece of

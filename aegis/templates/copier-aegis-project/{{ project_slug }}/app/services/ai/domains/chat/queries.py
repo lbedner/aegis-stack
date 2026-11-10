@@ -134,8 +134,7 @@ async def recent_conversations_for(
         .order_by(col(Conversation.updated_at).desc())
         .limit(limit)
     )
-    if since is not None:
-        stmt = stmt.where(col(Conversation.updated_at) >= since)
+    stmt = stmt.where(*within(col(Conversation.updated_at), since, None))
     return (await session.exec(stmt)).all()
 
 

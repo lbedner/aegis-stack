@@ -28,10 +28,11 @@ cases:
       script:
         - text: >-
             It runs a backend and a frontend{% if include_database %}, a database{% endif %}{% if include_worker %}, a worker{% endif %}{% if include_scheduler %}, a scheduler{% endif %}{% if include_redis %} and Redis{% endif %}, with the AI service.
+    # The backend is judged, not matched: a model calls it "an HTTP API" as
+    # often as "the backend", and either is right.
     evaluators:
-      - Contains:
-          value: backend
-          case_sensitive: false
+      - Judged:
+          rubric: names a backend or API, in any words
 {%- if include_database %}
       - Contains:
           value: database

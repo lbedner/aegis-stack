@@ -287,7 +287,11 @@ line-ending = "auto"
 [tool.ruff.lint.isort]
 force-single-line = false
 force-sort-within-sections = true
-known-first-party = ["app"]
+# ``alembic`` is the library, but ruff counts the ``alembic/`` directory a
+# project's first migration brings as first-party. Pinned to the side it
+# lands on once that directory exists, so an add that brings it does not
+# re-sort every module importing the library.
+known-first-party = ["app", "alembic"]
 
 [tool.ruff.lint.per-file-ignores]
 # deps.py is a re-export shim that exposes FastAPI dependency-injection

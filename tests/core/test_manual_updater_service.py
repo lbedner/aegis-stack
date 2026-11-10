@@ -55,6 +55,10 @@ class TestAddServiceMigrationFlow:
         migration, then ``run_migrations``. ``add_service_command``
         does this inline today; ``add_service`` makes the same sequence
         reusable so the resolver flow doesn't skip it."""
+        # The answers as the (mocked) install saves them.
+        (fake_project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS.replace("include_auth: false", "include_auth: true")
+        )
         updater = _make_updater(fake_project)
         component_result = UpdateResult(component="auth", success=True)
 
@@ -73,6 +77,7 @@ class TestAddServiceMigrationFlow:
                 return_value=False,
             ),
             patch("aegis.core.migration_generator.generate_migration") as generate_mock,
+            patch("aegis.core.migration_generator.generate_missing_migrations"),
             patch("aegis.core.post_gen_tasks.run_migrations") as run_mig_mock,
         ):
             result = updater.add_service("auth")
@@ -126,6 +131,34 @@ class TestAddServiceMigrationFlow:
         generate_mock.assert_called_once()
         context = generate_mock.call_args.args[2]
         assert context[AnswerKeys.DATABASE_ENGINE] == StorageBackends.SQLITE
+
+    def test_a_service_keeping_no_tables_brings_no_alembic(
+        self, fake_project: Path
+    ) -> None:
+        """AI on the memory backend keeps no tables: init makes no alembic/
+        for it, and an empty one fails the project's revision check
+        (aegis-stack#1424). The add a plugin's dependency takes is held to
+        init's rule."""
+        (fake_project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS
+            + f"{AnswerKeys.AI}: true\n"
+            + f"{AnswerKeys.AI_BACKEND}: {StorageBackends.MEMORY}\n"
+        )
+        updater = _make_updater(fake_project)
+        component_result = UpdateResult(component="ai", success=True)
+
+        with (
+            patch.object(updater, "add_component", return_value=component_result),
+            patch.object(updater, "run_post_generation_tasks"),
+            patch("aegis.core.migration_generator.bootstrap_alembic") as bootstrap_mock,
+            patch("aegis.core.migration_generator.generate_migration") as generate_mock,
+            patch("aegis.core.post_gen_tasks.run_migrations"),
+        ):
+            result = updater.add_service("ai")
+
+        assert result.success
+        bootstrap_mock.assert_not_called()
+        generate_mock.assert_not_called()
 
     def test_service_without_migrations_skips_migration_pipeline(
         self, fake_project: Path

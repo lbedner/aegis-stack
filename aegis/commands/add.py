@@ -741,29 +741,22 @@ def add_command(
                 )
                 typer.echo(f"   {t('add.specs_need_update_hint')}")
 
-        # Revisions for newly added components that own tables (a persistent
-        # scheduler, on SQLite as on Postgres; secrets): whatever the
-        # project's answers now call for and it lacks, exactly as ``init``
-        # would have generated them, then applied. A project whose models
-        # have no revision fails its own drift check.
-        # A spec whose tables wait on an added component (mcp's activity
-        # record, deploy's history: both on the database) counts too.
+        # Revisions for whatever this add brought that owns tables (a
+        # persistent scheduler, secrets, mcp's activity record once a
+        # database lands): init's rule, before and after, then applied. A
+        # spec keeping no tables on the backend chosen (a memory scheduler)
+        # brings none, and no empty alembic/ to fail the project's own
+        # revision check (aegis-stack#1424).
+        from ..core.migration_generator import (
+            bootstrap_alembic,
+            generate_missing_migrations,
+            get_services_needing_migrations,
+        )
+
         answers_now = load_copier_answers(target_path)
-        if any(
-            COMPONENTS[c].migrations for c in components_to_add if c in COMPONENTS
-        ) or any(
-            spec.migrations
-            and answers_now.get(AnswerKeys.include_key(name))
-            and any(
-                AnswerKeys.include_key(c) in spec.files.extras
-                for c in components_to_add
-            )
-            for name, spec in COMPONENTS.items()
+        if set(get_services_needing_migrations(answers_now)) - set(
+            get_services_needing_migrations(existing_answers)
         ):
-            from ..core.migration_generator import (
-                bootstrap_alembic,
-                generate_missing_migrations,
-            )
             from ..core.post_gen_tasks import run_migrations
 
             if not (target_path / "alembic").exists():

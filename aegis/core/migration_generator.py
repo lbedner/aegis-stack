@@ -1161,6 +1161,7 @@ def bootstrap_alembic(
     if not gitkeep.exists():
         gitkeep.touch()
 
+    _formatted(project_path, [project_path / f for f in created_files])
     _pin_alembic(project_path)
     return created_files
 

@@ -632,3 +632,30 @@ class TestMigrationsAreIdempotentOnPrepopulatedSQLite:
         )
         with pytest.raises(Exception):
             self._apply(source, url)
+
+
+def test_the_alembic_bootstrap_formats_what_it_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An add that brings the first migrations writes ``alembic/env.py``
+    after the add's own format pass, so the bootstrap formats it, as the
+    generator does its revisions; else ``make check`` fails on a file the
+    user never touched (aegis-stack#1424)."""
+    from aegis.core import migration_generator
+    from aegis.core.component_files import get_template_path
+    from aegis.core.render_diff import build_template_env
+
+    formatted: list[str] = []
+    monkeypatch.setattr(
+        migration_generator,
+        "ruff_fix_files",
+        lambda project, paths: formatted.extend(paths) or True,
+    )
+    monkeypatch.setattr(migration_generator, "_pin_alembic", lambda project: None)
+    answers = {"project_slug": "demo", "database_engine": "sqlite"}
+
+    migration_generator.bootstrap_alembic(
+        tmp_path, build_template_env(get_template_path()), answers
+    )
+
+    assert str(tmp_path / "alembic" / "env.py") in formatted

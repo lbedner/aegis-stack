@@ -78,11 +78,13 @@ EVALS_PAGES = [
     "app/components/web_frontend/overseer_ai_evals.py",
     "app/components/web_frontend/routes/partials/overseer_ai_evals.py",
     "app/components/web_frontend/templates/pages/overseer/ai/_evals.html",
-    "app/components/web_frontend/templates/pages/overseer/ai/_evals_case.html",
     "app/components/web_frontend/templates/pages/overseer/ai/_evals_compare.html",
+    "app/components/web_frontend/templates/pages/overseer/ai/_evals_dataset.html",
+    "app/components/web_frontend/templates/pages/overseer/ai/_evals_datasets.html",
+    "app/components/web_frontend/templates/pages/overseer/ai/_evals_macros.html",
+    "app/components/web_frontend/templates/pages/overseer/ai/_evals_new.html",
     "app/components/web_frontend/templates/pages/overseer/ai/_evals_run.html",
     "app/components/web_frontend/templates/pages/overseer/ai/_evals_runs.html",
-    "app/components/web_frontend/templates/pages/overseer/ai/_evals_scores.html",
     "tests/web/test_overseer_ai_evals.py",
 ]
 

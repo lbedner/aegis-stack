@@ -54,8 +54,9 @@ def extract_usage(result: Any) -> dict[str, int]:
     """Token usage from a pydantic-ai run result.
 
     Handles every shape pydantic-ai has shipped: ``result.usage`` as a
-    data attribute (legacy ``Usage`` with request/response_tokens) or as
-    a method returning ``RunUsage`` (input/output_tokens). Anything
+    data attribute (legacy ``Usage`` with request/response_tokens, or
+    today's ``RunUsage``, whose deprecated call is never made) or as a
+    method returning ``RunUsage`` (input/output_tokens). Anything
     unreadable degrades to zeros rather than raising — usage tracking
     must never fail the request.
 
@@ -66,7 +67,7 @@ def extract_usage(result: Any) -> dict[str, int]:
     which prices identically to the pre-cache behavior.
     """
     usage = getattr(result, "usage", None)
-    if callable(usage):
+    if callable(usage) and not hasattr(usage, "input_tokens"):
         try:
             usage = usage()
         except Exception:

@@ -117,9 +117,19 @@ async def run_evals_task(
     return await run_evals_job(job_id, name, model, note)
 
 
+async def generate_evals_task(
+    job_id: str, name: str, about: str, cases: int, like: str | None
+) -> dict:
+    """Write an eval dataset with the model, run it once and keep what held."""
+    from app.services.ai.service import generate_evals_job
+
+    return await generate_evals_job(job_id, name, about, cases, like)
+
+
 # Registered only where evals keep their runs: elsewhere it reaches nothing.
 if present("app.services.ai.domains.evals.jobs"):
     run_evals_task = broker.task(run_evals_task)
+    generate_evals_task = broker.task(generate_evals_task)
 
 
 # The scheduled service jobs, bound here so the registry sees them as this

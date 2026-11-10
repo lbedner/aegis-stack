@@ -9,8 +9,10 @@ from sqlmodel import Session
 
 JUDGE = "eval-judge"
 JUDGING = """You grade an assistant's answer to a message against a rubric.
-The answer passes when the rubric's statement is true of it. Give a one or
-two sentence reason, pass, and a score from 0 to 1."""
+The answer passes when the rubric's statement is true of it. Read holds
+what the assistant read before answering, its tool calls and their
+results: a fact found there is not invented. Give a one or two sentence
+reason, pass, and a score from 0 to 1."""
 
 
 def judge_agent_definition() -> dict[str, Any]:

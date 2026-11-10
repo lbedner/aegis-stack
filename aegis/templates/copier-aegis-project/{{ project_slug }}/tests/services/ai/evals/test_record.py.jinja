@@ -2,6 +2,7 @@
 """Eval runs kept: a scored run, its cases and their scores in the
 project's tables, its conversations gone unless kept, and two runs compared."""
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -50,12 +51,18 @@ async def test_a_run_is_kept_with_its_cases_and_scores(
     [run] = await queries.runs(async_db_session)
     assert (run.dataset, run.cases, run.passed, run.failed) == ("mini", 2, 2, 0)
     assert (run.total_cost, run.model_id, run.note) == (0.5, "gpt-test", "baseline")
+    file = (mini / "mini.yaml").read_bytes()
+    assert run.dataset_sha256 == hashlib.sha256(file).hexdigest()
     cases = {c.name: c for c in await queries.cases(async_db_session, run.id)}
     assert set(cases) == {"reads the paper", "never deletes"}
     paper = cases["reads the paper"]
     assert paper.passed and paper.tool_calls[0]["tool"] == "paper"
+    assert paper.cost == 0.25
     scores = await queries.scores(async_db_session, paper.id)
-    assert {s.evaluator: s.passed for s in scores} == {"ToolCalls": True, "Contains": True}
+    assert {s.evaluator: (s.passed, s.rule) for s in scores} == {
+        "ToolCalls": (True, "calls paper once"),
+        "Contains": (True, 'says "letter"'),
+    }
     assert await _talks(async_db_session) == []
     assert paper.conversation_id is None
 
@@ -73,7 +80,7 @@ async def test_kept_conversations_are_named_on_their_cases(
 
 
 @pytest.mark.queryspy(allow_n_plus_one=True)  # two runs, each written the same way
-async def test_compare_names_exactly_the_cases_that_flipped(
+async def test_compare_names_only_the_cases_that_changed(
     mini: Path, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
 ) -> None:
     answering(monkeypatch)
@@ -83,12 +90,55 @@ async def test_compare_names_exactly_the_cases_that_flipped(
 
     compared = await queries.compare(async_db_session, before.id, after.id)
 
-    assert [c.name for c in compared.flipped] == ["reads the paper"]
-    [flip] = compared.flipped
-    assert (flip.before, flip.after) == (True, False)
+    assert compared.dataset_changed is False
+    [flip] = compared.cases
+    assert compared.flipped == [flip]
+    assert (flip.name, flip.change) == ("reads the paper", "flipped")
+    assert flip.before and flip.after
+    assert (flip.before.passed, flip.after.passed) == (True, False)
+    assert flip.after.output == "The letter says hello." and flip.after.cost == 0.25
     tool_calls = next(s for s in flip.scores if s.evaluator == "ToolCalls")
-    assert (tool_calls.before, tool_calls.after) == (1.0, 0.0)
-    assert {c.name for c in compared.cases} == {"reads the paper", "never deletes"}
+    assert (tool_calls.rule, tool_calls.before, tool_calls.after) == (
+        "calls paper once",
+        1.0,
+        0.0,
+    )
+
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # two runs, each written the same way
+async def test_compare_marks_cases_added_removed_or_whose_rule_changed(
+    mini: Path, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
+) -> None:
+    """Over a dataset edited between the runs, flagged as such."""
+    answering(monkeypatch)
+    before = await _kept(async_db_session, mini, keep=True)
+    edited = DATASET.replace("Contains: letter", "Contains: hello")
+    (mini / "mini.yaml").write_text(edited.replace("never deletes", "never removes"))
+    after = await _kept(async_db_session, mini, keep=True)
+
+    compared = await queries.compare(async_db_session, before.id, after.id)
+
+    assert compared.dataset_changed is True
+    assert [(c.name, c.change) for c in compared.cases] == [
+        ("reads the paper", "rule changed"),
+        ("never removes", "added"),
+        ("never deletes", "removed"),
+    ]
+    added, removed = compared.cases[1:]
+    assert added.before is None and removed.after is None
+
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # two runs, each written the same way
+async def test_two_runs_alike_have_no_differences(
+    mini: Path, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
+) -> None:
+    answering(monkeypatch)
+    before = await _kept(async_db_session, mini, keep=True)
+    after = await _kept(async_db_session, mini, keep=True)
+
+    compared = await queries.compare(async_db_session, before.id, after.id)
+
+    assert compared.cases == [] and compared.dataset_changed is False
 
 
 async def test_a_case_that_errors_is_kept_as_a_failure(
@@ -150,4 +200,18 @@ async def test_the_run_before_is_the_last_of_its_dataset(
 
     assert await queries.previous(async_db_session, last) == first.id
     assert await queries.previous(async_db_session, first) is None
+
+
+async def test_runs_are_read_by_model(async_db_session: AsyncSession) -> None:
+    async_db_session.add_all(
+        EvalRun(dataset="mini", model_id=model, cases=1, passed=1)
+        for model in ("gpt-a", "gpt-b", "gpt-a")
+    )
+    await async_db_session.flush()
+
+    assert [r.model_id for r in await queries.runs(async_db_session, model="gpt-a")] == [
+        "gpt-a",
+        "gpt-a",
+    ]
+    assert await queries.models(async_db_session) == ["gpt-a", "gpt-b"]
 {%- endif %}

@@ -1,6 +1,8 @@
 {%- if ai_backend != "memory" -%}
 """Two kept runs of ``mini`` for the tests that read them (the API, the
-Overseer): the second fails "reads the paper", which no longer reads it."""
+Overseer): the second fails "reads the paper", which no longer reads it, on
+an edited dataset. The first was kept before rules were, so its scores
+have none."""
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -13,9 +15,22 @@ READ = [{"tool": "paper", "args": '{"page": 1}', "result": "Dear Leo"}]
 async def two_runs(session: AsyncSession) -> tuple[int, int]:
     """Kept in three flushes (runs, cases, scores); the two ids, oldest first."""
     before = EvalRun(
-        dataset="mini", model_id="gpt-test", build="abc123", cases=2, passed=2, note="baseline"
+        dataset="mini",
+        model_id="gpt-test",
+        build="abc123",
+        cases=2,
+        passed=2,
+        note="baseline",
+        dataset_sha256="aaa",
     )
-    after = EvalRun(dataset="mini", model_id="gpt-other", build="def456", cases=2, passed=1)
+    after = EvalRun(
+        dataset="mini",
+        model_id="gpt-other",
+        build="def456",
+        cases=2,
+        passed=1,
+        dataset_sha256="bbb",
+    )
     session.add_all([before, after])
     await session.flush()
     assert before.id and after.id
@@ -27,6 +42,8 @@ async def two_runs(session: AsyncSession) -> tuple[int, int]:
             inputs={"message": ASKED[name]},
             output="The letter says hello." if passed else "I could not find it.",
             tool_calls=READ if passed and name == "reads the paper" else [],
+            cost=0.0123,
+            duration_ms=1500.0,
         )
         for run, name, passed in (
             (before, "reads the paper", True),
@@ -41,6 +58,7 @@ async def two_runs(session: AsyncSession) -> tuple[int, int]:
         EvalScore(
             case_id=case.id,
             evaluator="ToolCalls",
+            rule=None if case.run_id == before.id else "calls paper once",
             value=float(case.passed),
             passed=case.passed,
             reason=None if case.passed else "paper was called 0 times, expected 1",

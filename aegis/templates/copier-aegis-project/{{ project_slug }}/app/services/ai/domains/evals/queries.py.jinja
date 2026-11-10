@@ -1,12 +1,13 @@
 {%- if ai_backend != "memory" -%}
 """Reading kept runs: newest first or one by id, a run's cases (or one by
 name), a case's scores or all of a run's, and two runs side by side (what
-flipped)."""
+changed)."""
 
-from typing import Any
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, computed_field
-from sqlalchemy import Row, func
+from sqlalchemy import func
+from sqlalchemy.orm import defer
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -14,13 +15,30 @@ from app.services.ai.models.evals import EvalCase, EvalRun, EvalScore
 
 
 async def runs(
-    session: AsyncSession, dataset: str | None = None, limit: int = 50
+    session: AsyncSession,
+    dataset: str | None = None,
+    limit: int = 50,
+    *,
+    model: str | None = None,
 ) -> list[EvalRun]:
-    """The latest runs, of ``dataset`` where named."""
+    """The latest runs, of ``dataset`` and on ``model`` where named."""
     query = select(EvalRun).order_by(col(EvalRun.started_at).desc(), col(EvalRun.id).desc())
     if dataset:
         query = query.where(EvalRun.dataset == dataset)
+    if model:
+        query = query.where(EvalRun.model_id == model)
     return list(await session.exec(query.limit(limit)))
+
+
+async def datasets(session: AsyncSession) -> list[str]:
+    """Every dataset a kept run ran, by name: one since deleted too."""
+    return sorted(await session.exec(select(EvalRun.dataset).distinct()))
+
+
+async def models(session: AsyncSession) -> list[str]:
+    """Every model a kept run ran on, by name."""
+    query = select(EvalRun.model_id).where(col(EvalRun.model_id).is_not(None)).distinct()
+    return sorted(m for m in await session.exec(query) if m is not None)
 
 
 async def run(session: AsyncSession, run_id: int) -> EvalRun | None:
@@ -66,72 +84,152 @@ async def run_scores(session: AsyncSession, run_id: int) -> list[EvalScore]:
 
 
 class ScoreDelta(BaseModel):
-    """One evaluator on a case, in each run (absent where it did not run)."""
+    """One evaluator on a case, in each run (absent where it did not run),
+    by the rule it was scored on (None where the run kept none)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     evaluator: str
+    rule: str | None
     before: float | None
     after: float | None
 
 
+class Change(StrEnum):
+    """How a case differs between two runs, in the order they are read."""
+
+    FLIPPED = "flipped"
+    RULE_CHANGED = "rule changed"
+    ADDED = "added"
+    REMOVED = "removed"
+
+
+class CaseSide(BaseModel):
+    """A case in one of the runs: how it went, what it said, cost and took,
+    and the rules it was scored on (None where the run kept none)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    passed: bool
+    output: str | None
+    cost: float | None
+    duration_ms: float
+    rules: list[str] | None
+
+
 class CaseDelta(BaseModel):
-    """A case in both runs: whether it passed in each, and each score."""
+    """A case that changed: how, each run's side of it (None where it was
+    not in that run), and each score."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
-    before: bool
-    after: bool
+    change: Change
+    before: CaseSide | None
+    after: CaseSide | None
     scores: list[ScoreDelta]
 
 
 class Comparison(BaseModel):
-    """Two runs' shared cases, and those whose pass or fail changed."""
+    """The cases that changed between two runs, flips first; and whether
+    the dataset file did (None where a run kept no fingerprint)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     cases: list[CaseDelta]
+    dataset_changed: bool | None
 
     @computed_field
     @property
     def flipped(self) -> list[CaseDelta]:
-        return [case for case in self.cases if case.before != case.after]
+        return [case for case in self.cases if case.change is Change.FLIPPED]
 
 
 async def compare(session: AsyncSession, before: int, after: int) -> Comparison:
-    """The cases ``before`` and ``after`` share, by name, in two queries."""
+    """What changed from ``before`` to ``after``, cases matched by name, in
+    three queries."""
+    kept = select(EvalRun.id, EvalRun.dataset_sha256).where(col(EvalRun.id).in_([before, after]))
+    files = dict((await session.exec(kept)).all())
     rows = list(
         await session.exec(
-            select(EvalCase.id, EvalCase.run_id, EvalCase.name, EvalCase.passed)
+            select(EvalCase)
+            # A case's trace and inputs can be long, and no side reads them.
+            .options(*(defer(c) for c in (EvalCase.tool_calls, EvalCase.inputs, EvalCase.expected)))
             .where(col(EvalCase.run_id).in_([before, after]))
             .order_by(col(EvalCase.id))
         )
     )
     verdicts = await session.exec(
-        select(EvalScore.case_id, EvalScore.evaluator, EvalScore.value).where(
-            col(EvalScore.case_id).in_([row.id for row in rows])
-        )
+        select(EvalScore).where(col(EvalScore.case_id).in_([row.id for row in rows]))
     )
-    by_case: dict[int, dict[str, float]] = {}
-    for case_id, evaluator, value in verdicts:
-        by_case.setdefault(case_id, {})[evaluator] = value
+    by_case: dict[int | None, list[EvalScore]] = {}
+    for score in verdicts:
+        by_case.setdefault(score.case_id, []).append(score)
     old = {row.name: row for row in rows if row.run_id == before}
     new = {row.name: row for row in rows if row.run_id == after}
-    shared = [_delta(old[name], new[name], by_case) for name in old if name in new]
-    return Comparison(cases=shared)
+    changed = [
+        _delta(name, old.get(name), new.get(name), by_case) for name in {**old, **new}
+    ]
+    order = list(Change)
+    found = [d for d in changed if d is not None]
+    a, b = files.get(before), files.get(after)
+    return Comparison(
+        cases=sorted(found, key=lambda d: order.index(d.change)),
+        dataset_changed=None if a is None or b is None else a != b,
+    )
 
 
-def _delta(old: Row[Any], new: Row[Any], by_case: dict[int, dict[str, float]]) -> CaseDelta:
-    was = by_case.get(old.id, {})
-    now = by_case.get(new.id, {})
+def _side(case: EvalCase, scores: list[EvalScore]) -> CaseSide:
+    rules = [s.rule for s in scores]
+    return CaseSide(
+        passed=case.passed,
+        output=case.output,
+        cost=case.cost,
+        duration_ms=case.duration_ms,
+        rules=None if None in rules else [r for r in rules if r is not None],
+    )
+
+
+def _change(was: CaseSide | None, now: CaseSide | None) -> Change | None:
+    if was is None:
+        return Change.ADDED
+    if now is None:
+        return Change.REMOVED
+    if was.passed != now.passed:
+        return Change.FLIPPED
+    known = was.rules is not None and now.rules is not None
+    return Change.RULE_CHANGED if known and was.rules != now.rules else None
+
+
+def _delta(
+    name: str,
+    old: EvalCase | None,
+    new: EvalCase | None,
+    by_case: dict[int | None, list[EvalScore]],
+) -> CaseDelta | None:
+    """``name`` in each run, where it changed."""
+    was_scores = by_case.get(old.id, []) if old else []
+    now_scores = by_case.get(new.id, []) if new else []
+    was = _side(old, was_scores) if old else None
+    now = _side(new, now_scores) if new else None
+    change = _change(was, now)
+    if change is None:
+        return None
+    before = {s.evaluator: s for s in was_scores}
+    after = {s.evaluator: s for s in now_scores}
     return CaseDelta(
-        name=old.name,
-        before=old.passed,
-        after=new.passed,
+        name=name,
+        change=change,
+        before=was,
+        after=now,
         scores=[
-            ScoreDelta(evaluator=name, before=was.get(name), after=now.get(name))
-            for name in dict.fromkeys([*was, *now])
+            ScoreDelta(
+                evaluator=key,
+                rule=(after.get(key) or before[key]).rule,
+                before=before[key].value if key in before else None,
+                after=after[key].value if key in after else None,
+            )
+            for key in dict.fromkeys([*before, *after])
         ],
     )
 {%- endif %}

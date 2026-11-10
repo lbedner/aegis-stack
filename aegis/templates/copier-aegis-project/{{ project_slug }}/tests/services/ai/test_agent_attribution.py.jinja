@@ -556,6 +556,22 @@ class TestWhatIsWrongRidesTheMessage:
 
         assert COMMS.message not in captured["message"]
 
+    async def test_a_turn_told_to_hear_nothing_hears_nothing_of_it(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """An eval's turn: its case is scored the same whatever is wrong."""
+        service, _recorder, captured, monkeypatch = harness
+        _wrong_now(monkeypatch, (COMMS,))
+        _stub_resolve(monkeypatch, default_agent_config())
+        told = turn_module.HEARS_NOW.set(False)
+
+        try:
+            await service.chat("hello")
+        finally:
+            turn_module.HEARS_NOW.reset(told)
+
+        assert COMMS.message not in captured["message"]
+
 
 class TestHistoryBudget:
     """History is budgeted by size, not message count: one agent's answers

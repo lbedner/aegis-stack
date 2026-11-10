@@ -580,6 +580,13 @@
    class="tab">{{ label }}</a>
 {% endmacro %}
 
+{# A section's tab row, each tab its own address (``tabs``: each
+   ``{label, url, active}``, ``overseer_ai_common.tab_links``), a tab
+   swapping the section's view (``#overseer-main``). #}
+{% macro section_tabs(tabs, label, id=None) %}
+{% call tab_bar(label, id=id) %}{% for t in tabs %}{{ tab_item(t.label, t.active, t.url, hx_replace(t.url, "#overseer-main")) }}{% endfor %}{% endcall %}
+{% endmacro %}
+
 {# Tabs within one view, switched in the browser (app.js's ``data-tabs``):
    ``tabs`` is each (key, label), ``open`` the key shown first (the first
    when none), and each panel a ``tab_panel(key, open)`` in the caller. The

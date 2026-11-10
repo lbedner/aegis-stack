@@ -1,0 +1,136 @@
+{#- One read of the system, as the turn makes it: inside a script where she
+    has code mode (``run_code``), else a direct call. #}
+{%- macro read(tool, args={}) -%}
+{%- if ai_backend != "memory" %}
+{%- set call = namespace(args="") %}
+{%- for name, value in args.items() %}
+{%- set call.args = call.args ~ (", " if not loop.first else "") ~ name ~ "=" ~ (value | tojson) %}
+{%- endfor %}
+        - tool: run_code
+          args:
+            code: {{ ("found = await " ~ tool ~ "(" ~ call.args ~ ")\nfound") | tojson }}
+{%- else %}
+        - tool: {{ tool }}
+          args: {{ args | tojson }}
+{%- endif %}
+{%- endmacro -%}
+# Can the assistant talk about this app: what it is made of, how it is
+# doing, what broke, and what it cannot see?
+#
+# Each case asks what an operator asks and passes on the read she makes
+# (the tools are the app's own: health, errors, requests, the twin) before
+# what she says. ``Judged`` cases need a model, so a scripted run
+# (``make evals-ci``) leaves them out.
+cases:
+  - name: what the app is made of
+    inputs:
+      message: what is this app made of?
+      script:
+        - text: >-
+            It runs a backend and a frontend{% if include_database %}, a database{% endif %}{% if include_worker %}, a worker{% endif %}{% if include_scheduler %}, a scheduler{% endif %}{% if include_redis %} and Redis{% endif %}, with the AI service.
+    evaluators:
+      - Contains:
+          value: backend
+          case_sensitive: false
+{%- if include_database %}
+      - Contains:
+          value: database
+          case_sensitive: false
+{%- endif %}
+{%- if include_worker %}
+      - Contains:
+          value: worker
+          case_sensitive: false
+{%- endif %}
+
+  - name: how the app is doing is read, not assumed
+    inputs:
+      message: is everything healthy?
+      script:
+{{- read("health") }}
+        - text: Here is how each part is doing right now.
+    evaluators:
+      - ToolCalls:
+          tool: health
+
+  - name: one part's health is asked of that part
+    inputs:
+      message: is the backend ok?
+      script:
+{{- read("health", {"component": "backend"}) }}
+        - text: The backend is answering.
+    evaluators:
+      - ToolCalls:
+          tool: health
+          args:
+            component: backend
+
+  - name: what broke is read from the errors
+    inputs:
+      message: what went wrong today?
+      script:
+{{- read("errors") }}
+        - text: Here are today's errors.
+    evaluators:
+      - ToolCalls:
+          tool: errors
+
+{%- if ai_backend != "memory" %}
+
+  - name: a table's users are read from the twin
+    inputs:
+      message: what in the code reads or writes the eval_run table?
+      script:
+{{- read("ontology", {"node": "object:eval_run"}) }}
+        - text: Here is what reads and writes eval_run.
+    evaluators:
+      - ToolCalls:
+          tool: ontology
+{%- endif %}
+
+  - name: a route is walked, not guessed
+    inputs:
+      message: how is GET /health/ handled?
+      script:
+{{- read("ontology", {"route": "GET /health/"}) }}
+        - text: Here is every hop GET /health/ takes.
+    evaluators:
+      - ToolCalls:
+          tool: ontology
+          args:
+            route: GET /health/
+
+  - name: slow requests are read from the requests
+    inputs:
+      message: what was the slowest request today?
+      script:
+{{- read("requests") }}
+        - text: Here is the slowest request today.
+    evaluators:
+      - ToolCalls:
+          tool: requests
+
+  - name: spend is read from its figures
+    inputs:
+      message: how much has the AI cost this month?
+      script:
+{{- read("aggregate", {"name": "ai.spend", "days": 30}) }}
+        - text: Here is this month's AI spend.
+    evaluators:
+      - ToolCalls:
+          tool: aggregate
+          args:
+            name: ai.spend
+
+  - name: what it cannot see is not invented
+    inputs:
+      message: what is the server's CPU temperature?
+      script:
+        - text: I can't see a temperature from here, only how busy each container is.
+    evaluators:
+      - AnswerAvoids:
+          terms: ["°", "degrees", "celsius"]
+{%- if ai_backend != "memory" %}
+      - Judged:
+          rubric: says it cannot see a temperature, and gives none
+{%- endif %}

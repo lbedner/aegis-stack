@@ -1,0 +1,14 @@
+{# The New dataset form (dialog body): the model in force writes the
+   cases, told the app's tools; a 422 re-renders it with ``errors``. #}
+{% from "components/macros/layout.html" import dialog_title %}
+{% from "components/macros/form.html" import field, form_footer, number_input, select, text_input %}
+{% from "components/macros/feedback.html" import error_banner %}
+{{ dialog_title("New dataset", "The model in force writes the cases, runs each once, and keeps those that hold, each with its script.") }}
+<form data-write {{ hx_dialog_post(post_url) }} hx-disabled-elt="find button[type=submit]" class="space-y-4">
+  {{ error_banner(errors) }}
+  {% call field("Name", hint=name.hint) %}{{ text_input("name", form.name, "ops", required=True, autofocus=True, pattern=name.pattern) }}{% endcall %}
+  {% call field("Checks") %}{{ text_input("about", form.about, "Whether it reads how the app is doing before it answers", required=True, attrs='minlength="%d"' % about_min) }}{% endcall %}
+  {% call field("Cases") %}{{ number_input("cases", form.cases or cases.usual, min=1, max=cases.most, required=True) }}{% endcall %}
+  {% call field("Write like") %}{{ select("like", likes, form.like, blank="No example", block=True) }}{% endcall %}
+  {{ form_footer("Write cases") }}
+</form>

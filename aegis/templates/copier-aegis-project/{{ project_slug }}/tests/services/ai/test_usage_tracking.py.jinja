@@ -46,6 +46,24 @@ class TestExtractUsage:
         assert usage["input_tokens"] == 100
         assert usage["output_tokens"] == 50
 
+{%- if ai_framework == "pydantic-ai" %}
+
+    @pytest.mark.filterwarnings("error")
+    def test_today_usage_is_read_as_the_property_it_is(
+        self, ai_service: AIService
+    ) -> None:
+        """``RunUsage`` still answers a call, with a deprecation warning."""
+        from types import SimpleNamespace
+
+        from pydantic_ai.usage import RunUsage
+
+        result = SimpleNamespace(usage=RunUsage(input_tokens=7, output_tokens=3))
+
+        usage = ai_service._extract_usage(result)
+
+        assert (usage["input_tokens"], usage["output_tokens"]) == (7, 3)
+{%- endif %}
+
     def test_extract_usage_missing_metadata(self, ai_service: AIService) -> None:
         """Test extracting usage when metadata is missing."""
         mock_result = MagicMock()

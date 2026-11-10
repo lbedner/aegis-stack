@@ -2,6 +2,7 @@
 """``Judged``: the model in force grading an answer against a rubric, as
 the ``eval-judge`` agent, metered like every other writer."""
 
+from pathlib import Path
 from typing import Any
 
 from pydantic_evals.evaluators import EvaluatorContext
@@ -9,14 +10,34 @@ from pydantic_evals.evaluators.llm_as_a_judge import GradingOutput
 import pytest
 from sqlmodel import Session, select
 
-from app.services.ai.domains.evals import evaluators
+from app.services.ai.domains.evals import evaluators, runner
 from app.services.ai.domains.evals.agents import JUDGE, JUDGING
 from app.services.ai.domains.evals.datasets import CaseInput
 from app.services.ai.fixtures import load_agent_registry_fixtures
 from app.services.ai.models.agents import Agent
+from tests.services.ai.evals._mini import answering
+
+GRADED = """\
+cases:
+  - name: says it cannot see
+    inputs:
+      message: what is my balance?
+      script:
+        - text: I can't see a balance from here.
+    evaluators:
+      - AnswerAvoids:
+          terms: ["$"]
+      - Judged:
+          rubric: never invents a number
+evaluators:
+  - LLMJudge:
+      rubric: polite
+"""
 
 
-def _ctx(message: str, output: str) -> EvaluatorContext:
+def _ctx(
+    message: str, output: str, trace: list[dict[str, Any]] | None = None
+) -> EvaluatorContext:
     return EvaluatorContext(
         name="case",
         inputs=CaseInput(message=message),
@@ -25,7 +46,7 @@ def _ctx(message: str, output: str) -> EvaluatorContext:
         output=output,
         duration=1.0,
         _span_tree=None,
-        attributes={},
+        attributes={evaluators.TRACE: trace} if trace else {},
         metrics={},
     )
 
@@ -54,6 +75,26 @@ async def test_judged_asks_the_writer_and_scores_its_verdict(
         assert said in asked["text"]
 
 
+async def test_the_judge_is_told_what_the_turn_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Whether an answer invents a fact rests on what it read first: its
+    tool calls and their results go to the judge as the evidence."""
+    asked: dict[str, Any] = {}
+
+    async def write(slug: str, prompt: str, output_type: type, text: str, **kw: Any) -> Any:
+        asked["text"] = text
+        return GradingOutput(reason="every part was read", pass_=True, score=1.0), "m"
+
+    monkeypatch.setattr(evaluators, "write", write)
+    trace = [{"tool": "health", "args": "{}", "result": "backend: healthy, worker: down"}]
+    ctx = _ctx("is everything ok?", "The worker is down.", trace)
+
+    await evaluators.Judged("names only what it read").evaluate(ctx)
+
+    assert "backend: healthy, worker: down" in asked["text"]
+
+
 def test_the_judge_is_seeded_as_an_agent(db_session: Session) -> None:
     """``eval-judge`` is seeded with the registry, so its model and prompt
     are set in Agents; with no model picked, it runs on the active one."""
@@ -61,4 +102,24 @@ def test_the_judge_is_seeded_as_an_agent(db_session: Session) -> None:
 
     row = db_session.exec(select(Agent).where(Agent.slug == JUDGE)).one()
     assert (row.system_prompt, row.model_id) == (JUDGING, None)
+
+
+async def test_a_scripted_run_leaves_out_the_checks_a_model_grades(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No model plays a script, so none grades it: ``Judged`` and
+    ``LLMJudge`` wait for a real run."""
+    (tmp_path / "graded.yaml").write_text(GRADED)
+    answering(monkeypatch)
+
+    async def write(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("a scripted run asked the judge")
+
+    monkeypatch.setattr(evaluators, "write", write)
+
+    report = await runner.run_dataset("graded", directory=tmp_path, scripted=True)
+
+    (case,) = report.cases
+    assert set(case.assertions) == {"AnswerAvoids"}
+    assert not case.evaluator_failures
 {%- endif %}

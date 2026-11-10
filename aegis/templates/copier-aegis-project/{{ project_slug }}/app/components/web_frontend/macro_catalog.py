@@ -233,6 +233,11 @@ EXAMPLES: dict[str, dict[str, str]] = {
               {{ tab_item("Overview", href="#macro-tab_item") }}
               {{ tab_item("History", active=True, href="#macro-tab_item") }}
             {% endcall %}""",
+        "section_tabs": """
+            {{ section_tabs([
+              {"label": "Profiles", "url": "#macro-section_tabs", "active": True},
+              {"label": "Models", "url": "#macro-section_tabs"},
+            ], "Example tabs") }}""",
         "tabbed": """
             {% call tabbed("example", [("notes", "Notes"), ("transcript", "Transcript")]) %}
               {% call tab_panel("notes", "notes") %}<p class="text-sm">The notes.</p>{% endcall %}

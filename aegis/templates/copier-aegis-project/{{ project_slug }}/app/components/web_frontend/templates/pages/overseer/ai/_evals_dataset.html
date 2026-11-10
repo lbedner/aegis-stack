@@ -1,0 +1,22 @@
+{# Evals > one dataset: the Run (the model, the active one unless picked),
+   then each case, what it asks and passes on (and why it is there, under
+   its name) and how it went in the dataset's last run, opened under it. #}
+{% from "components/macros/form.html" import action, primary_button, select %}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% from "pages/overseer/ai/_evals_macros.html" import case_result %}
+{% macro last_result(row) %}{% if row.result %}{{ case_result(row.result, asked=False, run_link=True) }}{% else %}<p class="text-sm text-aegis-muted">Not run yet.</p>{% endif %}{% endmacro %}
+{% call card(dataset.name, dataset.about, id="ai-evals-dataset") %}
+<form id="ai-evals-start" data-write hx-post="{{ start_url }}" class="flex flex-wrap items-center gap-2 mb-4">
+  <input type="hidden" name="dataset" value="{{ dataset.name }}">
+  {{ select("model", models, blank=active, grouped=True, attrs='aria-label="Model"') }}
+  {{ primary_button(run_label, "submit") }}
+  <span class="ml-auto">{{ action("Delete", hx_dialog(delete_url, "data-write data-evals-delete"), "danger") }}</span>
+</form>
+{{ data_table([
+  {"key": "case", "label": "Case", "kind": "link", "wrap": True},
+  {"key": "asks", "label": "Asks", "wrap": True},
+  {"key": "checks", "label": "Passes if", "wrap": True},
+  {"key": "last", "label": "Last run", "kind": "status"},
+], cases, empty="No cases", detail=last_result) }}
+{% endcall %}

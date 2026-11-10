@@ -6,6 +6,7 @@ from typing import Any
 
 from openai import AsyncOpenAI
 from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.profiles.openai import openai_model_profile
 from pydantic_ai.providers import infer_provider_class
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
@@ -35,14 +36,24 @@ def _get_model_class(provider: AIProvider):
 def _supports_custom_temperature(model: str | None) -> bool:
     """Whether a model accepts a non-default ``temperature``.
 
-    OpenAI reasoning models (o1/o3/o4) and the gpt-5 family reject any
-    temperature other than the default (1) — sending one returns a 400. Omit
-    temperature for those; every other model accepts a custom value.
+    A model that reasons takes no sampling settings while it does, so the
+    same rule pydantic-ai drops them by (with a warning each call) decides
+    here, from the model's profile: one that reasons by default, or cannot
+    turn reasoning off, takes the default (1) only. We never set an effort,
+    so the default is what runs.
     """
     if not model:
         return True
-    name = model.split("/")[-1].lower()  # strip any "provider/" prefix
-    return not name.startswith(("o1", "o3", "o4", "gpt-5"))
+    profile = openai_model_profile(model.split("/")[-1].lower())
+    if not profile.get("openai_supports_reasoning", False):
+        return True
+    efforts = profile.get("openai_reasoning_efforts")
+    can_stop = (
+        "none" in efforts
+        if efforts is not None
+        else profile.get("openai_supports_reasoning_effort_none", False)
+    )
+    return can_stop and not profile.get("thinking_enabled_by_default", False)
 
 
 def _model_settings(config: Any) -> ModelSettings:

@@ -297,7 +297,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           AI_PROVIDER: openai
-          AI_MODEL: gpt-6-luna
+          AI_MODEL: &model gpt-6-luna
           GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
         run: |
           stack="$RUNNER_TEMP/head/everything"
@@ -318,3 +318,52 @@ jobs:
 
       - name: Illiana's verdict
         run: exit "${{ steps.findings.outputs.code }}"
+
+  # The ai_evals stack's datasets (evals/), scored on a real model: what
+  # the scripted plays (``validate (ai_evals)``) cannot tell, whether the
+  # model itself still reads before it answers. Advisory while the cases
+  # settle; the scores land in the job summary.
+  evals:
+    name: Evals
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.stack == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      # A fork's or Dependabot's pull request gets no secrets: nothing to score on.
+      - name: Is there a model key
+        id: key
+        env:
+          KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: echo "key=${KEY:+yes}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate the ai_evals stack
+        if: steps.key.outputs.key == 'yes'
+        run: uv sync --python 3.11 --all-extras && scripts/generate_stack.sh ai_evals "$RUNNER_TEMP"
+
+      - name: Score every dataset
+        if: steps.key.outputs.key == 'yes'
+        working-directory: ${{ runner.temp }}/ai-evals
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AI_PROVIDER: openai
+          AI_MODEL: *model
+        run: |
+          set -o pipefail
+          uv run alembic -c alembic/alembic.ini upgrade head
+          fence='```'
+          echo "$fence" >> "$GITHUB_STEP_SUMMARY"
+          trap 'echo "$fence" >> "$GITHUB_STEP_SUMMARY"' EXIT
+          uv run python -m app.cli.main ai evals run | tee -a "$GITHUB_STEP_SUMMARY"

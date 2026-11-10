@@ -17,6 +17,7 @@ recorded prompt change and empties itself when a newer one appears.
 """
 
 {% if ai_backend != "memory" and ai_framework == "pydantic-ai" %}from collections.abc import Awaitable, Callable, Sequence
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -37,6 +38,7 @@ from app.services.ai.domains.chat.tools import resolve_tools
 from app.services.ai.models.agents import Agent
 from app.services.ai.domains.spend.recording import chat_action, record_usage
 {% elif ai_backend != "memory" %}
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -49,6 +51,7 @@ from app.services.ai.domains.chat.builtin_fetchers import APP_MAP
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
 from app.services.ai.models.agents import Agent
 {% else %}
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 
 from app.core.config import settings
@@ -56,6 +59,12 @@ from app.core.log import logger
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
 {% endif %}
 DEFAULT_AGENT_SLUG = "assistant"
+
+
+# The code mode every turn in this context runs in, whatever its agent is
+# set to: the eval harness plays a script in the mode its turn was recorded
+# in. Unset everywhere else.
+CODE_MODE_OVERRIDE: ContextVar[bool | None] = ContextVar("code_mode_override", default=None)
 
 
 @dataclass(frozen=True)

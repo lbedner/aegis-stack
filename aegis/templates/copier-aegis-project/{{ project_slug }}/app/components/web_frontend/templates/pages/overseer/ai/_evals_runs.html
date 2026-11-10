@@ -1,34 +1,13 @@
-{# Evals > runs: a started run's job, followed as it goes; the Run form
-   (a dataset under evals/, a model where not the one in use, a note) over
-   each dataset's cases, what each asks and checks; every kept run, newest
-   first, each opening its cases; and two picked to compare. #}
-{% from "components/macros/feedback.html" import empty_state %}
-{% from "components/macros/form.html" import action, primary_button, select, text_input %}
+{# Evals > Runs: every kept run, newest first, of the dataset and on the
+   model picked (each pick re-reads the list); a row opens its run. #}
+{% from "components/macros/form.html" import select %}
 {% from "components/macros/layout.html" import card %}
 {% from "components/macros/table.html" import data_table %}
-{% if job %}{% with card_id = "ai-evals-job" %}{% include "pages/overseer/ai/_job_card.html" %}{% endwith %}{% endif %}
-<div id="ai-evals-start" class="space-y-4">
-  {% if datasets %}
-  <form data-write hx-post="{{ start_url }}" class="flex flex-wrap items-center gap-2">
-    {{ select("dataset", datasets, blank=None, attrs='aria-label="Dataset"') }}
-    {{ select("model", models, blank="The active model", grouped=True, attrs='aria-label="Model"') }}
-    <div class="w-48">{{ text_input("note", placeholder="Note", attrs='aria-label="Note"') }}</div>
-    {{ primary_button("Run", "submit") }}
-  </form>
-  {% for dataset in datasets %}
-  {% call card(dataset.name, dataset.about, id="ai-evals-dataset-" ~ dataset.name) %}
-  {{ data_table([
-    {"key": "case", "label": "Case"},
-    {"key": "asks", "label": "Asks", "wrap": True},
-    {"key": "agent", "label": "Agent"},
-    {"key": "checks", "label": "Passes if", "wrap": True},
-  ], dataset.cases, empty="No cases") }}
-  {% endcall %}
-  {% endfor %}
-  {% else %}
-  {{ empty_state("No datasets under evals/", "Copy evals/starter.yaml from a fresh project, or write one: each case a message and what should happen.") }}
-  {% endif %}
-</div>
+<form id="ai-evals-filter" {{ hx_replace(section, "#overseer-main") }} hx-trigger="change" class="flex flex-wrap items-center gap-2">
+  <input type="hidden" name="tab" value="runs">
+  {{ select("dataset", datasets, picked.dataset, blank="All datasets", attrs='aria-label="Dataset"') }}
+  {{ select("model", models, picked.model, blank="All models", attrs='aria-label="Model"') }}
+</form>
 <div id="ai-evals-runs">
   {% call card(None, id="ai-evals-runs-card") %}
   {{ data_table([
@@ -43,11 +22,3 @@
   ], rows, empty="No runs yet") }}
   {% endcall %}
 </div>
-{% if rows|length > 1 %}
-<form {{ hx_replace(section, "#overseer-main") }} id="ai-evals-pick" class="flex flex-wrap items-center gap-2">
-  <span class="text-xs text-aegis-muted">Compare</span>
-  {{ select("a", rows, rows[1].id, blank=None, attrs='aria-label="Before"') }}
-  {{ select("b", rows, rows[0].id, blank=None, attrs='aria-label="After"') }}
-  {{ action("Compare", "", type="submit") }}
-</form>
-{% endif %}

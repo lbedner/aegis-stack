@@ -22,15 +22,18 @@ from app.services.ai.domains.llm.model_factory import (
 
 {%- if ai_framework == "pydantic-ai" %}
 class TestCustomTemperatureSupport:
-    """gpt-5 family and o-series reasoning models reject any temperature but
-    the default (1); sending one 400s. Those must omit temperature."""
+    """A model reasoning by default takes no temperature but the default
+    (1), as its pydantic-ai profile says; a newer family needs no name
+    added here."""
 
     def test_fixed_temperature_models(self) -> None:
-        for model in ["gpt-5.5", "gpt-5", "openai/gpt-5.2", "o1-mini", "o3", "o4-mini"]:
+        for model in ["gpt-5.5", "gpt-5", "gpt-6-luna", "o1-mini", "o3", "o4-mini"]:
             assert _supports_custom_temperature(model) is False, model
 
     def test_custom_temperature_models(self) -> None:
-        for model in ["gpt-4o", "gpt-4o-mini", "claude-sonnet-4-6", "auto", None]:
+        # gpt-5.2 reasons only when asked to, so it takes a temperature.
+        custom = ["gpt-4o", "gpt-4o-mini", "openai/gpt-5.2", "claude-sonnet-4-6"]
+        for model in [*custom, "auto", None]:
             assert _supports_custom_temperature(model) is True, model
 
     def test_model_settings_omits_temperature_for_fixed(self) -> None:

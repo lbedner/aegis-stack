@@ -1,0 +1,253 @@
+{%- if ai_backend != "memory" -%}
+"""A new dataset written by the model in force (Pydantic Evals'
+``generate_dataset``, ``write_cases``), told the default assistant's
+prompt and the app's map, the tools that assistant may call by their
+signatures, so a case checks a call it can make, what the cases under
+``evals/`` already ask, so it repeats none, and, where given, a dataset
+to write like. Kept as a file a person reads: the leading comment
+``about``, no empty fields. ``held`` reads which cases of a kept run held,
+each with the script its turn took (``jobs.generate_evals`` keeps only
+those, and only then is the file there: ``publish``)."""
+
+import inspect
+from pathlib import Path
+import re
+import textwrap
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict
+from pydantic_evals.generation import generate_dataset
+from sqlmodel.ext.asyncio.session import AsyncSession
+import yaml
+
+from app.core.config import settings
+from app.core.tools import get_tool, load_tools
+from app.services.ai.domains.chat.agent_loader import AgentConfig, resolve_agent
+from app.services.ai.domains.chat.builtin_fetchers import whole_app
+from app.services.ai.domains.chat.code_mode import with_sandbox_rules
+from app.services.ai.domains.chat.prompts import meant
+from app.services.ai.domains.llm.active_model import model_for_active
+
+from . import queries
+from .datasets import EvalDataset, dataset_path, describe, describe_all, load, without
+from .evaluators import EVALUATORS, SPANS
+from .script import Step, recorded
+
+# A new dataset's name: a file name with no way out of the folder. The
+# hyphen is escaped for the form's ``pattern``, which a browser reads too.
+NAME = re.compile(r"[a-z0-9][a-z0-9_\-]*")
+NAME_HINT = "lowercase letters, digits, - and _"
+# How many cases are written when none is said, and the most: each is a
+# real turn on the model, paid for.
+CASES = 5
+MOST_CASES = 20
+# The fewest characters that say what a dataset checks: it is most of what
+# steers the cases.
+ABOUT_MIN = 10
+GUIDE = """\
+Write cases for an assistant in this app: each a message a person asks
+and checks on the tools its turn should call (or never call) and what its
+answer should or should never say. Check calls with ToolCalls and
+ToolOrder, never with a check that reads spans ({spans}). A check names
+only the tools below, with only their arguments. Name each case, and give
+it metadata.why: what it guards, in a few words. Leave inputs.script empty
+and inputs.agent unset."""
+
+
+class Dropped(BaseModel):
+    """A case the model wrote that is not kept, and why."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    why: str
+
+
+class Generated(BaseModel):
+    """A dataset written: how many cases it kept, those dropped, and the
+    run on the model that decided which."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kept: int
+    dropped: list[Dropped]
+    run_id: int
+
+    @property
+    def written(self) -> int:
+        """How many cases the model wrote: those kept and those dropped."""
+        return self.kept + len(self.dropped)
+
+
+def _signature(name: str) -> str:
+    """``name(args): what it does``, its return type left out."""
+    tool = get_tool(name)
+    if tool is None:
+        return name
+    called = inspect.signature(tool.func).replace(return_annotation=inspect.Signature.empty)
+    doc = (tool.description or inspect.getdoc(tool.func) or "").split("\n\n")[0]
+    return f"{name}{called}: {' '.join(doc.split())}"
+
+
+def _tool_signatures(names: list[str]) -> str:
+    """Each of these tools, one per line (``_signature``)."""
+    load_tools()
+    return "\n".join(_signature(name) for name in names)
+
+
+def asked(directory: Path) -> list[str]:
+    """Every message a case under ``directory`` already asks."""
+    # ponytail: every message of every dataset, uncapped; keep the newest
+    # few hundred if the prompt outgrows the model's window.
+    return [case.message for found in describe_all(directory) for case in found.cases]
+
+
+def _unscripted(name: str, directory: Path) -> str:
+    """Dataset ``name`` as a file without its scripts: what a new one is
+    to look like when the model writes it."""
+    example = load(name, directory)
+    for case in example.cases:
+        case.inputs = case.inputs.model_copy(update={"script": []})
+    return written(example, describe(name, directory).about)
+
+
+def instructions(
+    about: str, like: str | None, directory: Path, agent: AgentConfig, app: str
+) -> str:
+    """What the model is told: what a case is, what this dataset checks,
+    the assistant (``agent``'s prompt, as a turn has it) and the ``app``
+    it answers for, the tools it may call, what is already asked, and the
+    dataset to write like."""
+    guide = GUIDE.format(spans=", ".join(kind.get_serialization_name() for kind in SPANS))
+    persona = with_sandbox_rules(meant(agent.system_prompt), code_mode=agent.code_mode)
+    told = [
+        guide,
+        f"The dataset checks: {about}",
+        f"The assistant is told:\n{persona}",
+        f"The app it answers for:\n{app}",
+        f"Tools:\n{_tool_signatures(list(agent.tool_names))}",
+    ]
+    if already := asked(directory):
+        listed = "\n".join(f"- {message}" for message in already)
+        told.append(f"Cases already ask these; ask none of them again:\n{listed}")
+    if like is not None:
+        told.append(f"Write like this dataset:\n\n{_unscripted(like, directory)}")
+    return "\n\n".join(told)
+
+
+def written(dataset: EvalDataset, about: str) -> str:
+    """``dataset`` as a file: ``about`` as its leading comment, then its
+    cases with only the fields they set (the short forms a person writes)."""
+    dumped: dict[str, Any] = dataset.model_dump(
+        mode="json",
+        by_alias=True,
+        exclude_defaults=True,
+        exclude_none=True,
+        context={"use_short_form": True},
+    )
+    dumped.pop("name", None)
+    comment = textwrap.fill(about, 72, initial_indent="# ", subsequent_indent="# ")
+    return f"{comment}\n{yaml.safe_dump(dumped, sort_keys=False, allow_unicode=True)}"
+
+
+def _taken(path: Path) -> ValueError:
+    return ValueError(f"evals/{path.name} already exists")
+
+
+def new_path(name: str, about: str, cases: int, like: str | None, directory: Path) -> Path:
+    """Where ``name`` goes; ValueError for a name that is taken or not a
+    plain file name, an ``about`` that says nothing, a count out of range,
+    or an unknown ``like``."""
+    if not NAME.fullmatch(name):
+        raise ValueError(f"{name!r} is not a dataset name: {NAME_HINT}")
+    if len(about.strip()) < ABOUT_MIN:
+        raise ValueError(f"Say what it checks, in {ABOUT_MIN} characters or more")
+    if not 1 <= cases <= MOST_CASES:
+        raise ValueError(f"Cases is 1 to {MOST_CASES}, not {cases}")
+    if like is not None:
+        dataset_path(like, directory)
+    path = directory / f"{name}.yaml"
+    if path.exists():
+        raise _taken(path)
+    return path
+
+
+def publish(dataset: EvalDataset, about: str, path: Path) -> None:
+    """Write the finished dataset where it was to go, never over a file
+    put there since (ValueError)."""
+    try:
+        with path.open("x") as file:
+            file.write(written(dataset, about))
+    except FileExistsError:
+        raise _taken(path) from None
+
+
+async def held(
+    session: AsyncSession, run_id: int
+) -> tuple[dict[str, list[Step]], list[Dropped]]:
+    """Each case of a kept run that passed, by name, with the script its
+    turn took (``recorded``); the rest, with the first check that failed."""
+    cases = await queries.cases(session, run_id)
+    scores = await queries.run_scores(session, run_id)
+    failed = {s.case_id: f"{s.rule}: {s.reason}" for s in scores if s.passed is False}
+    scripts: dict[str, list[Step]] = {}
+    dropped: list[Dropped] = []
+    for case in cases:
+        why = case.error or failed.get(case.id)
+        if case.passed:
+            try:
+                scripts[case.name] = recorded(case.tool_calls, case.output or "")
+                continue
+            except ValueError:
+                why = "a call too long for its trace to record"
+        dropped.append(Dropped(name=case.name, why=why or "a check could not say"))
+    return scripts, dropped
+
+
+def keep(
+    dataset: EvalDataset, scripts: dict[str, list[Step]], dropped: list[Dropped]
+) -> None:
+    """Only the cases in ``scripts``, each with its script; ValueError naming
+    why each was dropped when none is."""
+    dataset.cases = [case for case in dataset.cases if case.name in scripts]
+    if not dataset.cases:
+        why = "; ".join(f"{d.name} ({d.why})" for d in dropped)
+        raise ValueError(f"No case held on the model in force: {why}")
+    for case in dataset.cases:
+        case.inputs = case.inputs.model_copy(update={"script": scripts[case.name]})
+
+
+def _unspanned(dataset: EvalDataset) -> list[Dropped]:
+    """Drop the checks that read spans (``SPANS``) from ``dataset``, which
+    no run in CI has; a case left with none is dropped too."""
+    without(dataset, SPANS)
+    gone = [case for case in dataset.cases if not (case.evaluators or dataset.evaluators)]
+    dataset.cases = [case for case in dataset.cases if case not in gone]
+    why = "checks only what spans show, and CI keeps none"
+    return [Dropped(name=case.name or "", why=why) for case in gone]
+
+
+async def write_cases(
+    about: str, cases: int, like: str | None, directory: Path
+) -> tuple[EvalDataset, list[Dropped]]:
+    """``cases`` new cases checking ``about``, written by the model in
+    force as ``instructions`` tell it, each named, without checks that
+    read spans (``_unspanned``): the dataset and the cases dropped.
+    ValueError when what the model wrote is no dataset."""
+    told = instructions(about, like, directory, await resolve_agent(), await whole_app())
+    model, _name = await model_for_active(settings)
+    try:
+        dataset = await generate_dataset(
+            dataset_type=EvalDataset,
+            custom_evaluator_types=EVALUATORS,
+            model=model,
+            n_examples=cases,
+            extra_instructions=told,
+        )
+    except ValueError as exc:  # not the JSON of a dataset
+        raise ValueError("The model's cases could not be read; try again") from exc
+    # A run names an unnamed case by its place; so does the file.
+    for place, case in enumerate(dataset.cases, 1):
+        case.name = case.name or f"Case {place}"
+    return dataset, _unspanned(dataset)
+{%- endif %}

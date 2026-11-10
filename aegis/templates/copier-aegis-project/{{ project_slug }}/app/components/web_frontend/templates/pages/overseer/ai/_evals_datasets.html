@@ -1,0 +1,20 @@
+{# Evals > Datasets: each dataset under evals/ in a row, what its leading
+   comment says it checks, its cases and its last run; a row opens it.
+   New dataset has the model write one (``_evals_new``). #}
+{% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/form.html" import action %}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+<div class="flex justify-end">{{ action("New dataset", hx_dialog(new_url, "data-write data-evals-new"), "primary") }}</div>
+{% call card(None, id="ai-evals-datasets") %}
+{% if summaries %}
+{{ data_table([
+  {"key": "dataset", "label": "Dataset", "kind": "link", "target": "#overseer-main"},
+  {"key": "about", "label": "Checks", "wrap": True},
+  {"key": "cases", "label": "Cases", "kind": "int", "align": "right"},
+  {"key": "last", "label": "Last run", "kind": "status"},
+], summaries) }}
+{% else %}
+{{ empty_state("No datasets under evals/", "Copy evals/starter.yaml from a fresh project, or write one: each case a message and what should happen.") }}
+{% endif %}
+{% endcall %}

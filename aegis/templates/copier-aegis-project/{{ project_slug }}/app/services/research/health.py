@@ -31,3 +31,6 @@ async def check_research_service_health() -> ComponentStatus:
         f"{counted(counts.items, 'item')}",
         metadata=metadata,
     )
+
+
+HEALTH = check_research_service_health

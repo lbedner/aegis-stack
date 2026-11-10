@@ -192,3 +192,6 @@ async def check_ai_service_health() -> ComponentStatus:
                 "error_type": "health_check_failure",
             },
         )
+
+
+HEALTH = check_ai_service_health

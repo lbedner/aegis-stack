@@ -36,15 +36,20 @@ def import_modules_named(package: ModuleType, name: str) -> list[ModuleType]:
     return [importlib.import_module(found) for found in modules_named(package, name)]
 
 
-def declared_by(package: ModuleType, name: str, attr: str) -> list[tuple[str, Any]]:
+def declared_by(
+    package: ModuleType, name: str, attr: str, required: bool = True
+) -> list[tuple[str, Any]]:
     """Each child package's ``attr`` from its ``name`` module, with the
     child's own name (``app.services.<part>``: its part, a plugin's too), in
-    name order. A ``name`` module declaring no ``attr`` is an error."""
+    name order. A ``name`` module declaring no ``attr`` is an error, or
+    skipped where not every such module declares one (``required=False``)."""
     found = []
     for module in import_modules_named(package, name):
         declared = getattr(module, attr, None)
         if declared is None:
-            raise ValueError(f"{module.__name__} declares no {attr}")
+            if required:
+                raise ValueError(f"{module.__name__} declares no {attr}")
+            continue
         found.append((module.__name__.split(".")[2], declared))
     return found
 

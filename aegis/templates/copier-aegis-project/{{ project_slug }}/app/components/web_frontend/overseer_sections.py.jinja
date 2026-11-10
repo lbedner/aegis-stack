@@ -8,6 +8,7 @@ the generic status page.
 
 from collections.abc import Awaitable, Callable
 from enum import StrEnum
+import importlib
 from typing import Any, NamedTuple
 
 from starlette.requests import Request
@@ -16,6 +17,7 @@ from app.core.client_session import cookie_name
 from app.core.constants import ComponentName
 from app.core.ontology import Kind
 from app.core.ontology.parts import concern_of
+from app.core.overseer_pages import service_pages
 from app.core.parts import Category
 from app.services.system import ui_runtime
 from app.services.system.models import ComponentStatus
@@ -163,6 +165,12 @@ def _optional_pages() -> dict[tuple[str, str], SectionedPage]:
     )
     {%- endfor %}
     {%- endfor %}
+    # A service's own (``app.core.overseer_pages``): an app's, with no edit here.
+    for owner, page in service_pages():
+        module = importlib.import_module(page.module)
+        pages[("services", owner)] = SectionedPage(
+            owner, module.SECTIONS, module.section_context
+        )
     return pages
 
 
@@ -409,6 +417,10 @@ SECTIONED_PAGES = {
     key: _with_settings(key, _with_runtime(key[1], page))
     for key, page in _PAGES.items()
 }
+
+# The services that declare a page of their own (``app.core.overseer_pages``):
+# on the rail with or without a health check.
+SERVICE_PAGES = frozenset(owner for owner, _ in service_pages())
 
 # An entry with no page of its own: its status, the generic page's body.
 STATUS = ((None, {"overview": "Overview"}),)

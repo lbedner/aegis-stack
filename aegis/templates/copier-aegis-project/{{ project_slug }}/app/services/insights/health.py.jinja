@@ -81,3 +81,6 @@ async def check_insight_health() -> ComponentStatus:
             message=f"Health check error: {e}",
             metadata={"error": str(e)},
         )
+
+
+HEALTH = check_insight_health

@@ -55,3 +55,6 @@ async def check_blog_service_health() -> ComponentStatus:
             message=f"Health check error: {e}",
             metadata={"error": str(e)},
         )
+
+
+HEALTH = check_blog_service_health

@@ -11,7 +11,7 @@ Illiana and MCP clients use, and a node's `now` in the [Twin](twin.md).
  startup                          running
  -------                          -------
  component / service              sampler (one per web process)
-   | register_health_check()        | runs every registered check
+   | registers / declares HEALTH    | runs every registered check
    v                                v
  health registry  ------------>  SystemStatus (a tree)
                                     | only what changed, over SSE
@@ -19,8 +19,8 @@ Illiana and MCP clients use, and a node's `now` in the [Twin](twin.md).
                                  open Overseer pages
 ```
 
-1. **Registration.** As the app starts, each component and service registers
-   its health check with the health registry.
+1. **Registration.** As the app starts, each component registers, and each
+   service declares, its health check with the health registry.
 2. **Aggregation.** The registry runs every check and gathers the results into
    one tree: the app, its components and services, and their sub-checks.
 3. **Push.** One sampler per web process reads the tree and pushes to open
@@ -59,16 +59,16 @@ async def check_orders_service_health() -> ComponentStatus:
         message=f"{pending} pending",
         metadata={"pending": pending},
     )
+
+
+HEALTH = check_orders_service_health
 ```
 
-and registers it at startup in `app/components/backend/startup/component_health.py`,
-beside the others:
+`HEALTH` is what registers it: at startup every service's `health.py` is
+found on disk and its `HEALTH` registered under the service's folder name,
+an app's own service's too, so no framework file changes.
 
-```python
-from app.services.orders.health import check_orders_service_health
-register_service_health_check("orders", check_orders_service_health)
-```
-
-A component registers with `register_health_check` the same way. Keep a check
+A component instead calls `register_health_check(name, check)` from a
+startup hook. Keep a check
 fast (the sampler runs every check), and return `UNHEALTHY` with the error as
 the message rather than raising.

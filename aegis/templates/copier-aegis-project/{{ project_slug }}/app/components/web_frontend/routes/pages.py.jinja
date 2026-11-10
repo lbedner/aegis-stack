@@ -114,6 +114,7 @@ from app.components.web_frontend.routes.partials import (
     overseer_worker as overseer_worker_partials,
 )
 {%- endif %}
+from app.core.overseer_pages import include_partials
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
@@ -222,6 +223,7 @@ router.include_router(overseer_worker_partials.router)
 router.include_router(overseer_deployments_partials.router)
 router.include_router(overseer_errors_partials.router)
 router.include_router(overseer_code_partials.router)
+include_partials(router)
 router.include_router(overseer_routes.router)
 {%- if include_auth %}
 

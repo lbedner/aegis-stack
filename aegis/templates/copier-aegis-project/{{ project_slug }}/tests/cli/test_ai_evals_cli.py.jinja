@@ -1,9 +1,9 @@
 {%- if ai_backend != "memory" -%}
 """``ai evals``: run a dataset and keep it, list and show kept runs (and
 one case of one), compare two of them; read the datasets, have the model
-write one, delete one."""
+write one, import one from YAML and export it back, delete one."""
 
-import functools
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
@@ -11,22 +11,20 @@ import pytest
 from app.services.ai.domains.evals import datasets, jobs
 from app.services.ai.domains.llm.llm_service import SetModelResult
 from tests._cli import invoke
-from tests.services.ai.evals._mini import ABOUT, answering, mini_in, writing
+from tests.services.ai.evals._mini import (
+    ABOUT,
+    DATASET,
+    answering,
+    only_mini,
+    writing,
+)
 
 
 @pytest.fixture
-def mini(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """``mini`` is the one dataset under evals/, answered by a fake chat."""
-    mini_in(tmp_path, monkeypatch)
-    for name, read in (
-        ("eval_datasets", datasets.names),
-        ("eval_dataset", datasets.describe),
-        ("eval_dataset_summaries", datasets.describe_all),
-        ("remove_eval_dataset", datasets.remove),
-    ):
-        monkeypatch.setattr(
-            f"app.cli.ai.evals.{name}", functools.partial(read, directory=tmp_path)
-        )
+async def mini(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[None]:
+    """``mini`` is the one dataset there."""
+    async with only_mini(monkeypatch):
+        yield
 
 
 def _run_id(output: str) -> int:
@@ -94,6 +92,37 @@ def test_a_failing_case_fails_the_command_and_compare_names_it(
     assert "No differences" in alike.output
 
 
+@pytest.mark.parametrize(
+    ("command", "says"),
+    [
+        (["run", "ops"], "2/2"),
+        (["datasets"], "ops"),
+        (["datasets", "ops"], "what does the letter say?"),
+        (["export", "ops"], "cases:"),
+    ],
+)
+def test_the_dataset_commands_add_the_shipped_datasets_first(
+    mini: None, monkeypatch: pytest.MonkeyPatch, command: list[str], says: str
+) -> None:
+    """As startup does, so a fresh clone or CI reads the ones ``run`` runs."""
+    answering(monkeypatch)
+    monkeypatch.setattr(datasets, "shipped", lambda directory: {"ops": DATASET})
+
+    ran = invoke(["ai", "evals", *command])
+
+    assert ran.exit_code == 0, ran.output
+    assert says in ran.output
+
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # two commands
+def test_with_no_dataset_a_run_says_how_one_comes_in(mini: None) -> None:
+    assert invoke(["ai", "evals", "delete", "mini", "--yes"]).exit_code == 0
+
+    ran = invoke(["ai", "evals", "run"])
+
+    assert ran.exit_code == 1 and "ai evals import" in ran.output
+
+
 def test_an_unknown_dataset_is_refused_naming_those_there(mini: None) -> None:
     ran = invoke(["ai", "evals", "run", "nope"])
 
@@ -121,6 +150,7 @@ def test_a_model_that_cannot_answer_is_refused(
     assert "nope-1" in ran.output
 
 
+@pytest.mark.queryspy(allow_n_plus_one=True)  # two commands
 def test_a_dataset_is_written_by_the_model_keeping_what_held(
     mini: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -132,12 +162,13 @@ def test_a_dataset_is_written_by_the_model_keeping_what_held(
     )
 
     assert made.exit_code == 0, made.output
-    assert "evals/ops.yaml: 1 case of 3" in made.output
+    assert "Wrote ops: 1 case of 3" in made.output
     assert "dropped checks health" in made.output
     taken = invoke(["ai", "evals", "generate", "mini", "--about", ABOUT])
     assert taken.exit_code == 1 and "already exists" in taken.output
 
 
+@pytest.mark.queryspy(allow_n_plus_one=True)  # each command reads the datasets
 def test_datasets_are_listed_and_one_is_read_with_its_cases(mini: None) -> None:
     listed = invoke(["ai", "evals", "datasets"])
     assert listed.exit_code == 0, listed.output
@@ -152,16 +183,40 @@ def test_datasets_are_listed_and_one_is_read_with_its_cases(mini: None) -> None:
     assert unknown.exit_code == 1 and "nope" in unknown.output
 
 
-def test_a_dataset_is_deleted_once_confirmed(mini: None, tmp_path: Path) -> None:
-    kept = invoke(["ai", "evals", "delete", "mini"], input="n\n")
-    assert "Cancelled" in kept.output and (tmp_path / "mini.yaml").exists()
+@pytest.mark.queryspy(allow_n_plus_one=True)  # each command reads the dataset
+def test_a_dataset_is_deleted_once_confirmed(mini: None) -> None:
+    stays = invoke(["ai", "evals", "delete", "mini"], input="n\n")
+    assert "Cancelled" in stays.output
+    assert invoke(["ai", "evals", "export", "mini"]).exit_code == 0
 
     gone = invoke(["ai", "evals", "delete", "mini", "--yes"])
     assert gone.exit_code == 0, gone.output
-    assert not (tmp_path / "mini.yaml").exists()
+    assert "No datasets" in invoke(["ai", "evals", "datasets"]).output
 
     unknown = invoke(["ai", "evals", "delete", "mini", "--yes"])
     assert unknown.exit_code == 1 and "mini" in unknown.output
+
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # each file in its own session, and each command reads
+def test_a_file_is_imported_and_exported_as_it_was_written(
+    mini: None, tmp_path: Path
+) -> None:
+    written = "# Imported.\n" + DATASET
+    for name in ("ops", "mini"):
+        (tmp_path / f"{name}.yaml").write_text(written)
+    files = [str(tmp_path / "ops.yaml"), str(tmp_path / "mini.yaml")]
+
+    imported = invoke(["ai", "evals", "import", *files])
+    assert imported.exit_code == 1 and "already exists" in imported.output
+    assert "Imported ops" in imported.output
+    assert invoke(["ai", "evals", "export", "ops"]).output == written
+    replaced = invoke(["ai", "evals", "import", "--replace", files[1]])
+    assert replaced.exit_code == 0, replaced.output
+
+    exported = invoke(["ai", "evals", "export", "mini"])
+    assert exported.exit_code == 0 and exported.output == written
+    unknown = invoke(["ai", "evals", "export", "nope"])
+    assert unknown.exit_code == 1 and "nope" in unknown.output
 
 
 def test_an_unknown_run_is_refused() -> None:

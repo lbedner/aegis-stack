@@ -1,0 +1,28 @@
+{%- if ai_backend != "memory" -%}
+"""A dataset, kept: its YAML as written (Pydantic Evals' format, its
+comments too), so what a run fingerprints is what was imported, generated
+or seeded. The one home of a dataset: every process of the app reads the
+same rows, and a deploy keeps them (``domains/evals/datasets.py``)."""
+
+from datetime import datetime
+
+from sqlalchemy import Column, Text
+from sqlmodel import Field, SQLModel
+
+from app.core.time import utcnow
+
+
+class EvalDatasetRecord(SQLModel, table=True):
+    """One dataset by its name; a deleted one keeps its row (``deleted_at``,
+    ``seed_missing``). ``shipped`` is the fingerprint of the shipped file
+    it was last seeded from, so one still as seeded follows its file."""
+
+    __tablename__ = "eval_dataset"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(unique=True, index=True)
+    text: str = Field(sa_column=Column(Text, nullable=False))
+    shipped: str | None = None
+    created_at: datetime = Field(default_factory=utcnow)
+    deleted_at: datetime | None = None
+{%- endif %}

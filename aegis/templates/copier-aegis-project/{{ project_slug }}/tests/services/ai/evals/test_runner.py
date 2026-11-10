@@ -1,23 +1,21 @@
 """Running a dataset: each case a real turn, scored on its reply."""
 
-from pathlib import Path
 from typing import Any
 
 import pytest
 
 from app.services.ai.domains.chat.agent_loader import CODE_MODE_OVERRIDE
 from app.services.ai.domains.evals import runner
-from app.services.ai.domains.evals.datasets import load, names
+from app.services.ai.domains.evals.datasets import parse, shipped
 from app.services.ai.service.turn import HEARS_NOW
 from tests.services.ai.evals._mini import DATASET, answering
 
 
 async def test_each_case_is_a_turn_scored_on_its_trace(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    (tmp_path / "mini.yaml").write_text(DATASET)
     asked = answering(monkeypatch)
-    report = await runner.run_dataset("mini", directory=tmp_path)
+    report = await runner.run_dataset("mini", DATASET)
 
     assert sorted(asked) == ["tidy up", "what does the letter say?"]
     results = {
@@ -29,24 +27,22 @@ async def test_each_case_is_a_turn_scored_on_its_trace(
 
 
 async def test_each_turn_is_an_admins(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The system's reads (its health, errors, parts) are an admin's, and
     only an admin starts a run."""
-    (tmp_path / "mini.yaml").write_text(DATASET)
     calls: list[dict[str, Any]] = []
     answering(monkeypatch, calls=calls)
-    await runner.run_dataset("mini", directory=tmp_path)
+    await runner.run_dataset("mini", DATASET)
 
     assert [call["admin"] for call in calls] == [True, True]
 
 
 async def test_no_turn_hears_what_is_wrong_right_now(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A case is scored on its message alone: with a check failing, or no
     webserver to ask, a greeting would otherwise be answered with a read."""
-    (tmp_path / "mini.yaml").write_text(DATASET)
     heard: list[bool] = []
 
     async def chat(self: Any, message: str, **kwargs: Any) -> Any:
@@ -55,28 +51,27 @@ async def test_no_turn_hears_what_is_wrong_right_now(
 
     monkeypatch.setattr(runner.AIService, "chat", chat)
 
-    await runner.run_dataset("mini", directory=tmp_path)
+    await runner.run_dataset("mini", DATASET)
 
     assert heard == [False, False]
     assert HEARS_NOW.get() is True
 
 
 async def test_scripted_mode_refuses_a_case_without_a_script(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    (tmp_path / "mini.yaml").write_text(DATASET)
-    report = await runner.run_dataset("mini", directory=tmp_path, scripted=True)
+    report = await runner.run_dataset("mini", DATASET, scripted=True)
     assert not report.cases
     assert len(report.failures) == 2
 
 
 async def test_a_scripted_run_leaves_out_the_checks_that_read_spans(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """No span is kept where a script plays, so a check that reads them
     waits for a real run; a case left with no check fails, never passes
     unchecked."""
-    (tmp_path / "spans.yaml").write_text(
+    spans = (
         "cases:\n"
         "  - name: checked both ways\n"
         "    inputs:\n"
@@ -94,7 +89,7 @@ async def test_a_scripted_run_leaves_out_the_checks_that_read_spans(
     )
     answering(monkeypatch)
 
-    report = await runner.run_dataset("spans", directory=tmp_path, scripted=True)
+    report = await runner.run_dataset("spans", spans, scripted=True)
 
     (case,) = report.cases
     assert set(case.assertions) == {"Contains"} and not case.evaluator_failures
@@ -103,36 +98,33 @@ async def test_a_scripted_run_leaves_out_the_checks_that_read_spans(
 
 
 async def test_a_run_reports_to_logfire_as_its_own_process(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Where the stack has observability, a run configures Logfire as the
     ``evals`` process; the token stays the only switch."""
     tracing = pytest.importorskip("app.components.backend.middleware.logfire_tracing")
     units: list[str] = []
     monkeypatch.setattr(tracing, "configure_logfire", lambda unit: units.append(unit))
-    (tmp_path / "mini.yaml").write_text("cases: []\n")
 
-    await runner.run_dataset("mini", directory=tmp_path)
+    await runner.run_dataset("mini", "cases: []\n")
 
     assert units == ["evals"]
 
 
 async def test_each_case_is_reported_as_it_starts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    (tmp_path / "mini.yaml").write_text(DATASET)
     answering(monkeypatch)
     labels: list[str] = []
 
-    await runner.run_dataset("mini", directory=tmp_path, report=labels.append)
+    await runner.run_dataset("mini", DATASET, report=labels.append)
 
     assert labels == ["1 of 2 · reads the paper", "2 of 2 · never deletes"]
 
 
 async def test_a_run_can_name_the_model_it_runs_on(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    (tmp_path / "mini.yaml").write_text(DATASET)
     answering(monkeypatch)
     seen: list[str] = []
     chat = runner.AIService.chat
@@ -143,17 +135,17 @@ async def test_a_run_can_name_the_model_it_runs_on(
 
     monkeypatch.setattr(runner.AIService, "chat", noting)
 
-    await runner.run_dataset("mini", directory=tmp_path, model="gpt-other")
+    await runner.run_dataset("mini", DATASET, model="gpt-other")
 
     assert seen == ["gpt-other", "gpt-other"]
 
 
 async def test_a_script_plays_in_the_mode_it_was_recorded_in(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A script whose turn wrote code plays in code mode, one that called
     tools directly plays without, whatever the agent is set to now."""
-    (tmp_path / "modes.yaml").write_text(
+    modes_written = (
         "evaluators:\n"
         "  - Contains: ok\n"
         "cases:\n"
@@ -174,25 +166,27 @@ async def test_a_script_plays_in_the_mode_it_was_recorded_in(
 
     monkeypatch.setattr(runner.AIService, "chat", chat)
 
-    await runner.run_dataset("modes", directory=tmp_path, scripted=True)
+    await runner.run_dataset("modes", modes_written, scripted=True)
 
     assert modes == [True, False]
     assert CODE_MODE_OVERRIDE.get() is None
 
 
 def test_every_shipped_dataset_loads_and_every_case_is_scripted() -> None:
-    for name in names():
-        dataset = load(name)
+    for name, written in shipped().items():
+        dataset = parse(name, written)
         assert dataset.cases, name
         assert all(case.inputs.script for case in dataset.cases), name
 
 
 @pytest.mark.queryspy(allow_n_plus_one=True)  # one real turn per case
-@pytest.mark.parametrize("name", names())
-async def test_every_shipped_dataset_plays_through_the_real_turn(name: str) -> None:
+@pytest.mark.parametrize(("name", "written"), shipped().items())
+async def test_every_shipped_dataset_plays_through_the_real_turn(
+    name: str, written: str
+) -> None:
     """Each scripted case through ``AIService.chat``: its tools run, its
     trace is kept, and every assertion holds. ``make evals-ci``."""
-    report = await runner.run_dataset(name, scripted=True)
+    report = await runner.run_dataset(name, written, scripted=True)
 
     assert not report.failures, [f.error_message for f in report.failures]
     assert report.cases

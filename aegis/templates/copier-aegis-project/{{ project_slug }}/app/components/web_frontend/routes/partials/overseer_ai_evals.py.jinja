@@ -1,13 +1,18 @@
 {%- if ai_backend != "memory" -%}
 """Fragments for the Overseer AI page's Evals section: a new dataset
-written by the model (its dialog), a dataset deleted (asked first), a
-run started as a job (``start_evals``), and the job followed over SSE. Mounted by
+written by the model (its dialog), one imported from a YAML file or
+downloaded as it, one deleted (asked first), a run started as a job
+(``start_evals``), and the job followed over SSE. Mounted by
 ``overseer_ai``'s router where the section is (``HAS_EVALS``)."""
 
-from fastapi import APIRouter, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import Response, StreamingResponse
 
 from app.components.web_frontend import overseer_ai_evals
+from app.components.web_frontend import overseer_ai_evals_datasets as datasets
+from app.components.web_frontend.overseer_access import Db, overseer_db
 from app.components.web_frontend.overseer_ai_common import section_url
 from app.components.web_frontend.overseer_live import event_stream, heartbeat
 from app.components.web_frontend.rendering import (
@@ -17,55 +22,85 @@ from app.components.web_frontend.rendering import (
     go_to,
     toast_response,
 )
+from app.services.ai.service import EVAL_YAML_TYPE, add_eval_dataset_file
 
 router = APIRouter(prefix="/evals")
 NEW = "pages/overseer/ai/_evals_new.html"
 CONFIRM = "pages/overseer/_confirm.html"
 
 
-def _new(
-    request: Request, form: dict[str, str], errors: list[str], status_code: int = 200
+async def _new(
+    request: Request, db: Db, form: dict[str, str], errors: list[str], status_code: int = 200
 ) -> Response:
-    context = overseer_ai_evals.new_dataset(form, errors)
+    context = await datasets.new_dataset(db, form, errors)
     return dialog(request, NEW, status_code, **context)
 
 
 @router.get("/datasets/new")
-async def new_dataset(request: Request) -> Response:
+async def new_dataset(request: Request, db: Db = Depends(overseer_db)) -> Response:
     """The New dataset dialog."""
-    return _new(request, {}, [])
+    return await _new(request, db, {}, [])
 
 
 @router.post("/datasets")
-async def write_dataset(request: Request) -> Response:
+async def write_dataset(request: Request, db: Db = Depends(overseer_db)) -> Response:
     """The form's dataset, written by the model as a job the Datasets tab
-    follows; why not (whatever ``new_path`` refuses) back in the dialog,
+    follows; why not (whatever ``check_new`` refuses) back in the dialog,
     as typed."""
     form = await form_fields(request)
     try:
-        job_id = await overseer_ai_evals.write_dataset(form)
+        job_id = await datasets.write_dataset(form)
     except ValueError as exc:
-        return _new(request, form, [str(exc)], 422)
+        return await _new(request, db, form, [str(exc)], 422)
     return dialog_done(section_url("evals", job=job_id), "Writing cases.")
 
 
+@router.post("/datasets/import")
+async def import_dataset(
+    file: UploadFile,
+    replace: Annotated[bool, Form()] = False,
+    db: Db = Depends(overseer_db),
+) -> Response:
+    """The uploaded YAML kept as a dataset named by the file (over the one
+    there where ``replace``), then opened; why not (taken, not a name, no
+    dataset) is the toast."""
+    try:
+        name = await add_eval_dataset_file(
+            db, file.filename or "", await file.read(), replace=replace
+        )
+    except ValueError as exc:
+        return toast_response(str(exc), "error")
+    return go_to(section_url("evals", dataset=name), f"Imported {name}.", target="#overseer-main")
+
+
+@router.get("/datasets/{name}/yaml")
+async def export_dataset(name: str, db: Db = Depends(overseer_db)) -> Response:
+    """The dataset's YAML, downloaded as ``<name>.yaml``: what Import reads
+    back."""
+    return Response(
+        await datasets.export(db, name),
+        media_type=EVAL_YAML_TYPE,
+        headers={"Content-Disposition": f'attachment; filename="{name}.yaml"'},
+    )
+
+
 @router.get("/datasets/{name}/delete")
-async def confirm_delete(request: Request, name: str) -> Response:
-    """Asked before a dataset's file is deleted."""
-    return dialog(request, CONFIRM, **overseer_ai_evals.delete_dataset(name))
+async def confirm_delete(request: Request, name: str, db: Db = Depends(overseer_db)) -> Response:
+    """Asked before a dataset is deleted."""
+    return dialog(request, CONFIRM, **await datasets.delete_dataset(db, name))
 
 
 @router.delete("/datasets/{name}")
-async def delete_dataset(name: str) -> Response:
-    """The dataset's file deleted; the section back on its datasets."""
-    overseer_ai_evals.deleted(name)
-    return dialog_done(section_url("evals"), f"Deleted evals/{name}.yaml.")
+async def delete_dataset(name: str, db: Db = Depends(overseer_db)) -> Response:
+    """The dataset deleted; the section back on its datasets."""
+    await datasets.deleted(db, name)
+    return dialog_done(section_url("evals"), f"Deleted {name}.")
 
 
 @router.post("/runs")
 async def start_run(request: Request) -> Response:
-    """A run of the form's dataset, as a job the section follows; a dataset
-    not under evals/ or a model that cannot answer is the toast."""
+    """A run of the form's dataset, as a job the section follows; no such
+    dataset or a model that cannot answer is the toast."""
     form = await form_fields(request)
     try:
         job_id = await overseer_ai_evals.start(form)
@@ -77,6 +112,6 @@ async def start_run(request: Request) -> Response:
 
 @router.get("/jobs/{job_id}/events")
 async def job_events(job_id: str, then: str = overseer_ai_evals.SECTION) -> StreamingResponse:
-    """A run's job, pushed to the page it is on (``then``) as it changes."""
+    """A run's job, pushed to the page it is on (``then``), as it changes."""
     return event_stream(heartbeat(overseer_ai_evals.job_events(job_id, then)))
 {%- endif %}

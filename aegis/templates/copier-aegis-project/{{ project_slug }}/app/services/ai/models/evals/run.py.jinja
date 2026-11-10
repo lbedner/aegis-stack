@@ -23,7 +23,7 @@ class EvalRun(SQLModel, table=True):
     model_id: str | None = None
     # The app's build it ran against (``settings.BUILD_ID``).
     build: str | None = None
-    # The dataset file it ran (SHA-256 of its bytes): two runs of an edited
+    # The dataset it ran (SHA-256 of its YAML): two runs of an edited
     # dataset are told apart. None on a run kept before it was recorded.
     dataset_sha256: str | None = None
     started_at: datetime = Field(default_factory=utcnow, index=True)

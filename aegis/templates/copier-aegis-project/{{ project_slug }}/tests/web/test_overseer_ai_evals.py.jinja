@@ -13,15 +13,17 @@ from markupsafe import Markup
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.components.web_frontend import chat_models, overseer_ai_evals
-from app.components.web_frontend.overseer_live import JOB_DONE
-from app.services.ai.domains.evals.datasets import (
-    CaseSummary,
-    DatasetSummary,
-    UnknownDatasetError,
+from app.components.web_frontend import (
+    chat_models,
+    overseer_ai_evals,
+    overseer_ai_evals_datasets,
 )
+from app.components.web_frontend.overseer_live import JOB_DONE
+from app.services.ai.domains.evals import queries
+from app.services.ai.domains.evals.datasets import DatasetSummary, add
 from app.services.system.jobs import get_job_runner
 from tests.services.ai.evals import _kept as kept
+from tests.services.ai.evals._mini import DATASET
 from tests.web.dom import (
     chosen,
     location,
@@ -53,11 +55,9 @@ async def two_runs(async_db_session: AsyncSession) -> tuple[int, int]:
 
 
 @pytest.fixture(autouse=True)
-def _datasets(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The datasets under ``evals/``: ``mini`` alone."""
-    monkeypatch.setattr(overseer_ai_evals, "eval_datasets", lambda: ["mini"])
-    monkeypatch.setattr(overseer_ai_evals, "eval_dataset", lambda name: MINI)
-    monkeypatch.setattr(overseer_ai_evals, "eval_dataset_summaries", lambda: [MINI])
+async def _datasets(async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The datasets: ``mini`` alone, its one case why it is there."""
+    await add(async_db_session, "mini", MINI)
 
     async def catalog(mode: str = "chat") -> list[dict[str, Any]]:
         return [{"model_id": "qwen3:4b", "title": "qwen3:4b", "vendor": "Ollama"}]
@@ -70,18 +70,8 @@ def _datasets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(overseer_ai_evals, "running_model", running_model)
 
 
-MINI = DatasetSummary(
-    name="mini",
-    about="Reads what it is given.",
-    cases=[
-        CaseSummary(
-            name="reads the paper",
-            why="a letter is read, not guessed",
-            message="what does the letter say?",
-            agent=None,
-            checks=["calls paper once", 'says "letter"'],
-        )
-    ],
+MINI = "# Reads what it is given.\n" + DATASET.split("  - name: never deletes")[0].replace(
+    "    evaluators:\n", "    metadata:\n      why: a letter is read, not guessed\n    evaluators:\n", 1
 )
 
 
@@ -104,12 +94,15 @@ def test_each_dataset_is_one_row_with_its_last_run(
     assert text(row["Cases"]) == "1" and text(row["Last run"]) == "1 / 2"
 
 
-def test_with_no_datasets_it_says_to_copy_the_starter(
+def test_with_no_datasets_it_says_how_one_comes_in(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(overseer_ai_evals, "eval_dataset_summaries", lambda: [])
+    async def none(db: AsyncSession) -> list[DatasetSummary]:
+        return []
 
-    assert "evals/" in text(one(page_html(client, PAGE), "#ai-evals-datasets"))
+    monkeypatch.setattr(overseer_ai_evals, "eval_dataset_summaries", none)
+
+    assert "Import a YAML file" in text(one(page_html(client, PAGE), "#ai-evals-datasets"))
 
 
 def test_a_dataset_opens_on_its_cases_their_last_result_and_a_run(
@@ -135,14 +128,29 @@ def test_a_dataset_opens_on_its_cases_their_last_result_and_a_run(
     assert text(one(form, "button[type=submit]")) == "Run 1 case"
 
 
-def test_a_dataset_not_under_evals_is_a_404(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+@pytest.fixture
+async def unreadable(async_db_session: AsyncSession) -> None:
+    """``mini`` as it reads once its YAML is broken."""
+    record = await queries.dataset_record(async_db_session, "mini")
+    assert record is not None
+    record.text = "cases: [never closed"
+    async_db_session.add(record)
+    await async_db_session.flush()
+
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # two pages
+def test_a_dataset_that_cannot_be_read_opens_saying_why_to_be_deleted(
+    client: TestClient, two_runs: tuple[int, int], unreadable: None
 ) -> None:
-    def unknown(name: str) -> DatasetSummary:
-        raise UnknownDatasetError(name)
+    html = page_html(client, f"{PAGE}?dataset=mini")
 
-    monkeypatch.setattr(overseer_ai_evals, "eval_dataset", unknown)
+    assert "Cannot be read" in text(one(html, "#ai-evals-dataset"))
+    assert one(html, "[data-evals-delete]") is not None
+    # Its kept runs still open.
+    assert client.get(PAGE, params={"run": str(two_runs[1])}).status_code == 200
 
+
+def test_an_unknown_dataset_is_a_404(client: TestClient) -> None:
     assert client.get(PAGE, params={"dataset": "../nope"}).status_code == 404
 
 
@@ -293,6 +301,7 @@ def test_a_model_that_cannot_answer_is_the_toast(
     assert toast["tone"] == "error" and "not a chat model" in toast["text"]
 
 
+@pytest.mark.queryspy(allow_n_plus_one=True)  # the page, then the dialog
 def test_a_new_dataset_is_asked_for_in_a_dialog(client: TestClient) -> None:
     html = page_html(client, PAGE)
     opener = one(html, "[data-evals-new]")
@@ -316,7 +325,7 @@ def test_a_dataset_is_written_as_a_job_the_section_follows(
         asked.append({"name": name, **kwargs})
         return "job-1"
 
-    monkeypatch.setattr(overseer_ai_evals, "start_generate_evals", start)
+    monkeypatch.setattr(overseer_ai_evals_datasets, "start_generate_evals", start)
 
     response = hx.post(
         f"{PARTIALS}/evals/datasets",
@@ -334,9 +343,9 @@ def test_a_name_taken_is_said_in_the_dialog(
     hx: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async def start(name: str, **kwargs: Any) -> str:
-        raise ValueError("evals/mini.yaml already exists")
+        raise ValueError("Dataset 'mini' already exists")
 
-    monkeypatch.setattr(overseer_ai_evals, "start_generate_evals", start)
+    monkeypatch.setattr(overseer_ai_evals_datasets, "start_generate_evals", start)
 
     response = hx.post(
         f"{PARTIALS}/evals/datasets", data={"name": "mini", "about": "Reads.", "cases": "3"}
@@ -347,23 +356,46 @@ def test_a_name_taken_is_said_in_the_dialog(
     assert one(Markup(response.text), "input[name=about]").get("value") == "Reads."
 
 
-def test_a_dataset_is_deleted_once_confirmed(
-    client: TestClient, hx: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Asked first, in a dialog that says its runs stay; then the file
+@pytest.mark.queryspy(allow_n_plus_one=True)  # each request reads the dataset
+def test_a_dataset_is_deleted_once_confirmed(client: TestClient, hx: TestClient) -> None:
+    """Asked first, in a dialog that says its runs stay; then the dataset
     goes and the section is back on its datasets."""
-    gone: list[str] = []
-    monkeypatch.setattr(overseer_ai_evals, "remove_eval_dataset", gone.append)
     opener = one(page_html(client, f"{PAGE}?dataset=mini"), "[data-evals-delete]")
     asked = client.get(opener.get("hx-get"))
 
-    assert "runs stay" in asked.text and gone == []
+    assert "runs stay" in asked.text
+    assert client.get(PAGE, params={"dataset": "mini"}).status_code == 200
     response = hx.delete(one(Markup(asked.text), "[hx-delete]").get("hx-delete"))
 
     assert response.status_code == 200, response.text
-    assert gone == ["mini"]
+    assert client.get(PAGE, params={"dataset": "mini"}).status_code == 404
     assert "dataset=" not in location(response)
     assert "dialog:close" in triggers(response)
+
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # each request reads the dataset
+def test_a_file_is_imported_opened_and_downloaded_as_it_was_written(
+    client: TestClient, hx: TestClient
+) -> None:
+    """Import names the dataset by its file, over one of that name only
+    where Replace is ticked; Download hands back the same text."""
+    form = one(page_html(client, PAGE), "#ai-evals-import")
+    url = form.get("hx-post")
+    assert one(form, "input[name=replace]").get("value") == "true"
+    written = "# Imported.\n" + DATASET
+
+    imported = hx.post(url, files={"file": ("ops.yaml", written)})
+    taken = hx.post(url, files={"file": ("mini.yaml", written)})
+    replaced = hx.post(url, data={"replace": "true"}, files={"file": ("mini.yaml", written)})
+
+    assert location(imported).endswith("?dataset=ops")
+    toast = triggers(taken)["toast"]
+    assert toast["tone"] == "error" and "already exists" in toast["text"]
+    assert location(replaced).endswith("?dataset=mini")
+    download = one(page_html(client, f"{PAGE}?dataset=mini"), "#ai-evals-dataset a[href$='/yaml']")
+    downloaded = client.get(download.get("href"))
+    assert downloaded.text == written
+    assert 'filename="mini.yaml"' in downloaded.headers["content-disposition"]
 
 
 @pytest.mark.usefixtures("client")

@@ -429,6 +429,19 @@ async def startup_database_init() -> None:
             logger.warning(f"Agent registry seed failed: {e}")
 {% endif %}
 
+{% if include_ai and ai_evals and ai_backend != "memory" %}
+        # The eval datasets the app ships, where missing or as seeded (``seed_missing``).
+        try:
+            from app.core.db import get_async_session
+            from app.services.ai.service import seed_eval_datasets
+
+            async with get_async_session() as session:
+                seeded = await seed_eval_datasets(session)
+            logger.info(f"Eval datasets verified: {seeded} added or updated")
+        except Exception as e:
+            logger.warning(f"Eval dataset seed failed: {e}")
+{% endif %}
+
 {% if include_ai and ai_backend != "memory" and (database_engine == "postgres" or include_inference) %}
         # Remote catalog and local Ollama tags, each only when missing.
         try:

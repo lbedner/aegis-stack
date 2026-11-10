@@ -148,11 +148,11 @@ test-verbose: ## Run tests with verbose output
 	@uv run pytest -v
 {%- if ai_evals %}
 
-evals-ci: ## Play every dataset under evals/ from its scripts: no model, no network
+evals-ci: ## Play every shipped dataset (evals/*.yaml) from its scripts: no model, no network
 	@uv run pytest -q tests/services/ai/evals/test_runner.py -k every_shipped_dataset
 {%- if ai_backend != "memory" %}
 
-evals: ## Score every dataset under evals/ on the model in force, and keep the runs
+evals: ## Score every dataset in the database on the model in force, and keep the runs
 	@uv run {{ project_slug }} ai evals run $(ARGS)
 {%- endif %}
 {%- endif %}

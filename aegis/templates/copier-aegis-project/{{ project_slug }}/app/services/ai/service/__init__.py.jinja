@@ -222,20 +222,27 @@ if TYPE_CHECKING:
 {%- if ai_evals and ai_backend != "memory" %}
     from app.services.ai.domains.evals import queries as eval_runs
     from app.services.ai.domains.evals.datasets import (
+        NAME as EVAL_NAME,
+        NAME_HINT as EVAL_NAME_HINT,
+        YAML_TYPE as EVAL_YAML_TYPE,
         DatasetSummary as EvalDatasetSummary,
         UnknownDatasetError,
+        add as add_eval_dataset,
+        add_file as add_eval_dataset_file,
         describe as eval_dataset,
         describe_all as eval_dataset_summaries,
         names as eval_datasets,
         remove as remove_eval_dataset,
+        seed_missing as seed_eval_datasets,
+        summed as eval_dataset_summed,
+        text as eval_dataset_text,
+        texts as eval_dataset_texts,
     )
     from app.services.ai.domains.evals.evaluators import called as eval_called
     from app.services.ai.domains.evals.generator import (
         ABOUT_MIN as EVAL_ABOUT_MIN,
         CASES as EVAL_CASES,
         MOST_CASES as EVAL_MOST_CASES,
-        NAME as EVAL_NAME,
-        NAME_HINT as EVAL_NAME_HINT,
     )
     from app.services.ai.domains.evals.jobs import (
         JOB_PREFIX as EVALS_JOB,

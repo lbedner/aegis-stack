@@ -1,7 +1,7 @@
 {%- if ai_backend != "memory" -%}
-"""Reading kept runs: newest first or one by id, a run's cases (or one by
-name), a case's scores or all of a run's, and two runs side by side (what
-changed)."""
+"""Reading the datasets (``datasets.py`` writes them) and kept runs: newest
+first or one by id, a run's cases (or one by name), a case's scores or all
+of a run's, and two runs side by side (what changed)."""
 
 from enum import StrEnum
 
@@ -11,7 +11,38 @@ from sqlalchemy.orm import defer
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.ai.models.evals import EvalCase, EvalRun, EvalScore
+from app.services.ai.models.evals import EvalCase, EvalDatasetRecord, EvalRun, EvalScore
+
+
+# A dataset not deleted.
+_LIVE = col(EvalDatasetRecord.deleted_at).is_(None)
+
+
+async def dataset_texts(session: AsyncSession) -> dict[str, str]:
+    """Every dataset not deleted, its YAML by name."""
+    query = (
+        select(EvalDatasetRecord.name, EvalDatasetRecord.text)
+        .where(_LIVE)
+        .order_by(col(EvalDatasetRecord.name))
+    )
+    return {name: text for name, text in await session.exec(query)}
+
+
+async def dataset_names(session: AsyncSession) -> list[str]:
+    """Every dataset not deleted, by name, its YAML left unread."""
+    query = select(EvalDatasetRecord.name).where(_LIVE).order_by(col(EvalDatasetRecord.name))
+    return list(await session.exec(query))
+
+
+async def dataset_record(session: AsyncSession, name: str) -> EvalDatasetRecord | None:
+    """``name``'s row, deleted or not."""
+    query = select(EvalDatasetRecord).where(EvalDatasetRecord.name == name)
+    return (await session.exec(query)).first()
+
+
+async def dataset_rows(session: AsyncSession) -> list[EvalDatasetRecord]:
+    """Every dataset's row, the deleted ones too."""
+    return list(await session.exec(select(EvalDatasetRecord)))
 
 
 async def runs(
@@ -132,7 +163,7 @@ class CaseDelta(BaseModel):
 
 class Comparison(BaseModel):
     """The cases that changed between two runs, flips first; and whether
-    the dataset file did (None where a run kept no fingerprint)."""
+    the dataset did (None where a run kept no fingerprint)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

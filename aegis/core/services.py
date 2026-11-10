@@ -76,6 +76,7 @@ class ServiceSpec(PluginSpec):
 # ``ai_evals``, as it needs the frontend and the harness both.
 EVALS_PAGES = [
     "app/components/web_frontend/overseer_ai_evals.py",
+    "app/components/web_frontend/overseer_ai_evals_datasets.py",
     "app/components/web_frontend/routes/partials/overseer_ai_evals.py",
     "app/components/web_frontend/templates/pages/overseer/ai/_evals.html",
     "app/components/web_frontend/templates/pages/overseer/ai/_evals_compare.html",

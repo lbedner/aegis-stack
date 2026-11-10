@@ -11,6 +11,7 @@ from urllib.parse import quote
 from app.components.backend.api.auth.router import login as api_login
 from app.components.backend.api.auth.router import register as api_register
 from app.components.backend.api.deps import login_rate_limit, register_rate_limit
+from app.components.backend.security import honeypot
 from app.components.web_frontend.routes.partials import overseer_auth as overseer_auth_partials
 from app.core.audit import AuditEmitter, get_audit
 from app.core.formatting import site_path
@@ -314,6 +315,9 @@ async def register_submit(
 {%- else %}
     redirect = RedirectResponse(url="/verify-pending", status_code=303)
 {%- endif %}
+    if honeypot.tripped(await request.form(), form="register"):
+        # A bot: the redirect a real signup gets, and nothing behind it.
+        return redirect
     try:
         await api_register(
             request=request,

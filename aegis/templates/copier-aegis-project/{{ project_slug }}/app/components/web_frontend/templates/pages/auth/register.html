@@ -1,5 +1,5 @@
 {% extends "pages/auth/_layout.html" %}
-{% from "components/macros/form.html" import submit_button %}
+{% from "components/macros/form.html" import honeypot, submit_button %}
 {% from "components/auth_macros.html" import auth_field, auth_banner %}
 
 {% block title %}Create an account - {{ project_name }}{% endblock %}
@@ -16,6 +16,7 @@
     {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
 
     {{ auth_banner("error") }}
+    {{ honeypot() }}
 
     {{ auth_field("full_name", "Name", autocomplete="name", required=False, placeholder="Ada Lovelace") }}
     {{ auth_field("email", "Email", type="email", autocomplete="username", placeholder="you@domain.com") }}

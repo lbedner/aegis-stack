@@ -7,7 +7,7 @@
   {{ dialog_title(document.title, facts=[document.kind, details[2][1], (document.page_count or 0) ~ " pages"]|join(" . ")) }}
   <div class="flex flex-wrap items-center gap-2">
     {{ action("Read pages", 'hx-post="' ~ urls.read ~ '" hx-swap="none" data-api-done="Reading started" data-write', "primary") }}
-    <a href="{{ urls.download }}" download class="px-2.5 py-1 text-xs rounded border border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted transition-colors">Download</a>
+    {{ action("Download", "download", href=urls.download) }}
     {{ action("Delete", hx_dialog(urls.delete, "data-write"), "danger") }}
   </div>
   <section id="document-pages" aria-label="Pages" class="flex flex-wrap gap-2">

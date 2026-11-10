@@ -488,6 +488,13 @@ class TestTemplateGeneratorEvals:
         assert any("Pydantic AI" in e for e in errors), errors
         assert not ServiceResolver.validate_services(["ai[sqlite, evals]"])
 
+    def test_init_refuses_evals_without_a_database(self) -> None:
+        """Datasets and runs are rows: the memory backend has nowhere to
+        keep them."""
+        errors = ServiceResolver.validate_services(["ai[evals]"])
+        assert any("database" in e for e in errors), errors
+        assert not ServiceResolver.validate_services(["ai[postgres, evals]"])
+
 
 class TestTemplateGeneratorAuthLevel:
     """Test auth service level configuration in template context.

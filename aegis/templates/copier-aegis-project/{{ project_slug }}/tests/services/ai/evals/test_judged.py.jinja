@@ -2,7 +2,6 @@
 """``Judged``: the model in force grading an answer against a rubric, as
 the ``eval-judge`` agent, metered like every other writer."""
 
-from pathlib import Path
 from typing import Any
 
 from pydantic_evals.evaluators import EvaluatorContext
@@ -105,11 +104,10 @@ def test_the_judge_is_seeded_as_an_agent(db_session: Session) -> None:
 
 
 async def test_a_scripted_run_leaves_out_the_checks_a_model_grades(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """No model plays a script, so none grades it: ``Judged`` and
     ``LLMJudge`` wait for a real run."""
-    (tmp_path / "graded.yaml").write_text(GRADED)
     answering(monkeypatch)
 
     async def write(*args: Any, **kwargs: Any) -> Any:
@@ -117,7 +115,7 @@ async def test_a_scripted_run_leaves_out_the_checks_a_model_grades(
 
     monkeypatch.setattr(evaluators, "write", write)
 
-    report = await runner.run_dataset("graded", directory=tmp_path, scripted=True)
+    report = await runner.run_dataset("graded", GRADED, scripted=True)
 
     (case,) = report.cases
     assert set(case.assertions) == {"AnswerAvoids"}

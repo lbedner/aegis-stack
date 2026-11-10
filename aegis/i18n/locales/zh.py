@@ -13,6 +13,7 @@ MESSAGES: dict[str, str] = {
     "validation.unknown_service": "未知服务：{name}",
     "validation.unknown_services": "未知服务：{names}",
     "validation.evals_needs_pydantic_ai": "ai[evals] needs Pydantic AI: its harness scores Pydantic AI tool calls, which {framework} does not record",
+    "validation.evals_needs_database": "ai[evals] needs a database: its datasets and runs are rows (add sqlite or postgres, e.g. ai[sqlite, evals])",
     "validation.unknown_component": "未知组件：{name}",
     # ── init 命令 ──────────────────────────────────────────────────────
     "init.title": "Aegis Stack 项目初始化",

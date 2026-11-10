@@ -3,7 +3,6 @@
 project's tables, its conversations gone unless kept, and two runs compared."""
 
 import hashlib
-from pathlib import Path
 
 import pytest
 from sqlmodel import select
@@ -20,18 +19,20 @@ TALKS = ["c-what does the letter say?", "c-tidy up"]
 
 
 @pytest.fixture
-def mini(tmp_path: Path, async_db_session: AsyncSession) -> Path:
-    """The ``mini`` dataset, and the conversations its turns would leave."""
-    (tmp_path / "mini.yaml").write_text(DATASET)
+def mini(async_db_session: AsyncSession) -> None:
+    """The conversations ``mini``'s turns would leave."""
     async_db_session.add_all(Conversation(id=talk, user_id="evals") for talk in TALKS)
-    return tmp_path
 
 
 async def _kept(
-    session: AsyncSession, directory: Path, *, keep: bool = False, note: str | None = None
+    session: AsyncSession,
+    written: str = DATASET,
+    *,
+    keep: bool = False,
+    note: str | None = None,
 ) -> EvalRun:
     started = utcnow()
-    report = await runner.run_dataset("mini", directory=directory)
+    report = await runner.run_dataset("mini", written)
     return await record_run(
         session, report, started_at=started, keep=keep, trigger="cli", note=note
     )
@@ -42,17 +43,16 @@ async def _talks(session: AsyncSession) -> list[str]:
 
 
 async def test_a_run_is_kept_with_its_cases_and_scores(
-    mini: Path, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
+    mini: None, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
 ) -> None:
     answering(monkeypatch)
 
-    await _kept(async_db_session, mini, note="baseline")
+    await _kept(async_db_session, note="baseline")
 
     [run] = await queries.runs(async_db_session)
     assert (run.dataset, run.cases, run.passed, run.failed) == ("mini", 2, 2, 0)
     assert (run.total_cost, run.model_id, run.note) == (0.5, "gpt-test", "baseline")
-    file = (mini / "mini.yaml").read_bytes()
-    assert run.dataset_sha256 == hashlib.sha256(file).hexdigest()
+    assert run.dataset_sha256 == hashlib.sha256(DATASET.encode()).hexdigest()
     cases = {c.name: c for c in await queries.cases(async_db_session, run.id)}
     assert set(cases) == {"reads the paper", "never deletes"}
     paper = cases["reads the paper"]
@@ -68,11 +68,11 @@ async def test_a_run_is_kept_with_its_cases_and_scores(
 
 
 async def test_kept_conversations_are_named_on_their_cases(
-    mini: Path, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
+    mini: None, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
 ) -> None:
     answering(monkeypatch)
 
-    run = await _kept(async_db_session, mini, keep=True)
+    run = await _kept(async_db_session, keep=True)
 
     cases = await queries.cases(async_db_session, run.id)
     assert {c.conversation_id for c in cases} == set(TALKS)
@@ -81,12 +81,12 @@ async def test_kept_conversations_are_named_on_their_cases(
 
 @pytest.mark.queryspy(allow_n_plus_one=True)  # two runs, each written the same way
 async def test_compare_names_only_the_cases_that_changed(
-    mini: Path, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
+    mini: None, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
 ) -> None:
     answering(monkeypatch)
-    before = await _kept(async_db_session, mini, keep=True)
+    before = await _kept(async_db_session, keep=True)
     answering(monkeypatch, reads=False)
-    after = await _kept(async_db_session, mini, keep=True)
+    after = await _kept(async_db_session, keep=True)
 
     compared = await queries.compare(async_db_session, before.id, after.id)
 
@@ -107,14 +107,14 @@ async def test_compare_names_only_the_cases_that_changed(
 
 @pytest.mark.queryspy(allow_n_plus_one=True)  # two runs, each written the same way
 async def test_compare_marks_cases_added_removed_or_whose_rule_changed(
-    mini: Path, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
+    mini: None, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
 ) -> None:
     """Over a dataset edited between the runs, flagged as such."""
     answering(monkeypatch)
-    before = await _kept(async_db_session, mini, keep=True)
+    before = await _kept(async_db_session, keep=True)
     edited = DATASET.replace("Contains: letter", "Contains: hello")
-    (mini / "mini.yaml").write_text(edited.replace("never deletes", "never removes"))
-    after = await _kept(async_db_session, mini, keep=True)
+    edited = edited.replace("never deletes", "never removes")
+    after = await _kept(async_db_session, edited, keep=True)
 
     compared = await queries.compare(async_db_session, before.id, after.id)
 
@@ -130,11 +130,11 @@ async def test_compare_marks_cases_added_removed_or_whose_rule_changed(
 
 @pytest.mark.queryspy(allow_n_plus_one=True)  # two runs, each written the same way
 async def test_two_runs_alike_have_no_differences(
-    mini: Path, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
+    mini: None, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
 ) -> None:
     answering(monkeypatch)
-    before = await _kept(async_db_session, mini, keep=True)
-    after = await _kept(async_db_session, mini, keep=True)
+    before = await _kept(async_db_session, keep=True)
+    after = await _kept(async_db_session, keep=True)
 
     compared = await queries.compare(async_db_session, before.id, after.id)
 
@@ -142,10 +142,10 @@ async def test_two_runs_alike_have_no_differences(
 
 
 async def test_a_case_that_errors_is_kept_as_a_failure(
-    mini: Path, async_db_session: AsyncSession
+    mini: None, async_db_session: AsyncSession
 ) -> None:
     started = utcnow()
-    report = await runner.run_dataset("mini", directory=mini, scripted=True)
+    report = await runner.run_dataset("mini", DATASET, scripted=True)
     run = await record_run(
         async_db_session, report, started_at=started, keep=False, trigger="ci", note=None
     )
@@ -156,10 +156,10 @@ async def test_a_case_that_errors_is_kept_as_a_failure(
 
 
 async def test_a_run_and_one_of_its_cases_are_read_by_id_and_name(
-    mini: Path, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
+    mini: None, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
 ) -> None:
     answering(monkeypatch)
-    kept = await _kept(async_db_session, mini)
+    kept = await _kept(async_db_session)
     assert kept.id
 
     run = await queries.run(async_db_session, kept.id)
@@ -171,10 +171,10 @@ async def test_a_run_and_one_of_its_cases_are_read_by_id_and_name(
 
 
 async def test_every_score_of_a_run_is_read_at_once(
-    mini: Path, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
+    mini: None, monkeypatch: pytest.MonkeyPatch, async_db_session: AsyncSession
 ) -> None:
     answering(monkeypatch)
-    kept = await _kept(async_db_session, mini)
+    kept = await _kept(async_db_session)
     assert kept.id
 
     found = await queries.run_scores(async_db_session, kept.id)

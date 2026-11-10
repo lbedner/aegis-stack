@@ -330,6 +330,8 @@ EXAMPLES: dict[str, dict[str, str]] = {
         "password_input": """
             {{ password_input("password", placeholder="Password", required=False) }}""",
         "or_divider": "{{ or_divider() }}",
+        "honeypot": "{{ honeypot() }}",
+        "no_autofill": """{{ text_input("api_key", placeholder="Paste a key", attrs=no_autofill()) }}""",
         "range_chips": """{{ range_chips([(1, "1d"), (7, "7d"), (30, "30d")], 7) }}""",
         "checklist": """{{ checklist("example-services", "service", "Services", [{"value": "redis", "label": "Cache", "checked": True}, {"value": "worker", "label": "Worker", "checked": False, "count": 3}]) }}""",
         "range_form": """{{ range_form([(1, "1d"), (7, "7d"), (30, "30d")], 7, "/overseer", "#overseer-main") }}""",

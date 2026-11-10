@@ -1,4 +1,4 @@
-{# What Rows and Query share (and Transactions and Activity, their cells,
+{# What Rows and Query share (and Transactions and Slow & locked, their cells,
    ``copy_cell``): the note saying why the app's data is hidden
    (``exposure.refusal``), and rows read like Logs (``rows_scroller``): one
    line each, cut at the edge like a log line, a click opening one, a
@@ -54,7 +54,7 @@
 {%- endmacro %}
 
 
-{# A cell of Transactions and Activity (``data-<attr>``), copied whole by
+{# A cell of Transactions and Slow & locked (``data-<attr>``), copied whole by
    its copy, past the cut: a name (a process, a container) kept to one
    line, whole on hover; or, ``opens``, a longer value (the code holding
    it) cut at the edge like a log line, a click opening it (``opens_rows``),

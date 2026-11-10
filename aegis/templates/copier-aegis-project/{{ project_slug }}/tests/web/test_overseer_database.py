@@ -152,7 +152,7 @@ class TestSections:
             "Query",
             "Migrations",
             "Engine",
-            "Activity",
+            "Slow & locked",
             "Transactions",
             "Container",
             "Logs",

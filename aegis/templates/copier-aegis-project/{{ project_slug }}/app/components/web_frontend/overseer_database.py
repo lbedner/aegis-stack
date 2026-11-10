@@ -1,6 +1,6 @@
 """Context for the Overseer Database page's sections.
 
-Overview, Migrations, Engine and Activity, built by the Flet database
+Overview, Migrations, Engine and Slow & locked, built by the Flet database
 modal's helpers (``app.services.system.ui_database``) from the health
 check's metadata;
 Transactions, what is open right now (``db_transactions``), kept live over
@@ -41,7 +41,7 @@ SECTIONS = (
             QUERY: "Query",
             "migrations": "Migrations",
             "engine": "Engine",
-            "activity": "Activity",
+            "activity": "Slow & locked",
             "transactions": "Transactions",
         },
     ),

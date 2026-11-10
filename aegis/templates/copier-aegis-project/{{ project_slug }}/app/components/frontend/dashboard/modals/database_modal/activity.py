@@ -1,4 +1,4 @@
-"""Activity: transactions held too long and statements that found the
+"""Slow & locked: transactions held too long and statements that found the
 database locked, with the code behind each (``app.core.db_activity``)."""
 
 import flet as ft

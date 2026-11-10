@@ -595,12 +595,22 @@
       htmx.ajax('GET', event.url, { target: call.slot, swap: 'innerHTML' });
     } else if (event.type === 'page') {
       pageAction(event); // chat.js: the same as a typed turn's
+    } else if (event.type === 'looked') {
+      stepped(); // the look is over; the saved turn shows in the thread
+      showTurns(call.conversation);
     } else if (event.type === 'saved') {
       showTurns(call.conversation);
       if (event.cost != null) showCost(event.cost); // an operator's call only
       if (field('cost-later')) field('cost-later').hidden = true;
     }
   };
+  // A picture shown on the call (chat.js hands it over while the call bar
+  // is up): it goes up the socket, and the server says what was seen.
+  document.addEventListener('chat:show', ({ detail: image }) => {
+    if (!call?.ready || call.closing) return;
+    stepping();
+    call.ws.send(JSON.stringify({ type: 'shown', image }));
+  });
   // A call outlives the chat it began in: leave the Chat page and it keeps
   // talking. The chat that comes in next (the drawer, the Chat page again)
   // shows it as it stands, never an idle phone over a live call, so its

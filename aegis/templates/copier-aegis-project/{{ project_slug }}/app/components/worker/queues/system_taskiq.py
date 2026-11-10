@@ -93,6 +93,19 @@ if present("app.services.documents"):
     extract_document_task = broker.task(extract_document_task)
 
 
+async def read_photo_task(user_id: str, key: str, media_type: str, title: str) -> dict:
+    """Keep a picture shared in chat and read what it showed, into its
+    paste index. The AI service is imported lazily, as the documents one is."""
+    from app.services.ai.service import read_photo_job
+
+    return {"key": key, "read": await read_photo_job(user_id, key, media_type, title)}
+
+
+# Registered only where the paste index and documents' vision are.
+if present("app.services.ai.domains.chat.pastes") and present("app.services.documents"):
+    read_photo_task = broker.task(read_photo_task)
+
+
 async def embed_files_task(key: str, n: int, files: list[str]) -> None:
     """Read, chunk and embed a batch of files for the knowledge base; the
     vectors go back through Redis to the one process that writes the index.

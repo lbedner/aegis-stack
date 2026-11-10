@@ -52,6 +52,12 @@ if TYPE_CHECKING:
         build_system_prompt,
     )
 {%- if ai_backend != "memory" %}
+    from app.services.ai.domains.chat.pastes import (
+        Picture,
+        keep_picture,
+        paste_id,
+        read_picture,
+    )
     from app.services.ai.domains.chat.queries import conversation_stats
     from app.services.ai.domains.chat.sentiment import (
         SentimentMix,
@@ -59,6 +65,7 @@ if TYPE_CHECKING:
         sentiment_mix,
         sentiment_stats,
     )
+    from app.services.ai.jobs import read_photo_job
 {%- endif %}
     from app.services.ai.domains.chat.tools import resolve_tools
 {%- if ai_backend != "memory" %}

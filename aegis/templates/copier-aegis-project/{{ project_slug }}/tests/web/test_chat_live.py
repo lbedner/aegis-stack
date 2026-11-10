@@ -35,9 +35,9 @@ from app.components.web_frontend.chat_surface import ChatSurface
 from app.components.web_frontend.overseer_ai_chat import OVERSEER
 from app.components.web_frontend.routes.partials import chat_live
 from app.core.tools import current_owner_user_id, current_subject
+from app.services.ai.domains.chat.page_actions import page_action
 from app.services.ai.domains.voice import realtime_calls
 from app.services.shared.deps import get_optional_owner_user_id
-from app.services.ai.domains.chat.page_actions import page_action
 from tests._pages import LANDING
 from tests._realtime import ENGINE, VOICE, FakeRealtime
 from tests.web.dom import one
@@ -45,6 +45,9 @@ from tests.web.overseer import AI, sign_in, status_with
 
 PAGE = "/overseer/services/ai/chat"
 SOCKET = f"{OVERSEER.path}/live/ws"
+HX = {"HX-Request": "true"}
+# A screenshot as the page sends it: shrunk and base64'd by chat.js.
+SHOT = {"media_type": "image/png", "data_b64": "c2hvdA==", "name": "shot.png"}
 
 
 @pytest.fixture
@@ -169,7 +172,33 @@ def _hear(ws: Any, until: str) -> tuple[list[bytes], list[dict[str, Any]]]:
     return heard, told
 
 
+def _looks(
+    monkeypatch: pytest.MonkeyPatch, answer: str, *, fail: bool = False
+) -> list[dict[str, Any]]:
+    """The call agent's typed turns on what it was shown, played by a fake."""
+    turns: list[dict[str, Any]] = []
+
+    async def chat(message: str, **kwargs: Any) -> Any:
+        turns.append({"message": message, **kwargs})
+        if fail:
+            raise RuntimeError("the model is down")
+        return SimpleNamespace(content=answer)
+
+    monkeypatch.setattr(chat_live.ai_service, "chat", chat)
+    return turns
+
+
 class TestTheControls:
+    @pytest.mark.parametrize("headers", [{}, HX], ids=["page", "hx"])
+    def test_the_call_bar_can_show_it_a_picture(
+        self, client: TestClient, headers: dict[str, str]
+    ) -> None:
+        """The composer's own picker, reached from the call bar: one input,
+        one set of checks (chat.js), whichever row is showing."""
+        page = client.get(PAGE, headers=headers).text
+        one(page, "#chat-composer input#chat-attach")
+        one(page, "#chat-call label[for=chat-attach]")
+
     def test_the_phone_sits_beside_the_mic_and_knows_its_socket(
         self, client: TestClient
     ) -> None:
@@ -256,6 +285,69 @@ class TestTheCall:
             ws.close()
             assert ended.wait(5)
         assert gemini.live.sent[1:] == [chat_live.CHECK_IN, chat_live.GOODBYE]
+
+    def test_a_picture_shown_on_the_call_is_looked_at_and_spoken_of(
+        self,
+        client: TestClient,
+        gemini: FakeRealtime,
+        ended: threading.Event,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A picture goes up the socket: the call's agent looks at it in a
+        turn of the conversation, and the assistant says what it saw
+        without leaving the call."""
+        turns = _looks(monkeypatch, "A **transfer** screen.")
+        with client.websocket_connect(SOCKET) as ws:
+            ready = ws.receive_json()
+            ws.send_json({"type": "shown", "image": SHOT})
+            _, told = _hear(ws, "looked")
+            ws.close()
+            assert ended.wait(5)
+
+        (turn,) = turns
+        assert turn["message"] == chat_live.SHOWN
+        assert turn["conversation_id"] == ready["conversation_id"]
+        assert [(a.media_type, a.decoded()) for a in turn["attachments"]] == [
+            ("image/png", b"shot")
+        ]
+        assert chat_live.SAW.format(seen="A transfer screen.") in gemini.live.sent
+        assert told[-1] == {"type": "looked"}
+
+    def test_a_file_that_is_not_a_picture_still_ends_the_look(
+        self,
+        client: TestClient,
+        gemini: FakeRealtime,
+        ended: threading.Event,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The page shows it working once it sends; a refusal must still
+        tell it the look is over, or the call bar stays on working."""
+        turns = _looks(monkeypatch, "unused")
+        with client.websocket_connect(SOCKET) as ws:
+            ws.receive_json()
+            ws.send_json({"type": "shown", "image": {**SHOT, "media_type": "x/pdf"}})
+            _, told = _hear(ws, "looked")
+            ws.close()
+            assert ended.wait(5)
+        assert told[-1] == {"type": "looked"}
+        assert turns == []
+
+    def test_a_failed_look_is_said_and_the_call_goes_on(
+        self,
+        client: TestClient,
+        gemini: FakeRealtime,
+        ended: threading.Event,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _looks(monkeypatch, "unused", fail=True)
+        with client.websocket_connect(SOCKET) as ws:
+            ws.receive_json()
+            ws.send_json({"type": "shown", "image": SHOT})
+            _, told = _hear(ws, "looked")
+            ws.close()
+            assert ended.wait(5)
+        assert told[-1] == {"type": "looked"}
+        assert gemini.live.sent[-1] == chat_live.NOT_SEEN
 
     def test_a_dropped_call_picks_up_where_it_stopped(
         self,
@@ -498,10 +590,12 @@ def test_a_caller_who_is_not_signed_in_is_refused(app: FastAPI) -> None:
 def test_a_cue_that_is_not_one_says_nothing() -> None:
     """Whatever the page sends that is not a cue by name is no line: a
     malformed message does not end the call either."""
-    assert chat_live._cue('{"line": "check_in"}') == chat_live.CHECK_IN
-    assert chat_live._cue("not json") is None
-    assert chat_live._cue('["check_in"]') is None
-    assert chat_live._cue('{"line": "say something rude"}') is None
+    assert chat_live._cue(chat_live._said('{"line": "check_in"}')) == (
+        chat_live.CHECK_IN
+    )
+    assert chat_live._said("not json") == {}
+    assert chat_live._said('["check_in"]') == {}
+    assert chat_live._cue(chat_live._said('{"line": "say something rude"}')) is None
 
 
 async def test_your_speech_is_relayed_from_its_first_sound() -> None:

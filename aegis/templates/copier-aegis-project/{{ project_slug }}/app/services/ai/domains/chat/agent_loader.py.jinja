@@ -122,6 +122,8 @@ def default_agent_config() -> AgentConfig:
 {%- if ai_backend != "memory" %}
             "catalog",
             "draw_card",
+            # What a picture shared earlier showed (``pastes``).
+            "pasted",
 {%- endif %}
             "health",
             "errors",

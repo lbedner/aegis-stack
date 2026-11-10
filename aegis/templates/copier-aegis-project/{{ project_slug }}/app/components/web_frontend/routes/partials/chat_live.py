@@ -14,6 +14,11 @@ header). It is its own router, apart from the mount's pages: a page guard
 reads an HTTP request a socket does not have. Otherwise a call is a
 turn: the mount's ``bind`` (whose call it is, about what), the signed-in
 owner and the mount's ``gate``, as ``/stream`` takes them.
+
+A picture shown mid-call (``{"type": "shown"}``) is a typed turn of the
+call's agent with the picture attached: it looks at it in the
+conversation and the assistant says what it saw, so a screenshot never
+means leaving the call.
 """
 
 import asyncio
@@ -46,9 +51,11 @@ from app.core.db import get_async_session
 from app.core.log import logger
 from app.core.pages import page_stage
 from app.services.ai.service import (
+    ChatAttachment,
     LiveEngine,
     live_engines,
     realtime_calls,
+    to_spoken,
 )
 from app.services.ai.service.trace import record_tool_call
 from app.services.shared.deps import get_optional_owner_user_id
@@ -84,6 +91,22 @@ GOODBYE = (
     "and end the call."
 )
 CUES = {"check_in": CHECK_IN, "goodbye": GOODBYE}
+
+# A picture shown mid-call: what the turn is asked with it (nothing was
+# said, the picture is the question), and the cue the assistant says what
+# it saw from, in its own voice. A look that failed is said too: the page
+# waits on it.
+SHOWN = "(showing you this on the call)"
+SAW = (
+    "They just showed you a picture on the call and you looked at it. Tell "
+    'them what you saw, in your own words: "{seen}"'
+)
+NOT_SEEN = (
+    "They just showed you a picture on the call, but you could not look at "
+    "it. Say so in a sentence and ask them to try again."
+)
+# What of the look is spoken: a few sentences, not the whole transcription.
+SEEN_CHARS = 1_000
 
 # A mount's longest call (``ChatSurface.longest_call``): this long before
 # it, the assistant is cued to wrap up; at it, the call ends and the page
@@ -172,15 +195,45 @@ async def _tell(ws: WebSocket, event: Any) -> None:
         await _send(ws, said)
 
 
-def _cue(text: str) -> str | None:
-    """The line a page's cue names (``{"line": "check_in"}``): only the
-    server's own, so the page never puts words in the assistant's mouth."""
+def _said(text: str) -> dict[str, Any]:
+    """A page's message, or nothing when it is not a JSON object."""
     try:
-        asked = json.loads(text)
+        said = json.loads(text)
     except json.JSONDecodeError:
         logger.warning("A live call sent a message that is not JSON")
-        return None
-    return CUES.get(asked.get("line")) if isinstance(asked, dict) else None
+        return {}
+    return said if isinstance(said, dict) else {}
+
+
+def _cue(said: dict[str, Any]) -> str | None:
+    """The line a page's cue names (``{"line": "check_in"}``): only the
+    server's own, so the page never puts words in the assistant's mouth."""
+    return CUES.get(said.get("line"))
+
+
+async def _shown(
+    ws: WebSocket,
+    session: Any,
+    image: Any,
+    see: Callable[[ChatAttachment], Awaitable[str]],
+) -> None:
+    """A picture shown on the call: ``see`` looks at it as a turn, and the
+    assistant is cued to say what it saw. The page is told the look is
+    over (``looked``) however it went, or its call bar stays working."""
+    try:
+        picture = ChatAttachment.model_validate(image)
+        if not picture.media_type.startswith("image/"):
+            raise ValueError("only a picture can be shown on a call")
+    except ValueError:
+        await _send(ws, {"type": "looked"})
+        return
+    try:
+        cue = SAW.format(seen=await see(picture))
+    except Exception:
+        logger.exception("Looking at a picture on a call failed")
+        cue = NOT_SEEN
+    await session.send(cue)
+    await _send(ws, {"type": "looked"})
 
 
 async def _carry(
@@ -190,9 +243,11 @@ async def _carry(
     info: dict[str, Any] | None,
     stopped: asyncio.Event,
     clock: Callable[..., Awaitable[None]] | None = None,
+    see: Callable[[ChatAttachment], Awaitable[str]] | None = None,
 ) -> None:
     """The audio, both ways, until the page hangs up or the server ends
-    the call (``stopped``); ``clock`` runs beside it (the longest call)."""
+    the call (``stopped``); ``clock`` runs beside it (the longest call),
+    and ``see`` looks at a picture the page shows, beside the call."""
     await ws.send_json(
         {
             "type": "ready",
@@ -207,6 +262,8 @@ async def _carry(
         async for chunk in session.stream_audio():
             await ws.send_bytes(chunk)
 
+    looks: set[asyncio.Task[None]] = set()
+
     async def listen() -> None:
         while True:
             message = await ws.receive()
@@ -214,7 +271,18 @@ async def _carry(
                 return
             if message.get("bytes"):
                 await session.send_audio(message["bytes"])
-            elif message.get("text") and (line := _cue(message["text"])):
+                continue
+            if not message.get("text"):
+                continue
+            said = _said(message["text"])
+            if said.get("type") == "shown" and see:
+                # Looked at beside the call, not in its way.
+                looking = asyncio.create_task(
+                    _shown(ws, session, said.get("image"), see)
+                )
+                looks.add(looking)
+                looking.add_done_callback(looks.discard)
+            elif line := _cue(said):
                 await session.send(line)
 
     tasks = [asyncio.create_task(speak())]
@@ -230,7 +298,7 @@ async def _carry(
     finally:
         # Cancelled too (``drive`` cancels this when the provider ends the
         # call first): nothing it started outlives the call.
-        for task in tasks:
+        for task in [*tasks, *looks]:
             task.cancel()
         await session.close()
 
@@ -343,6 +411,22 @@ def live_router(
                     await asyncio.sleep(wrap)
                     await end("limit", TIME_UP)
 
+                async def see(picture: ChatAttachment) -> str:
+                    """The call's agent looks at a picture, as a turn of
+                    the call's conversation; what it saw, to say."""
+                    reply = await ai_service.chat(
+                        SHOWN,
+                        conversation_id=conversation.id,
+                        user_id=bound.user,
+                        owner_user_id=owner_user_id,
+                        admin=admin,
+                        agent_slug=_answers(bound),
+                        surface=bound.surface,
+                        attachments=[picture],
+                        subject=bound.subject,
+                    )
+                    return to_spoken(reply.content, SEEN_CHARS)
+
                 async def saved(cost: float) -> None:
                     """A turn is kept; the mount's check may end the call there."""
                     await _send(
@@ -364,6 +448,7 @@ def live_router(
                         info if operator else None,
                         stopped,
                         functools.partial(clock, longest=longest) if longest else None,
+                        see,
                     ),
                     on_event=lambda event: _tell(ws, event),
                     on_saved=saved,

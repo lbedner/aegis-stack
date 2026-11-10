@@ -282,20 +282,25 @@ function pageAction({ action, target, value }) {
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, type, 0.9));
     return new File([blob], file.name, { type });
   };
+  // While a call is up the composer is hidden: a picture pasted, dropped
+  // or picked then is shown on the call (voice.js), not staged.
+  const onCall = () => document.getElementById('chat-call')?.hidden === false;
   const stage = async (file) => {
     if (!IMAGE_TYPES.includes(file.type)) { toast(`${file.name || 'That'} is not an image.`, 'error'); return; }
     if (file.size > MAX_BYTES) { toast(`${file.name} is over 10 MB.`, 'error'); return; }
-    if (staged.length >= MAX_FILES) { toast(`Up to ${MAX_FILES} images per message.`, 'error'); return; }
+    const showing = onCall();
+    if (!showing && staged.length >= MAX_FILES) { toast(`Up to ${MAX_FILES} images per message.`, 'error'); return; }
     let payload = file;
     try { payload = await shrink(file); } catch (_) { /* undecodable: send as pasted, the model will say so */ }
     const reader = new FileReader();
     reader.onload = () => {
-      staged.push({
+      const part = {
         name: file.name || 'image',
         media_type: payload.type,
         data_b64: String(reader.result).split(',')[1],
-        url: URL.createObjectURL(payload),
-      });
+      };
+      if (showing) return announce('chat:show', part);
+      staged.push({ ...part, url: URL.createObjectURL(payload) });
       drawChips();
     };
     reader.readAsDataURL(payload);

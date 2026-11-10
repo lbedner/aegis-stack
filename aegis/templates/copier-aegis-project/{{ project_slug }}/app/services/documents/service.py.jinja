@@ -46,6 +46,9 @@ if TYPE_CHECKING:
         extract_document,
     )
     from app.services.documents.domains.extraction.vision import (  # noqa: F401
+{%- if include_ai and ai_framework == "pydantic-ai" and ai_backend != "memory" %}
+        look,
+{%- endif %}
         vision_reader,
     )
     from app.services.documents.models import DocumentPage  # noqa: F401

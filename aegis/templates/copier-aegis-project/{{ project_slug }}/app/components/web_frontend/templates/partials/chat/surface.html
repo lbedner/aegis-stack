@@ -143,6 +143,12 @@
       Live{% if operator %} · <span data-call-engine></span>{% endif %} · <span data-call-timer>0:00</span>
       {% if operator %}<span class="text-aegis-muted"> · <span data-call-cost></span><span data-call-cost-later>priced as it goes</span></span>{% endif %}
     </span>
+    {# Show the assistant a picture without leaving the call: the composer's
+       own picker (chat.js hands a picture to the call while it is up, as it
+       does a paste or a drop). #}
+    <label for="chat-attach" class="{{ button_classes('default') }} cursor-pointer" title="Show {{ assistant }} a picture">
+      {{ icon("paperclip", "w-4 h-4") }}
+    </label>
     <button type="button" id="chat-mute" aria-pressed="false" aria-label="Mute" title="Mute"
             class="group/mute {{ button_classes('default') }} aria-pressed:text-error aria-pressed:border-error">
       <span class="group-aria-pressed/mute:hidden">{{ icon("mic", "w-4 h-4") }}</span>

@@ -136,85 +136,16 @@ async def startup_hook() -> None:
     # Service Health Checks Registration
     # ==========================================
 
-    from app.services.system.health import register_service_health_check
+    from app.services.system import health as system_health
 
     logger.info("Registering service health checks...")
-
-    {%- if include_auth %}
-    # Register auth service health check
-    from app.services.auth.health import check_auth_service_health
-    register_service_health_check("auth", check_auth_service_health)
-    logger.info("Auth service health check registered")
-    {%- endif %}
-
-    {%- if include_ai %}
-    # Register AI service health check
-    from app.services.ai.health import check_ai_service_health
-    register_service_health_check("ai", check_ai_service_health)
-    logger.info("AI service health check registered")
-    {%- endif %}
-
-    {%- if include_comms %}
-    # Register comms service health check
-    from app.services.comms.health import check_comms_service_health
-    register_service_health_check("comms", check_comms_service_health)
-    logger.info("Comms service health check registered")
-    {%- endif %}
-
-    {%- if include_insights %}
-    # Register insights service health check
-    from app.services.insights.health import check_insight_health
-    register_service_health_check("insights", check_insight_health)
-    logger.info("Insights service health check registered")
-    {%- endif %}
-
-    {%- if include_payment %}
-    # Register payment service health check
-    from app.services.payment.health import check_payment_service_health
-    register_service_health_check("payment", check_payment_service_health)
-    logger.info("Payment service health check registered")
-    {%- endif %}
-
-    {%- if include_finance %}
-    # Register finance service health check
-    from app.services.finance.health import check_finance_service_health
-    register_service_health_check("finance", check_finance_service_health)
-    logger.info("Finance service health check registered")
-    {%- endif %}
-
-    {%- if include_blog %}
-    # Register blog service health check
-    from app.services.blog.health import check_blog_service_health
-    register_service_health_check("blog", check_blog_service_health)
-    logger.info("Blog service health check registered")
-    {%- endif %}
-
-    {%- if include_documents %}
-    # Register documents service health check
-    from app.services.documents.health import check_documents_service_health
-    register_service_health_check("documents", check_documents_service_health)
-    logger.info("Documents service health check registered")
-    {%- endif %}
-
-    {%- if include_research %}
-    # Register research service health check
-    from app.services.research.health import check_research_service_health
-    register_service_health_check("research", check_research_service_health)
-    logger.info("Research service health check registered")
-    {%- endif %}
-
-    {%- if include_meetings %}
-    # Register meetings service health check
-    from app.services.meetings.health import check_meetings_service_health
-    register_service_health_check("meetings", check_meetings_service_health)
-    logger.info("Meetings service health check registered")
-    {%- endif %}
+    system_health.register_declared_service_health()
 
     {%- for p in _plugins | default([]) %}
     {%- for h in p.wiring.health_checks %}
     # Register {{ h.label }} service health check (plugin)
     from {{ h.module }} import {{ h.symbol }}
-    register_service_health_check("{{ h.label }}", {{ h.symbol }})
+    system_health.register_service_health_check("{{ h.label }}", {{ h.symbol }})
     logger.info("{{ h.label }} service health check registered")
     {%- endfor %}
     {%- endfor %}

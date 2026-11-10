@@ -92,9 +92,11 @@ disk, and picks up a plugin's the same way as its own.
 |---|---|
 | `__init__.py` | `CATEGORY = Category.DATA` (from `app.core.parts`): where the service sits in Overseer's grouping; App when left out |
 | `models.py` (or a `models/` package) | the plugin's tables |
+| `health.py` | `HEALTH`, its health check, registered at startup under the service's folder name; or the spec's `health_checks`, registered under its label (the name `overseer_pages` keys a page on). One or the other, not both |
 | `change_types.py` | changes a model proposes and the user approves |
 | `scheduled_jobs.py` | `JOBS`, the jobs that run on a schedule |
 | `aggregates.py` | `AGGREGATES`, what the plugin's data says about itself (`Aggregate` from `app.core.aggregates`): counts and sums an agent reads with `aggregate`, never rows |
+| `overseer.py` | `OVERSEER`, an `OverseerPage` (`app.core.overseer_pages`): a page of its own in Overseer, see [Services](../services/index.md) (or the spec's `overseer_pages`) |
 | `tools.py` | tools an agent or an MCP client can be granted (`register_tool`) — declaring one in the spec's `agent_tools` is what grants it |
 
 A tool is only usable once it is **declared**, with the effect it has:

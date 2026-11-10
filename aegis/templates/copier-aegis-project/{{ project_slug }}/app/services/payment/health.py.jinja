@@ -90,3 +90,6 @@ async def cached_provider_health(service: PaymentService) -> ProviderHealth:
     result = await service.provider.health_check()
     _cached_provider_health = (result, now)
     return result
+
+
+HEALTH = check_payment_service_health

@@ -20,3 +20,6 @@ async def check_meetings_service_health() -> ComponentStatus:
         message=f"{counted(counts.meetings, 'meeting')}, {counts.in_call} in a call",
         metadata=counts,
     )
+
+
+HEALTH = check_meetings_service_health

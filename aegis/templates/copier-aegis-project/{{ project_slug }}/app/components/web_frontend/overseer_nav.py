@@ -105,7 +105,10 @@ def page_url(group: str, name: str) -> str:
 
 
 def build_navigation(status: SystemStatus | None) -> dict[str, list[NavItem]]:
-    """Flatten the Flet dashboard's components/services groups for the rail."""
+    """Flatten the Flet dashboard's components/services groups for the rail,
+    with a service whose page is its own and has no health check."""
+    from .overseer_sections import SERVICE_PAGES
+
     aegis = status.components.get("aegis") if status else None
     groups = aegis.sub_components if aegis else {}
     registered = registered_health_names()
@@ -113,13 +116,14 @@ def build_navigation(status: SystemStatus | None) -> dict[str, list[NavItem]]:
     for group in result:
         parent = groups.get(group)
         children = parent.sub_components if parent else {}
-        names = set(registered[group]) | set(children)
+        checked = set(registered[group]) | set(children)
+        paged = SERVICE_PAGES if group == "services" else frozenset()
         # In each part's declared order (``ontology.parts.placement``).
-        for name in sorted(names, key=placement):
+        for name in sorted(checked | paged, key=placement):
             component = children.get(name) or ComponentStatus(
                 name=name,
                 status=ComponentStatusType.INFO,
-                message="Checking status…",
+                message="Checking status…" if name in checked else "No health check",
             )
             result[group].append(
                 NavItem(

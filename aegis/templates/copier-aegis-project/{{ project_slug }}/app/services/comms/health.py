@@ -160,3 +160,6 @@ async def check_comms_service_health() -> ComponentStatus:
                 "error_type": "health_check_failure",
             },
         )
+
+
+HEALTH = check_comms_service_health

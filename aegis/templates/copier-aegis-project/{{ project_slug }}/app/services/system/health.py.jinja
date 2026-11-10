@@ -18,6 +18,7 @@ import psutil
 
 from app.core.config import settings
 from app.core.constants import ComponentName
+from app.core.discovery import declared_by
 from app.core.formatting import format_bytes
 from app.services.system.health_probes import (
     _get_cached_system_metrics,
@@ -152,6 +153,16 @@ def register_service_health_check(
     logger.info(f"Registered service health check: {name}")
     # Note: Activity event is emitted by _run_health_check on first check
     # with the actual status (not hardcoded "success")
+
+
+def register_declared_service_health() -> None:
+    """Register each service's check, ``HEALTH`` in its ``health`` module,
+    found on disk: an app's own service's too. A health module with no
+    ``HEALTH`` is skipped."""
+    import app.services as services
+
+    for owner, check in declared_by(services, "health", "HEALTH", required=False):
+        register_service_health_check(owner, check)
 
 
 async def get_system_status(force_refresh: bool = False) -> SystemStatus:

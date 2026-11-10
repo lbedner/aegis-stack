@@ -19,6 +19,17 @@
   is as wide as a table, a picture or a video marked `data-snug` (one marker
   where the table and the documents page each had their own); and the icon sprite carries
   `gif`, `film`, `photo`, `musical-note` and `exclamation-triangle`.
+- **A service brings its own Overseer page and health check.** `OVERSEER`
+  (an `OverseerPage`, `app.core.overseer_pages`) in a service's
+  `overseer.py` names its page module, partials and when it shows;
+  `HEALTH` in its `health.py` is its check. Both are found on disk at
+  startup, so an app's own service needs no edit to framework files
+  (`overseer_sections.py`, `routes/pages.py`, `component_health.py`), and
+  a service with a page but no check is still on the rail. The framework's
+  services now declare `HEALTH` too, and `component_health.py` lost its
+  per-service blocks: run `aegis update` before `aegis add` or `aegis
+  remove` of a service, or a project's old blocks import a service that is
+  gone (remove) or miss one that arrived (add).
 - **`range_chips(..., multiple=True)`.** A row of chips can be ticks instead of
   one exclusive pick: `days` holds the values ticked and the row is a
   `data-checklist`, so over a list it narrows the rows with no request

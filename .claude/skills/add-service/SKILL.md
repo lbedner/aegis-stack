@@ -138,9 +138,11 @@ Template (`aegis/templates/copier-aegis-project/{{ project_slug }}/`):
   mounts the card), `app/services/system/ui.py.jinja` (dashboard registry), and
   `app/components/backend/api/deps.py.jinja` if the service's routes need a
   shared dependency. Trace how `blog` appears in each before adding `<name>`.
-- `app/components/backend/startup/component_health.py.jinja`: register the
-  service's health check behind `{%- if include_<name> %}` with
-  `register_service_health_check("<name>", check_<name>_service_health)`.
+- The service's `health.py` ends with `HEALTH = check_<name>_service_health`:
+  startup registers every service's `HEALTH` found on disk
+  (`register_declared_service_health`), so `component_health.py.jinja` gets
+  no block. Its own Overseer page, if any, is `OVERSEER` in its `overseer.py`
+  (`app.core.overseer_pages`), likewise found on disk.
 - `app/components/backend/startup/database_init.py.jinja` (table-owning
   services only): import the service's SQLModel models behind
   `{%- if include_<name> %}` (with `# noqa: F401`), add `include_<name>` to the
@@ -233,7 +235,7 @@ Cross-cutting:
   no component/service `FileManifest` claims; `aegis add`/`remove` finds it
   by rendering the tree at the old and new answers and diffing. Add
   `{% if include_<name> %}` conditionals to `routing.py.jinja`,
-  `component_health.py.jinja`, `cards/__init__.py.jinja` — or to a brand-new
+  `database_init.py.jinja`, `cards/__init__.py.jinja` — or to a brand-new
   shared file — and it is handled automatically. There is no list to add it
   to. `tests/core/test_shared_scope_completeness.py` fails, naming the file,
   if a stack-dependent file somehow ends up handled by nothing.
@@ -258,8 +260,8 @@ Cross-cutting:
    `manual_updater.py`, and `commands/update.py` (see Files that change).
 6. Build the template package: `app/services/<name>/`, the API router plus
    `routing.py.jinja` registration, the CLI module plus `main.py.jinja`
-   registration, and the health check registration in
-   `component_health.py.jinja`.
+   registration, and `HEALTH = check_<name>_service_health` at the end of
+   its `health.py`.
 7. Wire the dashboard and frontend: card, modal, both `__init__.py.jinja`
    files, the `modal_map`/import block in `card_utils.py.jinja`, plus
    `status_overview.py.jinja`, `frontend/main.py.jinja`, and

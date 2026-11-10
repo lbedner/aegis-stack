@@ -48,11 +48,10 @@ MODELS_ELSEWHERE = {
 DATABASE = ("sqlmodel", "sqlalchemy")
 # A service's top-level files as the standard names them, each the piece it
 # is opened up (``service_pieces``): its title, and its lane, the way a call
-# goes (in, wiring, the facade, its data; health a probe beside;
-# constants, schemas and a settings mixin, declarations imported from
-# every lane, on the rail above them all). The package its subsystems
-# live in makes a piece of each too; any other top-level module is a
-# subsystem left loose.
+# goes (in, wiring, the facade, its data; health a probe beside; constants,
+# schemas and a settings mixin, declarations imported from every lane, on
+# the rail above them all). The package its subsystems live in makes a
+# piece of each too; any other top-level module is a subsystem left loose.
 ROUTER = "Router"
 PIECES = {
     "service": ("Facade", "facade"),
@@ -70,6 +69,7 @@ PIECES = {
     "tools": ("Tools", "entry"),
     "change_types": ("Change types", "entry"),
     "sources": ("Sources", "entry"),  # research sources a plugin registers
+    "overseer": ("Overseer", "entry"),  # its own page (app.core.overseer_pages)
     # What it talks to (providers, file formats, collectors): logic, drawn
     # with the domains, a package of its own so what it knows stays apart.
     "adapters": ("Adapters", "domains"),

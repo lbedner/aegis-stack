@@ -508,6 +508,19 @@ def get_all_owned_paths() -> set[str]:
 SERVICES_CARD_FILE = "app/components/frontend/dashboard/cards/services_card.py"
 MIGRATION_SKILL_FILE = ".claude/skills/add-model-and-migration/SKILL.md"
 
+
+def shows_services_card(answers: dict[str, Any]) -> bool:
+    """Whether the dashboard imports ``ServicesCard``: the condition in
+    ``cards/__init__.py.jinja``, where a plugin is a service too. Init,
+    add and remove each keep ``SERVICES_CARD_FILE`` to it."""
+    from .plugins.composer import PLUGINS_ANSWER_KEY
+    from .services import SERVICE_ANSWER_KEYS
+
+    # Init's context may still say "yes"/"no" for a flag.
+    has_service = any(answers.get(key) in (True, "yes") for key in SERVICE_ANSWER_KEYS)
+    return has_service or bool(answers.get(PLUGINS_ANSWER_KEY))
+
+
 _ENGINE_UNSAFE_PATHS: frozenset[str] = frozenset(
     {
         AnswerKeys.ANSWERS_FILENAME,

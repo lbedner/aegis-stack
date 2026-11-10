@@ -42,8 +42,10 @@ from .component_files import (
     get_shared_scope,
     get_template_path,
     is_binary_asset,
+    shows_services_card,
 )
 from .copier_manager import is_copier_project, load_copier_answers
+from .file_manifest import apply_cleanup_path
 from .plugins.composer import PLUGINS_ANSWER_KEY
 from .plugins.template_resolver import plugin_tree_files
 from .render_diff import FilePolicy, RenderDiffEngine, build_template_env
@@ -695,15 +697,23 @@ class ManualUpdater:
             bootstrap_alembic,
             generate_migration,
             generate_missing_migrations,
+            get_services_needing_migrations,
             service_has_migration,
         )
         from .post_gen_tasks import run_migrations
+        from .services import SERVICES
 
         result = self.add_component(service, additional_data, run_post_gen=False)
         if not result.success:
             return result
 
-        if service in MIGRATION_SPECS:
+        # A built-in service is held to init's rule (AI on the memory
+        # backend keeps no tables, so no empty alembic/, aegis-stack#1424);
+        # a plugin's is known only by its MIGRATION_SPECS entry.
+        if service in MIGRATION_SPECS and (
+            service not in SERVICES
+            or service in get_services_needing_migrations(self.answers)
+        ):
             alembic_dir = self.project_path / "alembic"
             if not alembic_dir.exists():
                 bootstrap_alembic(self.project_path, self.jinja_env, self.answers)
@@ -812,6 +822,8 @@ class ManualUpdater:
                 shared_files_need_manual_merge,
             ) = self._regenerate_shared_files(updated_answers, component)
             self._retire_env_keys(env_before, component)
+            if card := self._retire_services_card(updated_answers):
+                files_deleted.append(card)
 
             # The regen drops alembic once no answer needs it, but the
             # project's revisions stay (its database was built from them),
@@ -1190,13 +1202,7 @@ class ManualUpdater:
 
         Returns the project-relative path if it created the file, else None.
         """
-        # Mirrors the condition in ``cards/__init__.py.jinja``: a plugin
-        # is a service on the dashboard, so it brings ServicesCard back
-        # just as an in-tree service does.
-        from .services import SERVICE_ANSWER_KEYS
-
-        has_service = any(answers.get(key) for key in SERVICE_ANSWER_KEYS)
-        if not has_service and not answers.get(PLUGINS_ANSWER_KEY):
+        if not shows_services_card(answers):
             return None
         output_path = self.project_path / SERVICES_CARD_FILE
         if output_path.exists():
@@ -1209,6 +1215,20 @@ class ManualUpdater:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         self._write_rendered(output_path, content)
         verbose_print(f"   Created cross-spec file: {SERVICES_CARD_FILE}")
+        return SERVICES_CARD_FILE
+
+    def _retire_services_card(self, answers: dict[str, Any]) -> str | None:
+        """Delete ``services_card.py`` when a removal takes the last service
+        or plugin: the remove-side mirror of :meth:`_ensure_services_card`,
+        as init's cleanup does (aegis-stack#1424).
+
+        Returns the project-relative path if it deleted the file, else None.
+        """
+        card = self.project_path / SERVICES_CARD_FILE
+        if shows_services_card(answers) or not card.exists():
+            return None
+        apply_cleanup_path(self.project_path, SERVICES_CARD_FILE)
+        verbose_print(f"   Removed file: {SERVICES_CARD_FILE}")
         return SERVICES_CARD_FILE
 
     def _merge_queryspy_baseline(
@@ -1543,7 +1563,7 @@ class ManualUpdater:
         clear error message if the plugin isn't currently installed.
         """
         from . import migration_generator, post_gen_tasks
-        from .file_manifest import apply_cleanup_path, iter_cleanup_paths
+        from .file_manifest import iter_cleanup_paths
         from .migration_generator import _pin_alembic
 
         files_deleted: list[str] = []
@@ -1597,6 +1617,8 @@ class ManualUpdater:
                     continue
                 apply_cleanup_path(self.project_path, rel_path)
                 files_deleted.append(rel_path)
+            if card := self._retire_services_card(updated_answers):
+                files_deleted.append(card)
             # The plugin's revisions stay, so history stays consistent: one
             # more revision exports its tables and drops them, and a re-add
             # restores from that export. The regen above drops alembic once

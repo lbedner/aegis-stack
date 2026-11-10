@@ -549,14 +549,12 @@ class TestAddPluginEnsuresServicesCard:
     project that has neither. Installing a plugin flips that condition back
     on, so the module must be restored or the frontend import chain dies
     with ``ModuleNotFoundError`` on boot. ``add_component`` has always done
-    this; the plugin path did not.
+    this; the plugin path did not. Removing the last one takes it away
+    again, as init does (aegis-stack#1424).
     """
 
-    def test_first_plugin_restores_services_card(
-        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from aegis_plugin_test.spec import get_spec
-
+    @pytest.fixture(autouse=True)
+    def _synthetic_project(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             ManualUpdater, "run_post_generation_tasks", lambda self: None
         )
@@ -565,6 +563,10 @@ class TestAddPluginEnsuresServicesCard:
             "_regenerate_shared_files",
             lambda self, ans, *_rest: ([], [], []),
         )
+
+    def test_first_plugin_restores_services_card(self, fake_project: Path) -> None:
+        from aegis_plugin_test.spec import get_spec
+
         card = fake_project / SERVICES_CARD_FILE
         assert not card.exists()
 
@@ -576,19 +578,9 @@ class TestAddPluginEnsuresServicesCard:
         assert card.is_file()
         assert str(SERVICES_CARD_FILE) in result.files_modified
 
-    def test_existing_services_card_is_left_alone(
-        self, fake_project: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_existing_services_card_is_left_alone(self, fake_project: Path) -> None:
         from aegis_plugin_test.spec import get_spec
 
-        monkeypatch.setattr(
-            ManualUpdater, "run_post_generation_tasks", lambda self: None
-        )
-        monkeypatch.setattr(
-            ManualUpdater,
-            "_regenerate_shared_files",
-            lambda self, ans, *_rest: ([], [], []),
-        )
         card = fake_project / SERVICES_CARD_FILE
         card.parent.mkdir(parents=True, exist_ok=True)
         card.write_text("# hand-edited\n")
@@ -598,6 +590,32 @@ class TestAddPluginEnsuresServicesCard:
         )
 
         assert card.read_text() == "# hand-edited\n"
+
+    def test_the_last_plugin_takes_the_card_with_it(self, fake_project: Path) -> None:
+        from aegis_plugin_test.spec import get_spec
+
+        ManualUpdater(fake_project).add_plugin(
+            spec=get_spec(), plugin_module_name="aegis_plugin_test"
+        )
+
+        result = ManualUpdater(fake_project).remove_plugin(get_spec())
+
+        assert result.success
+        assert not (fake_project / SERVICES_CARD_FILE).exists()
+        assert str(SERVICES_CARD_FILE) in result.files_deleted
+
+    def test_a_service_left_keeps_the_card(self, fake_project: Path) -> None:
+        from aegis_plugin_test.spec import get_spec
+
+        answers = fake_project / ".copier-answers.yml"
+        answers.write_text(answers.read_text() + "include_blog: true\n")
+        ManualUpdater(fake_project).add_plugin(
+            spec=get_spec(), plugin_module_name="aegis_plugin_test"
+        )
+
+        ManualUpdater(fake_project).remove_plugin(get_spec())
+
+        assert (fake_project / SERVICES_CARD_FILE).is_file()
 
 
 class TestPluginShipsMoreThanTemplates:

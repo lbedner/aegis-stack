@@ -36,6 +36,7 @@ _APT_PACKAGE_NAME = re.compile(r"^[a-z0-9][a-z0-9+.-]*$")
 _DOCKER_STEP_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 # A queue name doubles as a module name under app/components/worker/queues/.
 _QUEUE_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
+_MEMORY = re.compile(r"^[1-9][0-9]*[KMG]$")
 # The only two effects a tool may declare.
 _AGENT_TOOL_EFFECTS = frozenset({"read", "writes"})
 
@@ -234,6 +235,9 @@ class WorkerQueueWiring:
     # Seconds the oldest waiting job may sit before the queue reads as
     # backed up.
     max_wait_seconds: int | None = None
+    # The worker container's memory limit, in Docker's spelling ("1G",
+    # "768M"). None: the stack's 512M. ``<QUEUE>_WORKER_MEMORY`` still wins.
+    memory: str | None = None
 
 
 @dataclass
@@ -547,6 +551,11 @@ class PluginSpec:
                         f"{self.name}: queue {name!r} needs positive numbers, got "
                         f"concurrency={queue.concurrency}, "
                         f"max_wait_seconds={queue.max_wait_seconds}"
+                    )
+                if queue.memory is not None and not _MEMORY.match(queue.memory):
+                    raise ValueError(
+                        f"{self.name}: queue {name!r} memory {queue.memory!r} is "
+                        "not Docker's spelling (expected a number and K, M or G)"
                     )
         for tool in self.wiring.agent_tools:
             if tool.effect not in _AGENT_TOOL_EFFECTS:

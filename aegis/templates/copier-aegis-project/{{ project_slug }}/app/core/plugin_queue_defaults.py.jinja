@@ -16,7 +16,7 @@ from app.core.queue_workers import QueueWorker
 {%- set args = [] %}
 {%- if queue.concurrency %}{% set _ = args.append("concurrency=" ~ queue.concurrency) %}{% endif %}
 {%- if queue.max_wait_seconds %}{% set _ = args.append("max_wait_seconds=" ~ queue.max_wait_seconds) %}{% endif %}
-{%- set _ = lines.append('    "' ~ queue.name ~ '": QueueWorker(' ~ (args | join(", ")) ~ "),") %}
+{%- if args %}{% set _ = lines.append('    "' ~ queue.name ~ '": QueueWorker(' ~ (args | join(", ")) ~ "),") %}{% endif %}
 {%- endfor %}
 {%- endfor %}
 

@@ -12,6 +12,7 @@ from app.components.web_frontend import overseer_sections
 from app.components.web_frontend.overseer_nav import build_navigation
 from app.components.web_frontend.overseer_sections import _optional_pages
 from app.core.overseer_pages import include_partials
+from tests.web.overseer import reported_only
 
 _PAGE = (
     "SECTIONS = ((None, {'overview': 'Overview', 'notes': 'Notes'}),)\n"
@@ -71,6 +72,17 @@ def test_a_page_with_no_health_check_is_still_on_the_rail(
 
     assert rail["demo_railed"].component.message == "No health check"
     assert rail["demo_railed"].url == "/overseer/services/demo_railed"
+
+
+def test_a_rail_built_from_the_snapshot_alone_leaves_declared_pages_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``reported_only``: a test that names every rail entry is not broken
+    by a page the app declares."""
+    monkeypatch.setattr(overseer_sections, "SERVICE_PAGES", frozenset({"demo_railed"}))
+    reported_only(monkeypatch)
+
+    assert "demo_railed" not in {i.name for i in build_navigation(None)["services"]}
 
 
 def test_a_page_its_service_holds_back_is_not_listed(

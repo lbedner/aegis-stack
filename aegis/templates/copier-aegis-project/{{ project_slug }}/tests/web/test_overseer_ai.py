@@ -289,7 +289,9 @@ def test_the_window_chips_narrow_the_range(
     client = _client(app, monkeypatch)
     _usage(monkeypatch, seen)
     client.get(f"{PAGE}/usage?days=7")
-    assert seen[-1]["start_time"] is not None
+    # The window's start on the timestamp columns' clock (naive UTC):
+    # an aware one is refused by Postgres, and the page reads empty.
+    assert seen[-1]["start_time"] == ranges.start(7)
     client.get(f"{PAGE}/usage?days={ranges.ALL}")
     assert seen[-1]["start_time"] is None
 

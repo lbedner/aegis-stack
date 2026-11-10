@@ -372,6 +372,22 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 {% endmacro %}
 
 
+{# Attributes that keep a browser and the password managers from filling
+   an input: a pasted key, or a field no person should fill. #}
+{% macro no_autofill() %}autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other"{% endmacro %}
+
+
+{# The trap every public form carries (``backend/security/honeypot.py``):
+   an input a person never sees or tabs to, and a form-filler bot fills.
+   Out of sight rather than ``display:none``, which bots skip, and closed
+   to the password managers that would fill it for a person. #}
+{% macro honeypot() %}
+<div class="sr-only" aria-hidden="true">
+  <label>Leave this empty <input type="text" name="{{ honeypot_field }}" tabindex="-1" {{ no_autofill() }}></label>
+</div>
+{% endmacro %}
+
+
 {# "OR" divider with hairlines — sits between a form and an alternate
    action (e.g. email/password above, OAuth buttons below). #}
 {% macro or_divider() %}

@@ -1150,10 +1150,17 @@ class ManualUpdater:
         skill back — the add-side mirror of that inline removal, like
         :meth:`_ensure_services_card` (issue #814).
 
+        Only the add that brings the first migrations: a project that had
+        them and lacks the skill predates it or removed it, and the skill
+        comes with ``aegis update`` (aegis-stack#2029). ``self.answers`` is
+        still the project's before this operation.
+
         Returns the project-relative path if it created the file, else None.
         """
         from .migration_generator import get_services_needing_migrations
 
+        if get_services_needing_migrations(self.answers):
+            return None
         if not get_services_needing_migrations(answers):
             return None
         output_path = self.project_path / MIGRATION_SKILL_FILE

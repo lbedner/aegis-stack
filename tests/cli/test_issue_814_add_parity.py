@@ -153,6 +153,21 @@ class TestGatedOnArrival:
             "add-model-and-migration skill missing after a migration service"
         )
 
+    def test_migration_skill_is_not_backfilled_by_an_unrelated_add(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """Only the add that brings the first migrations brings the skill:
+        one already missing is ``aegis update``'s, or the project's choice
+        (aegis-stack#2029)."""
+        project = project_factory("base_with_auth_service")
+        (project / MIGRATION_SKILL).unlink()
+
+        updater = ManualUpdater(project)
+        result = updater.add_component("redis", run_post_gen=False)
+
+        assert result.success, result.error_message
+        assert not (project / MIGRATION_SKILL).exists()
+
 
 class TestAuthManifestGating:
     """Auth's org-gated and htmx-gated files stay out of ungated projects."""

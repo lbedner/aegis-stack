@@ -1,4 +1,4 @@
-"""
+{% if include_scheduler or include_worker %}"""
 Tests for core health logic and component status propagation.
 
 These tests focus on the pure logic of health checking, warning propagation,
@@ -758,4 +758,5 @@ class TestDatabaseHealthCheck:
         assert database_status.metadata["connection_pool_size"] == 1
         assert isinstance(database_status.metadata["pragma_settings"], dict)
         assert database_status.metadata["wal_enabled"] is False
+{% endif %}
 {% endif %}

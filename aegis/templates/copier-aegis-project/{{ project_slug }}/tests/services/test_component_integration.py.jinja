@@ -1,4 +1,4 @@
-"""
+{% if include_scheduler or include_worker %}"""
 Tests for component health checks with controlled failure scenarios.
 
 These tests focus on integration between components and their health checks,
@@ -509,3 +509,4 @@ class TestComponentIntegration:
             ]:
                 if component_name in _health_checks:
                     del _health_checks[component_name]
+{% endif %}

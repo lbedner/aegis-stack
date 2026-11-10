@@ -11,7 +11,10 @@
   <input type="hidden" name="dataset" value="{{ dataset.name }}">
   {{ select("model", models, blank=active, grouped=True, attrs='aria-label="Model"') }}
   {{ primary_button(run_label, "submit") }}
-  <span class="ml-auto">{{ action("Delete", hx_dialog(delete_url, "data-write data-evals-delete"), "danger") }}</span>
+  <span class="ml-auto flex items-center gap-2">
+    {{ action("Download", "download", href=export_url) }}
+    {{ action("Delete", hx_dialog(delete_url, "data-write data-evals-delete"), "danger") }}
+  </span>
 </form>
 {{ data_table([
   {"key": "case", "label": "Case", "kind": "link", "wrap": True},

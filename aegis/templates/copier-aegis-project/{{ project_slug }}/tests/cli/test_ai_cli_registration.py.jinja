@@ -85,5 +85,15 @@ def test_the_evals_group_is_mounted_with_its_commands() -> None:
     [group] = [g for g in package.app.registered_groups if g.name == "evals"]
     assert group.typer_instance is not None
     names = {c.name for c in group.typer_instance.registered_commands}
-    assert names == {"run", "generate", "datasets", "delete", "list", "show", "compare"}
+    assert names == {
+        "run",
+        "generate",
+        "datasets",
+        "delete",
+        "import",
+        "export",
+        "list",
+        "show",
+        "compare",
+    }
 {%- endif %}

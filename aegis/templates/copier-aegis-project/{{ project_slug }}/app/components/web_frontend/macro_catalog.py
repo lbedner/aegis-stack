@@ -347,6 +347,7 @@ EXAMPLES: dict[str, dict[str, str]] = {
               {{ action("Pause", "", "warn") }}
               {{ action("Delete", "", "danger") }}
               {{ action("Details", "") }}
+              {{ action("Download", "download", href="#") }}
             </div>""",
     },
     "table": {

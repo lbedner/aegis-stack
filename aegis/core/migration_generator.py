@@ -244,7 +244,7 @@ VOICE_MIGRATION = ServiceMigrationSpec(
 
 EVALS_MIGRATION = ServiceMigrationSpec(
     service_name="ai_evals",
-    description="AI eval tables (runs, their cases, and each case's scores)",
+    description="AI eval tables (datasets, runs, their cases, and each case's scores)",
 )
 
 INSIGHTS_MIGRATION = ServiceMigrationSpec(

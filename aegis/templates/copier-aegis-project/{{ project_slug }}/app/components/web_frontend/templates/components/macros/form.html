@@ -444,9 +444,13 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
    dict for ``hx-vals``; ``tone`` is default (quiet), primary (teal),
    danger or warn; ``glyph`` draws an icon in
    place of the label, which then names it for a reader and on hover (as
-   the chips do); ``type`` is ``submit`` for a form's own verb. The one
-   recipe every compact button uses. #}
-{% macro action(label, attrs, tone="default", vals=None, glyph=None, type="button") %}
+   the chips do); ``type`` is ``submit`` for a form's own verb; ``href``
+   makes it a link (a download: ``attrs`` "download"), looking the same.
+   The one recipe every compact button uses. #}
+{% macro action(label, attrs, tone="default", vals=None, glyph=None, type="button", href=None) %}
 {% set tones = {"default": "border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted", "primary": "border-aegis-teal text-aegis-text hover:bg-aegis-teal/10", "danger": "border-aegis-error/40 text-error hover:border-aegis-error", "warn": "border-aegis-amber/40 text-aegis-text hover:border-aegis-amber"} %}
-<button type="{{ type }}" {{ attrs|button_attrs|safe }} {% if vals is not none %}hx-vals='{{ vals|tojson }}'{% endif %} {% if glyph %}title="{{ label }}" {% endif %}class="action {{ _button_size }} rounded border whitespace-nowrap transition-colors disabled:opacity-40 disabled:pointer-events-none {{ tones.get(tone, tones['default']) }}">{% if glyph %}{{ icon(glyph) }}<span class="sr-only">{{ label }}</span>{% else %}{{ label }}{% endif %}</button>
+{% set classes = "action " ~ _button_size ~ " rounded border whitespace-nowrap transition-colors disabled:opacity-40 disabled:pointer-events-none " ~ tones.get(tone, tones['default']) %}
+{% if href %}<a href="{{ href }}" {{ attrs|safe }} class="{{ classes }}">{{ label }}</a>{% else %}
+<button type="{{ type }}" {{ attrs|button_attrs|safe }} {% if vals is not none %}hx-vals='{{ vals|tojson }}'{% endif %} {% if glyph %}title="{{ label }}" {% endif %}class="{{ classes }}">{% if glyph %}{{ icon(glyph) }}<span class="sr-only">{{ label }}</span>{% else %}{{ label }}{% endif %}</button>
+{% endif %}
 {% endmacro %}

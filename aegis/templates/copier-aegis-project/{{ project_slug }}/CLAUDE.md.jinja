@@ -125,9 +125,14 @@ hand. See the `protect-an-endpoint` skill.
 A regression found by reading logs (a turn that called the wrong tool, or
 said what it was never told) ships with the case that would have caught it:
 the message from the log and the assertion you wish you had had, in a
-dataset under `evals/`. Give it a `script:` so `make evals-ci` plays it
+dataset. Datasets live in the database; the ones the app ships are
+`evals/*.yaml`, added at startup (and by the `ai evals` commands) where
+missing; an edited one reaches its row the same way, unless the row was
+changed in the app. Give a case a `script:` so `make evals-ci` plays it
 without a model.
 {% if ai_backend != "memory" %}`make evals` scores it on the real one and keeps the run.
+`ai evals import --replace <file>` puts a file over its row, and
+`ai evals export <name>` prints a row back as YAML.
 {% endif %}See `evals/starter.yaml`.
 
 {% endif %}## Skills

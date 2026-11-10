@@ -1,15 +1,21 @@
 """A two-case dataset, a chat that answers it, and a model that writes a
 dataset, for the evals tests."""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 import json
-from pathlib import Path
 from typing import Any
 
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 import pytest
+from sqlmodel import delete
 
+from app.core.db import get_async_session
+from app.services.ai.domains.evals import datasets
+from app.services.ai.domains.evals.datasets import add, names, text
 from app.services.ai.models import ConversationMessage, MessageRole
+from app.services.ai.models.evals import EvalDatasetRecord
 from app.services.ai.service import AIService
 
 # What a written dataset checks, long enough to say something.
@@ -35,13 +41,42 @@ cases:
 """
 
 
-def mini_in(directory: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """``mini`` is the one dataset under ``evals/``, which is ``directory``.
-    The jobs are imported here: they are only where runs are kept."""
-    from app.services.ai.domains.evals import jobs
+async def keep(name: str, written: str, *, replace: bool = False) -> None:
+    """``written`` kept as ``name`` in the app's own database, where the CLI
+    and the jobs read."""
+    async with get_async_session() as session:
+        await add(session, name, written, replace=replace)
 
-    (directory / "mini.yaml").write_text(DATASET)
-    monkeypatch.setattr(jobs, "EVALS_DIR", directory)
+
+async def kept() -> list[str]:
+    """Every dataset in the app's own database."""
+    async with get_async_session() as session:
+        return await names(session)
+
+
+async def kept_text(name: str) -> str:
+    async with get_async_session() as session:
+        return await text(session, name)
+
+
+async def _forget() -> None:
+    async with get_async_session() as session:
+        await session.exec(delete(EvalDatasetRecord))
+
+
+@asynccontextmanager
+async def only_mini(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[None]:
+    """``mini`` the one dataset in the app's own database while inside, and
+    nothing shipped to seed (undone by ``monkeypatch``, which a sync test's
+    async teardown cannot skip). That database outlives a test (and startup
+    seeds it), so every dataset goes before and after."""
+    await _forget()
+    await keep("mini", DATASET)
+    monkeypatch.setattr(datasets, "shipped", lambda directory: {})
+    try:
+        yield
+    finally:
+        await _forget()
 
 
 def answering(

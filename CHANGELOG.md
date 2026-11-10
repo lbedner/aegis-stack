@@ -23,15 +23,22 @@
   one exclusive pick: `days` holds the values ticked and the row is a
   `data-checklist`, so over a list it narrows the rows with no request
   (`data-facets`).
-- **`ai[evals]`.** Datasets in `evals/<name>.yaml`, each case one real
-  turn scored on the tools it called (`ToolCalls`, `ToolOrder`) and its
+- **`ai[evals]`.** Datasets kept in the database (`eval_dataset`, each
+  its YAML as written), the shipped `evals/*.yaml` added at startup and
+  by the `ai evals` commands where the database has never had the name,
+  and a row still as seeded following its file when the file changes,
+  so one edited or deleted in the app stays so; `ai evals import
+  [--replace]` and `ai evals export`, `POST /api/v1/ai/evals/datasets/import` and `GET .../datasets/{name}/yaml`,
+  and Import and Download in the Overseer bring YAML in and out (#2028).
+  Evals need a database backend: `ai[evals]` on memory is refused. Each
+  case one real turn scored on the tools it called (`ToolCalls`, `ToolOrder`) and its
   answer (`AnswerAvoids`, `Judged`). A case's script plays without a
   model, and the starter dataset plays in the project's tests. `Judged`
   is metered as `eval_judge`, and a run reports to Logfire as `evals`
   when a token is set. On a database-backed stack `record_run` keeps a
   run (`eval_run`, `eval_case`, `eval_score`) and deletes its
   conversations, each check's rule in words, each case's cost and the
-  dataset file's SHA-256; `queries.compare` names the cases that changed
+  dataset's SHA-256; `queries.compare` names the cases that changed
   between two runs (flipped, a rule changed, added, removed) and whether
   the dataset did. `ai evals run|list|show|compare`, `make evals`, and
   `/api/v1/ai/evals` (a run started there is a job, on the worker where
@@ -48,11 +55,11 @@
   `ai evals generate` (and New dataset on the Datasets tab) has the
   model in force write a dataset, told what the assistant is told (its
   prompt, the app's map), the app's tools and their arguments, what the
-  cases under `evals/` already ask (it repeats none) and, with `--like`, a dataset to write like; each case runs
+  datasets already ask (it repeats none) and, with `--like`, a dataset to write like; each case runs
   once on that model and is kept only if it passes, with the script its
-  turn took, then only if that script passes as CI plays it; the file
-  is written once, at the end (`POST /api/v1/ai/evals/datasets` starts
-  the same job). A dataset's page deletes its file, once confirmed
+  turn took, then only if that script passes as CI plays it; the dataset
+  is kept once, at the end (`POST /api/v1/ai/evals/datasets` starts
+  the same job). A dataset's page deletes it, once confirmed
   (`DELETE /api/v1/ai/evals/datasets/{name}`); its kept runs stay. The CLI,
   the API and Overseer each read, write and delete datasets
   (`ai evals datasets`, `ai evals delete`, `GET /api/v1/ai/evals/datasets`). A scripted run leaves out the checks that read spans,

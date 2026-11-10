@@ -6,12 +6,12 @@ where there is one) followed here as it goes. Runs: every kept run,
 filtered by dataset and model, one opened on its cases, failed first, each
 with its answer, its checks in words and the calls its turn made. Compare:
 what changed between two runs, flips first, each side's answer. Reads are
-the eval queries (``eval_runs``) the CLI and the API read. Offered wherever
-``ai[...,evals]`` keeps runs (a database).
+the eval queries (``eval_runs``) and the dataset store the CLI and the API
+read; what is done to a dataset is ``overseer_ai_evals_datasets``.
 """
 
-from collections.abc import AsyncIterator, Callable, Mapping
-from typing import TYPE_CHECKING, Any, TypeVar
+from collections.abc import AsyncIterator, Mapping
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
 from fastapi import HTTPException
@@ -24,42 +24,33 @@ from app.core.formatting import (
     format_relative_time,
 )
 from app.services.ai.service import (
-    EVAL_ABOUT_MIN,
-    EVAL_CASES,
-    EVAL_MOST_CASES,
-    EVAL_NAME,
-    EVAL_NAME_HINT,
     EVALS_JOB,
     EVALS_WRITING_JOB,
     EvalCase,
-    EvalDatasetSummary,
     EvalRun,
     EvalScore,
-    UnknownDatasetError,
     eval_called,
     eval_dataset,
     eval_dataset_summaries,
-    eval_datasets,
+    eval_dataset_summed,
+    eval_dataset_text,
     eval_runs,
-    remove_eval_dataset,
     start_evals,
-    start_generate_evals,
 )
 from app.services.system.jobs import get_job_runner
 
 from .chat_models import model_choices, running_model
 from .chat_surface import run as tool_run
 from .overseer_ai_common import PARTIALS, dollars, section_url, tab_links
+from .overseer_ai_evals_datasets import DATASETS_URL, options, or_404
 from .overseer_live import job_frames, job_state
-from .rendering import form_number, hx_replace, status_cell
+from .rendering import hx_replace, status_cell
 
 if TYPE_CHECKING:
     from sqlmodel.ext.asyncio.session import AsyncSession
 
-T = TypeVar("T")
 SECTION = section_url("evals")
 RUNS_URL = f"{PARTIALS}/evals/runs"
-DATASETS_URL = f"{PARTIALS}/evals/datasets"
 TABS = {"datasets": "Datasets", "runs": "Runs", "compare": "Compare"}
 
 
@@ -106,25 +97,13 @@ def _run_url(run_id: int | None) -> str:
     return section_url("evals", run=str(run_id))
 
 
-def _or_404(act: Callable[[str], T], name: str) -> T:
-    """``act`` on a dataset under ``evals/``; 404 for any other name."""
-    try:
-        return act(name)
-    except UnknownDatasetError:
-        raise HTTPException(status_code=404, detail="No such dataset.") from None
-
-
-def _found(name: str) -> EvalDatasetSummary:
-    return _or_404(eval_dataset, name)
-
-
 async def _datasets(db: "AsyncSession") -> dict[str, Any]:
     """Each dataset in a row: what it checks, how many cases, its last run."""
     # ponytail: the last run is read from the latest runs; a dataset not
     # run among them shows none.
     runs = await eval_runs.runs(db)
     summaries = []
-    for found in eval_dataset_summaries():
+    for found in await eval_dataset_summaries(db):
         name = found.name
         last = next((r for r in runs if r.dataset == name), None)
         summaries.append(
@@ -135,7 +114,12 @@ async def _datasets(db: "AsyncSession") -> dict[str, Any]:
                 "last": last and _passed_cell(last),
             }
         )
-    return {"view": "datasets", "summaries": summaries, "new_url": f"{DATASETS_URL}/new"}
+    return {
+        "view": "datasets",
+        "summaries": summaries,
+        "new_url": f"{DATASETS_URL}/new",
+        "import_url": f"{DATASETS_URL}/import",
+    }
 
 
 async def _results(db: "AsyncSession", run: EvalRun) -> dict[str, dict[str, Any]]:
@@ -177,18 +161,19 @@ def _result(run: EvalRun, case: EvalCase, scores: list[EvalScore]) -> dict[str, 
     }
 
 
-def _whys(name: str) -> dict[str, str | None]:
-    """Why each case of ``name`` is there, as its file says now."""
+async def _whys(db: "AsyncSession", name: str) -> dict[str, str | None]:
+    """Why each case of ``name`` is there, as the dataset says now."""
     try:
-        return {c.name: c.why for c in eval_dataset(name).cases}
-    except UnknownDatasetError:
+        return {c.name: c.why for c in (await eval_dataset(db, name)).cases}
+    except ValueError:  # no such dataset now, or one that cannot be read
         return {}
 
 
 async def _dataset(db: "AsyncSession", name: str) -> dict[str, Any]:
     """A dataset opened: each case, what it asks and passes on and how it
-    went in the dataset's last run; the Run, on the model picked."""
-    found = _found(name)
+    went in the dataset's last run; the Run, on the model picked. One that
+    cannot be read says why (``eval_dataset_summed``), to be deleted."""
+    found = eval_dataset_summed(name, await or_404(eval_dataset_text(db, name)))
     last = next(iter(await eval_runs.runs(db, name, limit=1)), None)
     results = await _results(db, last) if last else {}
     return {
@@ -206,6 +191,7 @@ async def _dataset(db: "AsyncSession", name: str) -> dict[str, Any]:
         ],
         "run_label": f"Run {counted(len(found.cases), 'case')}",
         "delete_url": f"{DATASETS_URL}/{found.name}/delete",
+        "export_url": f"{DATASETS_URL}/{found.name}/yaml",
         "models": await model_choices(db, None),
         "active": f"{await running_model()} (active)",
         "start_url": RUNS_URL,
@@ -225,10 +211,6 @@ def _run_row(run: EvalRun) -> dict[str, Any]:
     }
 
 
-def _options(names: list[str]) -> list[dict[str, str]]:
-    return [{"id": name, "name": name} for name in names]
-
-
 async def _runs(db: "AsyncSession", query: Mapping[str, str]) -> dict[str, Any]:
     """Every kept run, newest first, of a ``dataset`` and on a ``model``
     where picked."""
@@ -237,8 +219,8 @@ async def _runs(db: "AsyncSession", query: Mapping[str, str]) -> dict[str, Any]:
     return {
         "view": "runs",
         "rows": [_run_row(r) for r in runs],
-        "datasets": _options(await eval_runs.datasets(db)),
-        "models": _options(await eval_runs.models(db)),
+        "datasets": options(await eval_runs.datasets(db)),
+        "models": options(await eval_runs.models(db)),
         "picked": {"dataset": dataset, "model": model},
     }
 
@@ -250,7 +232,7 @@ async def _run(db: "AsyncSession", run_id: int) -> dict[str, Any]:
     if run is None or run.id is None:
         raise HTTPException(status_code=404, detail="No such run.")
     results = await _results(db, run)
-    whys = _whys(run.dataset)
+    whys = await _whys(db, run.dataset)
     earlier = await eval_runs.previous(db, run)
     cases = [
         {
@@ -429,56 +411,9 @@ def job_events(job_id: str, then: str = SECTION) -> AsyncIterator[str]:
     return job_frames(job_id, job_view, reload_of(then))
 
 
-def new_dataset(form: Mapping[str, str], errors: list[str]) -> dict[str, Any]:
-    """The New dataset dialog: a name, what it checks, how many cases and
-    a dataset to write like; ``form`` as typed when ``errors`` say why not."""
-    return {
-        "form": form,
-        "errors": errors,
-        "likes": _options(eval_datasets()),
-        "post_url": DATASETS_URL,
-        "name": {"pattern": EVAL_NAME.pattern, "hint": EVAL_NAME_HINT.capitalize()},
-        "about_min": EVAL_ABOUT_MIN,
-        "cases": {"usual": EVAL_CASES, "most": EVAL_MOST_CASES},
-    }
-
-
-def delete_dataset(name: str) -> dict[str, Any]:
-    """The confirmation before a dataset's file is deleted (404 for one
-    not under ``evals/``); the file is not read, so one that cannot be
-    read can still go."""
-    if name not in eval_datasets():
-        raise HTTPException(status_code=404, detail="No such dataset.")
-    return {
-        "title": f"Delete {name}?",
-        "body": f"evals/{name}.yaml goes for good. Its kept runs stay.",
-        "url": f"{DATASETS_URL}/{name}",
-        "label": "Delete",
-        "method": "delete",
-    }
-
-
-def deleted(name: str) -> None:
-    """Delete the dataset's file; 404 for one not under ``evals/``."""
-    _or_404(remove_eval_dataset, name)
-
-
-async def write_dataset(form: Mapping[str, str]) -> str:
-    """The form's dataset, written by the model in force as a job
-    (``start_generate_evals``): its id. ValueError for whatever
-    ``new_path`` refuses, or a count that is not a number."""
-    return await start_generate_evals(
-        form.get("name", "").strip(),
-        about=form.get("about", "").strip(),
-        cases=form_number(form.get("cases"), "Cases") or EVAL_CASES,
-        like=form.get("like") or None,
-    )
-
-
 async def start(form: Mapping[str, str]) -> str:
     """A run of the form's dataset started as a job: its id. ValueError
-    (``start_evals``) for a dataset not under ``evals/``, or a model that
-    cannot answer."""
+    (``start_evals``) for no such dataset, or a model that cannot answer."""
     return await start_evals(
         form.get("dataset", ""), model=form.get("model") or None, note=None
     )

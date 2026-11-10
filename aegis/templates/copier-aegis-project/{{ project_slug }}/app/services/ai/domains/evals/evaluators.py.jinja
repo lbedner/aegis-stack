@@ -38,7 +38,7 @@ TRACE = "tool_trace"
 CONVERSATION = "conversation_id"
 COST = "cost"
 MODEL = "model"
-# On the run's report: the dataset file it ran (``datasets.fingerprint``).
+# On the run's report: the dataset it ran (``datasets.fingerprint``).
 FINGERPRINT = "dataset_sha256"
 # Whose an eval run's turns and judging are, so they never mix with a person's.
 EVALS_USER = "evals"
@@ -200,8 +200,8 @@ def _trajectory(e: Any) -> str:
     return f"{calls}, nothing else" if e.order == "exact" else calls
 
 
-# Pydantic Evals' own checks in words, by the name a dataset file gives
-# each: every one a file can name (a name this version lacks never comes).
+# Pydantic Evals' own checks in words, by the name a dataset gives
+# each: every one a dataset can name (a name this version lacks never comes).
 BUILT_IN: dict[str, Callable[[Any], str]] = {
     "Contains": _contains,
     "Equals": lambda e: f"answers exactly {_quoted(e.value)}",
@@ -217,7 +217,7 @@ BUILT_IN: dict[str, Callable[[Any], str]] = {
     "MaxToolCalls": lambda e: f"calls at most {e.max_calls} tools",
     "MaxModelRequests": lambda e: f"makes at most {e.max_requests} model requests",
 }
-# Each check by the name a dataset file and a result's spec give it.
+# Each check by the name a dataset and a result's spec give it.
 KNOWN: dict[str, type[Evaluator[Any, Any, Any]]] = {
     kind.get_serialization_name(): kind for kind in (*DEFAULT_EVALUATORS, *EVALUATORS)
 }

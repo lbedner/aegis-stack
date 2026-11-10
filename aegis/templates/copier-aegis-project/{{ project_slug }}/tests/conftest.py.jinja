@@ -380,6 +380,18 @@ def client(app: FastAPI) -> Generator[TestClient, None, None]:
         yield test_client
 
 
+@pytest.fixture
+def files(tmp_path: Path) -> Generator[Any, None, None]:
+    """The object store (``app.core.storage``), on disk in the test's own
+    directory and put back after it."""
+    from app.core.storage import FilesystemStorage, set_storage
+
+    store = FilesystemStorage(tmp_path)
+    set_storage(store)
+    yield store
+    set_storage(None)
+
+
 {%- if include_database %}
 @pytest.fixture
 def client_with_db(
@@ -720,6 +732,27 @@ async def async_db_session(async_engine) -> AsyncGenerator[AsyncSession, None]:
 
         # Clean up: rollback transaction
         await transaction.rollback()
+
+
+@pytest.fixture
+async def key_holder(async_db_session: AsyncSession) -> AsyncGenerator[Any, None]:
+    """A table naming stored objects the two ways rows do (``app.core.storage``):
+    a ``*_key`` column (a document's file) and inside JSON (a chat
+    attachment), beside a ``*_key`` that names something else."""
+    from sqlalchemy import JSON, Column, Integer, String, Table
+    from sqlmodel import AutoString
+
+    table = Table(
+        "key_holder",
+        SQLModel.metadata,
+        Column("id", Integer, primary_key=True),
+        Column("file_key", AutoString),
+        Column("payee_key", String),
+        Column("meta_data", JSON),
+    )
+    await async_db_session.run_sync(lambda s: table.create(s.connection()))
+    yield table
+    SQLModel.metadata.remove(table)
 
 
 @pytest.fixture

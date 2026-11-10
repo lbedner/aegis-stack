@@ -11,6 +11,14 @@
 
 ### Added
 
+- **A storage catalog.** With a database, `stored_object` holds a row per
+  object stored through `store()` in `app.components.database.stored` (key,
+  size, content type), for a part's columns to key into. `release()` marks
+  one in the caller's transaction; once the session commits, the session
+  helpers purge what is marked and no row names (`app.core.storage.held`
+  checks every `*_key` column and JSON document, in one statement, whichever
+  part wrote it). Content-hash keys mean one file can belong to two parts, so
+  deleting it for one took it from the other.
 - **A plugin's worker names its memory.** `WorkerQueueWiring(..., memory="1G")`
   is the compose default for its `worker-<queue>` container, in place of the
   stack's 512M; `<QUEUE>_WORKER_MEMORY` still wins. A value that is not
@@ -149,6 +157,11 @@
   format pass. A memory scheduler no longer creates an empty `alembic/`
   that failed the revision check beside the database's own models. Removing
   the last service or plugin takes `services_card.py` with it, as init does.
+- **A plugin's migration data runs, and after the database component's.**
+  A plugin's `data_sql`/`data_body` was dropped (only the built-in registry
+  was read), and its revision could point at a component table the project
+  had no revision for yet; `aegis add <plugin>` now writes the database
+  component's revision first and the plugin's data into its own.
 - **`aegis add` writes only what the component changes** (#2029). A file the
   add does not change was created whenever it was missing, so an add run
   from a newer template than the project's (the same version string passes

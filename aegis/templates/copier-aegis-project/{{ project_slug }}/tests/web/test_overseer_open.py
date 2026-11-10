@@ -22,6 +22,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.mark.queryspy(allow_n_plus_one=True)  # one request per route walked
 def test_nothing_refuses_the_local_dev_build(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -43,6 +44,7 @@ def test_nothing_refuses_the_local_dev_build(
     assert not refused, f"refused without auth: {refused}"
 
 
+@pytest.mark.queryspy(allow_n_plus_one=True)  # one request per route walked
 def test_nothing_fails_for_a_missing_component(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:

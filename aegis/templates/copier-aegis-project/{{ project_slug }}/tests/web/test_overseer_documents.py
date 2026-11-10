@@ -5,7 +5,6 @@ change goes through ``DocumentService`` on the request's session; files
 land in the object store.
 """
 
-from collections.abc import Generator
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -34,14 +33,12 @@ DOCUMENTS = ComponentStatus(name="documents", message="Documents ready")
 def docs(
     app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
+    files: FilesystemStorage,
     async_client_with_db: TestClient,
-) -> Generator[TestClient]:
+) -> TestClient:
     """Signed in, on the test's own session, with a store in a temp dir."""
     sign_in(app, monkeypatch, status_with(services=[DOCUMENTS]))
-    storage_module.set_storage(FilesystemStorage(str(tmp_path)))
-    yield async_client_with_db
-    storage_module.set_storage(None)
+    return async_client_with_db
 
 
 def _get(client: TestClient, section: str = "", query: str = "") -> str:

@@ -8,6 +8,7 @@ import pytest
 
 from aegis.core.migration_generator import (
     MigrationGenerationError,
+    ServiceMigrationSpec,
     generate_drop_revision,
     generate_plugin_migrations,
     generate_revisions,
@@ -104,7 +105,9 @@ def test_only_a_plugins_revisions_restore_its_data(
     revisions never ask."""
     _versions(tmp_path)
     run = Mock(return_value=Mock(returncode=0, stderr="", stdout=""))
-    spec = Mock(migrations=[Mock(service_name="crawler")])
+    spec = Mock(
+        migrations=[ServiceMigrationSpec(service_name="crawler", description="Crawls")]
+    )
     with patch("aegis.core.migration_generator.subprocess.run", run):
         if plugin:
             generate_plugin_migrations(tmp_path, spec)
@@ -112,6 +115,48 @@ def test_only_a_plugins_revisions_restore_its_data(
             generate_revisions(tmp_path, ["crawler"])
 
     assert ("AEGIS_RESTORE_DATA" in run.call_args.kwargs["env"]) is plugin
+
+
+def test_a_plugins_revisions_follow_the_database_components(tmp_path: Path) -> None:
+    """A plugin's tables can point at the component's own (a key into
+    ``stored_object``), so the component's revision comes first: on a
+    project that predates a table of its own, the run writes it before the
+    plugin's revision points at it."""
+    _versions(tmp_path)
+    run = Mock(return_value=Mock(returncode=0, stderr="", stdout=""))
+    spec = Mock(
+        migrations=[ServiceMigrationSpec(service_name="crawler", description="Crawls")]
+    )
+    with patch("aegis.core.migration_generator.subprocess.run", run):
+        generate_plugin_migrations(tmp_path, spec)
+
+    assert run.call_args.args[0][-2:] == ["database", "crawler"]
+
+
+def test_a_plugins_data_runs_in_its_revision(tmp_path: Path) -> None:
+    """A plugin's ``data_body`` runs first in the revision the run writes
+    for it, as an in-tree service's does: the rows a new key points at."""
+    versions = _versions(tmp_path)
+    body = "    op.execute('INSERT INTO stored_object SELECT 1')"
+
+    def fake_run(cmd: list[str], **_kw: object) -> Mock:
+        (versions / "002_crawler.py").write_text(
+            "def upgrade() -> None:\n    pass\n\n\ndef downgrade() -> None:\n    pass\n"
+        )
+        return Mock(returncode=0, stderr="", stdout="")
+
+    spec = Mock(
+        migrations=[
+            ServiceMigrationSpec(
+                service_name="crawler", description="Crawls", data_body=body
+            )
+        ]
+    )
+    with patch("aegis.core.migration_generator.subprocess.run", side_effect=fake_run):
+        generate_plugin_migrations(tmp_path, spec)
+
+    upgrade = (versions / "002_crawler.py").read_text().split("def downgrade")[0]
+    assert body in upgrade
 
 
 def test_returns_only_files_this_call_wrote(tmp_path: Path) -> None:

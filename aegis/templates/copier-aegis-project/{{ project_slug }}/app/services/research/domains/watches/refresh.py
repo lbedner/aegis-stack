@@ -19,10 +19,10 @@ import logging
 from typing import Any
 
 from sqlalchemy import update
-from sqlalchemy.dialects import postgresql, sqlite
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.db import insert
 from app.core.time import utcnow
 from app.services.research.domains.sources.registry import (
     SourceItem,
@@ -165,18 +165,11 @@ async def _fetch(
     return items
 
 
-def _insert(db: AsyncSession, model: Any) -> Any:
-    """The upsert-capable INSERT for the session's database."""
-    name = db.sync_session.get_bind().dialect.name
-    dialect = postgresql if name == "postgresql" else sqlite
-    return dialect.insert(model)
-
-
 def _upsert(
     db: AsyncSession, model: Any, chunk: Sequence[dict[str, Any]], keys: list[str]
 ) -> Any:
     """Insert ``chunk``; a row whose ``keys`` exist takes every other value."""
-    upsert = _insert(db, model).values(list(chunk))
+    upsert = insert(db, model).values(list(chunk))
     return upsert.on_conflict_do_update(
         index_elements=keys,
         set_={name: upsert.excluded[name] for name in chunk[0] if name not in keys},

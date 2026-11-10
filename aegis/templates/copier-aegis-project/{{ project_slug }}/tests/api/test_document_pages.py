@@ -4,15 +4,14 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.backend.api.documents import pages
-from app.core.storage import FilesystemStorage, set_storage
+from app.core.storage import FilesystemStorage
 from app.services.documents.domains.extraction import dispatch
 from tests._jobs import wait_for_job
 from tests._pdf import pdf_bytes
 
 
 @pytest.fixture(autouse=True)
-def _storage(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    set_storage(FilesystemStorage(tmp_path))
+def _storage(files: FilesystemStorage, monkeypatch: pytest.MonkeyPatch) -> None:
     # No model in the test process: scans come back unread, deterministically.
     async def _no_vision() -> None:
         return None
@@ -21,8 +20,6 @@ def _storage(tmp_path, monkeypatch: pytest.MonkeyPatch):
     # No worker in a test process: the background path runs in-process here
     # whatever the stack ships.
     monkeypatch.setattr(pages, "start_extraction", dispatch.start_extraction_in_process)
-    yield
-    set_storage(None)
 
 
 def _upload(client: TestClient, texts: list[str], title: str) -> int:

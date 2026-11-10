@@ -32,3 +32,4 @@ def test_the_component_declares_its_migration_and_files() -> None:
     assert DATABASE_MIGRATION.stamp_signature == ("table", "saved_query")
     assert "app/components/database" in spec.files.primary
     assert "tests/components/test_database_saved.py" in spec.files.primary
+    assert "tests/components/test_database_stored.py" in spec.files.primary

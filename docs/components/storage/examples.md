@@ -21,6 +21,22 @@ async def store_and_read(pdf_bytes: bytes) -> None:
 
 Keep the key. It is what a database row should store, alongside the backend name if the row might outlive a migration, which is exactly what the documents service records.
 
+## Sharing an Object Safely
+
+Keys are content hashes, so two rows storing the same file share one object, and deleting it for one would take it from the other. With a database, store and delete through the catalog (`app.components.database.stored`) instead, and point the row's column at it (`Field(foreign_key="stored_object.key")`):
+
+```python
+from app.components.database.stored import release, store
+
+
+async def replace(session, old_key: str, new_bytes: bytes) -> str:
+    key = await store(session, new_bytes, content_type="image/png")  # a stored_object row too
+    await release(session, old_key)  # marked; gone once the session commits
+    return key
+```
+
+Bytes cannot be rolled back, so `release` only marks the row. Once the session commits, `get_async_db` and `get_async_session` purge: each marked object goes unless a `*_key` column or JSON document still names it (`app.core.storage.held`), whichever part wrote it. Storing the same bytes again before then keeps them.
+
 ## A Link Instead of a Proxy
 
 Serving a 40 MB scan through the app costs a worker for the length of the download. A presigned URL hands the browser a time-limited link to the object itself.

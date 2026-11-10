@@ -359,7 +359,8 @@ COMPONENTS: dict[str, ComponentSpec] = {
         template_files=["app/core/db.py"],
         marker_path="app/core/db.py",
         docker_services=["postgres"],
-        # Query's saved queries, in its own table (app/components/database).
+        # Query's saved queries and the storage catalog, in its own tables
+        # (app/components/database).
         migrations=[DATABASE_MIGRATION],
         files=FileManifest(
             primary=[
@@ -369,6 +370,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "tests/cli/test_storage_cli.py",
                 "tests/core/test_missing_objects.py",
                 "tests/components/test_database_saved.py",
+                "tests/components/test_database_stored.py",
                 "tests/components/test_schema_gaps.py",
                 "app/core/db_activity.py",
                 "tests/core/test_db_activity.py",

@@ -1,20 +1,13 @@
 """``storage check``: what a script reads is the missing keys alone on
 stdout (``aegis deploy-upload-storage`` sends exactly those)."""
 
-from pathlib import Path
-
 import pytest
 
 from app.cli import storage_cli
-from app.core.storage import FilesystemStorage, content_key, set_storage
+from app.core.storage import content_key
 from tests._cli import invoke
 
-
-@pytest.fixture(autouse=True)
-def _store(tmp_path: Path) -> None:
-    set_storage(FilesystemStorage(tmp_path))
-    yield
-    set_storage(None)
+pytestmark = pytest.mark.usefixtures("files")
 
 
 def _missing(monkeypatch: pytest.MonkeyPatch, keys: list[str]) -> None:

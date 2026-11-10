@@ -4,6 +4,7 @@
 from typing import Any
 
 import pytest
+from sqlalchemy import event
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.domains.chat.context_modules import (
@@ -294,4 +295,28 @@ class TestPerSubject:
         )
 
         assert await get_context_entry("notes", "3", session=session) is None
+
+    async def test_the_entries_are_deleted_not_left_to_the_cascade(
+        self, session: AsyncSession
+    ) -> None:
+        """SQLite runs the key's cascade only with foreign keys on, and a
+        project's test engine may keep them off: the delete names the
+        entries itself."""
+        await create_context_module(
+            slug="notes", name="Notes", per_subject=True, session=session
+        )
+        await set_context_entry("notes", "3", "old notes", session=session)
+        ran: list[str] = []
+
+        def record(_conn: Any, _cursor: Any, statement: str, *_: Any) -> None:
+            ran.append(statement)
+
+        bind = session.sync_session.get_bind()
+        event.listen(bind, "before_cursor_execute", record)
+        try:
+            await delete_context_module("notes", session=session)
+        finally:
+            event.remove(bind, "before_cursor_execute", record)
+
+        assert any(s.startswith("DELETE FROM context_module_entry") for s in ran)
 {% endif %}

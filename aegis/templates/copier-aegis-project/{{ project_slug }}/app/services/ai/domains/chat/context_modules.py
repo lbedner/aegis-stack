@@ -132,9 +132,12 @@ async def update_context_module(
 
 
 async def delete_context_module(slug: str, *, session: AsyncSession) -> None:
-    """Delete a module by slug, and its entries with it (the key cascades).
+    """Delete a module by slug, and its entries with it: deleted here, not
+    left to the key's cascade, which SQLite runs only with foreign keys on.
     Unknown slugs are an error, not a no-op."""
     module = await _require_module(session, slug)
+    for entry in await queries.context_entries_of(session, module.id):
+        await session.delete(entry)
     await session.delete(module)
     await session.commit()
     logger.info("Deleted context module", module_slug=slug)

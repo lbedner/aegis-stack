@@ -1,5 +1,5 @@
 {% if include_ai and ai_backend != "memory" %}
-"""Scheduled jobs for AI service."""
+"""Scheduled jobs for AI service, and the worker's jobs it starts."""
 
 from app.core.log import logger
 
@@ -54,4 +54,36 @@ async def analyze_sentiment_job() -> None:
         )
     except Exception as e:
         logger.error(f"Sentiment job failed: {e}")
+
+
+async def read_photo_job(user_id: str, key: str, media_type: str, title: str) -> bool:
+    """A picture shared in chat (``read_photo_task``): its line in the
+    user's paste index, and what it showed read once and kept there.
+
+    On the worker, after the turn: the turn that carried the picture saw
+    its bytes, and every later one reads this with ``pasted``. No session
+    is held over the vision call. False when nothing new was read: read
+    before, its bytes gone, or no model that can see is in force."""
+    from app.core.db import get_async_session
+    from app.core.storage import get_storage
+    from app.services.ai.service import (
+        Picture,
+        keep_picture,
+        paste_id,
+        read_picture,
+    )
+
+    picture = Picture(id=paste_id(key), key=key, media_type=media_type, title=title)
+    async with get_async_session() as session:
+        picture = await keep_picture(session, user_id, picture)
+    image = None if picture.reading_key else await get_storage().get(key)
+    text = image and await read_picture(image, media_type)
+    if not text:
+        return False
+    reading_key = await get_storage().put(text.encode(), content_type="text/plain")
+    async with get_async_session() as session:
+        await keep_picture(
+            session, user_id, picture.model_copy(update={"reading_key": reading_key})
+        )
+    return True
 {% endif %}

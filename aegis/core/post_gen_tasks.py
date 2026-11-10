@@ -472,6 +472,9 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # Per-user memory needs the agent_user_memory table + async DB.
         remove_file(project_path, "app/services/ai/domains/chat/user_memory.py")
         remove_file(project_path, "tests/services/ai/test_user_memory.py")
+        # A shared picture's handle lives in that same row.
+        remove_file(project_path, "app/services/ai/domains/chat/pastes.py")
+        remove_file(project_path, "tests/services/ai/test_pastes.py")
         remove_file(project_path, "app/components/backend/api/ai/memory.py")
         # Context modules are DB rows (the context_module table).
         remove_file(project_path, "app/services/ai/domains/chat/context_modules.py")

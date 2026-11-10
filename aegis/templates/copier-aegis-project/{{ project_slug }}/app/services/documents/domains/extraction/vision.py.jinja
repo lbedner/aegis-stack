@@ -2,8 +2,10 @@
 """The vision reader extraction hands a rendered page to.
 
 The same model the chat surface reads a pasted screenshot with, called
-headlessly: a page image in, its transcription out. Usage is recorded
-under its own surface so the cost of reading paper is visible.
+headlessly: an image in, its text out. ``look`` is the one call; a page
+of paper and a picture shared in chat (``pastes.read_photo``) differ only
+in what the model is told and where the usage is recorded, so the cost
+of reading paper stays visible on its own.
 """
 
 from __future__ import annotations
@@ -29,25 +31,37 @@ INSTRUCTIONS = (
 )
 
 
-async def read_page(image: bytes, media_type: str) -> tuple[str, str]:
-    """Transcribe one page image; returns (text, model name)."""
+async def look(
+    image: bytes, media_type: str, *, instructions: str, ask: str, surface: str
+) -> tuple[str, str]:
+    """One image through the active model; returns (text, model name).
+    Usage is recorded under ``surface``."""
     from pydantic_ai import Agent as PydanticAgent
     from pydantic_ai.messages import BinaryContent
 
     model, model_name = await active_model.model_for_active(settings)
-    agent: PydanticAgent[None, str] = PydanticAgent(model, instructions=INSTRUCTIONS)
+    agent: PydanticAgent[None, str] = PydanticAgent(model, instructions=instructions)
     started = time.perf_counter()
-    result = await agent.run(
-        ["Transcribe this page.", BinaryContent(data=image, media_type=media_type)]
-    )
+    result = await agent.run([ask, BinaryContent(data=image, media_type=media_type)])
     await record_usage(
-        action=SURFACE,
+        action=surface,
         model_name=model_name,
         usage=extract_usage(result),
         user_id=None,
         duration_ms=(time.perf_counter() - started) * 1000,
     )
     return str(result.output), model_name
+
+
+async def read_page(image: bytes, media_type: str) -> tuple[str, str]:
+    """Transcribe one page image; returns (text, model name)."""
+    return await look(
+        image,
+        media_type,
+        instructions=INSTRUCTIONS,
+        ask="Transcribe this page.",
+        surface=SURFACE,
+    )
 
 
 async def vision_reader() -> VisionReader | None:

@@ -43,6 +43,11 @@ def test_a_services_task_is_registered_only_where_the_service_is() -> None:
         ("generate_evals_task", "app.services.ai.domains.evals.jobs"),
     ):
         assert (task in registered) == present(service), task
+    # A picture shared in chat, read into its paste index with documents'.
+    reads = present("app.services.ai.domains.chat.pastes") and present(
+        "app.services.documents"
+    )
+    assert ("read_photo_task" in registered) == reads
 
 
 def test_every_rule_says_why() -> None:

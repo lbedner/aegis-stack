@@ -22,8 +22,19 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.core.discovery import present
 from app.core.log import logger
 from app.core.storage import get_storage
+
+# Where a picture shared in chat can be kept and read (``pastes``).
+_READABLE = all(
+    present(part)
+    for part in (
+        "app.services.ai.domains.chat.pastes",
+        "app.components.worker",
+        "app.services.documents",
+    )
+)
 
 
 class ChatAttachment(BaseModel):
@@ -61,14 +72,27 @@ def build_user_content(
     return parts
 
 
-def annotate_attachments(message: str, attachments: list[ChatAttachment] | None) -> str:
+def annotate_attachments(
+    message: str,
+    attachments: list[ChatAttachment] | None,
+    photos: list[dict[str, Any]] | None = None,
+) -> str:
     """Stamp the stored user message with what was attached.
 
     History replays as text only, so this marker is how a later turn
-    (or a text-only model) knows images rode this one."""
+    (or a text-only model) knows images rode this one. ``photos`` are the
+    queued images' handles (``_read_later``): named in the marker,
+    what a photo showed is a ``pasted`` call away in any later turn."""
     if not attachments:
         return message
-    names = ", ".join(a.name or a.media_type for a in attachments)
+    names = (
+        ", ".join(
+            f'{p["title"]} #{p["id"]}, what it showed: pasted("{p["id"]}")'
+            for p in photos
+        )
+        if photos
+        else ", ".join(a.name or a.media_type for a in attachments)
+    )
     noun = "image" if len(attachments) == 1 else "images"
     return f"{message}\n\n[attached {len(attachments)} {noun}: {names}]"
 
@@ -123,13 +147,52 @@ def attachment_metadata(stored: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 async def prepare_turn(
-    message: str, attachments: list[ChatAttachment] | None
+    message: str, attachments: list[ChatAttachment] | None, user_id: str = ""
 ) -> tuple[str, dict[str, Any]]:
     """The stored message text and metadata for one turn's attachments.
 
-    Both chat paths - streaming and not - need the same three steps in
-    the same order, and doing them by hand in each is how one of them
-    ends up missing a step. One call, both callers.
+    Both chat paths - streaming and not - need the same steps in the
+    same order, and doing them by hand in each is how one of them ends
+    up missing a step. One call, both callers.
     """
     stored = await persist_attachments(attachments)
-    return annotate_attachments(message, attachments), attachment_metadata(stored)
+    photos = await _read_later(user_id, stored)
+    return annotate_attachments(message, attachments, photos), attachment_metadata(
+        stored
+    )
+
+
+async def _read_later(
+    user_id: str, stored: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Queue each kept photo to be indexed and read on the worker
+    (``read_photo_job``); its handle, for the marker.
+
+    The handle is the storage key's, so this turn touches no database for
+    it, and a second vision call here would make every picture turn wait
+    on two. Only where it can be read: a paste index (a database behind
+    the AI service), a worker and the documents service's vision. Never
+    fails the turn."""
+    if not (stored and user_id and _READABLE):
+        return []
+    from app.components.worker import pools
+    from app.core.constants import QueueName
+    from app.services.ai.domains.chat.pastes import paste_id
+
+    photos = []
+    for s in stored:
+        title = s.get("name") or "picture"
+        try:
+            await pools.enqueue_task(
+                "read_photo_task",
+                QueueName.SYSTEM,
+                user_id,
+                s["key"],
+                s["media_type"],
+                title,
+            )
+        except Exception as exc:  # noqa: BLE001 - the turn goes on regardless
+            logger.warning(f"Could not queue a photo to be read: {exc}")
+            continue
+        photos.append({"id": paste_id(s["key"]), "title": title})
+    return photos

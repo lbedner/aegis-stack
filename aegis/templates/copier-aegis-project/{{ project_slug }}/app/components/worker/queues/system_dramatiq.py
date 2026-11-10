@@ -6,9 +6,10 @@ Handles system maintenance and monitoring tasks using Dramatiq patterns.
 
 from datetime import UTC, datetime
 
+import dramatiq
+
 # Import broker to ensure it is initialised before actors are registered
 import app.components.worker.broker  # noqa: F401
-import dramatiq
 from app.components.worker.tasks.service_jobs import service_job_tasks
 from app.core.constants import QueueName
 from app.core.discovery import present
@@ -66,6 +67,21 @@ if present("app.services.documents"):
     extract_document_task = dramatiq.actor(
         queue_name=QueueName.SYSTEM, store_results=True, time_limit=30 * 60 * 1000
     )(extract_document_task)
+
+
+async def read_photo_task(user_id: str, key: str, media_type: str, title: str) -> dict:
+    """Keep a picture shared in chat and read what it showed, into its
+    paste index. The AI service is imported lazily, as the documents one is."""
+    from app.services.ai.service import read_photo_job
+
+    return {"key": key, "read": await read_photo_job(user_id, key, media_type, title)}
+
+
+# Registered only where the paste index and documents' vision are.
+if present("app.services.ai.domains.chat.pastes") and present("app.services.documents"):
+    read_photo_task = dramatiq.actor(queue_name=QueueName.SYSTEM, store_results=True)(
+        read_photo_task
+    )
 
 
 async def embed_files_task(key: str, n: int, files: list[str]) -> None:

@@ -8,8 +8,12 @@ the standard fails on the drift. Likewise a subsystem left loose beside
 a service's standard files instead of in a package under ``domains/``.
 """
 
+import importlib
+import importlib.util
+
 from fastapi import FastAPI
 
+from app.core import source_index
 from app.services.system import pattern_findings, patterns, service_parts
 from tests._conformance import CONFORMANCE
 
@@ -60,6 +64,55 @@ def test_loose_modules_never_grow() -> None:
 def test_every_other_enforced_rule_holds() -> None:
     broken = [(f.check, f.subject, f.evidence) for f in _errors() if f.check != READS]
     assert not broken, broken
+
+
+def _resolves(source: str, member: str) -> bool:
+    """``member`` is a name ``source`` offers, or a submodule of it."""
+    if hasattr(importlib.import_module(source), member):
+        return True
+    try:
+        return importlib.util.find_spec(f"{source}.{member}") is not None
+    except ModuleNotFoundError:  # a facade that is a module, not a package
+        return False
+
+
+def test_every_name_taken_from_a_facade_is_one_it_offers() -> None:
+    """A facade loads its names lazily (``facade.lazy``), and the type
+    checker takes any name from its ``__getattr__``: a name missing from
+    its ``TYPE_CHECKING`` list fails only when the import runs - in a
+    worker, mid-job. Every name the project imports from one, and its
+    service defines, must load. A name the stack's service lacks (an
+    option it was built without) is a task that never runs here."""
+    index = source_index.project()
+
+    def defined(service: str, member: str) -> bool:
+        return any(
+            (module := index.get(name)) and member in module.defined
+            for name in index.paths
+            if name.startswith(f"{service}.")
+        )
+
+    facades = {
+        name
+        for name in index.paths
+        if (module := index.get(name))
+        and any("facade.lazy(" in line for line in module.lines)
+    }
+    missing = set()
+    for name in index.paths:
+        module = index.get(name)
+        if module is None:
+            continue
+        for full in module.imports:
+            source, _, member = full.rpartition(".")
+            service = ".".join(source.split(".")[:3])
+            if (
+                source in facades
+                and not _resolves(source, member)
+                and defined(service, member)
+            ):
+                missing.add(f"{module.path}: {full}")
+    assert not missing, sorted(missing)
 
 
 def test_the_shipped_app_breaks_no_enforced_route_rule(app: FastAPI) -> None:

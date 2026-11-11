@@ -53,3 +53,20 @@ def test_the_commands_the_project_ships_do_not_rely_on_extras() -> None:
         "pyproject.toml.jinja",
     ):
         assert "--all-extras" not in _render(path), path
+
+
+def test_the_image_installs_dependencies_in_a_layer_only_the_lock_reaches() -> None:
+    """A README edit reinstalled every package: the dependency layer copied
+    README.md, and the step deleted its uv cache. The lock alone reaches
+    that layer, the cache is a build mount, and the project installs after
+    the code is copied."""
+    dockerfile = _render("Dockerfile.jinja")
+
+    deps, project = dockerfile.split("COPY . /code", 1)
+    assert "COPY pyproject.toml uv.lock /code/\n" in deps
+    assert "uv sync --frozen --no-install-project" in deps
+    assert "rm -rf /tmp/uv-cache" not in dockerfile
+    # The mount is wherever UV_CACHE_DIR says, not a second copy of it.
+    mount = "RUN --mount=type=cache,target=${UV_CACHE_DIR}"
+    assert deps.count(mount) == 1
+    assert f"{mount} \\\n    uv sync --frozen\n" in project

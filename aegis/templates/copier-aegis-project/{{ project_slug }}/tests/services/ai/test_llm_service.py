@@ -706,6 +706,45 @@ class TestSetActiveModel:
                 await set_active_model("claude-sonnet-4-20250514", force=True)
             ).success
 
+    async def test_a_vendor_no_provider_serves_is_refused(
+        self,
+        mock_async_session,
+        llm_session: Session,
+    ) -> None:
+        """A catalog model whose vendor maps to no provider has nothing to
+        call it: stored, its name went to whichever provider was active and
+        every answer 404ed. ``force`` still overrides."""
+        vendor = LLMOrg(slug="meta", name="meta", description="", color="#000")
+        llm_session.add(vendor)
+        llm_session.flush()
+        llm_session.add(
+            LargeLanguageModel(
+                model_id="meta/some-model",
+                title="Some Model",
+                description="",
+                context_window=4096,
+                streamable=True,
+                enabled=True,
+                served_by_org_id=vendor.id,
+                mode="chat",
+            )
+        )
+        llm_session.commit()
+        with (
+            patch(
+                "app.services.ai.domains.llm.llm_service.get_async_session",
+                mock_async_session,
+            ),
+            patch(
+                "app.services.ai.domains.llm.llm_service.update_env_file"
+            ) as mock_update,
+        ):
+            result = await set_active_model("meta/some-model")
+            assert result.success is False
+            assert "meta" in result.message
+            mock_update.assert_not_called()
+            assert (await set_active_model("meta/some-model", force=True)).success
+
     async def test_model_exists(
         self,
         mock_async_session,

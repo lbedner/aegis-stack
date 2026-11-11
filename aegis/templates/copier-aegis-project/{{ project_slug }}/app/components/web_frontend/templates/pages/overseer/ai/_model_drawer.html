@@ -1,11 +1,17 @@
 {# One catalog model in the drawer: what it is and costs, and a button to
-   make it the model the app answers with (a stored choice, live at once). #}
+   make it the model the app answers with (a stored choice, live at once),
+   disabled with what is missing when nothing here can call it. #}
 {% from "components/macros/layout.html" import badge, card, dialog_title, facts as fact_list %}
 {% from "components/macros/form.html" import primary_button %}
 <div class="space-y-4">
   {{ dialog_title(info.title or info.model_id) }}
   {% if current %}
   <div>{{ badge("The active model", "ok") }}</div>
+  {% elif use_blocked %}
+  {# The title sits on a wrapper: a disabled button takes no hover. #}
+  <span data-use-blocked title="{{ use_blocked }}" class="inline-block cursor-not-allowed">
+    {{ primary_button("Use this model", attrs="disabled") }}
+  </span>
   {% elif use_url %}
   <form data-write hx-post="{{ use_url }}" hx-swap="none" data-use-model>
     <input type="hidden" name="model_id" value="{{ info.model_id }}">

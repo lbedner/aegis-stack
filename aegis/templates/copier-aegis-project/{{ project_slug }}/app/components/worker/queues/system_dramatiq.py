@@ -5,6 +5,7 @@ Handles system maintenance and monitoring tasks using Dramatiq patterns.
 """
 
 from datetime import UTC, datetime
+import functools
 
 import dramatiq
 
@@ -122,7 +123,10 @@ async def generate_evals_task(
 # Registered only where evals keep their runs: elsewhere it reaches nothing.
 if present("app.services.ai.domains.evals.jobs"):
     # Never retried: each try is paid model calls, and a failure is an answer.
-    evals = dramatiq.actor(
+    # A partial, not one dramatiq.actor(...) decorator: that keeps the first
+    # function's name, so a second use registers the same name again.
+    evals = functools.partial(
+        dramatiq.actor,
         queue_name=QueueName.SYSTEM,
         store_results=True,
         max_retries=0,

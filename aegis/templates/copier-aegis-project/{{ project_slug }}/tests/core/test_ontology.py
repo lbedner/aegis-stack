@@ -251,11 +251,20 @@ def test_a_worker_container_names_the_queue_it_takes(
     }
 
 
+def test_without_a_scheduler_no_service_job_is_drawn(model: SystemModel) -> None:
+    """A service's jobs run only on the scheduler: without one the map
+    shows no job, not one running on the worker that never starts."""
+    if "component:scheduler" in _parts(model):
+        pytest.skip("the scheduler runs them in this stack")
+    assert not [n.id for n in model.nodes if isinstance(n, JobNode)]
+
+
 def test_a_scheduled_job_hands_its_task_to_the_queue(model: SystemModel) -> None:
     """With a worker the scheduler enqueues a job's task, so the path runs
-    job, task, what the task touches; never waited on."""
-    if "component:worker" not in _parts(model):
-        pytest.skip("no worker in this stack")
+    job, task, what the task touches; never waited on. Without a scheduler
+    nothing enqueues them, so the worker binds no job tasks."""
+    if not {"component:worker", "component:scheduler"} <= _parts(model).keys():
+        pytest.skip("no worker and scheduler in this stack")
     from app.core.schedule import service_jobs
 
     handed = {

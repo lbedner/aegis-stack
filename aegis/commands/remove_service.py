@@ -14,6 +14,7 @@ from ..cli.validation import (
     validate_copier_project,
 )
 from ..constants import AnswerKeys, Messages
+from ..core.component_utils import extract_base_service_name
 from ..core.copier_manager import load_copier_answers
 from ..core.manual_updater import ManualUpdater
 from ..core.service_resolver import ServiceResolver
@@ -120,7 +121,11 @@ def remove_service_command(
 
     # Parse and validate services
     assert services is not None  # Already validated by check above
-    selected_services = parse_comma_separated_list(services, "service")
+    # Options name what was added, not what to remove: ai[sqlite,evals] is ai.
+    selected_services = [
+        extract_base_service_name(s)
+        for s in parse_comma_separated_list(services, "service")
+    ]
 
     # Validate services exist
     try:

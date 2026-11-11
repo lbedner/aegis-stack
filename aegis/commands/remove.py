@@ -14,6 +14,11 @@ from ..cli.validation import (
     validate_copier_project,
 )
 from ..constants import AnswerKeys, ComponentNames, Messages, StorageBackends
+from ..core.component_utils import (
+    extract_base_component_name,
+    extract_base_service_name,
+    split_bracket_list,
+)
 from ..core.components import COMPONENTS, CORE_COMPONENTS
 from ..core.copier_manager import load_copier_answers
 from ..core.dependency_resolver import DependencyResolver
@@ -171,16 +176,12 @@ def remove_command(
     # Plugin / service dispatch — single-name args only. Services
     # forward to the existing remove-service implementation (Phase 2
     # of #771: unify the entry point, defer the implementation-merge).
-    if components and "," not in components:
+    if components and len(split_bracket_list(components)) == 1:
         if _resolve_plugin(components) is not None:
             _uninstall_plugin(components, target_path, yes, force)
             return
 
-        # Bracket-tolerant base extraction for symmetry with
-        # ``aegis add`` — users sometimes type bracket syntax even on
-        # remove out of habit.
-        service_base = components.split("[", 1)[0].strip()
-        if service_base in SERVICES:
+        if extract_base_service_name(components) in SERVICES:
             from .remove_service import remove_service_command
 
             remove_service_command(
@@ -213,12 +214,12 @@ def remove_command(
 
     # Parse and validate components
     assert components is not None  # Already validated by check above
-    selected_components = parse_comma_separated_list(components, "component")
+    named = parse_comma_separated_list(components, "component")
 
     # Validate components exist
     try:
         # Use the same validation logic as init command
-        errors = DependencyResolver.validate_components(selected_components)
+        errors = DependencyResolver.validate_components(named)
         if errors:
             for error in errors:
                 brand.error(f"{error}", err=True)
@@ -227,6 +228,9 @@ def remove_command(
     except Exception as e:
         brand.error(t("remove.validation_failed", error=e), err=True)
         raise typer.Exit(1)
+
+    # Options name what was added, not what to remove: worker[taskiq] is worker.
+    selected_components = [extract_base_component_name(c) for c in named]
 
     # Load existing project configuration
     try:

@@ -18,6 +18,7 @@ from typing import Any
 
 from ..constants import AIFrameworks, AIProviders, AnswerKeys, StorageBackends
 from ..i18n import t
+from .component_files import AI_PERSISTENCE, group_on
 from .option_spec import is_spec_with_options, parse_options
 from .services import SERVICES
 
@@ -65,14 +66,11 @@ def evals_rule(answers: Mapping[str, Any]) -> str | None:
     Pydantic AI's tool events and scripts a turn with its ``FunctionModel``,
     which LangChain has neither of, and keeps its datasets and runs as
     rows, which the memory backend has nowhere to put."""
-    if answers.get(AnswerKeys.AI_EVALS) not in (True, "yes"):
+    if not group_on(AnswerKeys.AI_EVALS, answers):
         return None
     framework = answers.get(AnswerKeys.AI_FRAMEWORK, AIFrameworks.PYDANTIC_AI)
     if framework != AIFrameworks.PYDANTIC_AI:
         return t("validation.evals_needs_pydantic_ai", framework=framework)
-    if (
-        answers.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
-        == StorageBackends.MEMORY
-    ):
+    if not group_on(AI_PERSISTENCE, answers):
         return t("validation.evals_needs_database")
     return None

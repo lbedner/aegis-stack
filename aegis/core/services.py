@@ -17,6 +17,7 @@ from ..constants import (
     StorageBackends,
 )
 from ..i18n import t
+from .component_files import AI_PERSISTENCE, group_on
 from .file_manifest import FileManifest
 from .migration_generator import (
     AGENTS_MIGRATION,
@@ -421,9 +422,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     # Persistence only: the catalog is provider-agnostic,
                     # and the CLI llm command + Cloud Catalog tab (which
                     # call this API) ship on every DB-backed stack.
-                    when=lambda opts: (
-                        opts.get("ai_backend") != StorageBackends.MEMORY
-                    ),
+                    when=lambda opts: group_on(AI_PERSISTENCE, opts),
                 ),
                 RouterWiring(
                     module="app.components.backend.api.rag.router",
@@ -480,6 +479,8 @@ SERVICES: dict[str, ServiceSpec] = {
                 ],
                 default=StorageBackends.MEMORY,
                 answer_key=AnswerKeys.AI_BACKEND,
+                # Nothing is kept in memory, so a project may persist it later.
+                upgrades_from=StorageBackends.MEMORY,
                 about="guided.choice.storage",
                 # Persistence backends auto-add the matching database engine.
                 auto_requires=lambda v: [f"{ComponentNames.DATABASE}[{v}]"]
@@ -531,29 +532,20 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/components/backend/api/ai/",
         ],
         files=FileManifest(
-            # Mirrors cleanup_components() lines 517-542 (AI NOT enabled),
-            # plus the analytics / llm catalog / rag dashboard tabs: they
-            # belong to the AI footprint, so add/remove and the AI-off init
-            # path all cover them. The narrower sub-feature cleanups (AI
-            # memory backend, ollama=none, rag off) stay inline.
+            # The AI footprint, analytics / llm catalog / rag dashboard tabs
+            # included, so add/remove and the AI-off init path all cover
+            # them. The framework (langchain) and rag-off cleanups stay
+            # inline; options and the backend are the extras below.
             primary=[
                 "app/components/backend/api/ai",
-                # LLM catalog API. Backend-conditional like ``app/cli/llm.py``
-                # below (both are stripped inline for the memory backend), so
-                # it rides in ``primary``; without it the retrofit path never
-                # copies the dir and the modal's catalog tab 404s (issue #814).
-                "app/components/backend/api/llm",
                 "app/services/ai",
                 "docs/services/ai",
                 "app/cli/ai",
-                "app/cli/agents.py",
                 "app/cli/ai_rendering.py",
                 "app/cli/marko_terminal_renderer.py",
                 "app/cli/marko_table_renderer.py",
                 "app/cli/chat_completer.py",
                 "app/cli/slash_commands.py",
-                "app/cli/llm.py",
-                "app/cli/llm_rendering.py",
                 "app/cli/status_line.py",
                 # ``app/core/formatting.py`` is NOT removed on AI-off —
                 # it also backs the always-shipping API load test CLI +
@@ -567,11 +559,9 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/cli/test_ai_rendering.py",
                 "tests/cli/test_conversation_memory.py",
                 "tests/cli/test_chat_completer.py",
-                "tests/cli/test_llm_cli.py",
                 "tests/cli/test_ai_cli_registration.py",
                 "tests/cli/test_ai_provider_commands.py",
                 "tests/cli/test_ai_conversations_cli.py",
-                "tests/cli/test_agents_cli.py",
                 "tests/cli/test_ai_streaming_gate.py",
                 "tests/cli/test_ai_session_health.py",
                 "tests/cli/test_slash_commands.py",
@@ -583,16 +573,11 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/backend/startup/llm_catalog.py",
                 "app/components/frontend/dashboard/cards/ai_card.py",
                 "app/components/frontend/dashboard/modals/ai_modal.py",
-                "app/components/frontend/dashboard/modals/ai_analytics_tab",
-                "app/components/frontend/dashboard/modals/agents_tab.py",
-                "app/components/frontend/dashboard/modals/llm_catalog_tab",
-                "tests/components/frontend/test_ai_analytics_utils.py",
-                "app/models/conversation.py",
             ],
-            # rag/voice files render empty unless their option is enabled, so
-            # they live in `extras` (kept out of the always-on add base) and
-            # are pulled into the full footprint for `aegis remove ai`. The AI
-            # memory backend / ollama mode cleanups stay inline.
+            # rag/voice/evals/persistence files render empty unless their
+            # option is on, so they live in `extras` (kept out of the
+            # always-on add base) and are pulled into the full footprint for
+            # `aegis remove ai`.
             extras={
                 "ai_rag": [
                     "app/components/backend/api/rag",
@@ -685,6 +670,112 @@ SERVICES: dict[str, ServiceSpec] = {
                     "tests/cli/test_ai_evals_cli.py",
                     "tests/api/test_ai_evals_endpoints.py",
                     *EVALS_PAGES,
+                ],
+                # What only a database backend holds: the tables and every
+                # read, page and command over them. Memory ships none of it,
+                # so ``ai[sqlite]`` on a memory project brings it.
+                AI_PERSISTENCE: [
+                    "app/models/conversation.py",
+                    "app/services/ai/models/llm",
+                    "app/services/ai/models/agents",
+                    "app/services/ai/models/voice",
+                    "app/services/ai/models/evals",
+                    "app/services/ai/models/sentiment.py",
+                    "app/services/ai/models/chat_card.py",
+                    "app/services/ai/fixtures",
+                    "app/services/ai/domains/spend",
+                    "app/services/ai/domains/llm/etl",
+                    "app/services/ai/domains/llm/active_model.py",
+                    "app/services/ai/domains/llm/writer.py",
+                    "app/services/ai/domains/llm/llm_service.py",
+                    "app/services/ai/domains/llm/catalog.py",
+                    "app/services/ai/domains/llm/queries.py",
+                    "app/services/ai/domains/chat/chat_kit",
+                    "app/services/ai/domains/chat/user_memory.py",
+                    "app/services/ai/domains/chat/pastes.py",
+                    "app/services/ai/domains/chat/context_modules.py",
+                    "app/services/ai/domains/chat/builtin_fetchers.py",
+                    "app/services/ai/domains/chat/module_context.py",
+                    "app/services/ai/domains/chat/sentiment.py",
+                    "app/services/ai/domains/chat/queries.py",
+                    "app/services/ai/domains/chat/cards.py",
+                    "app/services/ai/domains/chat/path_card.py",
+                    "app/services/ai/domains/chat/agent_registry.py",
+                    "app/services/ai/domains/voice/profiles.py",
+                    "app/services/ai/domains/voice/pronunciations.py",
+                    "app/services/ai/domains/voice/design.py",
+                    "app/services/ai/domains/voice/queries.py",
+                    "app/services/ai/domains/voice/live_engines.py",
+                    "app/services/ai/domains/voice/realtime_calls.py",
+                    "app/services/ai/domains/voice/live_voice.py",
+                    # The knowledge base's records; Chroma itself is files.
+                    "app/services/rag/models/knowledge.py",
+                    "app/services/rag/knowledge.py",
+                    "app/services/rag/queries.py",
+                    "app/components/backend/api/rag/knowledge.py",
+                    "app/components/backend/api/ai/memory.py",
+                    "app/components/backend/api/llm",
+                    "app/components/backend/startup/live_engine.py",
+                    "app/components/backend/startup/voice_profile.py",
+                    "app/cli/agents.py",
+                    "app/cli/llm.py",
+                    "app/cli/llm_rendering.py",
+                    "app/components/frontend/dashboard/modals/agents_tab.py",
+                    "app/components/frontend/dashboard/modals/ai_analytics_tab",
+                    "app/components/frontend/dashboard/modals/llm_catalog_tab",
+                    "app/components/web_frontend/routes/partials/chat_cards.py",
+                    "app/components/web_frontend/routes/partials/chat_live.py",
+                    "app/components/web_frontend/routes/partials/chat_voices.py",
+                    "app/components/web_frontend/overseer_ai_costs.py",
+                    "app/components/web_frontend/overseer_ai_costs_views.py",
+                    *(
+                        f"app/components/web_frontend/templates/pages/overseer/ai/_costs{tab}.html"
+                        for tab in (
+                            "",
+                            "_overview",
+                            "_users",
+                            "_projections",
+                            "_breakdown",
+                        )
+                    ),
+                    "tests/_voice_catalog.py",
+                    "tests/_realtime.py",
+                    "tests/cli/test_agents_cli.py",
+                    "tests/cli/test_llm_cli.py",
+                    "tests/components/frontend/test_ai_analytics_utils.py",
+                    "tests/services/ai/chat_kit",
+                    "tests/services/ai/etl",
+                    "tests/services/ai/test_active_model.py",
+                    "tests/services/ai/test_agent_models.py",
+                    "tests/services/ai/test_agent_registry.py",
+                    "tests/services/ai/test_builtin_fetchers.py",
+                    "tests/services/ai/test_catalog_tool.py",
+                    "tests/services/ai/test_chat_cards.py",
+                    "tests/services/ai/test_context_modules.py",
+                    "tests/services/ai/test_llm_pricing_lookup.py",
+                    "tests/services/ai/test_llm_service.py",
+                    "tests/services/ai/test_model_id_display.py",
+                    "tests/services/ai/test_module_context.py",
+                    "tests/services/ai/test_pastes.py",
+                    "tests/services/ai/test_path_card.py",
+                    "tests/services/ai/test_price_memo.py",
+                    "tests/services/ai/test_sentiment.py",
+                    "tests/services/ai/test_spend_queries.py",
+                    "tests/services/ai/test_usage_tracking.py",
+                    "tests/services/ai/test_user_memory.py",
+                    "tests/services/ai/voice/test_live_engines.py",
+                    "tests/services/ai/voice/test_live_voice.py",
+                    "tests/services/ai/voice/test_realtime_calls.py",
+                    "tests/services/ai/voice/test_speech_costs.py",
+                    "tests/services/ai/voice/test_voice_design.py",
+                    "tests/services/ai/voice/test_voice_profiles.py",
+                    "tests/services/rag/test_knowledge_models.py",
+                    "tests/services/rag/test_knowledge_sync.py",
+                    "tests/web/test_chat_cards.py",
+                    "tests/web/test_chat_live.py",
+                    "tests/web/test_chat_voices.py",
+                    "tests/web/test_overseer_ai_costs.py",
+                    "tests/web/test_path_card.py",
                 ],
             },
         ),

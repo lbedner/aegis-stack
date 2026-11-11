@@ -22,19 +22,16 @@ What R1 does NOT do (deliberately deferred to R2):
 
 Everything else stays inline in ``cleanup_components`` for R1:
 
-* Pattern B sub-feature cleanup (``ai_rag``, ``ai_voice``, ``auth_org``,
-  AI memory backend, ollama mode, scheduler memory backend). Each has
-  its own gating predicate; uniform reducer rules don't fit yet.
+* Pattern B sub-feature cleanup (``ai_rag``, oauth, the langchain strip).
+  ``auth_org``, ``ai_voice``, ``ai_evals`` and both persistence groups have
+  since moved to their spec's ``extras``.
 * Pattern C cross-spec aggregations (``alembic`` only when no service
   needs migrations; ``services_card.py`` only when no services;
   ``docs/components`` only when no components).
 * Pattern D worker backend-variant rename + delete-others.
 
-The ``extras`` field on ``FileManifest`` is captured here for
-documentation / future use (``get_component_file_mapping`` legacy keys
-like ``ai_rag``, ``ai_voice``, ``scheduler_persistence``), but the R1
-reducer ignores it. R2 generalises the spec model and lights up
-``extras``-driven cleanup uniformly.
+The ``extras`` field on ``FileManifest`` holds the gated groups; init,
+add and remove read them through ``component_files.group_on``.
 """
 
 from __future__ import annotations
@@ -66,14 +63,10 @@ class FileManifest:
     These files render empty unless their option is enabled (``ai_rag``,
     ``ai_voice``) or only exist for a specific backend
     (``scheduler_persistence``), so they are kept out of the always-on
-    ``primary`` add base. Each group is emitted under its own key by
-    ``compute_file_mapping`` and folded into the full footprint by
-    ``get_component_files(..., full=True)`` for ``aegis remove``.
-
-    **Not** yielded by the R1 init-cleanup reducer (``iter_cleanup_paths``):
-    sub-feature cleanup at init stays inline in ``cleanup_components`` because
-    each predicate is non-uniform (some by AnswerKey toggle, some by option
-    value, some only when the parent is also on).
+    ``primary`` add base, and folded into the full footprint by
+    ``get_component_files(..., full=True)`` for ``aegis remove``. Init's
+    ``cleanup_components`` removes a selected spec's group when its gate
+    (``component_files.group_on``) is off.
 
     Example: ``{"ai_rag": [...], "ai_voice": [...]}`` on the AI service.
     """
@@ -83,9 +76,8 @@ def compute_file_mapping(specs: Iterable[Any]) -> dict[str, list[str]]:
     """Build the component-file mapping from spec manifests.
 
     This is the single source for ``get_component_file_mapping()``. Output
-    shape: ``{spec_name: primary, extra_key: extra_files, ...}`` — each spec's
-    ``primary`` keyed by its name, plus every ``extras`` group under its own
-    key.
+    shape: ``{spec_name: primary, ...}``. A spec's ``extras`` are read off the
+    spec itself, through ``component_files.group_on``.
 
     Specs without a populated ``FileManifest`` are skipped — CORE components
     (backend/frontend) and any non-migrated spec do not break the reducer.
@@ -97,9 +89,6 @@ def compute_file_mapping(specs: Iterable[Any]) -> dict[str, list[str]]:
             continue
         if manifest.primary:
             mapping[spec.name] = list(manifest.primary)
-        for extra_key, extra_files in manifest.extras.items():
-            if extra_files:
-                mapping[extra_key] = list(extra_files)
     return mapping
 
 

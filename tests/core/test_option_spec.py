@@ -452,6 +452,38 @@ class TestVariantDelta:
         with pytest.raises(VariantConflictError, match="ai_framework"):
             variant_delta("ai[langchain]", self._ai(), {"ai_framework": "pydantic-ai"})
 
+    @staticmethod
+    def _backend() -> _FakeSpec:
+        return _FakeSpec(
+            "ai",
+            [
+                OptionSpec(
+                    name="backend",
+                    mode=OptionMode.SINGLE,
+                    choices=["memory", "sqlite", "postgres"],
+                    default="memory",
+                    answer_key="ai_backend",
+                    upgrades_from="memory",
+                )
+            ],
+        )
+
+    def test_leaving_a_choice_that_holds_nothing_is_an_upgrade(self) -> None:
+        """Memory keeps nothing a database would lose, so ``ai[sqlite]`` on a
+        memory project moves it; the request is otherwise a conflict."""
+        assert variant_delta(
+            "ai[sqlite]", self._backend(), {"ai_backend": "memory"}
+        ) == {"ai_backend": "sqlite"}
+
+    def test_asking_for_that_choice_once_past_it_is_satisfied(self) -> None:
+        assert (
+            variant_delta("ai[memory]", self._backend(), {"ai_backend": "sqlite"}) == {}
+        )
+
+    def test_between_two_choices_that_hold_data_is_still_a_conflict(self) -> None:
+        with pytest.raises(VariantConflictError, match="ai_backend"):
+            variant_delta("ai[postgres]", self._backend(), {"ai_backend": "sqlite"})
+
     def test_fresh_install_ignores_recorded_defaults(self) -> None:
         """Copier records ``ai_backend: memory`` even when AI is not
         installed. A fresh ``ai[sqlite]`` names sqlite and compares with

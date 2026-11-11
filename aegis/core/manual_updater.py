@@ -21,7 +21,6 @@ from pydantic import BaseModel, Field
 from aegis.constants import (
     AnswerKeys,
     AuthLevels,
-    ComponentNames,
     WorkerBackends,
 )
 from aegis.i18n import t
@@ -42,6 +41,7 @@ from .component_files import (
     get_installed_owned_paths,
     get_shared_scope,
     get_template_path,
+    group_on,
     is_binary_asset,
     shows_services_card,
 )
@@ -455,18 +455,11 @@ class ManualUpdater:
             if rule := evals_rule(updated_answers):
                 raise ValueError(rule)
 
-            # Get files for this component
-            backend_variant = (
-                update_data.get(AnswerKeys.SCHEDULER_BACKEND)
-                if component == ComponentNames.SCHEDULER
-                else None
-            )
             # Pass the post-add answers so option-gated extras (auth org
-            # files, htmx auth pages, ai rag/voice) are copied exactly when
-            # this project's configuration enables them (issue #814).
-            component_files = get_component_files(
-                component, backend_variant, answers=updated_answers
-            )
+            # files, htmx auth pages, ai rag/voice, a backend's persistence)
+            # are copied exactly when this project's configuration enables
+            # them (issue #814).
+            component_files = get_component_files(component, answers=updated_answers)
             # And what other installed specs keep only while this one is
             # there (mcp's activity record, with a database).
             component_files += [
@@ -481,11 +474,7 @@ class ManualUpdater:
                 # merge below, the ones it deleted stay deleted. A missing
                 # file the old answers rendered empty (gated whole-file on
                 # the option) was never there to delete.
-                before = set(
-                    get_component_files(
-                        component, backend_variant, answers=self.answers
-                    )
-                )
+                before = set(get_component_files(component, answers=self.answers))
                 component_files = [
                     f
                     for f in component_files
@@ -1405,7 +1394,7 @@ class ManualUpdater:
         off = [
             Path(path)
             for key, paths in (extras or {}).items()
-            if not self.answers.get(key)
+            if not group_on(key, self.answers)
             for path in paths
         ]
         files = [f for f in files if not any(f[1].is_relative_to(path) for path in off)]

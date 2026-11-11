@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from aegis.constants import StorageBackends
+from aegis.constants import AnswerKeys, StorageBackends
 from aegis.core.component_files import (
     PROJECT_SLUG_PLACEHOLDER,
     get_component_files,
@@ -57,6 +57,10 @@ _LEGACY_GENERATED_ONLY = {
 }
 
 
+def _scheduler(backend: str) -> dict[str, object]:
+    return {AnswerKeys.SCHEDULER_BACKEND: backend}
+
+
 def _resolves_in_template(rel_path: str) -> bool:
     """True if a manifest path maps to a real template file/dir/variant.
 
@@ -90,11 +94,6 @@ class TestMappingIsDerived:
         mapping = get_component_file_mapping()
         assert "backend" not in mapping
         assert "frontend" not in mapping
-
-    def test_gated_extras_emitted_as_their_own_keys(self) -> None:
-        mapping = get_component_file_mapping()
-        for key in ("scheduler_persistence", "ai_rag", "ai_voice"):
-            assert key in mapping, f"{key} extra missing from mapping"
 
 
 class TestNoStaleManifestPaths:
@@ -149,20 +148,25 @@ class TestFootprintSplit:
 
     def test_ai_add_base_ships_llm_api_and_omits_rag_tab(self) -> None:
         """Retrofit parity with a fresh scaffold (issue #814): the LLM catalog
-        API rides in the add base, and the RAG tab does not (it is RAG-gated,
-        so it belongs to the ai_rag extras, not the always-copied primary)."""
-        add_base = set(get_component_files("ai"))
+        API rides in a persisted add base, and the RAG tab does not (it is
+        RAG-gated, so it belongs to the ai_rag extras, not primary)."""
+        add_base = set(
+            get_component_files(
+                "ai", answers={AnswerKeys.AI_BACKEND: StorageBackends.SQLITE}
+            )
+        )
         full = set(get_component_files("ai", full=True))
         rag_tab = "app/components/frontend/dashboard/modals/rag_tab/tab.py"
 
-        # LLM API dir is in primary -> its files land in the add base.
         assert "app/components/backend/api/llm/routes.py" in add_base
         # rag_tab only on the remove side / when ai_rag is enabled.
         assert rag_tab not in add_base
         assert rag_tab in full
 
     def test_scheduler_memory_excludes_persistence(self) -> None:
-        memory = set(get_component_files("scheduler", StorageBackends.MEMORY))
+        memory = set(
+            get_component_files("scheduler", answers=_scheduler(StorageBackends.MEMORY))
+        )
         # Nothing gated on ``scheduler_backend != memory`` may be present.
         assert "app/cli/tasks.py" not in memory
         assert not any(f.startswith("app/services/scheduler/") for f in memory)
@@ -173,7 +177,7 @@ class TestFootprintSplit:
     def test_scheduler_db_backends_include_persistence(self, backend: str) -> None:
         """Persistence files are gated on ``scheduler_backend != memory``, so
         every database backend (not just sqlite) must get them."""
-        files = set(get_component_files("scheduler", backend))
+        files = set(get_component_files("scheduler", answers=_scheduler(backend)))
         assert "app/cli/tasks.py" in files
         assert "app/services/scheduler/execution_log.py" in files
         assert "app/components/backend/api/scheduler.py" in files
@@ -184,7 +188,7 @@ class TestFootprintSplit:
     def test_scheduler_remove_matches_db_backend_footprint(self, backend: str) -> None:
         """Removal takes everything a database backend adds, plus the web
         Overseer page test, which only an htmx project gets."""
-        files = set(get_component_files("scheduler", backend))
+        files = set(get_component_files("scheduler", answers=_scheduler(backend)))
         full = set(get_component_files("scheduler", full=True))
         htmx_only = set(COMPONENTS["scheduler"].files.extras["include_htmx"])
         assert files == full - htmx_only

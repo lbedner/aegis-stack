@@ -16,10 +16,10 @@ from typing import Any
 
 import pytest
 
-from aegis.constants import AnswerKeys
+from aegis.constants import AnswerKeys, StorageBackends
 from aegis.core import post_gen_tasks
 from aegis.core.component_files import (
-    SCHEDULER_PERSISTENCE,
+    AI_PERSISTENCE,
     _expand_directories_to_files,
     get_all_owned_paths,
     get_component_files,
@@ -32,12 +32,11 @@ SPECS = {**SERVICES, **COMPONENTS}
 
 
 def _answer_groups() -> list[tuple[str, str]]:
-    """(spec, extras group) pairs whose group is an answer, i.e. a gate."""
+    """Every (spec, extras group) pair: each group is a gate."""
     return [
         (name, group)
         for name, spec in SPECS.items()
         for group in (spec.files.extras or {})
-        if group != SCHEDULER_PERSISTENCE
     ]
 
 
@@ -96,18 +95,22 @@ def test_an_option_that_is_off_adds_none_of_its_files(spec: str, group: str) -> 
         **get_copier_defaults(),
         AnswerKeys.include_key(spec): True,
         group: False,
+        # A persistence group is off on its memory backend.
+        AnswerKeys.AI_BACKEND: StorageBackends.MEMORY,
+        AnswerKeys.SCHEDULER_BACKEND: StorageBackends.MEMORY,
     }
     gated = set(_expand_directories_to_files(SPECS[spec].files.extras[group]))
     added = set(get_component_files(spec, answers=answers))
     assert not added & gated, sorted(added & gated)[:10]
 
 
-@pytest.mark.parametrize("option", [AnswerKeys.AI_VOICE, AnswerKeys.AI_EVALS])
-def test_init_without_an_ai_option_leaves_none_of_its_files(
-    tmp_path: Any, option: str
+@pytest.mark.parametrize(("spec", "option"), _answer_groups())
+def test_init_without_an_option_leaves_none_of_its_files(
+    tmp_path: Any, spec: str, option: str
 ) -> None:
-    """An AI option off: init removes what the AI spec lists under it."""
-    gated = SERVICES["ai"].files.extras[option]
+    """An option off: init removes what its spec lists under it. A memory
+    backend is persistence off, so a later ``ai[sqlite]`` brings them."""
+    gated = SPECS[spec].files.extras[option]
     for rel in gated:
         # A listed folder gets a file inside it; a listed file is itself.
         path = (
@@ -117,6 +120,25 @@ def test_init_without_an_ai_option_leaves_none_of_its_files(
         path.write_text("")
     post_gen_tasks.cleanup_components(
         tmp_path,
-        {**get_copier_defaults(), AnswerKeys.AI: True, option: False},
+        {
+            **get_copier_defaults(),
+            AnswerKeys.include_key(spec): True,
+            option: False,
+        },
     )
     assert not [rel for rel in gated if (tmp_path / rel).exists()]
+
+
+def test_a_persisted_ai_adds_its_tables_and_a_memory_one_does_not() -> None:
+    gated = set(
+        _expand_directories_to_files(SERVICES["ai"].files.extras[AI_PERSISTENCE])
+    )
+    answers = {**get_copier_defaults(), AnswerKeys.AI: True}
+
+    memory = set(get_component_files("ai", answers=answers))
+    sqlite = set(
+        get_component_files("ai", answers={**answers, AnswerKeys.AI_BACKEND: "sqlite"})
+    )
+
+    assert not memory & gated
+    assert "app/services/ai/models/agents/__init__.py" in sqlite & gated

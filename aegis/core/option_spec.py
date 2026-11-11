@@ -84,6 +84,12 @@ class OptionSpec:
     value is project-wide state; it is what lets a dependency such as
     ``auth[org]`` be compared against what the project already has."""
 
+    upgrades_from: str | None = None
+    """A choice that holds nothing the others would lose (the AI's
+    ``memory`` backend): a project on it may move to any other choice, and
+    a request for it once past it is satisfied. Any other mismatch on an
+    unordered option is still a conflict (sqlite and postgres hold data)."""
+
     ordered: bool = False
     """``choices`` are ascending levels (auth: basic < rbac < org). A
     request at or below the project's current value is satisfied; above
@@ -276,7 +282,8 @@ def answers_delta(
     An answer that is missing or not one of the option's choices is
     treated as unset. Ordered options are satisfied by any current value
     at or above the request; unordered ones raise
-    :class:`VariantConflictError` on a mismatch. A multi option (AI
+    :class:`VariantConflictError` on a mismatch, except to or from their
+    ``upgrades_from`` choice (moved off, or already past). A multi option (AI
     providers) is satisfied when the project already holds every
     requested value, else the delta is the union, current values first,
     as the comma-separated string copier stores; a flag (rag, voice) is
@@ -305,12 +312,12 @@ def answers_delta(
             if current is not True:
                 delta[key] = True
             continue
-        if current not in opt.choices:
+        if current not in opt.choices or current == opt.upgrades_from != wanted:
             delta[key] = wanted
         elif opt.ordered:
             if opt.choices.index(wanted) > opt.choices.index(current):
                 delta[key] = wanted
-        elif current != wanted:
+        elif current != wanted != opt.upgrades_from:
             raise VariantConflictError(
                 f"{plugin_spec.name}[{wanted}] conflicts with the project's "
                 f"{key}={current!r}; change it deliberately rather than "

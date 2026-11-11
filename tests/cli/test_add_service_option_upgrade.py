@@ -11,9 +11,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from aegis.core.manual_updater import ManualUpdater
 
 from .conftest import ProjectFactory
+from .test_utils import run_aegis_command
 
 AI = "app/services/ai"
 SPEECH = "app/components/backend/api/ai/speech.py"
@@ -138,3 +141,25 @@ def test_adding_evals_to_a_langchain_project_is_refused(
     assert not result.success
     assert "Pydantic AI" in (result.error_message or "")
     assert not (project / f"{AI}/domains/evals").exists()
+
+
+@pytest.mark.slow
+def test_a_memory_ai_moves_to_a_database(project_factory: ProjectFactory) -> None:
+    """Memory holds nothing a database would lose, so ``ai[sqlite,evals]`` on
+    a memory project persists it, with the database it needs, rather than
+    refusing the only way off the default backend."""
+    # Not the default provider: what the request does not name stays the
+    # project's, rather than a fresh install's defaults riding the upgrade in.
+    project = project_factory("ai_memory_openai")
+
+    result = run_aegis_command(
+        "add-service", "ai[sqlite,evals]", "--project-path", str(project), "--yes"
+    )
+
+    assert result.success, result.stderr + result.stdout
+    answers = (project / ".copier-answers.yml").read_text()
+    assert "ai_backend: sqlite" in answers
+    assert "include_database: true" in answers
+    assert "ai_providers: openai" in answers
+    assert (project / f"{AI}/models/evals/run.py").exists()
+    assert (project / f"{AI}/domains/evals/runner.py").exists()

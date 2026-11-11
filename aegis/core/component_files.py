@@ -5,16 +5,17 @@ This module provides functionality to identify which files belong to which
 components by parsing the Copier template's exclusion rules.
 """
 
+import functools
 import importlib.util
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import yaml
 
-from ..constants import AnswerKeys, ComponentNames, StorageBackends
+from ..constants import AnswerKeys, StorageBackends
 
 # Constants
 PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
@@ -192,6 +193,9 @@ def _expand_directories_to_files(paths: list[str]) -> list[str]:
     """
     Expand directory paths to include all nested files.
 
+    The template tree does not change while aegis runs, so one walk per
+    list is kept (an add asks for the same groups for every installed spec).
+
     For each directory path, recursively discover all files within it
     by scanning the template directory.
 
@@ -205,6 +209,11 @@ def _expand_directories_to_files(paths: list[str]) -> list[str]:
         >>> _expand_directories_to_files(["app/components/scheduler"])
         ["app/components/scheduler/__init__.py", "app/components/scheduler/main.py"]
     """
+    return list(_expand(tuple(paths)))
+
+
+@functools.cache
+def _expand(paths: tuple[str, ...]) -> tuple[str, ...]:
     template_path = get_template_path()
     expanded_paths: list[str] = []
 
@@ -233,7 +242,7 @@ def _expand_directories_to_files(paths: list[str]) -> list[str]:
             # Not a directory or doesn't exist - keep as-is (it's a file path)
             expanded_paths.append(path)
 
-    return expanded_paths
+    return tuple(expanded_paths)
 
 
 def _spec_extras(component: str) -> dict[str, list[str]]:
@@ -267,7 +276,7 @@ def _foreign_gated_files(component: str, answers: dict[str, Any]) -> set[str]:
             continue
         owner_installed = answers.get(AnswerKeys.include_key(name), False)
         for group, files in (spec.files.extras or {}).items():
-            if owner_installed and answers.get(group):
+            if owner_installed and group_on(group, answers):
                 continue
             excluded |= set(_expand_directories_to_files(files))
     return excluded
@@ -285,24 +294,18 @@ def dependent_files(
     from .services import SERVICES
 
     specs = {**SERVICES, **COMPONENTS}
-    # Every group is an answer that gates (a spec's flag, or an option like
-    # ``ai_voice``), but ``scheduler_persistence``, which names a variant.
-    groups = {group for spec in specs.values() for group in spec.files.extras or {}}
-    gates = groups - {SCHEDULER_PERSISTENCE}
     key = AnswerKeys.include_key(component)
     paths = [
         path
         for name, spec in specs.items()
         if name != component and answers.get(AnswerKeys.include_key(name))
         for path in (spec.files.extras or {}).get(key, [])
-        if _other_gates_hold(spec, key, path, answers, gates)
+        if _other_gates_hold(spec, key, path, answers)
     ]
     return _expand_directories_to_files(paths) if expand else paths
 
 
-def _other_gates_hold(
-    spec: Any, key: str, path: str, answers: dict[str, Any], gates: set[str]
-) -> bool:
+def _other_gates_hold(spec: Any, key: str, path: str, answers: dict[str, Any]) -> bool:
     """Whether every *other* gate on ``path`` is also enabled.
 
     A spec may list one file under two answer keys, meaning it needs both:
@@ -314,19 +317,43 @@ def _other_gates_hold(
     imports renders empty (aegis issue #1873).
     """
     for group, files in (spec.files.extras or {}).items():
-        gates_this = group != key and group in gates and path in files
-        if gates_this and not answers.get(group):
+        gates_this = group != key and path in files
+        if gates_this and not group_on(group, answers):
             return False
     return True
 
 
-# The one extras group that is a backend variant, not an answer to gate on.
+# What a part keeps in a database: off on its memory backend.
+AI_PERSISTENCE = "ai_persistence"
 SCHEDULER_PERSISTENCE = "scheduler_persistence"
+
+
+def _persisted(backend_key: str) -> Callable[[Mapping[str, Any]], bool]:
+    return lambda answers: (
+        (answers.get(backend_key) or StorageBackends.MEMORY) != StorageBackends.MEMORY
+    )
+
+
+# Extras groups that follow from an answer rather than being one.
+DERIVED_GATES: dict[str, Callable[[Mapping[str, Any]], bool]] = {
+    AI_PERSISTENCE: _persisted(AnswerKeys.AI_BACKEND),
+    SCHEDULER_PERSISTENCE: _persisted(AnswerKeys.SCHEDULER_BACKEND),
+}
+
+
+def group_on(group: str, answers: Mapping[str, Any]) -> bool:
+    """Whether an extras group's files belong in a project with ``answers``:
+    its answer is on (``True``, or ``"yes"`` from an old answers file), or
+    its ``DERIVED_GATES`` predicate holds."""
+    derived = DERIVED_GATES.get(group)
+    if derived:
+        return derived(answers)
+    value = answers.get(group)
+    return value is True or value == "yes"
 
 
 def get_component_files(
     component: str,
-    backend_variant: str | None = None,
     *,
     full: bool = False,
     answers: dict[str, Any] | None = None,
@@ -339,10 +366,11 @@ def get_component_files(
     and updates stay consistent.
 
     The default (``full=False``) returns the *add base*: the spec's ``primary``
-    files, plus scheduler persistence files for database backends
-    (sqlite/postgres — the templates gate them on ``scheduler_backend !=
-    "memory"``). These render real content for the chosen options, so
-    ``aegis add`` never writes empty stubs.
+    files, with each ``extras`` group in or out by ``group_on`` over
+    ``answers`` (none reads every gate off). This is how ``aegis add`` copies
+    option-gated files exactly when the project enables them (auth's org
+    files on ``auth[org]``, the AI's tables on a database backend) and never
+    writes the empty stubs they render to otherwise (issue #814).
 
     With ``full=True`` it returns the *complete footprint*: ``primary`` plus
     every ``extras`` group the spec owns (``ai_rag``, ``ai_voice``,
@@ -350,18 +378,10 @@ def get_component_files(
     fully deleted regardless of which options were enabled; over-deletion is
     safe because missing paths are no-ops.
 
-    With ``answers`` provided, extras groups whose name is a truthy answer key
-    (``include_auth_org``, ``include_htmx``, ``ai_rag``, ...) join the add
-    base. This is how ``aegis add`` copies option-gated files exactly when the
-    project's configuration enables them — e.g. auth's org files on an
-    ``auth[org]`` add, or its htmx login pages when the project ships the htmx
-    frontend — instead of over-copying them from ``primary`` (issue #814).
-
     Args:
         component: Component name (e.g., "scheduler", "worker", "database")
-        backend_variant: Optional backend variant (e.g., "memory", "sqlite") for scheduler
         full: When True, include every gated extra group (remove footprint)
-        answers: Project answers; enables extras whose group name is truthy
+        answers: Project answers the extras gates read
 
     Returns:
         List of file paths relative to project root
@@ -370,7 +390,7 @@ def get_component_files(
         >>> get_component_files("scheduler")
         ['app/components/scheduler', 'app/entrypoints/scheduler.py', ...]
 
-        >>> get_component_files("scheduler", "sqlite")
+        >>> get_component_files("scheduler", answers={"scheduler_backend": "sqlite"})
         ['app/services/scheduler', 'app/cli/tasks.py', ...]
     """
     from .post_gen_tasks import get_component_file_mapping
@@ -384,40 +404,20 @@ def get_component_files(
             base.extend(extra_files)
         return sorted(set(_expand_directories_to_files(base)))
 
+    # An extras group joins the add base when its gate is on, and is taken
+    # back out when off: it may sit inside a primary directory (voice inside
+    # ``app/services/ai``, persistence inside ``app/services/scheduler``),
+    # which would otherwise copy it anyway. No answers reads every gate off.
     own_off: set[str] = set()
-    if answers:
-        # Option-gated extras join the add base when the project's answers
-        # enable them. Groups whose name isn't an answer key (e.g.
-        # ``scheduler_persistence``, handled by the backend_variant branch
-        # below) simply never match. A group whose answer is off is taken
-        # back out: it may sit inside a primary directory (voice inside
-        # ``app/services/ai``), which would otherwise copy it anyway.
-        for group, extra_files in _spec_extras(component).items():
-            if answers.get(group):
-                base.extend(extra_files)
-            elif group != SCHEDULER_PERSISTENCE:
-                own_off |= set(_expand_directories_to_files(extra_files))
-
-    if component == ComponentNames.SCHEDULER:
-        # Scheduler persistence files are gated on ``scheduler_backend !=
-        # memory``. On a database backend (sqlite/postgres) they render real
-        # content (add them); on the memory backend they render empty, so
-        # subtract them from the add base to avoid writing 0-byte stubs.
-        persistence = mapping.get(SCHEDULER_PERSISTENCE, [])
-        base_files = set(_expand_directories_to_files(base))
-        persistence_files = set(_expand_directories_to_files(persistence))
-        if backend_variant in (StorageBackends.SQLITE, StorageBackends.POSTGRES):
-            files = base_files | persistence_files
+    for group, extra_files in _spec_extras(component).items():
+        if group_on(group, answers or {}):
+            base.extend(extra_files)
         else:
-            files = base_files - persistence_files
-        if answers:
-            files -= _foreign_gated_files(component, answers) | own_off
-        return sorted(files)
+            own_off |= set(_expand_directories_to_files(extra_files))
 
-    # Expand directories to include all nested files
-    files = set(_expand_directories_to_files(base))
+    files = set(_expand_directories_to_files(base)) - own_off
     if answers:
-        files -= _foreign_gated_files(component, answers) | own_off
+        files -= _foreign_gated_files(component, answers)
     return sorted(files)
 
 
@@ -443,22 +443,6 @@ def get_component_cleanup_paths(component: str) -> list[str]:
     for extra_files in _spec_extras(component).values():
         paths.extend(extra_files)
     return sorted(set(paths))
-
-
-def get_service_files(service: str) -> list[str]:
-    """
-    Get list of file paths that belong to a service.
-
-    Services are components that provide business logic (auth, ai).
-    This is an alias for get_component_files for clarity.
-
-    Args:
-        service: Service name (e.g., "auth", "ai")
-
-    Returns:
-        List of file paths relative to project root
-    """
-    return get_component_files(service)
 
 
 def get_all_owned_paths() -> set[str]:
@@ -498,13 +482,7 @@ def get_installed_owned_paths(answers: dict[str, Any]) -> set[str]:
         path
         for name in (*COMPONENTS, *SERVICES)
         if name in CORE_COMPONENTS or answers.get(AnswerKeys.include_key(name))
-        for path in get_component_files(
-            name,
-            answers.get(AnswerKeys.SCHEDULER_BACKEND)
-            if name == ComponentNames.SCHEDULER
-            else None,
-            answers=answers,
-        )
+        for path in get_component_files(name, answers=answers)
     }
 
 
@@ -536,8 +514,7 @@ def shows_services_card(answers: dict[str, Any]) -> bool:
     from .plugins.composer import PLUGINS_ANSWER_KEY
     from .services import SERVICE_ANSWER_KEYS
 
-    # Init's context may still say "yes"/"no" for a flag.
-    has_service = any(answers.get(key) in (True, "yes") for key in SERVICE_ANSWER_KEYS)
+    has_service = any(group_on(key, answers) for key in SERVICE_ANSWER_KEYS)
     return has_service or bool(answers.get(PLUGINS_ANSWER_KEY))
 
 

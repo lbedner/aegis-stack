@@ -17,11 +17,14 @@ import typer
 from aegis.constants import (
     AIFrameworks,
     AnswerKeys,
-    StorageBackends,
     WorkerBackends,
 )
 from aegis.core.build_reporter import BuildReporter
-from aegis.core.component_files import SERVICES_CARD_FILE, shows_services_card
+from aegis.core.component_files import (
+    SERVICES_CARD_FILE,
+    group_on,
+    shows_services_card,
+)
 from aegis.core.components import COMPONENTS, ComponentType
 from aegis.core.file_manifest import (
     apply_cleanup_path,
@@ -79,14 +82,12 @@ def get_component_file_mapping() -> dict[str, list[str]]:
     """Map each component/service to the files it owns.
 
     Derived from each spec's ``FileManifest`` — the single source of truth.
-    ``mapping[name]`` is the spec's ``primary`` add base, and every ``extras``
-    group is emitted under its own key (e.g. ``scheduler_persistence``,
-    ``ai_rag``, ``ai_voice``) for the option/variant-gated consumers. The full
-    add/remove footprint (``primary`` plus every extra) is assembled by
+    ``mapping[name]`` is the spec's ``primary``. The add base and full remove
+    footprint (``primary`` with its ``extras``) are assembled by
     :func:`aegis.core.component_files.get_component_files`.
 
     Returns:
-        Dict mapping component/service (and extra) names to file paths
+        Dict mapping component/service names to their primary file paths
         relative to the project root.
     """
     return compute_file_mapping([*COMPONENTS.values(), *SERVICES.values()])
@@ -358,10 +359,8 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         context values for maximum compatibility.
     """
 
-    # Helper to handle both bool and string values from different template engines
     def is_enabled(key: str) -> bool:
-        value = context.get(key)
-        return value is True or value == "yes"
+        return group_on(key, context)
 
     # =====================================================================
     # Pattern A: per-spec primary cleanup driven from FileManifest
@@ -379,33 +378,18 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
             for _rel_path in iter_cleanup_paths(_spec, selected=False):
                 apply_cleanup_path(project_path, _rel_path)
 
-    # A component's files that need another plugin (deploy's history and
-    # mcp's activity record need the database, mcp's tokens need auth) go
-    # when that plugin is absent; the component itself still works without.
-    _plugin_keys = {
-        AnswerKeys.include_key(_name) for _name in {**COMPONENTS, **SERVICES}
-    }
-    for _name, _spec in COMPONENTS.items():
-        if not is_enabled(AnswerKeys.include_key(_name)):
+    # A selected part's files gated on something that is off go: another
+    # plugin it works without (deploy's history needs the database), an
+    # option (``ai_voice``), or a backend that keeps nothing
+    # (``ai_persistence``). A new file is cleaned up by being listed in its
+    # spec's extras, and an upgrade that turns the gate on brings it back.
+    for _spec in _cleanable_specs:
+        if not is_enabled(AnswerKeys.include_key(_spec.name)):
             continue
-        for _key, _paths in _spec.files.extras.items():
-            if _key in _plugin_keys and not is_enabled(_key):
+        for _group, _paths in _spec.files.extras.items():
+            if not group_on(_group, context):
                 for _rel_path in _paths:
                     apply_cleanup_path(project_path, _rel_path)
-
-    # =====================================================================
-    # Pattern B/D: option-driven and backend-variant cleanups (inline).
-    # =====================================================================
-    # Scheduler service (only useful with persistence; remove on memory backend)
-    scheduler_backend = context.get(
-        AnswerKeys.SCHEDULER_BACKEND, StorageBackends.MEMORY
-    )
-    if scheduler_backend == StorageBackends.MEMORY:
-        remove_dir(project_path, "app/services/scheduler")
-        remove_file(project_path, "app/cli/tasks.py")
-        remove_file(project_path, "app/components/backend/api/scheduler.py")
-        remove_file(project_path, "tests/api/test_scheduler_endpoints.py")
-        remove_file(project_path, "tests/services/test_scheduled_task_manager.py")
 
     # Spec-declared post-render transforms (Pattern D). Primary cleanup is
     # handled above by the Pattern A loop; these run for SELECTED specs
@@ -424,214 +408,29 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     # Note: per-spec primary cleanup for database / redis / ingress /
     # observability / auth / AI / comms / payment / insights is now driven
     # by the Pattern A loop above, sourced from each spec's
-    # `files.primary` list. Sub-feature blocks (auth_org, ai_memory,
-    # ai_rag, ai_voice) remain inline below.
+    # `files.primary` list, and sub-features by the extras loop above. What
+    # stays inline below: oauth (shared files) and the langchain strip.
 
     # Remove OAuth (social login) files when not selected. Auth-only
     # projects without OAuth still have ``OAuthProvider`` /
     # ``UserOAuthIdentity`` SQLModels in ``app/models/user.py`` (the
     # tables ship with the auth migration unconditionally), but the
-    # routes, middleware, settings, and tests are scoped here.
+    # middleware and tests are shared stubs scoped here; the auth spec's own
+    # oauth files go with its ``include_oauth`` extras above.
     if not is_enabled(AnswerKeys.AUTH_OAUTH):
-        remove_file(project_path, "app/components/backend/api/auth/oauth.py")
         remove_file(project_path, "app/components/backend/middleware/session.py")
-        remove_file(
-            project_path,
-            "app/components/frontend/controls/auth/oauth_button.py",
-        )
         remove_file(project_path, "tests/api/test_oauth_endpoints.py")
         remove_file(project_path, "tests/services/test_oauth_user_service.py")
-
-    # Remove auth org files if org level not selected (but auth is enabled):
-    # what the auth spec lists under ``include_auth_org``.
-    if is_enabled(AnswerKeys.AUTH) and not is_enabled(AnswerKeys.AUTH_ORG):
-        for _rel_path in SERVICES["auth"].files.extras[AnswerKeys.AUTH_ORG]:
-            apply_cleanup_path(project_path, _rel_path)
-
-    # (AI primary cleanup handled by the Pattern A loop above.)
-
-    # AI conversation persistence handling
-    # When AI backend is memory (or not specified), remove database-related files
-    ai_backend = context.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
-    if ai_backend == StorageBackends.MEMORY:
-        remove_file(project_path, "app/models/conversation.py")
-        # Remove LLM tracking models (only needed with persistence)
-        # Keep ai/models/__init__.py, providers.py and conversation.py: core types
-        remove_dir(project_path, "app/services/ai/models/llm")
-        # The active-model selector reads the LLM tables removed above.
-        remove_file(project_path, "app/services/ai/domains/llm/active_model.py")
-        remove_file(project_path, "tests/services/ai/test_active_model.py")
-        # A writer runs as an agent row, read through the selector above.
-        remove_file(project_path, "app/services/ai/domains/llm/writer.py")
-        # Agent registry models ride the same persistence gate (the memory
-        # backend resolves the default agent from code, not DB rows). The
-        # tools.py registry itself stays: it is DB-free and the code-config
-        # path still resolves tools through it.
-        remove_dir(project_path, "app/services/ai/models/agents")
-        remove_file(project_path, "tests/services/ai/test_agent_models.py")
-        # Per-user memory needs the agent_user_memory table + async DB.
-        remove_file(project_path, "app/services/ai/domains/chat/user_memory.py")
-        remove_file(project_path, "tests/services/ai/test_user_memory.py")
-        # A shared picture's handle lives in that same row.
-        remove_file(project_path, "app/services/ai/domains/chat/pastes.py")
-        remove_file(project_path, "tests/services/ai/test_pastes.py")
-        remove_file(project_path, "app/components/backend/api/ai/memory.py")
-        # Context modules are DB rows (the context_module table).
-        remove_file(project_path, "app/services/ai/domains/chat/context_modules.py")
-        remove_file(project_path, "tests/services/ai/test_context_modules.py")
-        # Reference fetchers query the conversation tables (removed above).
-        # The fetcher registry itself (fetchers.py) stays: it is DB-free.
-        remove_file(project_path, "app/services/ai/domains/chat/builtin_fetchers.py")
-        remove_file(project_path, "tests/services/ai/test_builtin_fetchers.py")
-        # Module context assembly reads context_module rows.
-        remove_file(project_path, "app/services/ai/domains/chat/module_context.py")
-        remove_file(project_path, "tests/services/ai/test_module_context.py")
-        # Sentiment scoring reads/writes conversation + sentiment tables.
-        remove_file(project_path, "app/services/ai/domains/chat/sentiment.py")
-        # Every chat read goes through the queries module; its tables are gone.
-        remove_file(project_path, "app/services/ai/domains/chat/queries.py")
-        remove_file(project_path, "app/services/ai/models/sentiment.py")
-        # A drawn card is a row (chat_card): no cards without persistence.
-        remove_file(project_path, "app/services/ai/models/chat_card.py")
-        remove_file(project_path, "app/services/ai/domains/chat/cards.py")
-        remove_file(project_path, "app/services/ai/domains/chat/path_card.py")
-        remove_file(
-            project_path, "app/components/web_frontend/routes/partials/chat_cards.py"
-        )
-        remove_file(project_path, "tests/services/ai/test_chat_cards.py")
-        remove_file(project_path, "tests/services/ai/test_path_card.py")
-        remove_file(project_path, "tests/web/test_chat_cards.py")
-        remove_file(project_path, "tests/web/test_path_card.py")
-        # Voice profiles and live engines are tables. ai_voice gates them,
-        # but persistence gates whether there is anywhere to put a table at
-        # all - without it the model registry walks into an unimportable
-        # sqlalchemy.
-        remove_dir(project_path, "app/services/ai/models/voice")
-        # The eval tables' package: its modules render empty here, its marker stays.
-        remove_dir(project_path, "app/services/ai/models/evals")
-        remove_file(project_path, "app/services/ai/domains/voice/profiles.py")
-        remove_file(project_path, "app/services/ai/domains/voice/pronunciations.py")
-        remove_file(project_path, "app/services/ai/domains/voice/design.py")
-        remove_file(project_path, "app/services/ai/domains/voice/queries.py")
-        remove_file(project_path, "app/services/ai/domains/voice/live_engines.py")
-        remove_file(project_path, "app/services/ai/domains/voice/realtime_calls.py")
-        remove_file(project_path, "app/services/ai/domains/voice/live_voice.py")
-        remove_file(project_path, "app/components/backend/startup/live_engine.py")
-        remove_file(
-            project_path, "app/components/web_frontend/routes/partials/chat_live.py"
-        )
-        remove_file(project_path, "app/components/backend/startup/voice_profile.py")
-        remove_file(
-            project_path, "app/components/web_frontend/routes/partials/chat_voices.py"
-        )
-        # Voice prices and the usage ledger they land in are tables too.
-        remove_file(project_path, "tests/services/ai/voice/test_speech_costs.py")
-        remove_file(project_path, "tests/services/ai/voice/test_voice_profiles.py")
-        remove_file(project_path, "tests/services/ai/voice/test_voice_design.py")
-        remove_file(project_path, "tests/web/test_chat_voices.py")
-        remove_file(project_path, "tests/web/test_chat_live.py")
-        remove_file(project_path, "tests/_voice_catalog.py")
-        remove_file(project_path, "tests/_realtime.py")
-        remove_file(project_path, "tests/services/ai/voice/test_realtime_calls.py")
-        remove_file(project_path, "tests/services/ai/voice/test_live_voice.py")
-        remove_file(project_path, "tests/services/ai/voice/test_live_engines.py")
-        remove_file(project_path, "tests/services/ai/test_sentiment.py")
-        # The spend reads (the Overseer's Costs) read the usage ledgers.
-        remove_dir(project_path, "app/services/ai/domains/spend")
-        remove_file(project_path, "tests/services/ai/test_spend_queries.py")
-        # ...and so does the Costs section built on them.
-        for costs in ("overseer_ai_costs.py", "overseer_ai_costs_views.py"):
-            remove_file(project_path, f"app/components/web_frontend/{costs}")
-        for tab in ("", "_overview", "_users", "_projections", "_breakdown"):
-            remove_file(
-                project_path,
-                f"app/components/web_frontend/templates/pages/overseer/ai/_costs{tab}.html",
-            )
-        remove_file(project_path, "tests/web/test_overseer_ai_costs.py")
-        # Agent registry CLI inspects DB rows.
-        remove_file(project_path, "app/cli/agents.py")
-        remove_file(project_path, "tests/cli/test_agents_cli.py")
-        # Agent registry admin surface (API service + dashboard tab).
-        remove_file(project_path, "app/services/ai/domains/chat/agent_registry.py")
-        remove_file(
-            project_path,
-            "app/components/frontend/dashboard/modals/agents_tab.py",
-        )
-        remove_file(project_path, "tests/services/ai/test_agent_registry.py")
-        # The knowledge base's records are DB-backed; the rag service itself
-        # stays (Chroma is file-based and works without a database).
-        remove_file(project_path, "app/services/rag/models/knowledge.py")
-        remove_file(project_path, "app/services/rag/knowledge.py")
-        remove_file(project_path, "app/services/rag/queries.py")
-        remove_file(project_path, "app/components/backend/api/rag/knowledge.py")
-        remove_file(project_path, "tests/services/rag/test_knowledge_models.py")
-        remove_file(project_path, "tests/services/rag/test_knowledge_sync.py")
-        # chat_kit + the spend domain's recording ledger the LLM catalog +
-        # conversation tables removed above, so they only work with a
-        # persistent backend (spend goes with its domain, above).
-        remove_dir(project_path, "app/services/ai/domains/chat/chat_kit")
-        remove_file(project_path, "tests/services/ai/test_price_memo.py")
-        remove_file(project_path, "tests/services/ai/test_llm_pricing_lookup.py")
-        remove_dir(project_path, "tests/services/ai/chat_kit")
-        remove_dir(project_path, "app/services/ai/domains/llm/etl")
-        remove_dir(project_path, "app/services/ai/fixtures")
-        # Remove persistence-related catalog and LLM modules
-        remove_file(project_path, "app/services/ai/domains/llm/llm_service.py")
-        remove_file(project_path, "app/services/ai/domains/llm/catalog.py")
-        remove_file(project_path, "app/services/ai/domains/llm/queries.py")
-        # provider_management stays: provider readiness, .env writes and SDK
-        # installs touch no table, and `ai providers` / `add-provider` /
-        # `use-provider` need it on the memory backend too.
-        # Remove persistence-related tests
-        remove_dir(project_path, "tests/services/ai/etl")
-        remove_file(project_path, "tests/services/ai/test_usage_tracking.py")
-        remove_file(project_path, "tests/services/ai/test_catalog_tool.py")
-        # Prints catalog rows; imports sqlmodel + the llm tables removed above.
-        remove_file(project_path, "tests/services/ai/test_model_id_display.py")
-        remove_file(project_path, "tests/services/ai/test_llm_service.py")
-        # Remove LLM CLI and API (catalog management needs database)
-        remove_file(project_path, "app/cli/llm.py")
-        remove_file(project_path, "app/cli/llm_rendering.py")
-        remove_file(project_path, "tests/cli/test_llm_cli.py")
-        remove_dir(project_path, "app/components/backend/api/llm")
-        remove_file(project_path, "tests/api/test_llm_endpoints.py")
-        # Remove analytics UI (needs database for usage tracking)
-        remove_dir(
-            project_path, "app/components/frontend/dashboard/modals/ai_analytics_tab"
-        )
-        # Cloud Catalog reads the llm tables removed above. ``ai_modal``
-        # imports it inside try/except ImportError, so removing the
-        # package is what hides the tab.
-        remove_dir(
-            project_path, "app/components/frontend/dashboard/modals/llm_catalog_tab"
-        )
-        remove_file(
-            project_path, "tests/components/frontend/test_ai_analytics_utils.py"
-        )
 
     # NOTE: the LLM catalog / ETL is provider-agnostic — it syncs model data
     # for whatever providers are configured (public, OpenAI, OpenRouter, …),
     # not just Ollama. Its only Ollama touch point is a single import in
     # ``llm_sync_service`` guarded by ``try/except`` (and a runtime
     # ``OllamaClient is None`` skip), so the chain stays importable with
-    # Ollama off. The catalog therefore depends only on PERSISTENCE, removed
-    # above when ``ai_backend == memory``. It is intentionally NOT gated on
+    # Ollama off. The catalog therefore depends only on persistence, removed
+    # with ``ai_persistence`` above. It is intentionally NOT gated on
     # ``ollama_mode`` here: choosing a non-Ollama provider must not strip the
     # ``llm`` command or catalog sync.
-
-    # Remove RAG service if not enabled
-    if not is_enabled(AnswerKeys.AI_RAG):
-        remove_dir(project_path, "app/components/backend/api/rag")
-        remove_dir(project_path, "app/services/rag")
-        # A package now, so remove_dir - remove_file unlinks and would
-        # silently no-op on a directory that is no longer a .py file.
-        remove_dir(project_path, "app/cli/rag")
-        remove_dir(project_path, "tests/services/rag")
-        remove_file(project_path, "tests/cli/test_rag_cli_registration.py")
-        # Remove RAG-related files within AI service
-        remove_file(project_path, "app/services/ai/domains/chat/rag_context.py")
-        remove_file(project_path, "app/services/ai/domains/chat/knowledge.py")
-        remove_dir(project_path, "app/components/frontend/dashboard/modals/rag_tab")
 
     # chat_kit is a pydantic-ai chat engine (imports ``pydantic_ai``); it has
     # no langchain path, so strip it on langchain. ``spend.recording`` stays:
@@ -648,13 +447,6 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/services/ai/domains/llm/model_factory.py")
         remove_file(project_path, "app/services/ai/domains/llm/agents.py")
         remove_file(project_path, "app/services/ai/domains/llm/writer.py")
-
-    # Remove voice (TTS/STT) and the eval harness when off: what the AI spec
-    # lists under each answer, so a new file is cleaned up by being listed there.
-    for _option in (AnswerKeys.AI_VOICE, AnswerKeys.AI_EVALS):
-        if not is_enabled(_option):
-            for _rel_path in SERVICES["ai"].files.extras[_option]:
-                apply_cleanup_path(project_path, _rel_path)
 
     # (comms / payment / insights / auth-dashboard primary cleanups handled
     # by the Pattern A loop above.)

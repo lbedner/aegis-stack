@@ -103,6 +103,9 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
     "scheduler_and_database": ProjectTemplateSpec(components=("database", "scheduler")),
     "base_with_auth_service": ProjectTemplateSpec(services=("auth",)),
     "base_with_ai_service": ProjectTemplateSpec(services=("ai",)),
+    # Memory with a provider other than the default, for upgrades that must
+    # keep what the request does not name.
+    "ai_memory_openai": ProjectTemplateSpec(services=("ai[openai]",)),
     # database is explicit: a bracket variant does not pull its component
     # through the resolver yet (#671), so ``ai[sqlite]`` alone renders a
     # project with no db module and no sqlmodel.

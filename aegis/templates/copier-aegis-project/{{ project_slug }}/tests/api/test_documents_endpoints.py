@@ -17,14 +17,9 @@ session, which cannot see rows written inside a test transaction.
 from fastapi.testclient import TestClient
 import pytest
 
-from app.core.storage import FilesystemStorage, set_storage
 
 
-@pytest.fixture(autouse=True)
-def _storage(tmp_path):
-    set_storage(FilesystemStorage(tmp_path))
-    yield
-    set_storage(None)
+pytestmark = pytest.mark.usefixtures("files")
 
 
 class TestDocumentEndpoints:

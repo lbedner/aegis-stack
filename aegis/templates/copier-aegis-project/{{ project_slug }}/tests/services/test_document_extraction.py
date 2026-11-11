@@ -11,7 +11,7 @@ import asyncio
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.storage import FilesystemStorage, get_storage, set_storage
+from app.core.storage import FilesystemStorage, get_storage
 from app.services.documents import DocumentService
 from app.services.documents.domains.extraction.pages import extract_document
 from app.services.documents.queries import pages_for
@@ -19,10 +19,8 @@ from tests._pdf import pdf_bytes
 
 
 @pytest.fixture
-def svc(async_db_session: AsyncSession, tmp_path):
-    set_storage(FilesystemStorage(tmp_path))
-    yield DocumentService(async_db_session)
-    set_storage(None)
+def svc(async_db_session: AsyncSession, files: FilesystemStorage) -> DocumentService:
+    return DocumentService(async_db_session)
 
 
 class FakeVision:

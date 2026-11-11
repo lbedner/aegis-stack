@@ -4,22 +4,19 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.backend.api.documents import pages
-from app.core.storage import FilesystemStorage, set_storage
+from app.core.storage import FilesystemStorage
 from app.services.documents.domains.extraction import dispatch
 from tests._jobs import wait_for_job
 from tests._pdf import pdf_bytes
 
 
 @pytest.fixture(autouse=True)
-def _storage(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    set_storage(FilesystemStorage(tmp_path))
+def _storage(files: FilesystemStorage, monkeypatch: pytest.MonkeyPatch) -> None:
     async def _no_vision() -> None:
         return None
 
     monkeypatch.setattr(pages, "vision_reader", _no_vision)
     monkeypatch.setattr(pages, "start_extraction", dispatch.start_extraction_in_process)
-    yield
-    set_storage(None)
 
 
 def _extract_in_background(client: TestClient, title: str) -> str:

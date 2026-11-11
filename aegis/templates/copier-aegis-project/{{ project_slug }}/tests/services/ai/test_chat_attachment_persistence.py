@@ -8,21 +8,13 @@ the image is kept once and the message remembers where.
 
 import pytest
 
-from app.core.storage import FilesystemStorage, content_key, set_storage
+from app.core.storage import content_key
 from app.services.ai.domains.chat.attachments import (
     ChatAttachment,
     attachment_metadata,
     persist_attachments,
     prepare_turn,
 )
-
-
-@pytest.fixture
-def store(tmp_path):
-    storage = FilesystemStorage(tmp_path)
-    set_storage(storage)
-    yield storage
-    set_storage(None)
 
 
 def _png(payload: bytes = b"fake png bytes") -> ChatAttachment:
@@ -38,7 +30,7 @@ def _png(payload: bytes = b"fake png bytes") -> ChatAttachment:
 class TestPersistAttachments:
     @pytest.mark.asyncio
     async def test_the_bytes_are_stored_and_the_descriptor_points_at_them(
-        self, store
+        self, files
     ) -> None:
         stored = await persist_attachments([_png()])
 
@@ -46,10 +38,10 @@ class TestPersistAttachments:
         assert stored[0]["key"] == content_key(b"fake png bytes")
         assert stored[0]["media_type"] == "image/png"
         assert stored[0]["name"] == "receipt.png"
-        assert await store.get(stored[0]["key"]) == b"fake png bytes"
+        assert await files.get(stored[0]["key"]) == b"fake png bytes"
 
     @pytest.mark.asyncio
-    async def test_the_same_image_twice_is_stored_once(self, store) -> None:
+    async def test_the_same_image_twice_is_stored_once(self, files) -> None:
         """Re-attaching a screenshot already in the store costs nothing -
         that is what content addressing buys."""
         first = await persist_attachments([_png()])
@@ -58,13 +50,13 @@ class TestPersistAttachments:
         assert first[0]["key"] == second[0]["key"]
 
     @pytest.mark.asyncio
-    async def test_no_attachments_touches_no_storage(self, store) -> None:
+    async def test_no_attachments_touches_no_storage(self, files) -> None:
         assert await persist_attachments(None) == []
         assert await persist_attachments([]) == []
 
     @pytest.mark.asyncio
     async def test_a_storage_failure_never_costs_the_user_their_message(
-        self, store, monkeypatch
+        self, files, monkeypatch
     ) -> None:
         """The turn is the point; keeping the picture is a bonus. A store
         that is full or unreachable must not swallow the question."""
@@ -72,7 +64,7 @@ class TestPersistAttachments:
         async def boom(*_args, **_kwargs):
             raise OSError("disk full")
 
-        monkeypatch.setattr(store, "put", boom)
+        monkeypatch.setattr(files, "put", boom)
 
         assert await persist_attachments([_png()]) == []
 
@@ -90,7 +82,7 @@ class TestAttachmentMetadata:
 
     @pytest.mark.asyncio
     async def test_a_malformed_payload_is_the_callers_error_not_the_stores(
-        self, store
+        self, files
     ) -> None:
         """Swallowing this would drop the image silently while logging a
         storage failure that never happened."""
@@ -102,7 +94,7 @@ class TestAttachmentMetadata:
 
 class TestPrepareTurn:
     @pytest.mark.asyncio
-    async def test_both_chat_paths_get_the_same_three_steps(self, store) -> None:
+    async def test_both_chat_paths_get_the_same_three_steps(self, files) -> None:
         """Streaming and non-streaming need store, annotate, describe - in
         that order. One call so neither can miss a step."""
         text, metadata = await prepare_turn("what is this?", [_png()])
@@ -112,7 +104,7 @@ class TestPrepareTurn:
         assert metadata["attachments"][0]["key"] == content_key(b"fake png bytes")
 
     @pytest.mark.asyncio
-    async def test_a_turn_with_no_images_is_unchanged(self, store) -> None:
+    async def test_a_turn_with_no_images_is_unchanged(self, files) -> None:
         text, metadata = await prepare_turn("plain question", None)
 
         assert text == "plain question"

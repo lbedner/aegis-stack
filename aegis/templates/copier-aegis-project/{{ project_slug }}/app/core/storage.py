@@ -206,20 +206,12 @@ def _kind(column: Any) -> Any:
     return getattr(column.type, "impl_instance", column.type)
 
 
-async def missing_objects(session: AsyncSession) -> list[str]:
-    """Every object a row names that the configured store lacks.
-
-    A copy that brought the database and not the store (a first deploy, a
-    restore) leaves rows pointing at nothing, found only when a page shows
-    a broken file. Rows name objects in ``*_key`` columns (a document's
-    file) or inside JSON (a chat attachment, a paste); either way a value
-    is one only if it is a content key, so ``payee_key`` and the like are
-    skipped.
-
-    ponytail: one ``exists`` per key, and every JSON column read through;
-    list the store, and mark the columns, if either grows large.
-    """
-    from sqlalchemy import JSON, String, cast, select, union, union_all
+def _naming_columns() -> tuple[list[Any], list[Any]]:
+    """The columns a row names a stored object in: ``*_key`` strings (a
+    document's file) and JSON documents (a chat attachment, a paste). A
+    value names one only if it is a content key, so ``payee_key`` and the
+    like name nothing."""
+    from sqlalchemy import JSON, String
     from sqlmodel import SQLModel
 
     from app.core.model_registry import import_all_models
@@ -227,13 +219,30 @@ async def missing_objects(session: AsyncSession) -> list[str]:
     import_all_models()
     columns = [c for t in SQLModel.metadata.tables.values() for c in t.columns]
     named = [
-        select(c.label("v")).where(c.like(f"{DIGEST_ALGORITHM}/%"))
-        for c in columns
-        if c.name.endswith("_key") and isinstance(_kind(c), String)
+        c for c in columns if c.name.endswith("_key") and isinstance(_kind(c), String)
     ]
-    docs = [cast(c, String) for c in columns if isinstance(_kind(c), JSON)]
+    return named, [c for c in columns if isinstance(_kind(c), JSON)]
+
+
+async def missing_objects(session: AsyncSession) -> list[str]:
+    """Every object a row names that the configured store lacks.
+
+    A copy that brought the database and not the store (a first deploy, a
+    restore) leaves rows pointing at nothing, found only when a page shows
+    a broken file.
+
+    ponytail: one ``exists`` per key, and every JSON column read through;
+    list the store, and mark the columns, if either grows large.
+    """
+    from sqlalchemy import String, cast, select, union, union_all
+
+    columns, docs = _naming_columns()
+    named = [
+        select(c.label("v")).where(c.like(f"{DIGEST_ALGORITHM}/%")) for c in columns
+    ]
     inside = [
-        select(d.label("v")).where(d.like(f"%{DIGEST_ALGORITHM}/%")) for d in docs
+        select(d.label("v")).where(d.like(f"%{DIGEST_ALGORITHM}/%"))
+        for d in (cast(c, String) for c in docs)
     ]
     keys: set[str] = set()
     if named:
@@ -245,3 +254,24 @@ async def missing_objects(session: AsyncSession) -> list[str]:
     storage = get_storage()
     held = await asyncio.gather(*(storage.exists(key) for key in found))
     return [key for key, ok in zip(found, held, strict=True) if not ok]
+
+
+async def held(session: AsyncSession, key: str) -> bool:
+    """Whether a row names ``key``, so its object must stay in the store.
+    One statement over every column a key can be in, each stopping at its
+    first row.
+
+    ponytail: an unindexed column, and every JSON document, is read
+    through on a miss; index the ``*_key`` columns, and mark the columns,
+    if deletes grow slow.
+    """
+    from sqlalchemy import String, cast, exists, or_, select
+
+    validate_key(key)
+    columns, docs = _naming_columns()
+    naming = [c == key for c in columns]
+    naming += [cast(c, String).like(f"%{key}%") for c in docs]
+    if not naming:
+        return False
+    found = select(or_(*(exists().where(match) for match in naming)))
+    return bool((await session.execute(found)).scalar())

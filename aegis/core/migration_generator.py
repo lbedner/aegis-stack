@@ -368,7 +368,7 @@ DEPLOY_MIGRATION = ServiceMigrationSpec(
 # and the revision a later service brings adopts it (``if_not_exists``).
 DATABASE_MIGRATION = ServiceMigrationSpec(
     service_name="database",
-    description="Saved queries: the statements Overseer's Query keeps",
+    description="Saved queries and the storage catalog",
     stamp_signature=("table", "saved_query"),
 )
 
@@ -635,6 +635,7 @@ def generate_revisions(
     python_version: str | None = None,
     *,
     restore_data: bool = False,
+    specs: dict[str, ServiceMigrationSpec] | None = None,
 ) -> list[Path]:
     """Derive revisions from the project's models, one per service.
 
@@ -642,6 +643,8 @@ def generate_revisions(
     produces no file, which is what makes re-running this idempotent.
     ``restore_data`` asks each new revision to load back the latest export
     of the tables it creates: a re-added plugin gets its rows back.
+    ``specs`` are the ones the registry does not hold (a plugin's), for
+    their data statements.
 
     Returns the revision files this call wrote, in name order.
     """
@@ -663,7 +666,7 @@ def generate_revisions(
         python_version=python_version,
         extra_env=extra_env,
     )
-    written.extend(_place_data_statements(project_path, services, written))
+    written.extend(_place_data_statements(project_path, services, written, specs))
     return _formatted(project_path, sorted(written))
 
 
@@ -814,7 +817,10 @@ def _tables_changed(src: str, tables: list[str]) -> list[str]:
 
 
 def _place_data_statements(
-    project_path: Path, services: list[str], written: list[Path]
+    project_path: Path,
+    services: list[str],
+    written: list[Path],
+    specs: dict[str, ServiceMigrationSpec] | None = None,
 ) -> list[Path]:
     """Give every service's ``data_sql`` a revision to run in.
 
@@ -830,7 +836,7 @@ def _place_data_statements(
 
     Returns the data-only revisions this call created.
     """
-    specs = _get_migration_specs()
+    specs = {**_get_migration_specs(), **(specs or {})}
     created: list[Path] = []
     for service in services:
         spec = specs.get(service)
@@ -909,11 +915,22 @@ def generate_plugin_migrations(
     a file in ``alembic/versions`` is skipped, so re-adding a plugin never
     stacks a duplicate revision.
 
+    Its tables can point at the database component's own (a key into
+    ``stored_object``), so that component's revision runs first: a project
+    that predates one of them gets it before the plugin's points at it.
+
     Returns the paths written, in declaration order.
     """
     del context
-    names = [m.service_name for m in getattr(plugin_spec, "migrations", None) or []]
-    return generate_revisions(project_path, names, restore_data=True)
+    migrations = getattr(plugin_spec, "migrations", None) or []
+    if not migrations:
+        return []
+    return generate_revisions(
+        project_path,
+        ["database", *(m.service_name for m in migrations)],
+        restore_data=True,
+        specs={m.service_name: m for m in migrations},
+    )
 
 
 def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:

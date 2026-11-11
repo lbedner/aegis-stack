@@ -3,7 +3,7 @@ its tables in, opened through ``app.core.db``'s engine and sessions and
 migrated by Alembic.
 
 This package holds only the component's own tables: what Overseer's Query
-keeps (``saved``)."""
+keeps (``saved``) and what the object store holds (``stored``)."""
 
 # Its tables no model declares, each with what it holds (``ontology``).
 TABLES = {"alembic_version": "Which migration the database is at, kept by Alembic"}

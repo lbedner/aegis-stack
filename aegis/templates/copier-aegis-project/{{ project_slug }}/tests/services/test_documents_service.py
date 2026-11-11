@@ -11,16 +11,14 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.storage import FilesystemStorage, set_storage
+from app.core.storage import FilesystemStorage
 from app.services.documents import DocumentService
 from app.services.documents.models import DocumentSummary
 
 
 @pytest.fixture
-def svc(async_db_session: AsyncSession, tmp_path):
-    set_storage(FilesystemStorage(tmp_path))
-    yield DocumentService(async_db_session)
-    set_storage(None)
+def svc(async_db_session: AsyncSession, files: FilesystemStorage) -> DocumentService:
+    return DocumentService(async_db_session)
 
 
 class TestIngest:

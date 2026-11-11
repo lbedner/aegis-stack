@@ -343,6 +343,7 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+        await _purge_released(session)
 
 async def release_lock(session: AsyncSession) -> None:
     """Commit, ending ``session``'s transaction before slow work that needs
@@ -354,6 +355,32 @@ async def release_lock(session: AsyncSession) -> None:
     request opens waits out the busy timeout behind it. On Postgres it is
     a connection idle in a transaction."""
     await session.commit()
+
+
+async def _purge_released(session: AsyncSession) -> None:
+    """Delete what the transaction just committed released
+    (``app.components.database.stored``): every caller's session ends here,
+    so none has to remember to. A purge that fails leaves the objects
+    marked, and the next one deletes them."""
+    if not session.info.pop("released", False):
+        return
+    from app.components.database.stored import purge
+
+    try:
+        await purge(session)
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        logger.exception("The storage purge failed; the next one will retry")
+
+
+def insert(session: AsyncSession, model: Any) -> Any:
+    """The INSERT for ``session``'s database that can take an ``ON CONFLICT``
+    (upsert, or do nothing): each dialect spells it under its own ``insert``."""
+    from sqlalchemy.dialects import postgresql, sqlite
+
+    name = session.sync_session.get_bind().dialect.name
+    return (postgresql if name == "postgresql" else sqlite).insert(model)
 
 
 def init_database() -> None:
@@ -433,3 +460,4 @@ async def get_async_db() -> AsyncGenerator[AsyncSession]:
         except Exception:
             await session.rollback()
             raise
+        await _purge_released(session)

@@ -555,15 +555,30 @@ def test_the_catalog_lists_every_kind_of_model(
 
 
 @persisted
-def test_a_voice_model_is_not_offered_for_chat(
-    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("vendor", "mode", "kind", "why"),
+    [
+        ("openai", "realtime", "Realtime", None),  # a voice model answers no chat
+        ("meta", "chat", "Chat", "No provider"),  # nothing here can call meta
+    ],
+)
+def test_a_model_chat_cannot_use_is_not_offered(
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+    vendor: str,
+    mode: str,
+    kind: str,
+    why: str | None,
 ) -> None:
+    """A voice model has no Use at all; a chat model nothing here can call
+    shows it disabled, saying on hover what is missing."""
+
     async def get_model_info(model_id: str) -> Any:
         return SimpleNamespace(
             model_id=model_id,
             title="GPT Realtime",
             description="",
-            vendor="openai",
+            vendor=vendor,
             context_window=32_000,
             streamable=False,
             enabled=True,
@@ -571,14 +586,19 @@ def test_a_voice_model_is_not_offered_for_chat(
             input_price=None,
             output_price=None,
             modalities=["text", "audio"],
-            mode="realtime",
+            mode=mode,
         )
 
     client = _client(app, monkeypatch)
     monkeypatch.setattr(overseer_ai_catalog, "get_model_info", get_model_info)
     drawer = client.get("/partials/overseer/ai/models/drawer?model=gpt-realtime").text
     assert not select(drawer, "form[data-use-model]")
-    assert "Realtime" in text(one(drawer, "#ai-model-facts"))
+    assert kind in text(one(drawer, "#ai-model-facts"))
+    if why is None:
+        assert not select(drawer, "[data-use-blocked]")
+    else:
+        assert why in one(drawer, "[data-use-blocked]").get("title")
+        one(drawer, "[data-use-blocked] button[disabled]")
 
 
 @persisted
@@ -614,9 +634,15 @@ def test_a_model_opens_in_the_drawer_with_use(
             mode="chat",
         )
 
+    async def usable_providers(settings: Any) -> list[str]:
+        return ["openai"]
+
     client = _client(app, monkeypatch)
     _catalog(monkeypatch)
     monkeypatch.setattr(overseer_ai_catalog, "get_model_info", get_model_info)
+    monkeypatch.setattr(
+        "app.services.ai.domains.llm.llm_service.usable_providers", usable_providers
+    )
     link = one(select(_get(client, "catalog"), "#ai-catalog tbody tr")[1], "a")
     assert "model=openai%2Fgpt-4o-mini" in link.get("href")
     drawer = client.get("/partials/overseer/ai/models/drawer?model=openai/gpt-4o-mini")

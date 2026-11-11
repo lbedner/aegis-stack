@@ -182,6 +182,8 @@ async def section_context(db: Any, query: Any) -> dict[str, Any]:
 
 async def model_context(model_id: str) -> dict[str, Any] | None:
     """One catalog model for the drawer, or None when it is not there."""
+    from app.services.ai.service import unusable_reason
+
     info = await get_model_info(model_id)
     if info is None:
         return None
@@ -189,8 +191,12 @@ async def model_context(model_id: str) -> dict[str, Any] | None:
     return {
         "info": info,
         "current": current.model == info.model_id,
-        # Only a chat model can be the model the app answers with.
+        # Only a chat model can be the model the app answers with, and only
+        # one a provider here can call; the rest say what is missing.
         "use_url": f"{PARTIALS}/models/use" if info.mode == "chat" else None,
+        "use_blocked": await unusable_reason(info.vendor)
+        if info.mode == "chat"
+        else None,
         "facts": [
             ("Description", info.description or None),
             ("Vendor", label(info.vendor)),

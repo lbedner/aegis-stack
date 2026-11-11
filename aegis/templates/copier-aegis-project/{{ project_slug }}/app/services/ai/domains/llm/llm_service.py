@@ -203,6 +203,22 @@ async def _not_callable(provider: str) -> str:
     return f"{row.label} has no API key. Set {row.env_var} in .env first."
 
 
+async def unusable_reason(vendor: str | None) -> str | None:
+    """Why a model from ``vendor`` cannot answer here, or None when it can.
+
+    A vendor that maps to no provider has nothing to call it with: its
+    model name would go to whichever provider was active and fail.
+    """
+    if not vendor:
+        return None
+    provider = AIProvider.from_name(vendor)
+    if provider is None:
+        return f"No provider this app can call serves {vendor}'s models."
+    if provider.value not in await usable_providers(settings):
+        return await _not_callable(provider.value)
+    return None
+
+
 async def check_model(session: AsyncSession, model_id: str) -> SetModelResult:
     """``model_id`` checked the way ``set_active_model`` checks it, with
     nothing saved: a chat model, in the catalog or pulled into Ollama, whose
@@ -230,8 +246,8 @@ async def check_model(session: AsyncSession, model_id: str) -> SetModelResult:
     provider = resolved.value if resolved is not None else None
     # A model whose provider cannot be called is refused: stored, it would
     # fail every answer after it until someone found the row.
-    if provider and provider not in await usable_providers(settings):
-        return _refused(model_id, await _not_callable(provider), vendor=vendor_name)
+    if why := await unusable_reason(vendor_name):
+        return _refused(model_id, why, vendor=vendor_name)
     return SetModelResult(
         success=True,
         model_id=model_id,

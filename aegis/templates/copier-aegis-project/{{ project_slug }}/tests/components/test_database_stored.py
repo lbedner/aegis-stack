@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from typing import Any
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import Table
@@ -90,9 +91,13 @@ async def test_a_session_that_commits_a_release_purges_it(
     files: FilesystemStorage,
 ) -> None:
     """The session helpers purge after their commit, so no caller has to
-    remember to; a release rolled back leaves the object."""
+    remember to; a release rolled back leaves the object. These sessions
+    commit to the worker's shared database, where a row another test left
+    may name the same content (a document of ``b"gone"``), so the bytes are
+    this test's alone."""
     async with get_async_session() as session:
-        kept, gone = await store(session, b"kept"), await store(session, b"gone")
+        kept = await store(session, f"kept {uuid4()}".encode())
+        gone = await store(session, f"gone {uuid4()}".encode())
     async with get_async_session() as session:
         await release(session, kept)
         await session.rollback()

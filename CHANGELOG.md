@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-11-10
+
 ### Added
 
 - **A plugin's worker names its memory.** `WorkerQueueWiring(..., memory="1G")`
@@ -97,9 +99,48 @@
   `chat_action(slug)` (the AI facade) is the one spelling of an agent's
   chat turn in the ledger, for its recorders and a budget. `fold` moves
   from the deployments page to `layout.html`.
+- **The assistant can research on the web.** `web_search` (Brave, keyed,
+  cached, budgeted; off when `BRAVE_API_KEY` is unset) and `read_page`
+  (a guarded GET of public hosts only, `app/core/safe_fetch.py`), granted
+  to the default assistant. One HTML-to-text home, `app/core/html_text.py`.
+  (#1997, #1998, #2000)
+- **A shared picture keeps what it showed.** Each picture shared in chat
+  is read once on the worker (`read_photo_task`) and kept in the user's
+  paste index, so a later turn knows what it showed, and a picture can be
+  shown mid-call. (#2036, #2037)
+- **Deploy on merge.** `aegis deploy-cd-setup --on-merge` deploys every
+  merge to main once its CI run passes, at the commit CI tested, rolling.
+  (#2003)
+- **`SERVER_HOST`.** `aegis deploy` stamps the server's address into its
+  `.env`, so Overseer's DNS section has an address for a new A record.
+  (#1994, #1996)
+- **One graph walker.** `app/core/graph.py` (`node`, `neighbors`, `paths`,
+  `touching`, `node_id`, `parse_node_id`) walks any graph whose nodes have
+  an `id` and edges a `source` and `target`; the twin uses it. (#2001)
+- **Public forms carry a honeypot.** Register and forgot password have one
+  hidden input; a filled trap gets a real submit's response and nothing
+  else (no account, no email), and is logged. (#2026)
+
+### Changed
+
+- **Overseer > Database.** Transactions reads like Logs: dense rows, one
+  line per value with the full one on hover, the SQL a click away to copy.
+  Activity is renamed **Slow & locked** (`?section=activity` still works).
+  (#2014, #2023)
+- **A chat card charts a share as a percent**, not a count. (#1996)
 
 ### Fixed
 
+- **Worker: a queue still starting jobs is busy, not backed up.** Backed up
+  now means its oldest job waited past `max_wait` and no job started in
+  that time (Redis 7.2+ `XINFO CONSUMERS`). (#2002)
+- **Deleting a context module takes its entries with it**, whether or not
+  the database cascades (SQLite with foreign keys off left them). (#2025)
+- **Overseer DNS: a delete says what it stops.** The wildcard: subdomains
+  without their own record; any other record: it stops pointing at its
+  value. (#2024)
+- **A live call's socket reads its viewer once**, through `Depends`, as the
+  call does: with sign-in off the second read was an N+1. (#1916, #1999)
 - **`aegis add` and `remove` leave `make check` green** (#1424). The
   `alembic/` directory a project's first migration brings made ruff count
   the `alembic` library first-party and re-sort every module importing it;

@@ -39,6 +39,8 @@ METRICS_FILE = "app/components/backend/api/metrics.py"
 SCHEDULER_MAIN = "app/components/scheduler/main.py"
 SYSTEM_SCHEDULE = "app/services/system/scheduled_jobs.py"
 MIGRATION_SKILL = ".claude/skills/add-model-and-migration/SKILL.md"
+FINANCE_ANALYST = "app/components/backend/api/finance/analyst.py"
+FINANCE_MODELS = "app/services/finance/models/base.py"
 
 
 class TestRegenFidelity:
@@ -167,6 +169,36 @@ class TestGatedOnArrival:
 
         assert result.success, result.error_message
         assert not (project / MIGRATION_SKILL).exists()
+
+    def test_another_specs_file_is_created_when_its_gate_turns_on(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """Finance owns its analyst endpoints but gates them on a persisted
+        AI; adding ``ai[sqlite]`` afterwards must bring them, or the routes
+        and conftest that import them fail on the next ``make check``."""
+        project = project_factory("finance_with_database")
+        assert not (project / FINANCE_ANALYST).exists()
+
+        result = ManualUpdater(project).add_component(
+            "ai", {"ai_backend": "sqlite"}, run_post_gen=False
+        )
+
+        assert result.success, result.error_message
+        assert (project / FINANCE_ANALYST).exists()
+
+    def test_another_specs_deleted_file_is_not_backfilled(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """Only a gate turning on brings a file: one the project deleted
+        stays deleted, even when this add changes its render (finance's
+        models gain owner keys with auth)."""
+        project = project_factory("finance_with_database")
+        (project / FINANCE_MODELS).unlink()
+
+        result = ManualUpdater(project).add_component("auth", run_post_gen=False)
+
+        assert result.success, result.error_message
+        assert not (project / FINANCE_MODELS).exists()
 
 
 class TestAuthManifestGating:

@@ -139,6 +139,12 @@
 
 ### Fixed
 
+- **`aegis add-service ai[sqlite]` brings what other parts gate on it.** A
+  file one part owns but gates on another (finance's analyst endpoints, the
+  htmx approval cards) was only re-rendered when already on disk, so adding
+  a persisted AI later left the routes that import them failing `make
+  check`. A file whose own gate the add turns on is now created; one the
+  project deleted stays deleted.
 - **Worker: a queue still starting jobs is busy, not backed up.** Backed up
   now means its oldest job waited past `max_wait` and no job started in
   that time (Redis 7.2+ `XINFO CONSUMERS`). (#2002)

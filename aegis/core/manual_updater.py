@@ -39,6 +39,7 @@ from .component_files import (
     get_component_files,
     get_copier_defaults,
     get_cross_spec_scope,
+    get_installed_owned_paths,
     get_shared_scope,
     get_template_path,
     is_binary_asset,
@@ -1036,6 +1037,18 @@ class ManualUpdater:
         verbose_print(f"   Running post-render transform for: {component}")
         spec.post_render(self.project_path, updated_answers)
 
+    def _belongs_in_project(self, rel_path: str, installed: set[str]) -> bool:
+        """Whether a spec-owned file is the cross-spec regen's to render.
+
+        On disk, yes. Absent, only when an installed spec owns it and it
+        rendered empty before this operation: its own gate is what turns
+        on (finance's analyst endpoints when a persisted AI arrives). A file
+        that rendered and is gone was deleted, and stays that way.
+        """
+        if (self.project_path / rel_path).exists():
+            return True
+        return rel_path in installed and not self._renders(rel_path, self.answers)
+
     def _regenerate_shared_files(
         self,
         updated_answers: dict[str, Any],
@@ -1083,9 +1096,11 @@ class ManualUpdater:
         scope = list(self._shared_scope)
         if operated is not None:
             fresh = written or set()
+            installed = get_installed_owned_paths(updated_answers)
             scope += get_cross_spec_scope(
                 self._render_diff_engine.discover_paths(),
-                lambda rel: rel not in fresh and (self.project_path / rel).exists(),
+                lambda rel: rel not in fresh
+                and self._belongs_in_project(rel, installed),
                 operated,
                 include_operated=include_operated,
             )

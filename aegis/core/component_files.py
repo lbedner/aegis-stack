@@ -488,6 +488,26 @@ def get_all_owned_paths() -> set[str]:
     return owned
 
 
+def get_installed_owned_paths(answers: dict[str, Any]) -> set[str]:
+    """What every spec ``answers`` installs would copy: its files with the
+    options and other specs ``answers`` turns on, as ``aegis add`` does."""
+    from .components import COMPONENTS, CORE_COMPONENTS
+    from .services import SERVICES
+
+    return {
+        path
+        for name in (*COMPONENTS, *SERVICES)
+        if name in CORE_COMPONENTS or answers.get(AnswerKeys.include_key(name))
+        for path in get_component_files(
+            name,
+            answers.get(AnswerKeys.SCHEDULER_BACKEND)
+            if name == ComponentNames.SCHEDULER
+            else None,
+            answers=answers,
+        )
+    }
+
+
 # Unowned by any component/service manifest (nothing claims them), but
 # NOT safe for the render-diff engine to render either. A static file
 # needs no entry: it renders the same at any answers, so the engine skips
@@ -563,7 +583,9 @@ def get_cross_spec_scope(
     Handing these to the render-diff engine is safe because it renders each
     one before and after the operation and touches only those whose output
     changes; the rest are no-ops. ``exists`` keeps existence manifest-owned:
-    a file not on disk is never created by an unrelated operation.
+    a file not on disk is never created by an unrelated operation, though
+    ``exists`` may admit one an installed spec owns whose own gate this
+    operation turns on.
 
     ``include_operated`` adds ``operated``'s own files: an option upgrade
     (``ai`` -> ``ai[voice]``) changes the answers they branch on too.

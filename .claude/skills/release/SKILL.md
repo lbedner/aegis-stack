@@ -161,10 +161,14 @@ added, then `remove-service`d: 0.16.0rc2 left alembic unpinned and the
 service's settings in `.env`), and `reverse` (made at the new version with the
 services, then a dramatiq worker added after them).
 
-Every line must read `markers=0 rej=0 stray=0 check_exit=0`. The script
-takes about 20 minutes, so run it in the background, outside the sandbox (it
-clones the template from GitHub and writes uv's caches under your home).
-Delete `<scratch-dir>` afterwards. On macOS the everything stack's
+Every line must read `markers=0 rej=0 stray=0 check_exit=0`. Run it on
+GitHub, not locally: `gh workflow run upgrade-check.yml -f from=<prev> -f
+to=<version> [-f index=pypi] [-f add=...] [-f add_services=...]`, then `gh
+run watch`; the job summary has the lines and the `upgrade-logs` artifact
+the logs. Locally, its parallel template clones from GitHub stall or reset
+(0.20.0rc1 and rc2 lost three runs to it). Run by hand, it takes about 20
+minutes in the background, outside the sandbox; delete `<scratch-dir>`
+afterwards. On macOS the everything stack's
 `test_service_memory_budget[meetings]` measures over budget; Linux CI passes
 it.
 

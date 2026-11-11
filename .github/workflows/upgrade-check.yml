@@ -1,0 +1,58 @@
+name: Upgrade Check
+
+# The release skill's upgrade-path check (.claude/skills/release/upgrade_stacks.sh):
+# stacks made at `from`, updated to `to`, then `make check` on each. Run by
+# hand for an rc or a release; a runner's network clones the template far
+# more reliably than a laptop running ten at once.
+
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: Previous release (e.g. 0.19.1)
+        required: true
+      to:
+        description: Version to check (e.g. 0.20.0rc2)
+        required: true
+      index:
+        description: testpypi or pypi
+        default: testpypi
+      add:
+        description: Components new in this release (comma list)
+        default: ""
+      add_services:
+        description: Services new in this release (comma list)
+        default: ""
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Git identity for the stacks' commits
+        run: |
+          git config --global user.name "upgrade-check"
+          git config --global user.email "upgrade-check@users.noreply.github.com"
+
+      - name: Run the stacks
+        env:
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
+          INDEX: ${{ inputs.index }}
+          ADD: ${{ inputs.add }}
+          ADD_SERVICES: ${{ inputs.add_services }}
+        run: |
+          bash .claude/skills/release/upgrade_stacks.sh "$RUNNER_TEMP/up" | tee results.txt
+          { echo '```'; cat results.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          ! grep -v "markers=0 rej=0 stray=0 check_exit=0" results.txt
+
+      - name: Logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: upgrade-logs
+          path: ${{ runner.temp }}/up/*.log

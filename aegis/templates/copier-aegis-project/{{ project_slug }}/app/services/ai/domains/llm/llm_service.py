@@ -229,7 +229,15 @@ async def check_model(session: AsyncSession, model_id: str) -> SetModelResult:
     resolved = AIProvider.from_name(vendor_name) if vendor_name else None
     provider = resolved.value if resolved is not None else None
     # A model whose provider cannot be called is refused: stored, it would
-    # fail every answer after it until someone found the row.
+    # fail every answer after it until someone found the row. A vendor that
+    # maps to no provider has nothing to call it with at all; its name would
+    # go to whichever provider was active before.
+    if vendor_name and provider is None:
+        return _refused(
+            model_id,
+            f"No provider this app can call serves {vendor_name}'s models.",
+            vendor=vendor_name,
+        )
     if provider and provider not in await usable_providers(settings):
         return _refused(model_id, await _not_callable(provider), vendor=vendor_name)
     return SetModelResult(

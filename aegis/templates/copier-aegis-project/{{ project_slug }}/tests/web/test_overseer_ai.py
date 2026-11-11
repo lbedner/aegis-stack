@@ -555,15 +555,22 @@ def test_the_catalog_lists_every_kind_of_model(
 
 
 @persisted
-def test_a_voice_model_is_not_offered_for_chat(
-    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("vendor", "mode", "kind"),
+    [
+        ("openai", "realtime", "Realtime"),  # a voice model answers no chat
+        ("meta", "chat", "Chat"),  # a vendor no provider here can call
+    ],
+)
+def test_a_model_chat_cannot_use_is_not_offered(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch, vendor: str, mode: str, kind: str
 ) -> None:
     async def get_model_info(model_id: str) -> Any:
         return SimpleNamespace(
             model_id=model_id,
             title="GPT Realtime",
             description="",
-            vendor="openai",
+            vendor=vendor,
             context_window=32_000,
             streamable=False,
             enabled=True,
@@ -571,14 +578,14 @@ def test_a_voice_model_is_not_offered_for_chat(
             input_price=None,
             output_price=None,
             modalities=["text", "audio"],
-            mode="realtime",
+            mode=mode,
         )
 
     client = _client(app, monkeypatch)
     monkeypatch.setattr(overseer_ai_catalog, "get_model_info", get_model_info)
     drawer = client.get("/partials/overseer/ai/models/drawer?model=gpt-realtime").text
     assert not select(drawer, "form[data-use-model]")
-    assert "Realtime" in text(one(drawer, "#ai-model-facts"))
+    assert kind in text(one(drawer, "#ai-model-facts"))
 
 
 @persisted

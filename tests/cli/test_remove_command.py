@@ -677,6 +677,6 @@ class TestRemoveHtmxComponent:
 
         assert flet_main.read_text() == before
         assert (
-            'app.mount("/dashboard"'
+            "app.mount(DASHBOARD_PATH, flet_app)"
             in (project_path / "app" / "integrations" / "main.py").read_text()
         )

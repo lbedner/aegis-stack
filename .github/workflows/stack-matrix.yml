@@ -92,6 +92,7 @@ jobs:
           - deploy_backups
           - ai_voice
           - ai_evals
+          - ai_evals_dramatiq
           - insights
           - insights_per_user
           - payment

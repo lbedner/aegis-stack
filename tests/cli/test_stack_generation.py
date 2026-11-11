@@ -377,6 +377,17 @@ STACK_COMBINATIONS = [
         expected_docker_services=["webserver"],
         expected_pyproject_deps=["fastapi", "flet", "pydantic-ai"],
     ),
+    # Dramatiq registers its system tasks its own way, and with no scheduler
+    # the worker binds no job tasks: no other stack has either.
+    StackCombination(
+        name="ai_evals_dramatiq",
+        components=["worker[dramatiq]", "database"],
+        services=["ai[sqlite,evals]"],
+        description="Evals on a dramatiq worker, with no scheduler",
+        expected_files=["app/components/worker/queues/system.py"],
+        expected_docker_services=["webserver", "redis", "worker-system"],
+        expected_pyproject_deps=["fastapi", "dramatiq", "pydantic-ai"],
+    ),
     StackCombination(
         name="insights",
         # Every source, not the default two: `plausible` and `reddit` have

@@ -45,6 +45,7 @@ from .component_files import (
     is_binary_asset,
     shows_services_card,
 )
+from .component_utils import extract_base_service_name
 from .copier_manager import is_copier_project, load_copier_answers
 from .file_manifest import apply_cleanup_path
 from .plugins.composer import PLUGINS_ANSWER_KEY
@@ -739,7 +740,9 @@ class ManualUpdater:
         Remove a component from the project.
 
         Args:
-            component: Component name to remove
+            component: Component name to remove; options (``ai[sqlite]``)
+                are dropped, since the include key alone would otherwise
+                match while every file lookup missed
 
         Returns:
             UpdateResult with files deleted
@@ -747,6 +750,7 @@ class ManualUpdater:
         Raises:
             ValueError: If component is not enabled
         """
+        component = extract_base_service_name(component)
         files_deleted: list[str] = []
 
         try:

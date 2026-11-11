@@ -145,6 +145,19 @@
   a persisted AI later left the routes that import them failing `make
   check`. A file whose own gate the add turns on is now created; one the
   project deleted stays deleted.
+- **`aegis remove-service ai[sqlite,evals]` removes ai.** Removal kept the
+  options on the name, so the service's files stayed while its dependencies
+  went, and `make check` failed on every import. The options are now
+  dropped wherever a removal starts: the name alone says what to remove.
+  `aegis add` and `aegis remove` also take a service with several options
+  (`ai[sqlite,evals]`) as one service instead of failing on "unknown
+  component ai".
+- **The system map draws no scheduled job without a scheduler.** A
+  service's jobs showed as running on the worker, which never runs them.
+- **Evals on a dramatiq worker.** Both evals tasks were registered through
+  one `dramatiq.actor(...)` decorator, which keeps the first task's name, so
+  the second registered it again and every queue import failed. A dramatiq
+  worker with `ai[sqlite,evals]` is now a stack in the matrix.
 - **Worker: a queue still starting jobs is busy, not backed up.** Backed up
   now means its oldest job waited past `max_wait` and no job started in
   that time (Redis 7.2+ `XINFO CONSUMERS`). (#2002)

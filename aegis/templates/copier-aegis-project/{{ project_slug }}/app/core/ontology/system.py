@@ -133,7 +133,7 @@ def system_model(app: Starlette | None = None) -> SystemModel:
     containers = _containers()
     boxes = [c.name for c in containers]
     taking = {c.queue: c.name for c in containers if c.queue}
-    jobs, own_jobs = _jobs(placed), _scheduler_jobs(placed)
+    jobs, own_jobs = _jobs(placed)
     queues, tasks = _worker(placed, ids)
     changes = _changes(placed)
     tables, links = _tables(by_module)
@@ -214,28 +214,24 @@ def _schedule(trigger: dict[str, Any]) -> str:
     return " ".join(f"{k}={v}" for k, v in trigger.items())
 
 
-def _jobs(placed: Placed) -> list[JobNode]:
-    from app.core.schedule import service_jobs
-
-    return [
-        JobNode(name=job.id, schedule=_schedule(job.trigger), **placed(job.func))
-        for job in service_jobs()
-    ]
-
-
-def _scheduler_jobs(placed: Placed) -> list[JobNode]:
-    """The scheduler's own (its heartbeat), beside the services'."""
+def _jobs(placed: Placed) -> tuple[list[JobNode], list[JobNode]]:
+    """The services' scheduled jobs and the scheduler's own (its heartbeat):
+    none without a scheduler, which alone runs them."""
     try:
         from app.components.scheduler import heartbeat
     except ImportError:  # no scheduler in this stack
-        return []
+        return [], []
+    from app.core.schedule import service_jobs
+
+    beat = JobNode(
+        name=heartbeat.HEARTBEAT_JOB_ID,
+        schedule=_schedule(heartbeat.HEARTBEAT_TRIGGER),
+        **placed(heartbeat.touch_scheduler_heartbeat),
+    )
     return [
-        JobNode(
-            name=heartbeat.HEARTBEAT_JOB_ID,
-            schedule=_schedule(heartbeat.HEARTBEAT_TRIGGER),
-            **placed(heartbeat.touch_scheduler_heartbeat),
-        )
-    ]
+        JobNode(name=job.id, schedule=_schedule(job.trigger), **placed(job.func))
+        for job in service_jobs()
+    ], [beat]
 
 
 def _worker(placed: Placed, ids: set[str]) -> tuple[list[QueueNode], list[TaskNode]]:

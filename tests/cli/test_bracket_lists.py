@@ -11,7 +11,7 @@ import pytest
 import typer
 
 from aegis.cli.validation import parse_comma_separated_list
-from tests.cli.conftest import GenerationCalls
+from tests.cli.conftest import GenerationCalls, ProjectFactory
 from tests.cli.test_utils import run_aegis_command
 
 
@@ -102,3 +102,63 @@ def test_a_malformed_component_is_refused_without_a_traceback(
 
     assert not result.success
     assert "Invalid component name format" in result.stderr + result.stdout
+
+
+def test_remove_service_with_its_options_removes_the_service(
+    project_factory: ProjectFactory,
+) -> None:
+    """``remove-service ai[sqlite,evals]`` names the service ``add-service``
+    took: it removes ai, not nothing while still dropping ai's dependencies."""
+    project = project_factory("base_with_ai_sqlite_service")
+
+    result = run_aegis_command(
+        "remove-service", "ai[sqlite,evals]", "--project-path", str(project), "--yes"
+    )
+
+    assert result.success, result.stderr + result.stdout
+    assert not (project / "app" / "services" / "ai").exists()
+    assert not (project / "tests" / "api" / "test_ai_endpoints.py").exists()
+
+
+def test_add_takes_a_service_with_several_options(
+    project_factory: ProjectFactory,
+) -> None:
+    """``aegis add ai[sqlite,evals]`` is one service, not a list: its comma
+    is inside the brackets."""
+    project = project_factory("base")
+
+    result = run_aegis_command(
+        "add", "ai[sqlite,evals]", "--project-path", str(project), "--yes"
+    )
+
+    assert result.success, result.stderr + result.stdout
+    assert (project / "app" / "services" / "ai" / "domains" / "evals").is_dir()
+
+
+def test_remove_takes_a_service_with_several_options(
+    project_factory: ProjectFactory,
+) -> None:
+    """``aegis remove ai[sqlite,evals]`` is one service, not a list: its comma
+    is inside the brackets."""
+    project = project_factory("base_with_ai_sqlite_service")
+
+    result = run_aegis_command(
+        "remove", "ai[sqlite,evals]", "--project-path", str(project), "--yes"
+    )
+
+    assert result.success, result.stderr + result.stdout
+    assert not (project / "app" / "services" / "ai" / "service.py").exists()
+
+
+def test_remove_with_its_options_removes_the_component(
+    project_factory: ProjectFactory,
+) -> None:
+    project = project_factory("base_with_worker")
+    worker = project / "app" / "components" / "worker" / "queues" / "system.py"
+
+    result = run_aegis_command(
+        "remove", "worker[arq]", "--project-path", str(project), "--yes"
+    )
+
+    assert result.success, result.stderr + result.stdout
+    assert not worker.exists()

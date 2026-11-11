@@ -23,7 +23,12 @@ from ..constants import (
     WorkerBackends,
 )
 from ..core import project_deps
-from ..core.component_utils import extract_base_component_name, extract_engine_info
+from ..core.component_utils import (
+    extract_base_component_name,
+    extract_base_service_name,
+    extract_engine_info,
+    split_bracket_list,
+)
 from ..core.components import COMPONENTS, CORE_COMPONENTS, component_option_answers
 from ..core.copier_manager import load_copier_answers
 from ..core.dependency_resolver import DependencyResolver
@@ -36,18 +41,6 @@ from ..core.project_map import render_project_map
 from ..core.services import SERVICES
 from ..core.version_compatibility import validate_version_compatibility
 from ..i18n import lazy_t, t
-
-
-def _strip_brackets(spec_str: str) -> str:
-    """Pull the base name out of ``foo[opt1,opt2]``.
-
-    ``extract_base_component_name`` is stricter and rejects bracket
-    contents that contain commas or whitespace — that's intentional
-    for component names but too narrow for plugins/services with
-    bracket-syntax options (``ai[langchain,openai]`` is valid).
-    Splitting on the literal ``[`` is the simplest tolerant variant.
-    """
-    return spec_str.split("[", 1)[0].strip()
 
 
 def _resolve_plugin(spec_str: str) -> tuple[PluginSpec, str] | None:
@@ -68,7 +61,7 @@ def _resolve_plugin(spec_str: str) -> tuple[PluginSpec, str] | None:
     """
     from importlib.metadata import entry_points
 
-    base_name = _strip_brackets(spec_str)
+    base_name = extract_base_service_name(spec_str)
     for plugin in discover_plugins():
         if plugin.name != base_name:
             continue
@@ -395,16 +388,15 @@ def add_command(
     # services route through the existing add-service implementation
     # (Phase 2 of #771: unify the entry point, defer the
     # implementation-merge).
-    if components and "," not in components:
+    if components and len(split_bracket_list(components)) == 1:
         if _resolve_plugin(components) is not None:
             validate_git_repository(target_path)
             _install_plugin(components, target_path, yes, force=force)
             return
 
-        # Use the bracket-tolerant helper here too — service bracket
-        # syntax (e.g. ``ai[langchain,openai]``) contains commas that
-        # ``extract_base_component_name`` rejects.
-        service_base = _strip_brackets(components)
+        # The tolerant helper: service options (``ai[langchain,openai]``)
+        # hold commas that ``extract_base_component_name`` rejects.
+        service_base = extract_base_service_name(components)
         if service_base in SERVICES:
             from .add_service import add_service_command
 

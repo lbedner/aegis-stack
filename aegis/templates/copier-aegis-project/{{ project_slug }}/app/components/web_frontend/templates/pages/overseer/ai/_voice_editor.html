@@ -18,7 +18,7 @@
   {{ avatar(v.chosen.provider_name, marks.get(v.chosen.provider)) }}
   <span class="text-sm text-aegis-text">{{ v.chosen.name }}</span>
   <span class="flex-1 text-xs text-aegis-muted">{{ v.chosen.detail }}{% if not pick %} · on <span class="font-mono">{{ v.model }}</span>{% endif %}</span>
-  {{ speak_button(chosen_listen, "text-aegis-muted hover:text-aegis-text") }}
+  {{ speak_button(chosen_listen) }}
 </div>
 {% endif %}
 {% endmacro %}
@@ -52,7 +52,7 @@
       {{ checklist("ai-voice-tone", "family", "Tone", f.options.family) }}
       {{ checklist(accent_id, "accent_of", "Accent", f.options.accent) }}
     </div>
-    {% for l in v.locked %}<p data-voice-locked class="text-xs text-aegis-muted">{{ l.voices }} {{ l.provider_name }} voices need <span class="text-warning">{{ l.key }}</span>: add it in Secrets to use them.</p>{% endfor %}
+    {% for l in v.locked %}<p data-voice-locked class="text-xs text-aegis-muted">{{ l.voices }} {{ l.provider_name }} voices are locked: <span class="text-warning">{{ l.needs }}</span>.</p>{% endfor %}
     <div class="divide-y divide-aegis-border/40 border-y border-aegis-border/40">
       {% for c in f.cards %}
       <label data-voice-card="{{ c.id }}" class="flex items-center gap-3 px-2 py-1.5 cursor-pointer hover:bg-aegis-border/20">
@@ -60,7 +60,7 @@
         {{ avatar(c.provider_name, marks.get(c.provider)) }}
         <span class="w-44 truncate text-sm text-aegis-text">{{ c.name }}</span>
         <span class="flex-1 text-xs text-aegis-muted">{{ c.detail }}</span>
-        {{ speak_button(sample_url ~ c.id ~ "?" ~ {"model": v.model}|urlencode, "text-aegis-muted hover:text-aegis-text") }}
+        {{ speak_button(sample_url ~ c.id ~ "?" ~ {"model": v.model}|urlencode) }}
       </label>
       {% else %}<p data-voice-none class="px-2 py-2 text-sm text-aegis-muted">No other voice matches all of those: clear a filter or the search.</p>{% endfor %}
     </div>
@@ -87,7 +87,7 @@
       <input type="radio" name="style" value="{{ key }}" class="sr-only peer" {% if (d.style or "") == key %}checked{% endif %}>
       <span class="flex items-start gap-2 rounded border border-aegis-border px-3 py-2 peer-checked:border-aegis-teal peer-checked:bg-aegis-teal/10 hover:border-aegis-muted">
         <span class="flex-1"><span class="block text-sm text-aegis-text">{{ s.label }}</span><span class="block text-xxs text-aegis-muted">{{ s.sounds }}</span></span>
-        {% if key %}{{ speak_button(style_listen[key], "mt-0.5 text-aegis-muted hover:text-aegis-text") }}{% endif %}
+        {% if key %}{{ speak_button(style_listen[key], "mt-0.5") }}{% endif %}
       </span>
     </label>
     {% endfor %}
@@ -120,7 +120,7 @@
     <pre data-voice-instructions class="whitespace-pre-wrap rounded border border-aegis-border bg-aegis-bg px-3 py-2 text-xs font-mono text-aegis-muted">{{ v.instructions }}</pre>
   </div>
   <div class="flex items-center gap-3">
-    <span class="inline-flex items-center gap-1 text-sm text-aegis-muted">{{ speak_button(listen_url, "text-aegis-muted hover:text-aegis-text", form=True) }} Listen</span>
+    {{ speak_button(listen_url, form=True, labelled=True) }}
     {{ primary_button("Save", attrs='data-write data-voice-save hx-post="' ~ save_url ~ '" hx-include="closest form"') }}
   </div>
   {% endif %}

@@ -5,7 +5,7 @@
        {% from "components/macros/layout.html" import card, stat_tile, dialog, dropdown %}
 #}
 {% from "components/macros/feedback.html" import empty_state, toast_region %}
-{% from "components/macros/form.html" import action, cancel_button %}
+{% from "components/macros/form.html" import action, cancel_button, filter_input %}
 {% from "components/macros/icons.html" import icon, sprite %}
 
 {# Rendered markdown's typography (``|markdown``): an answer in the chat or
@@ -415,8 +415,30 @@
 {# A dropdown() menu's group heading (Download, Copy; a schema), its
    ``glyph`` before it; a ``tag`` other than ``li`` where it heads rows
    inside one item (a filtered list). #}
-{% macro menu_heading(label, glyph=None, tag="li", attrs="") %}
-<{{ tag }} {{ attrs|safe }} class="flex items-center gap-1.5 px-3 pt-2 pb-1 text-xxs caps text-aegis-muted">{% if glyph %}{{ icon(glyph, "w-3 h-3") }}{% endif %}{{ label }}</{{ tag }}>
+{% macro menu_heading(label, glyph=None, tag="li", attrs="", count=None) %}
+<{{ tag }} {{ attrs|safe }} class="flex items-center gap-1.5 px-3 pt-2 pb-1 text-xxs caps text-aegis-muted">{% if glyph %}{{ icon(glyph, "w-3 h-3") }}{% endif %}{{ label }}{% if count is not none %} · {{ count }}{% endif %}</{{ tag }}>
+{%- endmacro %}
+
+{# A dropdown() to pick one of a list too long to scan: a box that finds
+   by name (``filter_input``, its text kept in the URL as ``name``) over
+   the list ``list_id``, whose ``pick_item`` entries and ``menu_heading``
+   groups come via {% call %}. #}
+{% macro pick_menu(label, list_id, placeholder, name="q", attrs="") %}
+{%- set entries = caller() %}
+{% call dropdown(label, align="left") %}
+<li class="p-2">{{ filter_input("#" ~ list_id, name, placeholder=placeholder) }}</li>
+<li id="{{ list_id }}" {{ attrs|safe }} class="max-h-[70vh] min-w-[20rem] overflow-auto">{{ entries }}</li>
+{% endcall %}
+{%- endmacro %}
+
+{# One entry in a pick_menu(): its ``label``, then what the {% call %}
+   gives, set right and muted; a link to ``url``, or a button whose
+   ``attrs`` pick it. The one picked carries ``aria-current`` (``page`` or
+   ``true``) and shows in teal. #}
+{% macro pick_item(label, url=None, attrs="", mono=False) %}
+{%- set tag = "a" if url else "button" %}
+<{{ tag }} {% if url %}href="{{ url }}" {{ attrs|safe }}{% else %}type="button" {{ attrs|button_attrs|safe }}{% endif %}
+   class="flex w-full justify-between gap-6 px-3 py-1 text-xs text-left rounded text-aegis-text hover:bg-aegis-border/30 aria-[current=page]:text-aegis-teal aria-[current=true]:text-aegis-teal{{ ' font-mono' if mono }}"><span class="truncate">{{ label }}</span>{% if caller is defined %}{{ caller() }}{% endif %}</{{ tag }}>
 {%- endmacro %}
 
 {# One entry in a dropdown() menu: a button, its htmx verb in ``attrs``

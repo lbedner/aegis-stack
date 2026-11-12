@@ -1,8 +1,12 @@
 {# Voice: two tabs, each its own URL (``?tab=``): Profiles, every voice
    profile and, opened, one profile's editor; and Models, every model and
-   voice there is. Each tab's body is its own partial, ``_voice_<tab>.html``. #}
+   voice there is. Each tab's body is its own partial, ``_voice_<tab>.html``.
+   Models fills the window below the header (``.overseer-fill``): its rows
+   scroll, the line to say and the file to transcribe stay in sight. #}
 {% from "components/macros/layout.html" import section_tabs %}
+<div class="{{ 'overseer-fill flex flex-col' if tab == 'models' }}">
 {% if tabs|length > 1 %}
 {{ section_tabs(tabs, "Voice views", "ai-voice-tabs") }}
 {% endif %}
 {% include "pages/overseer/ai/_voice_" ~ tab ~ ".html" %}
+</div>

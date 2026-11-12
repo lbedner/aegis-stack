@@ -1,5 +1,7 @@
 """Tests for STT providers."""
 
+import pytest
+
 from app.services.ai.domains.voice.models import STTProvider
 from app.services.ai.domains.voice.stt import (
     BaseSTTProvider,
@@ -9,6 +11,7 @@ from app.services.ai.domains.voice.stt import (
     WhisperLocalProvider,
     get_stt_provider,
 )
+from tests._voice_packages import packages_installed
 
 
 class TestGetSTTProvider:
@@ -21,15 +24,17 @@ class TestGetSTTProvider:
         assert isinstance(provider, OpenAIWhisperProvider)
         assert provider.provider_type == STTProvider.OPENAI_WHISPER
 
-    def test_get_whisper_local_provider(self) -> None:
+    def test_get_whisper_local_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test factory returns WhisperLocalProvider."""
+        packages_installed(monkeypatch, True)
         provider = get_stt_provider(STTProvider.WHISPER_LOCAL)
 
         assert isinstance(provider, WhisperLocalProvider)
         assert provider.provider_type == STTProvider.WHISPER_LOCAL
 
-    def test_get_faster_whisper_provider(self) -> None:
+    def test_get_faster_whisper_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test factory returns FasterWhisperProvider."""
+        packages_installed(monkeypatch, True)
         provider = get_stt_provider(STTProvider.FASTER_WHISPER)
 
         assert isinstance(provider, FasterWhisperProvider)

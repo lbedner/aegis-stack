@@ -23,7 +23,7 @@ WorkingSound = Literal["typing", "none"]
 
 class VoiceSettings(BaseSettings):
     # Speech-to-Text (STT) Configuration
-    # Provider: openai_whisper, whisper_local, faster_whisper, groq_whisper
+    # Provider: an STTProvider value (app/services/ai/domains/voice/models.py)
     STT_PROVIDER: str = "openai_whisper"  # Default to OpenAI Whisper API
     STT_MODEL: str | None = None  # Model name/size (provider-specific, None = default)
     STT_LANGUAGE: str | None = None  # ISO 639-1 language code (None = auto-detect)
@@ -31,7 +31,7 @@ class VoiceSettings(BaseSettings):
     STT_DEVICE: str | None = None  # Device: 'cpu', 'cuda', 'mps' (None = auto-detect)
 
     # Text-to-Speech (TTS) Configuration
-    # Provider: openai
+    # Provider: a TTSProvider value (app/services/ai/domains/voice/models.py)
     TTS_PROVIDER: str = "openai"  # Default to OpenAI TTS API
     TTS_MODEL: str | None = (
         None  # Model: tts-1 (fast), tts-1-hd (quality). None = default

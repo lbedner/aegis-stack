@@ -220,8 +220,8 @@ class VoiceEditor(ft.Column):
                 ),
                 *(
                     SecondaryText(
-                        f"{lock['voices']} {lock['provider_name']} voices need "
-                        f"{lock['key']}: add it in Secrets to use them."
+                        f"{lock['voices']} {lock['provider_name']} voices are "
+                        f"locked: {lock['needs']}."
                     )
                     for lock in view["locked"]
                 ),

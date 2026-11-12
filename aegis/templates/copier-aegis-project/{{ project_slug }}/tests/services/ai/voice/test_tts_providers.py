@@ -18,6 +18,7 @@ from app.services.ai.domains.voice.tts import (
     OpenAITTSProvider,
     get_tts_provider,
 )
+from tests._voice_errors import AnsweredError
 
 
 class TestGetTTSProvider:
@@ -416,8 +417,8 @@ class TestGeminiThatDoesNotAnswer:
             tries.append(kwargs["model"])
             answer = answers[len(tries) - 1]
             if answer == "quota":
-                raise RateLimitedError(
-                    "Rate limit exceeded (limit: 10 requests per day)"
+                raise AnsweredError(
+                    429, "Rate limit exceeded (limit: 10 requests per day)"
                 )
             if not answer:
                 await asyncio.Event().wait()  # never answers
@@ -484,9 +485,3 @@ class TestGeminiThatDoesNotAnswer:
 
         codes = built["http_options"].retry_options.http_status_codes
         assert 429 not in codes and 503 in codes
-
-
-class RateLimitedError(Exception):
-    """The SDK's answer to a 429: its status on ``status_code``."""
-
-    status_code = 429

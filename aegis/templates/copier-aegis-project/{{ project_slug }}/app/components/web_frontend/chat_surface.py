@@ -23,8 +23,6 @@ import json
 from typing import Any
 from urllib.parse import urlencode
 
-from fastapi import HTTPException
-
 from app.components.backend.api.ai.service import ai_service
 from app.core.chat_transcript import (
     card_markers,
@@ -34,7 +32,6 @@ from app.core.chat_transcript import (
     trace_label,
     trace_output,
 )
-from app.core.log import logger
 from app.core.pages import Page
 
 from .main import CHANGES
@@ -246,14 +243,10 @@ def spoken(text: str) -> str:
 async def synthesize(text: str, tts: Any = None) -> Any:
     """``text`` said aloud (a ``SpeechResult``: the audio and what it is) by
     the configured text-to-speech, or by ``tts`` (a voice being previewed)."""
+    from app.components.backend.api.ai.speech import said
     from app.services.ai.service import SpeechRequest
 
-    speaker = tts or ai_service.tts
-    try:
-        return await speaker.synthesize(SpeechRequest(text=text))
-    except Exception:  # the provider's own: a key, the network, a format
-        logger.exception("Speech synthesis failed")
-        raise HTTPException(status_code=503, detail="Speech synthesis failed") from None
+    return await said(SpeechRequest(text=text), tts)
 
 
 def _voice(chat: ChatSurface) -> dict[str, Any]:

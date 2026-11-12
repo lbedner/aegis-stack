@@ -11,6 +11,7 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.discovery import present
 from app.core.voice_settings import TTS_SPEED_MAX, TTS_SPEED_MIN, setting_default
 
 
@@ -21,6 +22,7 @@ class STTProvider(str, Enum):
     WHISPER_LOCAL = "whisper_local"  # Local Whisper via HuggingFace transformers
     FASTER_WHISPER = "faster_whisper"  # SYSTRAN faster-whisper (optimized local)
     GROQ_WHISPER = "groq_whisper"  # Groq API (ultra-fast)
+    PARAKEET = "parakeet"  # NVIDIA Parakeet in the app (onnx-asr)
 
 
 class TTSProvider(str, Enum):
@@ -28,6 +30,7 @@ class TTSProvider(str, Enum):
 
     OPENAI = "openai"  # OpenAI TTS API
     GEMINI = "gemini"  # Gemini's speech models, the voices Gemini Live speaks
+    KOKORO = "kokoro"  # Kokoro in the app (kokoro-onnx)
 
 
 class OpenAIVoice(str, Enum):
@@ -63,10 +66,12 @@ DEFAULT_TTS_VOICE = OpenAIVoice.ALLOY.value
 DEFAULT_TTS_MODELS: dict[TTSProvider, str] = {
     TTSProvider.OPENAI: DEFAULT_TTS_MODEL,
     TTSProvider.GEMINI: "gemini-3.8-flash-tts",
+    TTSProvider.KOKORO: "kokoro-v1.0",
 }
 DEFAULT_TTS_VOICES: dict[TTSProvider, str] = {
     TTSProvider.OPENAI: DEFAULT_TTS_VOICE,
     TTSProvider.GEMINI: "Kore",
+    TTSProvider.KOKORO: "af_heart",  # Kokoro's own pick
 }
 DEFAULT_STT_MODEL = "whisper-1"
 # Each provider's model when none is named.
@@ -75,6 +80,7 @@ DEFAULT_STT_MODELS: dict[STTProvider, str] = {
     STTProvider.GROQ_WHISPER: "whisper-large-v3-turbo",
     STTProvider.WHISPER_LOCAL: "openai/whisper-base",
     STTProvider.FASTER_WHISPER: "base",
+    STTProvider.PARAKEET: "nemo-parakeet-tdt-0.6b-v3",  # as onnx-asr names it
 }
 # The setting holding each cloud provider's key; a provider not here runs
 # locally and needs none.
@@ -91,6 +97,42 @@ STT_KEYS: dict[STTProvider, str] = {
     STTProvider.OPENAI_WHISPER: "OPENAI_API_KEY",
     STTProvider.GROQ_WHISPER: "GROQ_API_KEY",
 }
+# What each in-process provider imports, and the name ``uv add`` installs
+# it by. No stack installs these (torch alone is gigabytes): a provider
+# here runs once its packages are added.
+LOCAL_PACKAGES: dict[str, dict[str, str]] = {
+    STTProvider.WHISPER_LOCAL: {"transformers": "transformers", "torch": "torch"},
+    STTProvider.FASTER_WHISPER: {"faster_whisper": "faster-whisper"},
+    # PyAV decodes the browser's webm, which onnx-asr cannot read.
+    STTProvider.PARAKEET: {"onnx_asr": '"onnx-asr[cpu,hub]"', "av": "av"},
+    TTSProvider.KOKORO: {"kokoro_onnx": "kokoro-onnx"},
+}
+
+
+def uninstalled(provider: str) -> list[str]:
+    """The packages (as ``uv add`` names them) an in-process ``provider``
+    lacks; nothing for one installed or hosted."""
+    needs = LOCAL_PACKAGES.get(provider, {})
+    return [package for module, package in needs.items() if not present(module)]
+
+
+def install_line(provider: str) -> str | None:
+    """The command that installs what ``provider`` lacks; None when nothing."""
+    needed = uninstalled(provider)
+    return f"uv add {' '.join(needed)}" if needed else None
+
+
+def not_installed(provider: str) -> str | None:
+    """Why ``provider`` cannot run here, with the line that fixes it: what
+    the settings report and the provider factories raise."""
+    install = install_line(provider)
+    name = getattr(provider, "value", provider)
+    return f"{name} is not installed: {install}" if install else None
+
+
+class NotInstalledError(RuntimeError):
+    """A provider factory's refusal (``not_installed``): words of the app's
+    own, so safe to show where a provider's text is not."""
 
 
 class AudioFormat(str, Enum):
@@ -128,6 +170,7 @@ MEDIA_TYPES: dict[AudioFormat, str] = {
 TTS_FORMATS: dict[TTSProvider, AudioFormat] = {
     TTSProvider.OPENAI: AudioFormat.MP3,
     TTSProvider.GEMINI: AudioFormat.WAV,
+    TTSProvider.KOKORO: AudioFormat.WAV,
 }
 
 

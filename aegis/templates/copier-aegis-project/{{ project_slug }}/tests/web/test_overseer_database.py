@@ -215,6 +215,7 @@ class TestTables:
         link = one(listed, f'a[href="{TABLES}?table=user"]')
         assert link.get("hx-target") == "#database-table"
         assert "1,200" in text(link)
+        assert link.get("aria-current") == "page"  # the table open
 
     def test_a_table_opens_on_its_tabs(self, postgres: TestClient) -> None:
         pytest.importorskip("app.models.user")

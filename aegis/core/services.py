@@ -644,9 +644,12 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/components/web_frontend/static/js/mic-worklet.js",
                     "app/components/backend/startup/live_engine.py",
                     "app/components/web_frontend/templates/partials/chat/voices.html",
+                    "app/components/web_frontend/static/marks/kokoro.png",
                     "tests/web/test_chat_voices.py",
                     "tests/web/test_chat_live.py",
                     "tests/_voice_catalog.py",
+                    "tests/_voice_packages.py",
+                    "tests/_voice_errors.py",
                     "tests/_realtime.py",
                     "app/components/backend/api/voice",
                     # The spoken-turn endpoints under /ai.

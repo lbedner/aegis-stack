@@ -18,10 +18,7 @@ from app.core.voice_settings import (
     WorkingSound,
 )
 from app.services.ai.domains.voice import pronunciations, queries
-from app.services.ai.domains.voice.catalog import (
-    get_stt_models,
-)
-from app.services.ai.domains.voice.models import STTProvider
+from app.services.ai.domains.voice.catalog import get_stt_model, get_stt_models
 from app.services.ai.models.voice import VoiceProfile
 
 # The first profile, seeded from ``.env``.
@@ -46,7 +43,7 @@ SETTINGS = {
 
 # What the profile form may say (the voice itself, its model, speed and
 # delivery, is put together in the voice designer: ``design``).
-STT_MODELS = tuple(m.id for m in get_stt_models(STTProvider.OPENAI_WHISPER.value))
+STT_MODELS = tuple(m.id for m in get_stt_models())
 REPLIES = get_args(Reply)
 WORKING_SOUNDS = get_args(WorkingSound)
 # What each picked column of the form may be: what it checks, what it offers.
@@ -81,6 +78,8 @@ def parse_form(form: Any) -> tuple[dict[str, Any], list[str]]:
         if value not in allowed:
             errors.append(f"{column.replace('_', ' ')}: pick one of the choices.")
         values[column] = value
+    if heard := get_stt_model(values["stt_model"]):  # heard by its own provider
+        values["stt_provider"] = heard.provider_id
     try:
         idle = int(str(form.get("live_idle_seconds") or ""))
         if not IDLE_RANGE[0] <= idle <= IDLE_RANGE[1]:

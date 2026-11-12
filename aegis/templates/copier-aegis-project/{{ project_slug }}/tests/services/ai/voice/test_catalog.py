@@ -1,5 +1,7 @@
 """Tests for voice catalog functions."""
 
+import pytest
+
 from app.services.ai.domains.voice import (
     OpenAIVoice,
     STTProvider,
@@ -11,6 +13,7 @@ from app.services.ai.domains.voice import (
     get_tts_providers,
     get_tts_voices,
     get_voice,
+    models,
     speaking_model,
 )
 from app.services.ai.domains.voice.models import (
@@ -19,6 +22,7 @@ from app.services.ai.domains.voice.models import (
     ProviderInfo,
     VoiceInfo,
 )
+from tests._voice_packages import packages_installed
 
 
 class TestGetTtsProviders:
@@ -441,12 +445,13 @@ class TestEveryVoiceSpeaks:
 
 class TestEveryVoiceIsDescribed:
     """The voice designer filters by gender and tone: a voice without
-    either could never be picked."""
+    either could never be picked. Kokoro names no tone, so its voices are
+    found by gender and accent alone."""
 
     def test_every_voice_has_a_gender_and_a_tone(self) -> None:
         for voice in get_tts_voices():
             assert voice.gender in ("female", "male", "neutral"), voice.id
-            assert voice.tone, voice.id
+            assert voice.tone or voice.provider_id == TTSProvider.KOKORO, voice.id
 
 
 class TestWhatEachModelSteers:
@@ -520,3 +525,28 @@ class TestAccentsByLanguage:
         assert get_voice("marin").accent == "General American"
         assert get_voice("Kore").accent == "General American"
         assert get_voice("fable").accent == "British"
+
+
+class TestLocalPackages:
+    """A local provider runs only with its packages installed, which no
+    stack does for it: each names the ones it lacks."""
+
+    def test_a_local_provider_names_the_packages_it_lacks(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        packages_installed(monkeypatch, False)
+
+        assert models.uninstalled(STTProvider.FASTER_WHISPER) == ["faster-whisper"]
+        assert models.uninstalled(STTProvider.WHISPER_LOCAL) == [
+            "transformers",
+            "torch",
+        ]
+
+    def test_installed_or_hosted_it_lacks_nothing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        packages_installed(monkeypatch, False)
+        assert models.uninstalled(STTProvider.OPENAI_WHISPER) == []
+
+        packages_installed(monkeypatch, True)
+        assert models.uninstalled(STTProvider.FASTER_WHISPER) == []

@@ -2,8 +2,11 @@
 
 from unittest.mock import MagicMock
 
+import pytest
+
 from app.services.ai.domains.voice.models import STTProvider
 from app.services.ai.domains.voice.stt import STTConfig, get_stt_config
+from tests._voice_packages import packages_installed
 
 
 class TestSTTConfigDefaults:
@@ -214,8 +217,11 @@ class TestSTTConfigValidation:
         assert len(errors) == 1
         assert "GROQ_API_KEY" in errors[0]
 
-    async def test_validate_local_no_key_required(self) -> None:
+    async def test_validate_local_no_key_required(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test validation passes for local providers without API key."""
+        packages_installed(monkeypatch, True)
         settings = MagicMock(spec=[])
 
         config = STTConfig(provider=STTProvider.WHISPER_LOCAL)
@@ -223,8 +229,11 @@ class TestSTTConfigValidation:
 
         assert len(errors) == 0
 
-    async def test_validate_faster_whisper_no_key_required(self) -> None:
+    async def test_validate_faster_whisper_no_key_required(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test validation passes for faster-whisper without API key."""
+        packages_installed(monkeypatch, True)
         settings = MagicMock(spec=[])
 
         config = STTConfig(provider=STTProvider.FASTER_WHISPER)

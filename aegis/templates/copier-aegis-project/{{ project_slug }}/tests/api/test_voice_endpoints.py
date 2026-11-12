@@ -13,6 +13,7 @@ from app.services.ai.domains.voice import (
     STTProvider,
     TTSProvider,
 )
+from tests._voice_errors import AnsweredError
 
 
 @pytest.fixture
@@ -465,6 +466,28 @@ class TestVoicePreview:
 
         assert response.headers["content-type"] == "audio/wav"
 
+    @patch("app.components.backend.api.voice.router.TTSService")
+    def test_the_voice_may_be_a_field_beside_the_line(
+        self, tts_class: MagicMock, client: TestClient
+    ) -> None:
+        """A form that picks the voice sends it as a field, as it sends the
+        line (the Overseer's say-a-line bar)."""
+        tts = MagicMock()
+        tts.synthesize = AsyncMock(
+            return_value=SpeechResult(
+                audio=b"mp3", format=AudioFormat.MP3, provider=TTSProvider.OPENAI
+            )
+        )
+        tts_class.return_value = tts
+
+        response = client.get(
+            "/api/v1/voice/preview", params={"voice_id": "alloy", "text": "Hi"}
+        )
+
+        assert response.status_code == 200, response.text
+        assert tts_class.call_args.args[0].TTS_VOICE == "alloy"
+        assert tts.synthesize.call_args.args[0].text == "Hi"
+
     def test_get_voice_preview_invalid_voice(self, client: TestClient) -> None:
         """Test preview with invalid voice ID."""
         response = client.get("/api/v1/voice/preview/invalid_voice_id")
@@ -646,13 +669,20 @@ class TestFailuresKeepTheirTextInTheLog:
             response = getattr(client, method)(path, **kwargs)
         assert SECRET not in response.text
 
-    def test_voice_preview(self, client: TestClient) -> None:
+    def test_voice_preview_says_why_it_could_not(self, client: TestClient) -> None:
+        """What the provider's answer means reaches the page; its text does not."""
+
+        class _Speaker:
+            async def synthesize(self, request: object) -> None:
+                raise RuntimeError(SECRET) from AnsweredError(503, SECRET)
+
         with patch(
             "app.components.backend.api.voice.router.TTSService",
-            return_value=_Exploding().tts,
+            return_value=_Speaker(),
         ):
             response = client.get(f"/api/v1/voice/preview/{OpenAIVoice.ALLOY.value}")
         assert response.status_code == 503
+        assert "busy" in response.json()["detail"]
         assert SECRET not in response.text
 
 

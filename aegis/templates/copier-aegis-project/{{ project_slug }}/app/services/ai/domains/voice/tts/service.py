@@ -12,6 +12,7 @@ from typing import Any
 
 from ..models import (
     MEDIA_TYPES,
+    NotInstalledError,
     SpeechRequest,
     SpeechResult,
     SpeechTokens,
@@ -24,6 +25,35 @@ from .config import TTSConfig, get_tts_config
 from .providers import BaseTTSProvider, get_tts_provider
 
 logger = logging.getLogger(__name__)
+
+# What a provider's answer means, by the HTTP status it answered with: said
+# on the page in place of its own text, which can carry a key or a URL.
+UNSAID = {
+    **dict.fromkeys((401, 403), "The voice's provider refused its key."),
+    404: "The voice's provider does not have this model.",
+    429: "The voice's provider is out of quota for now. Try later, or another voice.",
+    **dict.fromkeys(
+        (500, 502, 503, 504), "The voice's provider is busy. Try again in a moment."
+    ),
+}
+
+
+def unsaid(exc: BaseException) -> str:
+    """Why speech could not be made, safe to show: the app's own refusal,
+    or what the provider's answer means (``UNSAID``), found down the chain
+    of causes; never the provider's text, which the log has."""
+    seen: set[int] = set()
+    cause: BaseException | None = exc
+    while cause is not None and id(cause) not in seen:
+        seen.add(id(cause))
+        if isinstance(cause, NotInstalledError):
+            return str(cause)
+        if said := UNSAID.get(getattr(cause, "status_code", None) or 0):
+            return said
+        if isinstance(cause, TimeoutError):
+            return "The voice's provider did not answer in time."
+        cause = cause.__cause__
+    return "The voice could not be made. The log says why."
 
 
 class TTSService:

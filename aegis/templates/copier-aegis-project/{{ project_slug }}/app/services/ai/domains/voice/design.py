@@ -46,8 +46,8 @@ from app.services.ai.domains.voice.models import (
 from app.services.ai.domains.voice.overview import (
     Frozen,
     ProfileRef,
+    blocked,
     detail,
-    missing_from,
     provider_key,
     read_keys,
 )
@@ -97,11 +97,12 @@ class ModelChoice(Frozen):
 
 
 class LockedProvider(Frozen):
-    """A provider whose voices cannot be heard: its key is missing."""
+    """A provider whose voices cannot be heard, and what it needs
+    (``overview.blocked``): its key, or its packages installed."""
 
     provider_name: str
     voices: int
-    key: str
+    needs: str
 
 
 class StyleChoice(Frozen):
@@ -173,7 +174,7 @@ class DesignView(Frozen):
 
 async def _voices(chosen: str) -> tuple[list[VoiceChoice], list[LockedProvider]]:
     """The voices that can be heard (and the chosen one, whatever), and
-    each provider locked out by its missing key."""
+    each provider locked out by what it lacks."""
     providers = get_tts_providers()
     found = await read_keys(*(provider_key(p) for p in providers))
     if gemini := found.get(TTS_KEYS[TTSProvider.GEMINI]):
@@ -182,10 +183,11 @@ async def _voices(chosen: str) -> tuple[list[VoiceChoice], list[LockedProvider]]
     locked: list[LockedProvider] = []
     for provider in providers:
         theirs = get_tts_voices(provider.id)
-        key = provider_key(provider)
-        if key and missing_from(key, found):
+        if needs := blocked(provider, found):
             locked.append(
-                LockedProvider(provider_name=provider.name, voices=len(theirs), key=key)
+                LockedProvider(
+                    provider_name=provider.name, voices=len(theirs), needs=needs
+                )
             )
             theirs = [v for v in theirs if v.id == chosen]
         voices += [

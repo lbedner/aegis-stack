@@ -5,12 +5,12 @@
    a time) and Use puts it on the profile. Below, a line said in a chosen
    voice and a file transcribed. #}
 {% from "components/macros/chat.html" import speak_button %}
-{% from "components/macros/form.html" import action, checklist, file_button, filter_input, primary_button %}
-{% from "components/macros/layout.html" import chart_dot %}
+{% from "components/macros/form.html" import checklist, file_button, filter_input, primary_button, text_input %}
+{% from "components/macros/layout.html" import chart_dot, menu_heading, pick_item, pick_menu %}
 {% from "pages/overseer/_macros.html" import row_cell, rows_head, rows_scroller %}
 {% set cell = row_cell("whitespace-nowrap truncate") %}
-<div id="ai-voice" class="space-y-3">
-  <div class="flex flex-wrap items-center gap-3">
+<div id="ai-voice" class="flex-1 min-h-0 flex flex-col gap-3">
+  <div class="shrink-0 flex flex-wrap items-center gap-3">
     <form class="flex flex-1 flex-wrap items-center gap-3" data-facets="#ai-voice-rows" x-on:submit.prevent>
       {{ checklist("ai-voice-kinds", "kind", "Kinds", kinds) }}
       {{ checklist("ai-voice-providers", "provider", "Providers", providers) }}
@@ -18,7 +18,7 @@
       {{ filter_input("#ai-voice-rows", "q", none, placeholder="Search voices and models") }}
     </form>
   </div>
-  {% call rows_scroller("overflow-y-auto") %}
+  {% call rows_scroller("overflow-y-auto", height="flex-1 min-h-0") %}
     <table class="w-full text-xs table-fixed">
       <colgroup><col class="w-24"><col class="w-36"><col class="w-64"><col><col class="w-56"><col class="w-28"><col class="w-44"></colgroup>
       {{ rows_head(["Kind", "Provider", "Name", "Details", "Plays on", "Price / 1M"], right=["Price / 1M"], actions=True) }}
@@ -32,8 +32,8 @@
           <td class="{{ cell }} font-mono text-aegis-muted">{{ row.plays_on or "" }}</td>
           <td class="{{ cell }} font-mono text-right text-aegis-muted">{{ row.price or "" }}</td>
           <td class="{{ row_cell('whitespace-nowrap text-right') }}">
-            {%- if row.blocked %}<span data-blocked class="text-xs text-warning" title="Set it in Secrets to use this">{{ row.blocked }}</span>{% endif -%}
-            {%- if row.speak %}{{ speak_button(row.speak, "align-middle text-aegis-muted hover:text-aegis-text") }}{% endif -%}
+            {%- if row.blocked %}<span data-blocked class="text-xs text-warning" title="Set the key in Secrets, or run the install line, to use this">{{ row.blocked }}</span>{% endif -%}
+            {%- if row.speak %}{{ speak_button(row.speak, "align-middle") }}{% endif -%}
             {%- if row.use %}<button type="button" data-write data-voice-use hx-post="{{ use_url }}" hx-vals='{{ row.use|tojson }}' class="ml-2 text-xs text-aegis-muted hover:text-aegis-teal">Use</button>
             {%- elif row.used and row.kind != "use" %}<span class="ml-2 text-xs text-aegis-teal">in use</span>{% endif -%}
           </td>
@@ -42,20 +42,31 @@
       </tbody>
     </table>
   {% endcall %}
-  <div class="flex flex-wrap items-center gap-6">
-    {# The voice API's preview route speaks any line; the player just points at it. #}
-    <div id="ai-voice-try" x-data="{ voice: '{{ current_voice }}', text: '', src: '' }" data-preview-base="{{ preview_base }}" class="flex flex-wrap items-center gap-2">
-      <select name="voice" x-model="voice" aria-label="Voice" class="select select-sm select-bordered">
-        {% for v in voice_options %}<option value="{{ v.id }}" {% if v.id == current_voice %}selected{% endif %}>{{ v.name }}</option>{% endfor %}
-      </select>
-      <input type="text" x-model="text" placeholder="Hello from the Overseer" aria-label="Line to say" class="input input-sm input-bordered w-72">
-      {{ action("Speak", "@click=\"src = $el.closest('[data-preview-base]').dataset.previewBase + voice + '?text=' + encodeURIComponent(text || 'Hello from the Overseer')\"") }}
-      <audio x-show="src" :src="src" controls autoplay class="h-8"></audio>
+  <div class="shrink-0 flex flex-wrap items-center gap-6 pb-3">
+    {% if voice_groups %}
+    {# A line said in the picked voice: the form's fields are the preview's. #}
+    {% set picked %}<span x-text="name">{{ current_voice_name }}</span>{% endset %}
+    <div id="ai-voice-try" x-data='{ voice: {{ current_voice|tojson }}, name: {{ current_voice_name|tojson }} }' class="flex flex-wrap items-center gap-3">
+      {% call pick_menu(picked, "ai-voice-voices", "Find a voice", name="voice_q") %}
+        {% for group in voice_groups %}
+        {{ menu_heading(group.label, tag="p", attrs="data-voice-group", count=group.voices|length) }}
+        {% for v in group.voices %}
+        {% set picks %}data-voice="{{ v.id }}" data-name="{{ v.name }}" @click="voice = $el.dataset.voice; name = $el.dataset.name" :aria-current="voice === $el.dataset.voice"{% endset %}
+        {% call pick_item(v.name, attrs=picks) %}<span class="truncate text-aegis-muted">{{ v.detail }}</span>{% endcall %}
+        {% endfor %}
+        {% endfor %}
+      {% endcall %}
+      <form x-on:submit.prevent class="flex flex-wrap items-center gap-3">
+        <input type="hidden" name="voice_id" value="{{ current_voice }}" :value="voice">
+        {{ text_input("text", placeholder="Hello from the Overseer", attrs='aria-label="Line to say"', block=False) }}
+        {{ speak_button(say_url, form=True, labelled=True) }}
+      </form>
     </div>
+    {% endif %}
     <form id="ai-voice-transcribe" data-write hx-post="{{ transcribe_url }}" hx-encoding="multipart/form-data" hx-target="#ai-voice-result" hx-swap="innerHTML" class="flex items-center gap-2">
       {{ file_button("ai-voice-audio", "Choose audio", "audio/*", name="audio", submit=False) }}
       {{ primary_button("Transcribe", "submit") }}
     </form>
   </div>
-  <div id="ai-voice-result"></div>
+  <div id="ai-voice-result" class="shrink-0"></div>
 </div>

@@ -70,7 +70,9 @@ VIEW: dict[str, Any] = {
         "matched": 40,
         "limit": 50,
     },
-    "locked": [{"provider_name": "Gemini", "voices": 30, "key": "GOOGLE_API_KEY"}],
+    "locked": [
+        {"provider_name": "Gemini", "voices": 30, "needs": "GOOGLE_API_KEY missing"}
+    ],
     "logos": {},
     "styles": {
         "": {"label": "Plain", "sounds": "No style; just the dials", "dials": {}},

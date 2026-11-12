@@ -65,11 +65,14 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
 
 {# Hear an answer: the stored message, said aloud. Same place and weight
    as the copy button; voice.js plays it, and plays it unasked when the
-   turn began at the microphone. #}
+   turn began at the microphone. ``form`` speaks its form's fields, unsaved;
+   ``labelled`` says "Listen" beside the speaker; ``tone`` is the muted
+   one every speaker but a bubble's (which shows on hover) takes; ``extra``
+   adds to it. #}
 
-{% macro speak_button(url, extra="", form=False) %}
-<button type="button" data-speak="{{ url }}" data-state="idle" {% if form %}data-speak-form{% endif %} aria-label="Listen" title="Listen" aria-pressed="false" class="group relative {{ extra }} aria-pressed:text-aegis-text data-[state=speaking]:text-aegis-teal">
-  {% call voice_states("w-3.5 h-3.5") %}{{ icon("speaker", "w-3.5 h-3.5") }}{% endcall %}
+{% macro speak_button(url, extra="", form=False, labelled=False, tone="text-aegis-muted hover:text-aegis-text") %}
+<button type="button" data-speak="{{ url }}" data-state="idle" {% if form %}data-speak-form{% endif %} aria-label="Listen" title="Listen" aria-pressed="false" class="group relative {% if labelled %}inline-flex items-center gap-1 text-sm {% endif %}{{ tone }} {{ extra }} aria-pressed:text-aegis-text data-[state=speaking]:text-aegis-teal">
+  {% call voice_states("w-3.5 h-3.5") %}{{ icon("speaker", "w-3.5 h-3.5") }}{% endcall %}{% if labelled %}Listen{% endif %}
 </button>
 {% endmacro %}
 
@@ -159,7 +162,7 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
       {% if message.model_icon %}<span data-model-icon class="inline-flex">{{ avatar(message.footer, message.model_icon, size="xs") }}</span>{% endif %}
       {% if message.footer %}<span data-footer>{{ message.footer }}</span>{% endif %}
       {{ copy_icon(message.content, "opacity-0 group-hover/bubble:opacity-100") }}
-      {% if message.speech %}{{ speak_button(message.speech, "opacity-0 group-hover/bubble:opacity-100 focus:opacity-100 aria-pressed:opacity-100") }}{% endif %}
+      {% if message.speech %}{{ speak_button(message.speech, "opacity-0 group-hover/bubble:opacity-100 focus:opacity-100 aria-pressed:opacity-100", tone="") }}{% endif %}
     </div>
   </div>
 </li>

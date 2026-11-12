@@ -7,7 +7,28 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Voice that runs in the app.** `ai[voice]` can speak with Kokoro
+  (`TTS_PROVIDER=kokoro`) and hear with NVIDIA Parakeet v3
+  (`STT_PROVIDER=parakeet`) in its own process, on the CPU, with no key and
+  no server. Their packages are opt-in (`uv add kokoro-onnx`, `uv add
+  "onnx-asr[cpu,hub]" av`) and each fetches its int8 model on first use.
+  Kokoro's 28 English voices are in the catalog, the voice designer and the
+  Overseer's voice models, and usage is recorded at no cost.
+
 ### Fixed
+
+- **Local Whisper is no longer offered when it cannot run.** Whisper (Local)
+  and faster-whisper were listed and accepted with their packages absent,
+  then failed on the first transcription. Their packages stay opt-in; until
+  added, the provider shows its install line in place of a Use, and the
+  voice settings and the provider refuse it with that line.
+- **A voice profile's hearing model brings its provider.** The profile form
+  offered only OpenAI's models and kept the provider as it was, so saving a
+  profile hearing through Groq or a local model asked that provider for an
+  OpenAI model. It offers every hearing model now, each with its own
+  provider.
 
 - **A memory AI can move to a database.** `aegis add-service "ai[sqlite]"`
   (or `ai[postgres]`) on a project made with the memory backend refused it

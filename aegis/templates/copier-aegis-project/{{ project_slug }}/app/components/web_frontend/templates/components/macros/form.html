@@ -243,10 +243,12 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 <div data-wizard-step="{{ n }}" x-show="step === {{ n }}" {% if n %}x-cloak{% endif %} class="space-y-4">{{ caller() }}</div>
 {% endmacro %}
 
-{% macro text_input(name, value=None, placeholder="", required=False, autofocus=False, pattern=None, attrs="") %}
+{# ``block`` (the default) fills a ``field()``; inline, it sits in a bar
+   beside its buttons, as ``select`` and ``date_input`` do. #}
+{% macro text_input(name, value=None, placeholder="", required=False, autofocus=False, pattern=None, attrs="", block=True) %}
 <input type="text" name="{{ name }}" value="{{ value or '' }}" placeholder="{{ placeholder }}"
        {% if required %}required{% endif %} {% if autofocus %}autofocus{% endif %} {% if pattern %}pattern="{{ pattern }}"{% endif %} {{ attrs|safe }}
-       class="{{ _control_classes }} w-full mt-1">
+       class="{{ _control_classes }} {{ 'w-full mt-1' if block else 'min-w-[16rem]' }}">
 {% endmacro %}
 
 {% macro number_input(name, value=None, step=1, min=None, max=None, required=False) %}

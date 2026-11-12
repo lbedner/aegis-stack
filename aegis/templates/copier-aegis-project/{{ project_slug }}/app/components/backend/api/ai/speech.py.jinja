@@ -8,6 +8,8 @@ from app.services.ai.service import (
     AudioInput,
     ProviderError,
     SpeechRequest,
+    SpeechResult,
+    unsaid,
 )
 from fastapi import (
     APIRouter,
@@ -320,23 +322,28 @@ async def synthesize_speech(
     Raises:
         HTTPException: 503 if TTS service error
     """
+    result = await said(SpeechRequest(text=text, voice=voice, speed=speed))
+    return Response(
+        content=result.audio,
+        media_type=result.media_type,
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="speech.{result.format.value}"'
+            ),
+        },
+    )
+
+
+async def said(request: SpeechRequest, tts: Any = None) -> SpeechResult:
+    """``request`` said aloud by ``tts`` (the configured voice when None),
+    or a 503 with why not (``unsaid``): every route that speaks comes here,
+    so a provider's own text, which can carry a key or a URL, stays in the
+    log."""
     try:
-        request = SpeechRequest(text=text, voice=voice, speed=speed)
-        result = await ai_service.tts.synthesize(request)
-
-        return Response(
-            content=result.audio,
-            media_type=result.media_type,
-            headers={
-                "Content-Disposition": (
-                    f'attachment; filename="speech.{result.format.value}"'
-                ),
-            },
-        )
-
-    except Exception:
+        return await (tts or ai_service.tts).synthesize(request)
+    except Exception as exc:
         logger.exception("Speech synthesis failed")
-        raise HTTPException(status_code=503, detail="Speech synthesis failed") from None
+        raise HTTPException(status_code=503, detail=unsaid(exc)) from None
 
 
 @router.post("/synthesize/stream")
@@ -368,9 +375,9 @@ async def synthesize_speech_stream(
     try:
         stream = ai_service.tts.synthesize_stream(request)
         first = await anext(stream, b"")
-    except Exception:
+    except Exception as exc:
         logger.exception("Speech synthesis streaming failed")
-        raise HTTPException(status_code=503, detail="Speech synthesis failed") from None
+        raise HTTPException(status_code=503, detail=unsaid(exc)) from None
 
     async def generate():
         yield first

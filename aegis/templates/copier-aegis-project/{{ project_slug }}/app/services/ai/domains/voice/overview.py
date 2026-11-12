@@ -20,6 +20,7 @@ from app.core.model_picker import format_price
 from . import library
 from .catalog import (
     get_current_voice_config,
+    get_stt_model,
     get_stt_models,
     get_stt_providers,
     get_tts_model,
@@ -29,7 +30,7 @@ from .catalog import (
     get_voice,
     speaking_model,
 )
-from .models import DEFAULT_TTS_VOICES, TTSProvider
+from .models import DEFAULT_TTS_VOICES, TTSProvider, install_line
 
 if TYPE_CHECKING:
     # Only a stack with a database has it; a voice-only one does not.
@@ -106,6 +107,13 @@ def missing_from(key: str | None, found: dict[str, str | None]) -> str | None:
 def provider_key(provider: Any) -> str | None:
     """The key a speech or hearing provider needs; None for a local one."""
     return provider.api_key_env_var if provider.requires_api_key else None
+
+
+def blocked(provider: Any, found: dict[str, str | None]) -> str | None:
+    """What a speech or hearing provider cannot run without: the packages
+    it lacks (the line installing them), else its key (``missing_from``);
+    None when it can run."""
+    return install_line(provider.id) or missing_from(provider_key(provider), found)
 
 
 def _vendor_key(slug: str) -> str | None:
@@ -312,7 +320,7 @@ async def voice_overview(db: "AsyncSession | None") -> VoiceOverview:
     found = await read_keys(
         *(provider_key(p) for p in speech), *(_vendor_key(v) for v in vendors)
     )
-    missing = {p.id: missing_from(provider_key(p), found) for p in speech}
+    missing = {p.id: blocked(p, found) for p in speech}
     for vendor in vendors:
         missing.setdefault(vendor, missing_from(_vendor_key(vendor), found))
     rows = _Rows(missing, prices, keeps)
@@ -345,8 +353,7 @@ def _change(profile: Any, choice: dict[str, str]) -> dict[str, Any]:
             "tts_provider": provider.value,
             "tts_voice": profile.tts_voice if kept else DEFAULT_TTS_VOICES[provider],
         }
-    heard = next((m for m in get_stt_models() if m.id == choice.get("stt_model")), None)
-    if heard is not None:
+    if heard := get_stt_model(choice.get("stt_model", "")):
         return {"stt_model": heard.id, "stt_provider": heard.provider_id}
     if engine := choice.get("live_engine"):
         return {"live_engine": engine}

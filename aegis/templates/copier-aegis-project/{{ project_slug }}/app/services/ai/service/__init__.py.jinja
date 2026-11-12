@@ -170,6 +170,8 @@ if TYPE_CHECKING:
         ModelInfo,
         ProviderInfo,
         SpeechRequest,
+        SpeechResult,
+        TTSProvider,
         TTSService,
         VoiceInfo,
         VoicePreviewRequest,
@@ -183,6 +185,7 @@ if TYPE_CHECKING:
         get_voice,
         speaking_model,
     )
+    from app.services.ai.domains.voice.tts.service import unsaid
     from app.services.ai.domains.voice.overview import (
         VoiceOverview,
         switch_voice,

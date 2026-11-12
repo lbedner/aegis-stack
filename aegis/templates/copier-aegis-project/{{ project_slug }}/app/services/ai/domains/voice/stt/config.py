@@ -17,6 +17,7 @@ from ..models import (
     DEFAULT_STT_PROVIDER,
     STT_KEYS,
     STTProvider,
+    not_installed,
 )
 
 
@@ -82,6 +83,8 @@ class STTConfig(BaseModel):
                     f"Missing API key for {self.provider.value}. "
                     f"Set {key_name} environment variable."
                 )
+        if refused := not_installed(self.provider):
+            errors.append(refused)
 
         # Validate language code format if provided
         if self.language and len(self.language) != 2:

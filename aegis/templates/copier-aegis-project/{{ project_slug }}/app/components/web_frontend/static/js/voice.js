@@ -171,15 +171,29 @@
     if (player?.reply) mood('idle');
     mentions.along(player?.answer, null);
     player?.pause();
+    if (player) URL.revokeObjectURL(player.src);
     playing?.setAttribute('aria-pressed', 'false');
     show(playing, 'idle');
     player = null;
     playing = null;
   };
 
+  // The audio at ``url``, fetched whole before it plays: a refusal is told
+  // (the route's ``detail``, app.js's apiDetail), where an <audio> given
+  // the URL would only stop.
+  const fetched = async (url) => {
+    const answer = await fetch(url).catch(() => {
+      throw new Error(NETWORK_ERROR);
+    });
+    if (!answer.ok) {
+      throw new Error(apiDetail({ responseText: await answer.text(), status: answer.status }));
+    }
+    return URL.createObjectURL(await answer.blob());
+  };
+
   // ``reply``: the answer to a spoken turn, so the mic shows it too; a
   // Listen shows only on its own button.
-  const play = (button, reply = false) => {
+  const play = async (button, reply = false) => {
     const again = playing === button;
     stop();
     if (again) return; // pressing a playing Listen button stops it
@@ -187,17 +201,32 @@
     const form = 'speakForm' in button.dataset && button.closest('form');
     const query = form ? `?${new URLSearchParams(new FormData(form))}` : '';
     show(button, 'thinking'); // fetching and synthesizing
-    player = voiced(`${button.dataset.speak}${query}`, button, reply);
+    playing = button;
+    button.setAttribute('aria-pressed', 'true');
+    let src;
+    try {
+      src = await fetched(`${button.dataset.speak}${query}`);
+    } catch (e) {
+      if (playing !== button) return; // stopped, or another pressed, meanwhile
+      stop();
+      if (reply) mood('idle');
+      toast(e.message, 'error');
+      return;
+    }
+    if (playing !== button) return URL.revokeObjectURL(src);
+    player = voiced(src, button, reply);
     player.reply = reply;
     // Its card follows along as it plays (mentions.js).
     player.answer = button.closest('[data-role=assistant]');
     player.addEventListener('timeupdate', function () {
       if (Number.isFinite(this.duration)) mentions.along(this.answer, this.currentTime / this.duration);
     });
-    playing = button;
-    button.setAttribute('aria-pressed', 'true');
     player.addEventListener('ended', stop);
-    player.addEventListener('error', stop);
+    player.addEventListener('error', function () {
+      if (player !== this) return; // stopped already
+      stop();
+      toast('This audio could not be played', 'error');
+    });
     player.play().catch(stop); // autoplay refused: the button still works
   };
 
@@ -211,21 +240,41 @@
   // --- Live: each sentence as it is written -----------------------------------
   // Fetched as soon as it is whole (the server synthesizes while the one
   // before plays) and played in order.
-  const next = () => {
-    current = queue.shift() || null;
-    if (!current) {
+  let told = false; // a sentence that could not be said, told once a turn
+  const tell = (why) => {
+    if (!told) toast(why, 'error');
+    told = true;
+  };
+  const next = async () => {
+    const fetching = queue.shift();
+    current = fetching || null; // the sentence in hand, fetching or playing
+    if (!fetching) {
       if (!live && !pending) mood('idle'); // it has finished
       return;
     }
-    current.addEventListener('ended', next);
-    current.addEventListener('error', next);
-    current.play().catch(next);
+    const src = await fetching.catch((e) => {
+      if (current === fetching) tell(e.message);
+    });
+    if (current !== fetching) return src && URL.revokeObjectURL(src); // hushed
+    if (!src) return next();
+    const audio = voiced(src);
+    current = audio;
+    const done = () => {
+      URL.revokeObjectURL(src);
+      if (current === audio) next();
+    };
+    audio.addEventListener('ended', done);
+    audio.addEventListener('error', () => {
+      if (current === audio) tell('The answer could not be said aloud');
+      done();
+    });
+    audio.play().catch(done);
   };
   const enqueue = (text) => {
     if (!text.trim()) return;
-    const audio = voiced(`${mic().dataset.say}?text=${encodeURIComponent(text)}`);
-    audio.preload = 'auto';
-    queue.push(audio);
+    const fetching = fetched(`${mic().dataset.say}?text=${encodeURIComponent(text)}`);
+    fetching.catch(() => {}); // told when its turn comes, not as unhandled
+    queue.push(fetching);
     if (!current) next();
   };
   // A sentence ends at . ! or ? before a space, or at a line break (a list
@@ -244,8 +293,11 @@
   const hush = () => {
     live = false;
     pending = '';
-    queue.length = 0;
-    current?.pause();
+    for (const fetching of queue.splice(0)) fetching.then(URL.revokeObjectURL, () => {});
+    if (current instanceof Audio) {
+      current.pause();
+      URL.revokeObjectURL(current.src);
+    }
     current = null;
     stopTyping();
     mood('idle');
@@ -281,6 +333,7 @@
     delete form.dataset.spoken;
     live = spoken && voice().reply === 'live';
     speakReply = spoken && !live;
+    told = false;
     say(null);
     if (!spoken) return;
     mood('thinking');

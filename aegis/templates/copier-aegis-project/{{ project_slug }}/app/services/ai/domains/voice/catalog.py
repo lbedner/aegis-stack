@@ -8,6 +8,7 @@ doesn't require database storage.
 
 from typing import Any
 
+from . import local
 from .models import (
     DEFAULT_TTS_MODELS,
     INSTRUCTED_TTS_MODELS,
@@ -226,6 +227,9 @@ _TTS_VOICES += [
     )
     for name, (gender, tone) in _GEMINI_VOICES.items()
 ]
+_TTS_PROVIDERS.append(local.TTS_PROVIDER)
+_TTS_MODELS += local.TTS_MODELS
+_TTS_VOICES += local.VOICES
 
 # Each voice and speech model by id, for the lookups a page makes per row.
 _VOICES_BY_ID = {v.id: v for v in _TTS_VOICES}
@@ -352,7 +356,10 @@ _STT_MODELS: list[ModelInfo] = [
         description="HuggingFace Whisper Medium",
         supports_streaming=False,
     ),
+    *local.STT_MODELS,
 ]
+_STT_PROVIDERS.append(local.STT_PROVIDER)
+_STT_BY_ID = {m.id: m for m in _STT_MODELS}
 
 
 # =============================================================================
@@ -447,6 +454,11 @@ def get_stt_models(provider_id: str | None = None) -> list[ModelInfo]:
     if provider_id is None:
         return _STT_MODELS.copy()
     return [m for m in _STT_MODELS if m.provider_id == provider_id]
+
+
+def get_stt_model(model_id: str) -> ModelInfo | None:
+    """A hearing model by id; None for one the catalog does not know."""
+    return _STT_BY_ID.get(model_id)
 
 
 def get_current_voice_config(settings: Any) -> dict[str, Any]:

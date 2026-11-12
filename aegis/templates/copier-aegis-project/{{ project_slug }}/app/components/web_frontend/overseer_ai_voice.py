@@ -17,6 +17,7 @@ from urllib.parse import urlencode
 
 from fastapi import UploadFile
 
+from .assets import static_url
 from .overseer_ai_common import PARTIALS, icon_url, section_url, tab_links
 
 if TYPE_CHECKING:
@@ -24,7 +25,17 @@ if TYPE_CHECKING:
     from sqlmodel.ext.asyncio.session import AsyncSession
 
 API = "/api/v1/voice"
-PREVIEW = f"{API}/preview/"
+# A voice said: by the voice in the path, or as a field beside the line.
+SAY = f"{API}/preview"
+PREVIEW = f"{SAY}/"
+
+
+def _shipped_marks() -> dict[str, str]:
+    """The mark of each provider that runs in the app, which no catalog org
+    holds, as the static route serves it."""
+    from app.services.ai.service import TTSProvider
+
+    return {TTSProvider.KOKORO.value: static_url("marks/kokoro.png")}
 
 
 def _speak(voice: str, model: str) -> str:
@@ -40,6 +51,17 @@ def _row(row: Any, colors: dict[str, int]) -> dict[str, Any]:
         "models": " ".join(row.models),
         "speak": _speak(*row.sample) if row.sample else None,
     }
+
+
+def _voice_groups(voices: list[Any]) -> list[dict[str, Any]]:
+    """The voices that can be heard here (a blocked one has no sample),
+    under their providers: the picker that says a line below the table."""
+    groups: dict[str, list[dict[str, str]]] = {}
+    for r in voices:
+        groups.setdefault(r.provider_name, []).append(
+            {"id": r.sample[0], "name": r.name, "detail": r.detail}
+        )
+    return [{"label": label, "voices": found} for label, found in groups.items()]
 
 
 def _options(name: str, labels: dict[str, str]) -> list[dict[str, Any]]:
@@ -119,8 +141,10 @@ async def _editor(db: "AsyncSession", query: Mapping[str, str]) -> dict[str, Any
         "view": view,
         "step": step,
         "chosen_listen": _speak(view.voice, view.model),
-        # Each provider's logo, served by the AI page's icon route.
-        "marks": {p: icon_url(logo.org) for p, logo in view.logos.items()},
+        # Each provider's logo, served by the AI page's icon route; one
+        # that runs in the app has no catalog org, so its mark ships here.
+        "marks": _shipped_marks()
+        | {p: icon_url(logo.org) for p, logo in view.logos.items()},
         # The accent checklist follows the other filters: a new id when its
         # options change, so the page draws them (a checklist is preserved).
         "accent_id": "ai-voice-accent-"
@@ -146,7 +170,10 @@ async def _models(db: "AsyncSession") -> dict[str, Any]:
     found = await voice_overview(db)
     providers = {r.provider: r.provider_name for r in found.rows}
     voices = [r for r in found.rows if r.kind == "voice" and r.sample]
+    names = {r.sample[0]: r.name for r in voices}
     speaking = found.rows[0].sample
+    # The voice in use where it can be heard, else the first that can.
+    current = speaking[0] if speaking else next(iter(names), None)
     colors = {p: i + 1 for i, p in enumerate(providers)}
     return {
         "rows": [_row(r, colors) for r in found.rows],
@@ -156,9 +183,10 @@ async def _models(db: "AsyncSession") -> dict[str, Any]:
             "model", {m: m for r in found.rows if r.kind != "use" for m in r.models}
         ),
         "use_url": f"{PARTIALS}/voice/use",
-        "voice_options": [{"id": r.sample[0], "name": r.name} for r in voices],
-        "current_voice": speaking[0] if speaking else None,
-        "preview_base": PREVIEW,
+        "voice_groups": _voice_groups(voices),
+        "current_voice": current,
+        "current_voice_name": names.get(current or "", current),
+        "say_url": SAY,
         "transcribe_url": f"{PARTIALS}/voice/transcribe",
     }
 

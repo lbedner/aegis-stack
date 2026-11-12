@@ -906,6 +906,7 @@ All voice endpoints are prefixed with `/voice`. See [Voice](voice.md) for full d
 | `POST /voice/design/profiles` | A new voice profile from the one in use (admin) |
 | `POST /voice/preview` | Generate voice preview (MP3 or WAV, as the provider makes it) |
 | `GET /voice/preview/{voice_id}` | Browser-friendly voice preview (`model` optional) |
+| `GET /voice/preview?voice_id=` | The same, the voice a field beside `text` (a form that picks both) |
 | `GET /voice/catalog/summary` | Full catalog summary |
 
 ---

@@ -9,9 +9,9 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from app.components.backend.api.ai.speech import said
 from app.components.backend.api.voice.overview import router as overview_router
 from app.core.config import settings
-from app.core.log import logger
 from app.services.ai.service import (
     ModelInfo,
     ProviderInfo,
@@ -283,6 +283,7 @@ async def generate_voice_preview(request: VoicePreviewRequest) -> Response:
 
 
 @router.get("/preview/{voice_id}")
+@router.get("/preview")
 async def get_voice_preview(
     voice_id: str,
     text: str | None = None,
@@ -295,7 +296,8 @@ async def get_voice_preview(
     Browser-friendly endpoint for audio playback via URL.
 
     Args:
-        voice_id: Voice ID to preview
+        voice_id: Voice ID to preview, in the path or, from a form that
+            picks it beside the line, a field
         text: Optional custom text
         speed: Optional speed multiplier (0.25 to 4.0, default 1.0)
         model: The model to say it on, when it speaks the voice
@@ -328,31 +330,20 @@ async def _generate_preview(
         }
     )
 
-    try:
-        speech_request = SpeechRequest(
-            text=preview_text,
-            voice=voice_id,
-            speed=speed or 1.0,
-        )
-        result = await TTSService(spoken).synthesize(speech_request)
-
-        return Response(
-            content=result.audio,
-            media_type=result.media_type,
-            headers={
-                "Content-Disposition": (
-                    f'inline; filename="{voice_id}_preview.{result.format.value}"'
-                ),
-                "Cache-Control": "no-cache",
-            },
-        )
-
-    except Exception:
-        # Logged, not returned: a provider's text can carry keys or URLs.
-        logger.exception(f"Voice preview generation failed for {voice_id}")
-        raise HTTPException(
-            status_code=503, detail="Voice preview generation failed"
-        ) from None
+    result = await said(
+        SpeechRequest(text=preview_text, voice=voice_id, speed=speed or 1.0),
+        TTSService(spoken),
+    )
+    return Response(
+        content=result.audio,
+        media_type=result.media_type,
+        headers={
+            "Content-Disposition": (
+                f'inline; filename="{voice_id}_preview.{result.format.value}"'
+            ),
+            "Cache-Control": "no-cache",
+        },
+    )
 
 
 # =============================================================================

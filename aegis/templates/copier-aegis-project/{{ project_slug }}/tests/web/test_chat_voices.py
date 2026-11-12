@@ -320,6 +320,23 @@ class TestEditing:
         await async_db_session.refresh(voices["marin"])
         assert voices["marin"].stt_model == "whisper-1"
 
+    async def test_a_hearing_model_brings_its_provider(
+        self,
+        hx: TestClient,
+        voices: dict[str, VoiceProfile],
+        async_db_session: AsyncSession,
+    ) -> None:
+        """Any hearing model can be picked, and it is heard by its own
+        provider: an OpenAI model kept beside Parakeet would be asked of
+        Parakeet."""
+        hx.post(
+            f"{VOICES}/{voices['marin'].id}",
+            data=_form(voices["marin"], stt_model="nemo-parakeet-tdt-0.6b-v3"),
+        )
+
+        await async_db_session.refresh(voices["marin"])
+        assert voices["marin"].stt_provider == "parakeet"
+
     def test_the_form_holds_the_live_dead_air_limit(
         self, hx: TestClient, voices: dict[str, VoiceProfile]
     ) -> None:

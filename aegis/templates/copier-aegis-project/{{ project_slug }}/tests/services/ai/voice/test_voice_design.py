@@ -11,6 +11,7 @@ from app.services.ai.domains.voice import design
 from app.services.ai.domains.voice.delivery import compose, styled
 from app.services.ai.models.voice import VoiceProfile
 from tests._voice_catalog import keep_voice_settings, only_profile
+from tests._voice_packages import packages_installed
 
 
 @pytest.fixture
@@ -86,12 +87,14 @@ def test_a_style_just_picked_sets_the_dials_then_they_are_yours() -> None:
 
 def test_every_tone_falls_in_one_family() -> None:
     """The designer offers a handful of tone families, not every word a
-    provider uses: a tone outside them could never be picked."""
+    provider uses: a tone outside them could never be picked. A voice whose
+    provider names no tone (Kokoro's) has none to fall anywhere."""
     from app.services.ai.domains.voice.catalog import get_tts_voices
     from app.services.ai.domains.voice.traits import TONE_FAMILIES, family_of
 
     for voice in get_tts_voices():
-        assert family_of(voice.tone or "") in TONE_FAMILIES, voice.id
+        if voice.tone:
+            assert family_of(voice.tone) in TONE_FAMILIES, voice.id
 
 
 async def test_a_provider_without_its_key_is_one_line_not_its_voices(
@@ -99,16 +102,17 @@ async def test_a_provider_without_its_key_is_one_line_not_its_voices(
 ) -> None:
     monkeypatch.setattr(settings, "GOOGLE_API_KEY", None)
     monkeypatch.setattr(settings, "OPENAI_API_KEY", "set")
+    packages_installed(monkeypatch, True)  # Kokoro's in
 
     view = await design.design_view(async_db_session, hers.id, None, {"filtered": "1"})
 
     assert view.find.cards
     assert all(v.provider_name != "Gemini" for v in view.find.cards)
     [gemini] = view.locked
-    assert (gemini.provider_name, gemini.voices, gemini.key) == (
+    assert (gemini.provider_name, gemini.voices, gemini.needs) == (
         "Gemini",
         30,
-        "GOOGLE_API_KEY",
+        "GOOGLE_API_KEY missing",
     )
 
 

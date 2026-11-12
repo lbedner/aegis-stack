@@ -447,9 +447,8 @@ function apiDetail(xhr) {
   } catch (_) { /* not JSON */ }
   return `Request failed (${xhr.status})`;
 }
-document.body.addEventListener('htmx:sendError', () => {
-  toast('Network error. Check the connection and try again.', 'error');
-});
+const NETWORK_ERROR = 'Network error. Check the connection and try again.';
+document.body.addEventListener('htmx:sendError', () => toast(NETWORK_ERROR, 'error'));
 
 // The one modal. Any swap into #dialog-body opens the native <dialog>;
 // closing it clears the body (see the dialog macro in macros/layout.html).

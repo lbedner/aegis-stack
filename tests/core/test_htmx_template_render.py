@@ -425,6 +425,8 @@ class TestWebFrontendScaffolding:
                 "lazy",
                 "menu_heading",
                 "menu_item",
+                "pick_item",
+                "pick_menu",
                 "modal_scrim",
                 "page_header",
                 "popover_panel",

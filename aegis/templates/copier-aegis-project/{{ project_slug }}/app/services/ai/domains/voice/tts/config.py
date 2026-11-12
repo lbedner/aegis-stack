@@ -18,6 +18,7 @@ from ..models import (
     DEFAULT_TTS_VOICES,
     TTS_KEYS,
     TTSProvider,
+    not_installed,
 )
 
 
@@ -89,6 +90,8 @@ class TTSConfig(BaseModel):
                     f"Missing API key for {self.provider.value}. "
                     f"Set {key_name} environment variable."
                 )
+        if refused := not_installed(self.provider):
+            errors.append(refused)
 
         return errors
 

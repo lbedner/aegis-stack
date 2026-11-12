@@ -6,6 +6,9 @@ import pytest
 
 from app.services.ai.domains.voice.models import DEFAULT_TTS_MODEL, TTSProvider
 from app.services.ai.domains.voice.tts import TTSService
+from app.services.ai.domains.voice.tts.service import unsaid
+from tests._voice_errors import AnsweredError
+from tests._voice_packages import packages_installed
 
 
 class TestTTSServiceInit:
@@ -375,3 +378,52 @@ class TestStreamingMeasuresTheSpeech:
         [c async for c in service.synthesize_stream(SpeechRequest(text="Hello"))]
 
         assert record.call_args.kwargs["output_duration_seconds"] == pytest.approx(1.2)
+
+
+class TestUnsaid:
+    """Why speech failed, safe to show: what the answer means, never its text."""
+
+    @pytest.mark.parametrize(
+        ("cause", "meaning"),
+        [
+            (AnsweredError(503), "busy"),
+            (AnsweredError(429), "quota"),
+            (AnsweredError(401), "key"),
+            (AnsweredError(404), "model"),
+            (TimeoutError("Gemini did not answer"), "in time"),
+        ],
+    )
+    def test_says_what_the_provider_answered(
+        self, cause: BaseException, meaning: str
+    ) -> None:
+        wrapped = RuntimeError(f"Speech synthesis failed: {cause}")
+        wrapped.__cause__ = cause  # as a provider raises it
+
+        said = unsaid(wrapped)
+
+        assert meaning in said
+        assert "secret" not in said and "internal" not in said
+
+    def test_an_answer_with_no_meaning_points_at_the_log(self) -> None:
+        said = unsaid(RuntimeError("key=sk-secret"))
+
+        assert "log" in said
+        assert "secret" not in said
+
+    def test_says_a_missing_package_with_the_line_that_installs_it(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.services.ai.domains.voice.tts.providers import get_tts_provider
+
+        packages_installed(monkeypatch, False)
+        with pytest.raises(RuntimeError) as refused:
+            get_tts_provider(TTSProvider.KOKORO)
+
+        assert unsaid(refused.value) == str(refused.value)
+        assert "uv add" in unsaid(refused.value)
+
+    def test_a_chain_that_loops_back_on_itself_still_ends(self) -> None:
+        looped = RuntimeError("key=sk-secret")
+        looped.__cause__ = looped
+
+        assert "log" in unsaid(looped)

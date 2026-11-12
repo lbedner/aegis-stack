@@ -21,7 +21,7 @@ Voice capabilities add Text-to-Speech (TTS) and Speech-to-Text (STT) to the AI s
 
 - **Text-to-Speech** - Convert text to audio with multiple voices and speed control
 - **Speech-to-Text** - Transcribe audio with timestamps and segment detection
-- **Multiple providers** - Cloud (OpenAI, Gemini, Groq) and local (Whisper, faster-whisper)
+- **Multiple providers** - Cloud (OpenAI, Gemini, Groq) and local, in the app (Kokoro, Parakeet, Whisper, faster-whisper)
 - **Voice catalog** - Browse providers, models, and voices via API
 - **Voice previews** - Generate audio samples to compare voices
 - **Usage tracking** - TTS and STT operations tracked alongside LLM usage
@@ -34,6 +34,7 @@ Voice capabilities add Text-to-Speech (TTS) and Speech-to-Text (STT) to the AI s
 |----------|------|--------|--------|-----------|---------|
 | **OpenAI** | Cloud | gpt-realtime-2.1-mini (gpt-4o-mini-tts, tts-1, tts-1-hd shut down Jan 6, 2027) | 13 (marin, cedar, alloy, ...); 10 on gpt-realtime-2.1-mini | The /v1/audio/speech models only | `OPENAI_API_KEY` |
 | **Gemini** | Cloud | gemini-3.8-flash-tts, gemini-3.8-flash-lite-tts | 30 prebuilt (Kore, Puck, Charon, ...) and its voice library | No | `GOOGLE_API_KEY` |
+| **Kokoro** | Local | kokoro-v1.0 (Kokoro-82M, int8) | 28 English (af_heart, bm_george, ...) | No | None (`uv add kokoro-onnx`) |
 
 Each speech model records what its delivery instructions steer, as its
 provider documents it: OpenAI's gpt-realtime and gpt-4o voices take the
@@ -112,6 +113,9 @@ GOOGLE_API_KEY=...
 | **Groq Whisper** | Cloud | whisper-large-v3-turbo | Very fast | High | `GROQ_API_KEY` |
 | **Local Whisper** | Local | whisper-tiny to large-v3 | Varies | Varies | `transformers`, `torch` |
 | **faster-whisper** | Local | tiny to large-v3 | 4x faster | High | `faster-whisper` |
+| **Parakeet** | Local | nemo-parakeet-tdt-0.6b-v3 (int8) | Fast on CPU | High, 25 languages | `onnx-asr[cpu,hub]`, `av` |
+
+The local providers' packages are not installed with `ai[voice]` (torch alone is gigabytes). Until they are added, the provider is offered with its install line in place of a Use, in the Overseer's voice models and its voice designer alike, and the voice settings and the provider itself refuse it with that line (`faster_whisper is not installed: uv add faster-whisper`), so a saved profile that still names it fails at once, saying what to add.
 
 ### OpenAI Whisper
 
@@ -154,6 +158,35 @@ STT_MODEL=base   # tiny, base, small, medium, large-v3
 Requires: `uv add faster-whisper`
 
 Supports compute types: `default`, `float16`, `int8`
+
+---
+
+## Voice in the App
+
+Speaking and hearing can both run inside the app, on the CPU, with no key
+and no server: [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) speaks
+(through `kokoro-onnx`) and NVIDIA's [Parakeet v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)
+hears (through `onnx-asr`, in 25 European languages). Their packages are
+opt-in, like local Whisper's:
+
+```bash
+uv add kokoro-onnx                  # speaking (Python 3.13 or older)
+uv add "onnx-asr[cpu,hub]" av       # hearing; av decodes the browser's webm
+
+# .env
+TTS_PROVIDER=kokoro
+TTS_VOICE=af_heart
+STT_PROVIDER=parakeet
+```
+
+Each fetches its model on first use, so the first line said or heard
+waits for the download: Kokoro's two files (about 120MB, int8) from the
+kokoro-onnx release into `~/.cache/kokoro-onnx`, and Parakeet (about
+670MB, int8) from Hugging Face into its cache. Kokoro speaks a WAV at
+24kHz, takes a speed from 0.5 to 2.0, and no delivery instructions. It
+names no tone, so the voice designer finds its voices by gender and
+accent; each is named by its id (`af_alloy`), since half share a name with
+an OpenAI or Gemini voice. Usage is recorded at no cost.
 
 ---
 
@@ -323,15 +356,15 @@ curl http://localhost:8000/voice/catalog/summary | jq
 ```json
 {
   "tts": {
-    "provider_count": 2,
-    "model_count": 7,
-    "voice_count": 43,
-    "providers": ["openai", "gemini"]
+    "provider_count": 3,
+    "model_count": 9,
+    "voice_count": 71,
+    "providers": ["openai", "gemini", "kokoro"]
   },
   "stt": {
-    "provider_count": 4,
-    "model_count": 4,
-    "providers": ["openai_whisper", "whisper_local", "faster_whisper", "groq_whisper"]
+    "provider_count": 5,
+    "model_count": 12,
+    "providers": ["openai_whisper", "groq_whisper", "faster_whisper", "whisper_local", "parakeet"]
   },
   "current_config": {
     "tts_provider": "openai",

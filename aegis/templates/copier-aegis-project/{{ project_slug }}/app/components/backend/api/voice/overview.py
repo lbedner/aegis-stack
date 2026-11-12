@@ -12,7 +12,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.components.backend.api.ai.service import ai_service
-from app.core.log import logger
 import app.services.ai.service as ai
 from app.services.ai.service import (
     Pronunciation,
@@ -86,6 +85,7 @@ if KEEPS_PROFILES:
     from fastapi import Request
     from fastapi.responses import Response
 
+    from app.components.backend.api.ai.speech import said
     from app.core.config import settings
     from app.services.ai.service import SpeechRequest, TTSService, design
 
@@ -94,14 +94,10 @@ if KEEPS_PROFILES:
         where there are none)."""
         if voice_settings is None:
             raise HTTPException(404, missing)
-        try:
-            said = await TTSService(voice_settings).synthesize(
-                SpeechRequest(text=design.PREVIEW_TEXT)
-            )
-        except Exception:  # the provider's own: a key, the network, a format
-            logger.exception("Voice preview failed")
-            raise HTTPException(503, "The voice could not be heard") from None
-        return Response(content=said.audio, media_type=said.media_type)
+        heard = await said(
+            SpeechRequest(text=design.PREVIEW_TEXT), TTSService(voice_settings)
+        )
+        return Response(content=heard.audio, media_type=heard.media_type)
 
     def _picked(query: Any) -> Any:
         picked, errors = design.parse_design(query)

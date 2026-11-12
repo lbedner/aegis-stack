@@ -173,6 +173,18 @@ EXAMPLES: dict[str, dict[str, str]] = {
               {{ menu_heading("Copy", "copy") }}
               {{ menu_item("Markdown", on_click) }}
             {% endcall %}""",
+        "pick_menu": """
+            {% call pick_menu("users", "catalog-pick-tables", "Find a table") %}
+              {{ menu_heading("public", tag="p", count=2) }}
+              {% call pick_item("users", url="#", attrs='aria-current="page"', mono=True) %}<span class="text-aegis-muted">42</span>{% endcall %}
+              {% call pick_item("orders", url="#", mono=True) %}<span class="text-aegis-muted">7</span>{% endcall %}
+            {% endcall %}""",
+        "pick_item": """
+            {% call pick_menu("Alloy", "catalog-pick-voices", "Find a voice", name="voice_q") %}
+              {{ menu_heading("OpenAI", tag="p", count=2) }}
+              {% call pick_item("Alloy", attrs='aria-current="true"') %}<span class="text-aegis-muted">neutral</span>{% endcall %}
+              {{ pick_item("Echo") }}
+            {% endcall %}""",
         "dropdown": """
             {% set on_click %}@click="$dispatch('toast', { text: 'Clicked', tone: 'ok' })"{% endset %}
             <span class="flex items-center gap-3">

@@ -20,9 +20,11 @@ from ..models import (
     REALTIME_TTS_MODELS,
     TTS_FORMATS,
     AudioFormat,
+    NotInstalledError,
     SpeechRequest,
     SpeechResult,
     TTSProvider,
+    not_installed,
 )
 from . import length, realtime
 
@@ -316,7 +318,10 @@ def get_tts_provider(
 
     Raises:
         ValueError: If provider type is not supported.
+        RuntimeError: If an in-process provider's packages are not installed.
     """
+    if refused := not_installed(provider):
+        raise NotInstalledError(refused)
     if provider == TTSProvider.OPENAI:
         return OpenAITTSProvider(
             api_key=api_key,
@@ -330,5 +335,9 @@ def get_tts_provider(
             model=model or DEFAULT_TTS_MODELS[provider],
             voice=voice or DEFAULT_TTS_VOICES[provider],
         )
+    elif provider == TTSProvider.KOKORO:
+        from .kokoro import KokoroProvider  # it imports this module
+
+        return KokoroProvider(voice=voice or DEFAULT_TTS_VOICES[provider])
     else:
         raise ValueError(f"Unsupported TTS provider: {provider}")

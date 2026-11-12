@@ -7499,6 +7499,10 @@ see <a href="providers/">Providers</a>.</p>
 </tr>
 </tbody>
 </table>
+<p>A project on the memory backend can persist later:
+<code>aegis add-service "ai[sqlite]"</code> (or <code>ai[postgres]</code>) adds the database and
+everything that needs it. Moving between sqlite and postgres is refused,
+since each holds data.</p>
 <h3 id="switching-providers">Switching Providers</h3>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Via environment variables</span>
 </span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="nv">AI_PROVIDER</span><span class="o">=</span>groq

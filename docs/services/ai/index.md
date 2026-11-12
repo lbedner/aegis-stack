@@ -187,6 +187,11 @@ aegis init my-app --services "ai[pydantic-ai,sqlite,openai,rag,voice]"
 | Voice | flag | disabled | Enable TTS/STT |
 | Evals | flag | disabled | The eval harness ([Evals](evals.md)); Pydantic AI and a database only |
 
+A project on the memory backend can persist later:
+`aegis add-service "ai[sqlite]"` (or `ai[postgres]`) adds the database and
+everything that needs it. Moving between sqlite and postgres is refused,
+since each holds data.
+
 ### Switching Providers
 
 ```bash

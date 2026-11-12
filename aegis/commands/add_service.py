@@ -448,8 +448,13 @@ def add_service_command(
             # installed service were filtered above through variant_delta.
             service_data.update(variant_answers(service, SERVICES[base_service]))
 
-            # For AI service, use the captured configuration
-            if base_service == AnswerKeys.SERVICE_AI:
+            installed = (
+                existing_answers.get(AnswerKeys.include_key(base_service)) is True
+            )
+
+            # A fresh AI install takes the captured configuration; an
+            # installed one keeps its own, changing only what the delta names.
+            if base_service == AnswerKeys.SERVICE_AI and not installed:
                 # Use providers from interactive config, or default to openai
                 providers = ai_config.get("providers", [AIProviders.OPENAI])
                 if isinstance(providers, list):
@@ -471,7 +476,7 @@ def add_service_command(
             # still lacks: for a multi option that is the union with what it
             # has (``ai[openai]`` on an ollama project keeps ollama), for a
             # flag it is simply on.
-            if existing_answers.get(AnswerKeys.include_key(base_service)) is True:
+            if installed:
                 service_data.update(
                     variant_delta(service, SERVICES[base_service], existing_answers)
                 )

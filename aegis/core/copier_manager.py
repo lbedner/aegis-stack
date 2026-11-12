@@ -37,6 +37,7 @@ from ..constants import (
     WorkerBackends,
 )
 from .build_reporter import BuildReporter
+from .component_files import AI_PERSISTENCE, group_on
 from .components import COMPONENTS, ComponentType
 from .migration_generator import (
     get_services_needing_migrations,
@@ -356,15 +357,10 @@ def generate_with_copier(
     # Run post-generation tasks with explicit working directory control
     # This ensures consistent behavior with Cookiecutter
     include_ai = copier_data.get(AnswerKeys.AI, False)
-    ai_backend = copier_data.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
     database_engine = copier_data.get(
         AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE
     )
-    # Type narrowing: ai_backend should always be a string, but narrow from Any
-    ai_backend_str: str = str(ai_backend) if ai_backend else StorageBackends.MEMORY
-    ai_needs_migrations = (
-        include_ai is True and ai_backend_str != StorageBackends.MEMORY
-    )
+    ai_needs_migrations = include_ai is True and group_on(AI_PERSISTENCE, copier_data)
     # Only run migrations automatically for SQLite (file-based, no server needed)
     # PostgreSQL requires a running server, so skip auto-migration
     is_sqlite = database_engine == StorageBackends.SQLITE

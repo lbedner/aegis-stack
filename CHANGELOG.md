@@ -7,6 +7,25 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A memory AI can move to a database.** `aegis add-service "ai[sqlite]"`
+  (or `ai[postgres]`) on a project made with the memory backend refused it
+  as a conflict, and there was no other way off the default. It is an
+  upgrade now: the database comes with it, and every table, read, page and
+  command the memory backend leaves out arrives, because those files are
+  the AI spec's `ai_persistence` group rather than a hand-kept list in
+  init's cleanup. The project keeps its framework and providers: an
+  upgrade no longer writes a fresh install's defaults over what the request
+  does not name. Asking for `ai[memory]` once persisted is satisfied;
+  sqlite and postgres stay a conflict, since each holds data.
+- **The scheduler's persistence follows the same gate.** Its memory-backend
+  cleanup was a second hand-kept list that had lost two test files; init,
+  add and remove now read the scheduler spec's `scheduler_persistence`
+  group, and the `backend_variant` special case in `get_component_files`
+  is gone. Init removes every selected part's off extras group in one loop,
+  so rag's inline list went too.
+
 ## [0.20.0] - 2026-11-11
 
 ### Added

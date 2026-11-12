@@ -26,6 +26,9 @@ from typing import Any
 
 from packaging.version import InvalidVersion, Version, parse
 
+from ..constants import AnswerKeys
+from .component_files import SCHEDULER_PERSISTENCE, group_on
+
 Answers = dict[str, Any]
 
 
@@ -39,15 +42,10 @@ class BehaviorChange:
     restore: str | None = None  # the setting that keeps the OLD behavior
 
 
-def _truthy(answers: Answers, key: str) -> bool:
-    value = answers.get(key)
-    return value is True or value == "yes"
-
-
 BEHAVIOR_CHANGES: tuple[BehaviorChange, ...] = (
     BehaviorChange(
         since="0.6.12",
-        when=lambda a: _truthy(a, "include_auth"),
+        when=lambda a: group_on(AnswerKeys.AUTH, a),
         message=(
             "The Flet dashboard now sits behind the auth service's login view. "
             "A dashboard that was public before this version requires sign-in "
@@ -57,8 +55,8 @@ BEHAVIOR_CHANGES: tuple[BehaviorChange, ...] = (
     ),
     BehaviorChange(
         since="0.7.0",
-        when=lambda a: _truthy(a, "include_scheduler")
-        and a.get("scheduler_backend", "memory") != "memory",
+        when=lambda a: group_on(AnswerKeys.SCHEDULER, a)
+        and group_on(SCHEDULER_PERSISTENCE, a),
         message=(
             "The scheduler now treats code as the source of truth for jobs: "
             "on boot it deletes every persisted job whose id is not registered "

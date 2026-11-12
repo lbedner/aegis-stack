@@ -36,9 +36,9 @@ from ..cli import brand
 from ..constants import (
     AnswerKeys,
     AuthLevels,
-    StorageBackends,
 )
 from ..i18n import t
+from .component_files import AI_PERSISTENCE, SCHEDULER_PERSISTENCE, group_on
 from .template_cleanup import project_env, ruff_fix_files
 
 
@@ -945,114 +945,73 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     """
     services = []
 
-    # Auth service (base user table)
-    include_auth = context.get(AnswerKeys.AUTH)
-    if include_auth == "yes" or include_auth is True:
-        services.append("auth")
+    def on(key: str) -> bool:
+        return group_on(key, context)
 
-    # Auth token tables (password reset, email verification) - always with auth
-    if include_auth == "yes" or include_auth is True:
-        services.append("auth_tokens")
+    # Auth service (base user table) and its token tables (password reset,
+    # email verification), always together.
+    include_auth_on = on(AnswerKeys.AUTH)
+    if include_auth_on:
+        services.extend(["auth", "auth_tokens"])
 
-    # Auth RBAC columns (rbac or org level)
-    include_auth_rbac = context.get(AnswerKeys.AUTH_RBAC)
+    # Auth RBAC columns (rbac or org level), and org tables (org level only)
     auth_level = context.get(AnswerKeys.AUTH_LEVEL)
-    rbac_enabled = (
-        include_auth_rbac == "yes"
-        or include_auth_rbac is True
-        or (
-            isinstance(auth_level, str)
-            and auth_level.lower() in (AuthLevels.RBAC, AuthLevels.ORG)
-        )
-    )
-    if (include_auth == "yes" or include_auth is True) and rbac_enabled:
+    level = auth_level.lower() if isinstance(auth_level, str) else None
+    if include_auth_on and (
+        on(AnswerKeys.AUTH_RBAC) or level in (AuthLevels.RBAC, AuthLevels.ORG)
+    ):
         services.append("auth_rbac")
-
-    # Auth org tables (only with org-level auth)
-    include_auth_org = context.get(AnswerKeys.AUTH_ORG)
-    org_enabled = (
-        include_auth_org == "yes"
-        or include_auth_org is True
-        or (isinstance(auth_level, str) and auth_level.lower() == AuthLevels.ORG)
-    )
-    if (include_auth == "yes" or include_auth is True) and org_enabled:
+    if include_auth_on and (on(AnswerKeys.AUTH_ORG) or level == AuthLevels.ORG):
         services.append("auth_org")
 
     # AI tables need a persistence backend: every AI revision rides this.
-    include_ai = context.get(AnswerKeys.AI)
-    ai_backend = context.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
-    ai_persistent = (
-        include_ai == "yes" or include_ai is True
-    ) and ai_backend != StorageBackends.MEMORY
-
-    def ai_flag(key: str) -> bool:
-        value = context.get(key)
-        return ai_persistent and (value == "yes" or value is True)
-
+    ai_persistent = on(AnswerKeys.AI) and on(AI_PERSISTENCE)
     if ai_persistent:
         # The catalog; the agent registry (agents are the service's default
         # architecture); and sentiment (its job is settings-gated off).
         services.extend(["ai", "ai_agents"])
     # KB metadata (the rag flag)
-    if ai_flag(AnswerKeys.AI_RAG):
+    if ai_persistent and on(AnswerKeys.AI_RAG):
         services.append("ai_knowledge")
     if ai_persistent:
         services.append("ai_sentiment")
-    if ai_flag(AnswerKeys.AI_VOICE):
+    if ai_persistent and on(AnswerKeys.AI_VOICE):
         services.append("ai_voice")
     # Eval runs, kept
-    if ai_flag(AnswerKeys.AI_EVALS):
+    if ai_persistent and on(AnswerKeys.AI_EVALS):
         services.append("ai_evals")
 
-    # Insights service (always needs database)
-    include_insights = context.get(AnswerKeys.INSIGHTS)
-    include_insights_on = include_insights == "yes" or include_insights is True
-    if include_insights_on:
+    # Insights and payment services (always need database)
+    if on(AnswerKeys.INSIGHTS):
         services.append("insights")
-
-    # Payment service (always needs database)
-    include_payment = context.get(AnswerKeys.PAYMENT)
-    include_payment_on = include_payment == "yes" or include_payment is True
+    include_payment_on = on(AnswerKeys.PAYMENT)
     if include_payment_on:
         services.append("payment")
 
     # Payment + Auth: add FK from payment_customer.user_id -> user.id.
     # Only meaningful when BOTH services are included; runs after both
     # base migrations so the `user` table exists when the FK is created.
-    include_auth_on = include_auth == "yes" or include_auth is True
     if include_payment_on and include_auth_on:
         services.append("payment_auth_link")
 
-    # Blog service (always needs database)
-    include_blog = context.get(AnswerKeys.BLOG)
-    include_blog_on = include_blog == "yes" or include_blog is True
-    if include_blog_on:
-        services.append("blog")
-
-    # Documents service (always needs database)
-    include_documents = context.get(AnswerKeys.DOCUMENTS)
-    if include_documents == "yes" or include_documents is True:
-        services.append("documents")
-
-    # Research service (always needs database)
-    include_research = context.get(AnswerKeys.RESEARCH)
-    if include_research == "yes" or include_research is True:
-        services.append("research")
-
-    # Meetings service (always needs database)
-    include_meetings = context.get(AnswerKeys.MEETINGS)
-    if include_meetings == "yes" or include_meetings is True:
-        services.append("meetings")
+    # Blog, documents, research and meetings (always need database)
+    for key, name in (
+        (AnswerKeys.BLOG, "blog"),
+        (AnswerKeys.DOCUMENTS, "documents"),
+        (AnswerKeys.RESEARCH, "research"),
+        (AnswerKeys.MEETINGS, "meetings"),
+    ):
+        if on(key):
+            services.append(name)
 
     # Finance service (always needs database).
-    include_finance = context.get(AnswerKeys.FINANCE)
-    include_finance_on = include_finance == "yes" or include_finance is True
+    include_finance_on = on(AnswerKeys.FINANCE)
     if include_finance_on:
         services.append("finance")
 
     # Finance + Auth: add FK from finance_connection.owner_user_id -> user.id.
     # Only when BOTH are included; runs after both base migrations so `user`
-    # exists. include_auth_on is defined above (payment_auth_link block).
+    # exists.
     if include_finance_on and include_auth_on:
         services.append("finance_auth_link")
 
@@ -1065,18 +1024,11 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     # Scheduler component: its job store and execution-history tables, on
     # any persistent backend. A component, not a service, but it rides the
     # same rail. Appended last: no FK to any service table.
-    include_scheduler = context.get(AnswerKeys.SCHEDULER)
-    scheduler_backend = context.get(
-        AnswerKeys.SCHEDULER_BACKEND, StorageBackends.MEMORY
-    )
-    if (
-        include_scheduler == "yes" or include_scheduler is True
-    ) and scheduler_backend != StorageBackends.MEMORY:
+    if on(AnswerKeys.SCHEDULER) and on(SCHEDULER_PERSISTENCE):
         services.append("scheduler")
 
     # Secrets component: its one table. No FK to anything, so order is free.
-    include_secrets = context.get(AnswerKeys.SECRETS)
-    if include_secrets == "yes" or include_secrets is True:
+    if on(AnswerKeys.SECRETS):
         services.append("secrets")
 
     # A component whose tables live in its database-only files (its
@@ -1085,20 +1037,19 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     # it works without them. The same marker decides their cleanup.
     from .components import COMPONENTS
 
-    include_database = context.get(AnswerKeys.DATABASE)
-    if include_database == "yes" or include_database is True:
-        for name, spec in COMPONENTS.items():
-            enabled = context.get(AnswerKeys.include_key(name))
-            if (
-                spec.migrations
-                and AnswerKeys.DATABASE in spec.files.extras
-                and (enabled == "yes" or enabled is True)
-            ):
-                services.append(name)
+    include_database_on = on(AnswerKeys.DATABASE)
+    if include_database_on:
+        services.extend(
+            name
+            for name, spec in COMPONENTS.items()
+            if spec.migrations
+            and AnswerKeys.DATABASE in spec.files.extras
+            and on(AnswerKeys.include_key(name))
+        )
 
     # The database component's own table (saved queries): last, and only
     # where something else migrates; otherwise ``create_all`` makes it.
-    if services and (include_database == "yes" or include_database is True):
+    if services and include_database_on:
         services.append("database")
 
     # Per-user vs shared insights is one folded migration — generation

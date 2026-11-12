@@ -21,6 +21,7 @@ from ..constants import (
     StorageBackends,
     WorkerBackends,
 )
+from .component_files import SCHEDULER_PERSISTENCE
 from .file_manifest import FileManifest
 from .migration_generator import (
     DATABASE_MIGRATION,
@@ -292,35 +293,19 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/entrypoints/scheduler.py",
                 "app/components/scheduler",
                 ".claude/skills/add-scheduled-job",
-                "app/services/scheduler/execution_log.py",
-                "app/services/scheduler/orphans.py",
                 "tests/components/test_scheduler.py",
                 "tests/components/test_scheduler_jobs.py",
-                "tests/services/test_scheduler_execution_log.py",
-                "tests/services/test_scheduler_executions_read.py",
                 "docs/components/scheduler.md",
-                "app/components/backend/api/scheduler.py",
-                "tests/api/test_scheduler_endpoints.py",
                 "app/components/frontend/dashboard/cards/scheduler_card.py",
                 "app/components/frontend/dashboard/modals/scheduler_modal.py",
                 "app/components/frontend/dashboard/modals/scheduler_history_section.py",
-                "tests/services/test_scheduled_task_manager.py",
             ],
-            # Persistence files render empty when scheduler_backend == memory,
-            # so they are kept out of the always-on `primary` add base and
-            # added only for the sqlite backend (see get_component_files).
-            # They are part of the full footprint, so `aegis remove scheduler`
-            # deletes them. Init-time memory-backend cleanup stays inline in
-            # cleanup_components() (gated on scheduler_backend, not a toggle).
             extras={
                 # The Overseer page's test: needs the web frontend too.
                 AnswerKeys.HTMX: ["tests/web/test_overseer_scheduler.py"],
-                # Every file gated by ``scheduler_backend != "memory"``.
-                # Excluded from the memory add base (they would render empty),
-                # added for the sqlite backend, and always part of the full
-                # remove footprint. ``app/services/scheduler`` covers
-                # ``execution_log.py`` (also memory-gated) via dir expansion.
-                "scheduler_persistence": [
+                # Every file gated by ``scheduler_backend != "memory"``: they
+                # render empty on memory, so only a database backend adds them.
+                SCHEDULER_PERSISTENCE: [
                     "app/services/scheduler",
                     "app/cli/tasks.py",
                     "app/components/backend/api/scheduler.py",

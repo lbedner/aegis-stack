@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from aegis.config.defaults import GITHUB_REPO_URL, version_to_git_tag
 from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
+from aegis.core.component_files import AI_PERSISTENCE, group_on
 from aegis.core.copier_manager import load_copier_answers
 from aegis.core.migration_generator import get_services_needing_migrations
 from aegis.core.post_gen_tasks import cleanup_components, run_post_generation_tasks
@@ -224,9 +225,8 @@ def update_with_copier_native(
         # change queue.
         include_migrations = bool(get_services_needing_migrations(answers))
         include_ai = answers.get(AnswerKeys.AI, False)
-        ai_backend = answers.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
         # AI needs seeding when using persistence backend
-        ai_needs_seeding = include_ai and ai_backend != StorageBackends.MEMORY
+        ai_needs_seeding = include_ai and group_on(AI_PERSISTENCE, answers)
 
         # Run shared post-generation tasks
         run_post_generation_tasks(

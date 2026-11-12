@@ -244,32 +244,3 @@ class TestNoComponentNameSpecialCasesRemain:
             "ManualUpdater still hardcodes scheduler's removal answer reset; "
             "it belongs in the spec's reset_answers_on_remove"
         )
-
-    def test_remaining_special_case_is_the_documented_one(self) -> None:
-        """Exactly one ``ComponentNames.SCHEDULER`` branch is left in
-        ManualUpdater: the ``backend_variant`` argument threaded into
-        ``get_component_files``.
-
-        Deliberately not generalized. Unlike the additive ``extras``
-        groups, scheduler persistence needs *subtractive* semantics
-        (persistence paths are reachable through ``primary``, and on the
-        memory backend they render as 0-byte stubs that must be removed
-        from the add base, not merely not-added). Expressing that means
-        giving ``FileManifest`` predicate-gated *and* subtractive extras
-        — a change to the hot path shared by init, add, remove, and the
-        ownership derivation, for no behavioral gain.
-
-        It is also entangled with a genuine pre-existing bug: the
-        obvious collapse target, ``scheduler_with_persistence``, is
-        computed inconsistently across paths (``!= memory`` at init,
-        ``== sqlite`` on add), so folding file selection onto it would
-        propagate that divergence into which files get written.
-
-        This test pins the count so the exception can't quietly grow.
-        """
-        source = Path("aegis/core/manual_updater.py").read_text()
-        assert source.count("ComponentNames.SCHEDULER") == 1, (
-            "the number of scheduler special cases in ManualUpdater changed — "
-            "if one was added, generalize it instead; if the remaining one was "
-            "removed, delete this test"
-        )

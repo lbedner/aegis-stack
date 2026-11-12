@@ -1,6 +1,6 @@
 """The Ollama detail modal, split by tab.
 
-``ollama_modal.py`` was eleven hundred lines of three tabs plus the
+``inference_modal.py`` was eleven hundred lines of three tabs plus the
 table machinery the models tab needs. Each is now its own module; this
 re-exports the names that were importable before, so nothing outside
 the package had to change.
@@ -23,7 +23,7 @@ from .columns import (
     Capability,
     table_width,
 )
-from .dialog import OllamaDetailDialog
+from .dialog import InferenceDetailDialog
 from .model_actions import ModelActionButton, UseModelControl
 from .models_tab import ModelsSection, ModelsTab
 from .overview_tab import OverviewSection, OverviewTab, ServerInfoSection
@@ -40,7 +40,7 @@ __all__ = [
     "ModelActionButton",
     "ModelsSection",
     "ModelsTab",
-    "OllamaDetailDialog",
+    "InferenceDetailDialog",
     "OverviewSection",
     "OverviewTab",
     "ServerInfoSection",

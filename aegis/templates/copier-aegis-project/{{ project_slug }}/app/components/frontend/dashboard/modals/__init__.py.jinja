@@ -63,7 +63,7 @@ from .mcp_modal import McpDetailDialog
 from .browser_modal import BrowserDetailDialog
 {%- endif %}
 {%- if ollama_mode != "none" %}
-from .ollama_modal import OllamaDetailDialog
+from .inference_modal import InferenceDetailDialog
 {%- endif %}
 {%- if include_redis %}
 from .redis_modal import RedisDetailDialog
@@ -132,7 +132,7 @@ __all__ = [
     "BrowserDetailDialog",
 {%- endif %}
 {%- if ollama_mode != "none" %}
-    "OllamaDetailDialog",
+    "InferenceDetailDialog",
 {%- endif %}
 {%- if include_redis %}
     "RedisDetailDialog",

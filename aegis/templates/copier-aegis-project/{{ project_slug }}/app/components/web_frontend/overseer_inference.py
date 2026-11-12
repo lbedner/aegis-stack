@@ -16,10 +16,10 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
-from app.components.inference import sampler
-from app.components.inference.activity import get_ollama_activity
+from app.components.inference import get_inference_engine, sampler
+from app.components.inference.activity import get_inference_activity
+from app.components.inference.engine import InferenceServerStatus
 from app.components.inference.formatting import format_quantization
-from app.components.inference.ollama import OllamaClient, OllamaServerStatus
 from app.core import series
 from app.core.concurrency import background
 from app.core.formatting import format_relative_time
@@ -58,10 +58,10 @@ _failed: dict[str, str] = {}
 
 async def _finish(action: str, model: str) -> None:
     try:
-        done = await OllamaClient().move(action, model)
+        done = await get_inference_engine().move(action, model)
     except Exception as exc:  # noqa: BLE001 - shown on the row, logged here
         logger.warning(
-            "Ollama action failed", action=action, model=model, error=str(exc)
+            "inference.action_failed", action=action, model=model, error=str(exc)
         )
         done = False
     finally:
@@ -81,7 +81,7 @@ def start(action: str, model: str) -> asyncio.Task[None]:
     return background(_finish(action, model))
 
 
-def _overview(server: OllamaServerStatus, base_url: str) -> dict[str, Any]:
+def _overview(server: InferenceServerStatus, base_url: str) -> dict[str, Any]:
     loaded = [m.name for m in server.running_models]
     return {
         "figures": [
@@ -118,7 +118,7 @@ def _settle_failures(warm: dict[str, float]) -> None:
             del _failed[name]
 
 
-def model_rows(server: OllamaServerStatus) -> list[dict[str, Any]]:
+def model_rows(server: InferenceServerStatus) -> list[dict[str, Any]]:
     warm = {m.name: m.size_vram_gb for m in server.running_models}
     _settle_failures(warm)
     return [
@@ -145,14 +145,14 @@ def model_rows(server: OllamaServerStatus) -> list[dict[str, Any]]:
     ]
 
 
-async def _read_server() -> tuple[OllamaServerStatus, str]:
+async def _read_server() -> tuple[InferenceServerStatus, str]:
     """The server as the inference sampler last read it (once a tick for
     every viewer, kept at full pace while one looks), and where it was
     looked for; read here only before the first sample."""
     return await series.reading(sampler.SAMPLER)
 
 
-def _reach(server: OllamaServerStatus, base_url: str) -> dict[str, Any]:
+def _reach(server: InferenceServerStatus, base_url: str) -> dict[str, Any]:
     """Where nothing answered, for ``_unreachable.html``."""
     return {"unreachable": None if server.available else base_url}
 
@@ -184,10 +184,10 @@ def _activity_rows() -> list[dict[str, Any]]:
             "model": e.model,
             "event": status_cell(e.action.capitalize(), EVENT_TONES[e.action]),
             "vram": f"{e.vram_gb:.1f} GB" if e.vram_gb else "-",
-            "by": "Ollama" if e.detected else "This app",
+            "by": "Server" if e.detected else "This app",
             "when": format_relative_time(e.timestamp),
         }
-        for e in get_ollama_activity().events()
+        for e in get_inference_activity().events()
     ]
 
 

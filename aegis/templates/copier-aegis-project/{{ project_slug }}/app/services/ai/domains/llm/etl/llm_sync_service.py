@@ -7,7 +7,6 @@ and upserts to the database.
 
 from sqlmodel import Session
 
-from app.core.config import settings
 from app.core.log import logger
 
 # Re-exported: callers have always reached the catalog readers through
@@ -49,12 +48,13 @@ from app.services.ai.models.llm import (
 )
 
 try:
-    from app.components.inference.ollama import OllamaClient, OllamaModel
+    from app.components.inference import get_inference_engine
+    from app.components.inference.engine import InferenceModel
 except (ModuleNotFoundError, ImportError):
     # Ollama module not generated or empty (ollama_mode is "none"),
     # or missing dependency — either way, gracefully degrade
-    OllamaClient = None  # type: ignore[assignment, misc]
-    OllamaModel = None  # type: ignore[assignment, misc]
+    get_inference_engine = None  # type: ignore[assignment]
+    InferenceModel = None  # type: ignore[assignment, misc]
 
 
 class LLMSyncService(UpsertMixin):
@@ -265,30 +265,20 @@ class LLMSyncService(UpsertMixin):
         """
         result = SyncResult()
 
-        if OllamaClient is None:
+        if get_inference_engine is None:
             result.errors.append("Ollama integration not available")
             return result
 
-        # Get Ollama base URL from settings (uses effective URL for Docker/local auto-detection)
-        base_url = settings.ollama_base_url_effective
-        client = OllamaClient(base_url=base_url)
-
-        # Check if Ollama is available
-        if not await client.is_available():
-            error_msg = (
-                f"Cannot connect to Ollama at {base_url}. "
-                "Make sure Ollama is running: ollama serve"
-            )
-            logger.error(error_msg)
-            result.errors.append(error_msg)
-            return result
-
-        logger.info(f"Syncing models from Ollama at {base_url}")
+        client = get_inference_engine()
+        logger.info(f"Syncing models from Ollama at {client.base_url}")
 
         try:
             ollama_models = await client.fetch_models()
         except Exception as e:
-            error_msg = f"Failed to fetch models from Ollama: {e}"
+            error_msg = (
+                f"Cannot read models from Ollama at {client.base_url} ({e}). "
+                "Make sure Ollama is running: ollama serve"
+            )
             logger.error(error_msg)
             result.errors.append(error_msg)
             return result
@@ -329,7 +319,7 @@ class LLMSyncService(UpsertMixin):
 
     def _sync_ollama_model(
         self,
-        ollama_model: OllamaModel,
+        ollama_model: InferenceModel,
         vendor: LLMOrg,
         result: SyncResult,
         dry_run: bool,

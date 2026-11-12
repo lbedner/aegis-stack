@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.inference import activity, sampler
-from app.components.inference.ollama import OllamaServerStatus
+from app.components.inference.engine import InferenceServerStatus
 from app.components.web_frontend import overseer_inference
 from app.services.system.models import ComponentStatus, ComponentStatusType
 from tests._fake_ollama import SERVING, FakeClient, serve
@@ -31,7 +31,6 @@ OLLAMA = ComponentStatus(
 def signed_in(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient]:
     sign_in(app, monkeypatch, status_with(OLLAMA))
     FakeClient.status, FakeClient.loaded, FakeClient.calls = SERVING, True, []
-    monkeypatch.setattr(overseer_inference, "OllamaClient", FakeClient)
     serve(monkeypatch)
     monkeypatch.setattr(overseer_inference, "_moving", {})
     monkeypatch.setattr(overseer_inference, "_failed", {})
@@ -74,7 +73,7 @@ def test_overview_names_the_server(signed_in: TestClient) -> None:
 
 
 def test_an_unreachable_server_says_where_it_looked(signed_in: TestClient) -> None:
-    FakeClient.status = OllamaServerStatus(available=False)
+    FakeClient.status = InferenceServerStatus(available=False)
     alert = text(one(_get(signed_in), "[role=alert]"))
     assert "host.docker.internal:11434" in alert
 
@@ -138,7 +137,7 @@ async def test_a_row_shows_the_load_in_flight_then_its_end(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     FakeClient.calls = []
-    monkeypatch.setattr(overseer_inference, "OllamaClient", FakeClient)
+    serve(monkeypatch)
     monkeypatch.setattr(overseer_inference, "_moving", {})
     monkeypatch.setattr(overseer_inference, "_failed", {})
 
@@ -157,7 +156,7 @@ async def test_a_row_shows_the_load_in_flight_then_its_end(
 async def test_a_refused_load_stays_on_the_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(overseer_inference, "OllamaClient", FakeClient)
+    serve(monkeypatch)
     monkeypatch.setattr(overseer_inference, "_moving", {})
     monkeypatch.setattr(overseer_inference, "_failed", {})
     monkeypatch.setattr(FakeClient, "loaded", False)
@@ -190,7 +189,7 @@ def test_the_table_streams_while_the_page_is_open(signed_in: TestClient) -> None
 async def test_the_stream_sends_the_table_only_when_it_changes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(overseer_inference, "OllamaClient", FakeClient)
+    serve(monkeypatch)
     monkeypatch.setattr(overseer_inference, "MODELS_INTERVAL_SECONDS", 0)
     events = await sent_events(overseer_inference.models_events(max_frames=3))
     assert len(events) == 1
@@ -210,7 +209,7 @@ def test_activity_starts_empty(signed_in: TestClient) -> None:
 
 
 def test_activity_lists_what_moved(signed_in: TestClient) -> None:
-    activity.get_ollama_activity().record_loaded("llama3.1:8b")
+    activity.get_inference_activity().record_loaded("llama3.1:8b")
     rows = select(_get(signed_in, "activity"), "#inference-activity tbody tr")
     assert "llama3.1:8b" in text(rows[0])
 
@@ -223,7 +222,7 @@ def test_models_are_served_from_the_one_shared_reading(
     from app.core import series
 
     asyncio.run(series.sample(sampler.SAMPLER))
-    FakeClient.status = OllamaServerStatus(available=False)  # a live read
+    FakeClient.status = InferenceServerStatus(available=False)  # a live read
     html = _get(signed_in, "models")
     loaded, _idle = select(html, "#inference-models tbody tr")
     assert "Loaded" in text(loaded)

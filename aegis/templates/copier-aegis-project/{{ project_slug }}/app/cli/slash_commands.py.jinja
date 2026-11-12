@@ -178,13 +178,11 @@ class SlashCommandHandler:
 
         # Check for Ollama models (local, no API key needed)
         try:
-            from app.components.inference.ollama import OllamaClient
+            from app.components.inference import get_inference_engine
 
-            ollama_client = OllamaClient()
-            if await ollama_client.is_available():
-                ollama_models = await ollama_client.fetch_models()
-                all_model_ids.extend([m.model_id for m in ollama_models])
-                logger.debug(f"Loaded {len(ollama_models)} Ollama models")
+            ollama_models = await get_inference_engine().fetch_models()
+            all_model_ids.extend([m.model_id for m in ollama_models])
+            logger.debug(f"Loaded {len(ollama_models)} Ollama models")
         except Exception as e:
             logger.debug(f"Ollama not available: {e}")
 {% if ai_backend != "memory" %}
@@ -383,14 +381,11 @@ class SlashCommandHandler:
         # Check if model is available in Ollama
         if model in self._model_cache:
             try:
-                from app.components.inference.ollama import OllamaClient
+                from app.components.inference import get_inference_engine
 
-                ollama_client = OllamaClient()
-                if await ollama_client.is_available():
-                    ollama_models = await ollama_client.fetch_models()
-                    ollama_model_ids = [m.model_id for m in ollama_models]
-                    if model in ollama_model_ids:
-                        provider = "ollama"
+                ollama_models = await get_inference_engine().fetch_models()
+                if model in [m.model_id for m in ollama_models]:
+                    provider = "ollama"
             except Exception:
                 pass
 

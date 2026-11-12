@@ -617,10 +617,11 @@ COMPONENTS: dict[str, ComponentSpec] = {
             primary=[
                 "app/components/inference",
                 "app/services/system/health_ollama.py",
-                "app/components/frontend/dashboard/cards/ollama_card.py",
-                "app/components/frontend/dashboard/modals/ollama_modal",
+                "app/components/frontend/dashboard/cards/inference_card.py",
+                "app/components/frontend/dashboard/modals/inference_modal",
                 "tests/components/test_inference.py",
-                "tests/components/frontend/test_ollama_model_table.py",
+                "tests/components/test_inference_engine.py",
+                "tests/components/frontend/test_inference_model_table.py",
                 "tests/_fake_ollama.py",
             ],
             extras={

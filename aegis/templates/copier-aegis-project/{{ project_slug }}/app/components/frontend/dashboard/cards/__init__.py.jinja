@@ -58,7 +58,7 @@ from .mcp_card import McpCard
 from .browser_card import BrowserCard
 {%- endif %}
 {%- if ollama_mode != "none" %}
-from .ollama_card import OllamaCard
+from .inference_card import InferenceCard
 {%- endif %}
 {%- if include_redis %}
 from .redis_card import RedisCard
@@ -133,7 +133,7 @@ __all__ = [
     "BrowserCard",
 {%- endif %}
 {%- if ollama_mode != "none" %}
-    "OllamaCard",
+    "InferenceCard",
 {%- endif %}
 {%- if include_redis %}
     "RedisCard",

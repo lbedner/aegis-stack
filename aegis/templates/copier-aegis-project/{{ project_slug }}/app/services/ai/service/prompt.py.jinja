@@ -39,13 +39,15 @@ from app.services.ai.domains.chat.self_context import (
 from app.services.ai.models import Conversation, MessageRole
 from app.services.ai.service.contexts import ContextsMixin
 {% if ai_rag %}
+from app.services.ai.domains.chat.prompts import codebase_context
 from app.services.ai.domains.chat.rag_context import RAGContext
 {% endif %}
 
 
 # Conversation history carried into each model call, in characters
-# (~1.5k tokens). Newest messages first; the oldest drop when a thread
-# outgrows the budget - prefill cost is paid on EVERY call of a turn.
+# (~1.5k tokens). The oldest drop, a slab at a time (``_history_start``),
+# when a thread outgrows the budget - prefill cost is paid on EVERY call of
+# a turn.
 # The replayed-history budget scales with the ACTIVE model's context
 # window: a fixed budget sized for small local models is how a
 # long-context agent "forgets" an allocation it computed minutes ago,
@@ -78,6 +80,33 @@ def _dated(content: str, on: date) -> str:
     return content if on >= today() else f"[answered {on.isoformat()}] {content}"
 
 
+def _history_start(lengths: list[int], budget: int) -> int:
+    """The first message the replayed history keeps, given each message's
+    length, oldest first.
+
+    The cut lands only on a slab boundary: the first message past each
+    whole multiple of half the budget, counted from the conversation's
+    start, so a boundary never moves as the conversation grows. The cut is
+    the first boundary that sheds the excess, and it moves on only when the
+    history outgrows the budget past the next one. Between moves every turn
+    replays the start the last one did, so a prompt cache reuses it;
+    dropping one message a turn changed the start every turn. At least half
+    the budget, less one message, still replays after a cut.
+    """
+    excess = sum(lengths) - budget
+    if excess <= 0:
+        return 0
+    step = max(budget // 2, 1)
+    dropped, slab = 0, 0
+    for index, length in enumerate(lengths):
+        if dropped // step > slab:  # this message opens a new slab
+            slab = dropped // step
+            if dropped >= excess:
+                return index
+        dropped += length
+    return len(lengths)
+
+
 class PromptMixin(ContextsMixin):
     """Agent-config overlay and per-request prompt/runtime construction."""
 
@@ -96,28 +125,21 @@ class PromptMixin(ContextsMixin):
         config: AIServiceConfig,
         agent_config: AgentConfig | None,
         *,
-{% if ai_rag %}
-        rag_context: RAGContext | None = None,
-{% endif %}
         memory_context: str | None = None,
         agent_modules_context: str | None = None,
     ) -> str:
         """The system prompt for one turn: persona plus every context block,
         formatted for the model in force. Nothing live: what changes turn
-        to turn rides the message (``right_now``), so a provider's prompt
-        cache holds this. The same prompt on both frameworks; only the
+        to turn (``right_now``; with RAG, the code retrieved for the
+        question) rides the message, after the history and beside the
+        question, so a prompt cache (an engine's, a provider's) reuses
+        everything ahead of it. The same prompt on both frameworks; only the
         runtime that receives it differs."""
-        formatted_rag = None
-{% if ai_rag %}
-        if rag_context and rag_context.results:
-            formatted_rag = rag_context.format_for_prompt(include_metadata=True)
-{% endif %}
-
+        persona = self._agent_persona(agent_config)
         system_prompt = build_system_prompt(
-            rag_context=formatted_rag,
             current_model=config.model,
             current_provider=config.provider.value,
-            persona=self._agent_persona(agent_config),
+            persona=persona,
             memory_context=memory_context,
         )
 
@@ -131,7 +153,7 @@ class PromptMixin(ContextsMixin):
             blocks=[
                 b
                 for b in (
-                    Block("persona", len(self._agent_persona(agent_config) or "")),
+                    Block("persona", len(persona or "")),
                     Block("saved memory", len(memory_context or "")),
                     Block("briefings", len(agent_modules_context or "")),
                 )
@@ -141,13 +163,22 @@ class PromptMixin(ContextsMixin):
 
         return system_prompt
 
-{% if ai_framework == "pydantic-ai" %}
+{% if ai_rag %}
+    @staticmethod
+    def _this_turn(rag_context: RAGContext | None, right_now: str | None) -> str:
+        """What this turn alone brings: the code retrieved for its question,
+        then what is wrong right now (where it rides: ``_system_prompt_for``)."""
+        retrieved = (
+            codebase_context(rag_context.format_for_prompt(include_metadata=True))
+            if rag_context and rag_context.results
+            else None
+        )
+        return "\n\n".join(filter(None, (retrieved, right_now)))
+
+{% endif %}{% if ai_framework == "pydantic-ai" %}
     async def _prepare_agent_and_context(
         self,
         conversation: Conversation,
-{% if ai_rag %}
-        rag_context: RAGContext | None = None,
-{% endif %}
         agent_config: AgentConfig | None = None,
         memory_context: str | None = None,
         agent_modules_context: str | None = None,
@@ -161,17 +192,15 @@ class PromptMixin(ContextsMixin):
 
         Args:
             conversation: The conversation to prepare context from
-{% if ai_rag %}
-            rag_context: Optional RAG context to inject into system prompt
-{% endif %}
             agent_config: Resolved agent definition; supplies sampling
                 parameters, an optional model pin, and an optional persona
             context_window: The effective model's window, for the stamp
                 the ``context`` tool reports from
             readings: The user's recorded extractions, replayed ahead of
                 history
-            right_now: What is wrong across the app, ahead of the history
-                (``node_now.RightNow.line``), or None
+            right_now: What this turn alone brings (``_build_turn``): what
+                is wrong across the app, and with RAG the code retrieved
+                for the question; it rides after the history, or None
 
         Returns:
             tuple[Any, str]: (agent instance, conversation context string)
@@ -185,9 +214,6 @@ class PromptMixin(ContextsMixin):
         system_prompt_override = self._system_prompt_for(
             config,
             agent_config,
-{% if ai_rag %}
-            rag_context=rag_context,
-{% endif %}
             memory_context=memory_context,
             agent_modules_context=agent_modules_context,
         )
@@ -253,19 +279,15 @@ class PromptMixin(ContextsMixin):
         # every turn, ahead of history - they are the durable record the
         # ephemeral attachment left behind, and they belong to the user
         # rather than to the thread they were read in.
-        # What is wrong right now rides with them (``_system_prompt_for``).
-        prefix = "".join(
-            f"{block}\n\n" for block in (format_readings(readings), right_now) if block
-        )
+        # What this turn alone brings (``right_now``) rides after the
+        # history, beside the question (``_system_prompt_for``).
 
-        # Budget history by SIZE, newest first, rather than by message
-        # count: one agent's answers can run 1k+ tokens each, so "last 10
-        # messages" re-prefills an essay collection on every model call.
-        # Oldest messages drop first; the current message always rides.
+        # Budget history by SIZE rather than by message count: one agent's
+        # answers can run 1k+ tokens each, so "last 10 messages" re-prefills
+        # an essay collection on every model call. Oldest messages drop
+        # first, a slab at a time (``_history_start``); the current message
+        # always rides.
         budget = history_budget or HISTORY_CHAR_BUDGET_DEFAULT
-        context_parts: list[str] = []
-        used = 0
-        dropped = 0
         # The last message is set aside only when it is the question being
         # asked now. A live call opens on a thread that ends with the
         # assistant's last reply, and setting that aside - then returning
@@ -274,48 +296,39 @@ class PromptMixin(ContextsMixin):
         latest_message = conversation.get_last_message()
         asking = latest_message is not None and latest_message.role == MessageRole.USER
         earlier = conversation.messages[:-1] if asking else conversation.messages
-        for msg in reversed(earlier):
-            if msg.role == MessageRole.USER:
-                line = f"User: {msg.content}"
-            elif msg.role == MessageRole.ASSISTANT:
-                line = f"Assistant: {_dated(msg.content, msg.timestamp.date())}"
-            else:
-                continue
-            if dropped or used + len(line) > budget:
-                # Keep counting once the budget is spent: how much the
-                # agent LOST is the number worth being able to report.
-                dropped += 1
-                continue
-            context_parts.insert(0, line)
-            used += len(line) + 1
+        lines = [
+            f"User: {msg.content}"
+            if msg.role == MessageRole.USER
+            else f"Assistant: {_dated(msg.content, msg.timestamp.date())}"
+            for msg in earlier
+            if msg.role in (MessageRole.USER, MessageRole.ASSISTANT)
+        ]
+        lengths = [len(line) + 1 for line in lines]
+        start = _history_start(lengths, budget)
 
+        # How much the agent LOST is the number worth being able to report.
         record_turn_context(
-            history_chars=used,
+            history_chars=sum(lengths[start:]),
             history_budget=budget,
-            messages_kept=len(context_parts),
-            messages_dropped=dropped,
+            messages_kept=len(lines) - start,
+            messages_dropped=start,
         )
 
-        if not asking:
-            # A call opening on the thread so far: the history alone.
-            return prefix + "\n".join(context_parts)
-        assert latest_message is not None
-        if context_parts:
-            # Include conversation history + current message
-            return (
-                prefix
-                + "\n".join(context_parts)
-                + f"\n\nUser: {latest_message.content}"
-            )
-        # First message in conversation
-        return prefix + latest_message.content
+        history = "\n".join(lines[start:])
+        # A call opening on the thread so far has no question: the history
+        # alone. The first message of a thread goes as it was typed.
+        question = (
+            (f"User: {latest_message.content}" if history else latest_message.content)
+            if asking and latest_message is not None
+            else None
+        )
+        return "\n\n".join(
+            filter(None, (format_readings(readings), history, right_now, question))
+        )
 {% else %}
     async def _prepare_llm_and_messages(
         self,
         conversation: Conversation,
-{% if ai_rag %}
-        rag_context: RAGContext | None = None,
-{% endif %}
         agent_config: AgentConfig | None = None,
         memory_context: str | None = None,
         right_now: str | None = None,
@@ -325,12 +338,11 @@ class PromptMixin(ContextsMixin):
 
         Args:
             conversation: The conversation to prepare messages from
-{% if ai_rag %}            rag_context: Optional RAG context with code search results
-{% endif %}            agent_config: Resolved agent definition; supplies sampling
+            agent_config: Resolved agent definition; supplies sampling
                 parameters, an optional model pin, and an optional persona
             memory_context: The user's saved memory, for the system prompt
-            right_now: What is wrong across the app, on the current message
-                (``node_now.RightNow.line``), or None
+            right_now: What this turn alone brings (``_build_turn``), on
+                the current message, or None
 
         Returns:
             The LLM with the agent's tools bound, the message tuples, and
@@ -348,9 +360,6 @@ class PromptMixin(ContextsMixin):
         system_prompt = self._system_prompt_for(
             config,
             agent_config,
-{% if ai_rag %}
-            rag_context=rag_context,
-{% endif %}
             memory_context=memory_context,
         )
         return (
@@ -366,15 +375,17 @@ class PromptMixin(ContextsMixin):
         right_now: str | None = None,
     ) -> list[tuple[str, str]]:
         """The LangChain message list: the system prompt, then recent
-        history, with what is wrong right now on the current message."""
+        history, with what this turn alone brings on the current message."""
         messages = [("system", system_prompt)]
 
         if not conversation.messages:
             return messages
 
-        # For continuous conversation, include recent message history
-        # Limit to last 10 messages to manage context window
-        recent_messages = conversation.messages[-10:]
+        # Recent history: ten messages at most, cut five at a time
+        # (``_history_start``) so the start holds from turn to turn.
+        recent_messages = conversation.messages[
+            _history_start([1] * len(conversation.messages), 10) :
+        ]
 
         # Format messages for LangChain
         for msg in recent_messages:

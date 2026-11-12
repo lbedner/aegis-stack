@@ -277,17 +277,17 @@ STACK_COMBINATIONS = [
         # ``ai[ollama]`` pulls in the inference component, on the host by
         # default, which needs no running Ollama to import and render. Without
         # the component post-gen strips the whole Ollama surface, including
-        # ``tests/components/frontend/test_ollama_model_table.py``.
+        # ``tests/components/frontend/test_inference_model_table.py``.
         components=["database"],
         services=["ai[ollama,sqlite]"],
         description="AI on local Ollama: the provider pulls in inference",
         expected_files=[
-            "app/components/frontend/dashboard/modals/ollama_modal/",
-            "app/components/frontend/dashboard/cards/ollama_card.py",
+            "app/components/frontend/dashboard/modals/inference_modal/",
+            "app/components/frontend/dashboard/cards/inference_card.py",
             "app/components/inference/ollama.py",
             "tests/components/test_inference.py",
             "app/services/system/health_ollama.py",
-            "tests/components/frontend/test_ollama_model_table.py",
+            "tests/components/frontend/test_inference_model_table.py",
         ],
         expected_docker_services=["webserver"],
         expected_pyproject_deps=["fastapi", "flet", "pydantic-ai"],

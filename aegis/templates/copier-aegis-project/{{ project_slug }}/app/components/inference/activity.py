@@ -1,8 +1,8 @@
 """
-Ollama model activity tracker.
+Inference model activity tracker.
 
-Ephemeral, in-process record of models moving in and out of Ollama's
-memory, powering the dashboard's Activity tab. Deliberately memory-only
+Ephemeral, in-process record of models moving in and out of the inference
+server's memory, powering the dashboard's Activity tab. Deliberately memory-only
 (a bounded deque, same shape as the system activity feed): the tab
 answers "what just happened", not an audit question, so events reset
 with the process.
@@ -10,10 +10,10 @@ with the process.
 Events arrive two ways:
 
 - ``record_loaded`` / ``record_unloaded``: explicit calls this app made
-  through ``OllamaClient`` (the dashboard's Load/Unload buttons).
+  through the engine's ``move`` (the dashboard's Load/Unload buttons).
 - ``observe``: a diff of the running-model set taken on every reading of
   the inference sampler. This is how idle evictions (``keep_alive`` expiry) and loads
-  triggered outside the app get noticed - Ollama has no event API, so
+  triggered outside the app get noticed - no engine has an event API, so
   polling is the only signal.
 """
 
@@ -24,31 +24,31 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
-OllamaActivityAction = Literal["loaded", "unloaded", "evicted"]
+ActivityAction = Literal["loaded", "unloaded", "evicted"]
 
 
 @dataclass
-class OllamaActivityEvent:
-    """A single model transition in or out of Ollama's memory."""
+class ActivityEvent:
+    """A single model transition in or out of the server's memory."""
 
-    action: OllamaActivityAction
+    action: ActivityAction
     model: str
     vram_gb: float | None  # VRAM the model held, when known
     detected: bool  # True when inferred from a poll diff, not an app call
     timestamp: datetime = field(default_factory=datetime.now)
 
 
-class OllamaActivityTracker:
-    """Bounded, in-memory log of Ollama model load/unload/eviction events."""
+class ActivityTracker:
+    """Bounded, in-memory log of model load/unload/eviction events."""
 
     def __init__(self, max_events: int = 50, stale_grace_seconds: float = 30.0) -> None:
-        self._events: deque[OllamaActivityEvent] = deque(maxlen=max_events)
+        self._events: deque[ActivityEvent] = deque(maxlen=max_events)
         # name -> VRAM GB for models believed warm. None until the first
         # observation: models already warm when the process started predate
         # the tracker, and fabricating "loaded" events for them would lie
         # about when they loaded.
         self._known: dict[str, float] | None = None
-        # Ollama's /api/ps lags explicit actions by a few seconds (an
+        # The server's running list (Ollama's /api/ps) lags explicit actions by a few seconds (an
         # unloaded model stays listed briefly; a loading one may be missing).
         # Observations that contradict an explicit action inside this window
         # are treated as that stale data, not as real transitions - without
@@ -57,11 +57,11 @@ class OllamaActivityTracker:
         # after the window closes instead of immediately.
         self._stale_grace_seconds = stale_grace_seconds
         # model name -> (last explicit action, when it happened)
-        self._recent: dict[str, tuple[OllamaActivityAction, datetime]] = {}
+        self._recent: dict[str, tuple[ActivityAction, datetime]] = {}
 
     def record_loaded(self, model: str) -> None:
         """Record a load this app performed."""
-        self._push(OllamaActivityEvent("loaded", model, None, detected=False))
+        self._push(ActivityEvent("loaded", model, None, detected=False))
         self._recent[model] = ("loaded", datetime.now())
         if self._known is not None:
             # VRAM is unknown until the next poll; 0.0 marks it pending so
@@ -71,15 +71,15 @@ class OllamaActivityTracker:
     def record_unloaded(self, model: str) -> None:
         """Record an unload this app performed."""
         vram = self._known.pop(model, None) if self._known is not None else None
-        self._push(OllamaActivityEvent("unloaded", model, vram or None, detected=False))
+        self._push(ActivityEvent("unloaded", model, vram or None, detected=False))
         self._recent[model] = ("unloaded", datetime.now())
 
     def observe(self, running: dict[str, float]) -> None:
         """Diff the currently running models against the previous poll.
 
         Args:
-            running: Mapping of model name to VRAM GB from Ollama's
-                ``/api/ps``. Models that appeared are recorded as loads,
+            running: Mapping of model name to VRAM GB from the server's
+                running list. Models that appeared are recorded as loads,
                 models that vanished as evictions. Anything this app
                 loaded or unloaded itself was already recorded explicitly
                 and is not double-counted, including the few seconds where
@@ -98,7 +98,7 @@ class OllamaActivityTracker:
                 del current[name]
         for name, vram in current.items():
             if name not in self._known:
-                self._push(OllamaActivityEvent("loaded", name, vram, detected=True))
+                self._push(ActivityEvent("loaded", name, vram, detected=True))
         for name, vram in self._known.items():
             if name not in current:
                 if self._is_stale(name, "loaded"):
@@ -106,21 +106,19 @@ class OllamaActivityTracker:
                     # it is warm instead of reporting a phantom eviction.
                     current[name] = vram
                     continue
-                self._push(
-                    OllamaActivityEvent("evicted", name, vram or None, detected=True)
-                )
+                self._push(ActivityEvent("evicted", name, vram or None, detected=True))
 
         self._known = current
         self._backfill_vram(running)
 
-    def events(self) -> list[OllamaActivityEvent]:
+    def events(self) -> list[ActivityEvent]:
         """Recent events, newest first."""
         return list(self._events)
 
-    def _push(self, event: OllamaActivityEvent) -> None:
+    def _push(self, event: ActivityEvent) -> None:
         self._events.appendleft(event)
 
-    def _is_stale(self, model: str, action: OllamaActivityAction) -> bool:
+    def _is_stale(self, model: str, action: ActivityAction) -> bool:
         """Whether an observation contradicting ``action`` is inside the grace window."""
         recent = self._recent.get(model)
         if recent is None:
@@ -143,12 +141,12 @@ class OllamaActivityTracker:
 # Module-level singleton: the dashboard frontend and the API run in the
 # same process, so both the inference sampler (writer) and the modal
 # (reader) see the same instance.
-_tracker: OllamaActivityTracker | None = None
+_tracker: ActivityTracker | None = None
 
 
-def get_ollama_activity() -> OllamaActivityTracker:
+def get_inference_activity() -> ActivityTracker:
     """Get the process-wide activity tracker (creates it if needed)."""
     global _tracker
     if _tracker is None:
-        _tracker = OllamaActivityTracker()
+        _tracker = ActivityTracker()
     return _tracker

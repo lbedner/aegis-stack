@@ -10,14 +10,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from app.core.config import settings
 from app.core.constants import ComponentName
 from app.core.log import logger
 
 from .models import ComponentStatus, ComponentStatusType
 
 if TYPE_CHECKING:
-    from app.components.inference.ollama import OllamaServerStatus
+    from app.components.inference.engine import InferenceServerStatus
 
 
 async def check_ollama_health() -> ComponentStatus:
@@ -28,13 +27,10 @@ async def check_ollama_health() -> ComponentStatus:
         ComponentStatus indicating Ollama infrastructure health with model info
     """
     try:
-        from app.components.inference.ollama import OllamaClient
+        from app.components.inference import get_inference_engine
 
-        # Get Ollama URL from settings (uses effective URL for Docker/local auto-detection)
-        ollama_url = settings.ollama_base_url_effective
-
-        client = OllamaClient(base_url=ollama_url)
-        return ollama_status(await client.get_server_status(), ollama_url)
+        engine = get_inference_engine()
+        return ollama_status(await engine.get_server_status(), engine.base_url)
 
     except ImportError:
         return ComponentStatus(
@@ -42,7 +38,7 @@ async def check_ollama_health() -> ComponentStatus:
             status=ComponentStatusType.UNHEALTHY,
             message="Ollama client not available",
             response_time_ms=None,
-            metadata={"error": "OllamaClient not installed"},
+            metadata={"error": "inference component not installed"},
         )
     except Exception as e:
         logger.error(f"Ollama health check failed: {e}")
@@ -56,7 +52,7 @@ async def check_ollama_health() -> ComponentStatus:
 
 
 def ollama_status(
-    server_status: OllamaServerStatus, ollama_url: str
+    server_status: InferenceServerStatus, ollama_url: str
 ) -> ComponentStatus:
     """A server reading as a health status: the check's, and the Flet
     modal's from the inference sampler's last reading."""

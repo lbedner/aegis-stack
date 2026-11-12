@@ -23,6 +23,7 @@ import pytest
 from app.services.ai.domains.chat.agent_loader import AgentConfig, default_agent_config
 from app.services.ai.domains.chat.prompts import LEGACY_SYSTEM_PROMPT
 from app.services.ai.domains.chat.user_memory import UserContext
+from app.services.ai.models import AIProvider, Conversation, MessageRole
 from app.services.ai.service import AIService
 import app.services.ai.service.chat as chat_module
 import app.services.ai.service.prompt as prompt_module
@@ -572,6 +573,21 @@ class TestWhatIsWrongRidesTheMessage:
 
         assert COMMS.message not in captured["message"]
 
+    def test_it_rides_after_the_history_beside_the_question(
+        self, mock_ai_settings: MagicMock
+    ) -> None:
+        """Where and why: ``PromptMixin._system_prompt_for``."""
+        context = AIService(mock_ai_settings)._build_conversation_context(
+            _short_thread(), right_now=COMMS.message
+        )
+
+        assert context.startswith("User: hi")
+        assert (
+            context.index("Assistant: hello")
+            < context.index(COMMS.message)
+            < context.index("User: how are you?")
+        )
+
 
 class TestHistoryBudget:
     """History is budgeted by size, not message count: one agent's answers
@@ -632,22 +648,53 @@ class TestHistoryBudget:
         assert "Assistant: 1723 now" in context
 
     def test_short_history_is_untouched(self, mock_ai_settings: MagicMock) -> None:
-        from app.services.ai.models import AIProvider, Conversation, MessageRole
-
-        service = AIService(mock_ai_settings)
-        conversation = Conversation(
-            id="c2", provider=AIProvider.OLLAMA, model="test"
+        context = AIService(mock_ai_settings)._build_conversation_context(
+            _short_thread()
         )
-        conversation.add_message(MessageRole.USER, "hi")
-        conversation.add_message(MessageRole.ASSISTANT, "hello")
-        conversation.add_message(MessageRole.USER, "how are you?")
-
-        context = service._build_conversation_context(conversation)
 
         assert "User: hi" in context
         assert "Assistant: hello" in context
         assert context.endswith("User: how are you?")
 
+
+
+def _short_thread() -> Conversation:
+    """A thread well inside any budget: hi, hello, how are you?"""
+    conversation = Conversation(id="c2", provider=AIProvider.OLLAMA, model="test")
+    conversation.add_message(MessageRole.USER, "hi")
+    conversation.add_message(MessageRole.ASSISTANT, "hello")
+    conversation.add_message(MessageRole.USER, "how are you?")
+    return conversation
+
+
+{% if ai_rag %}
+class TestRetrievedCodeRidesTheMessage:
+    async def test_it_rides_beside_the_question_not_in_the_system_prompt(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """Where and why: ``PromptMixin._system_prompt_for``."""
+        from app.services.ai.domains.chat.rag_context import RAGContext
+        from app.services.rag.models import SearchResult
+
+        service, _recorder, captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, default_agent_config())
+
+        async def retrieved(**kwargs: object) -> RAGContext:
+            return RAGContext(
+                query="how does it work?",
+                collection="code",
+                results=[
+                    SearchResult(content="def retrieved_helper(): ...", score=0.9, rank=1)
+                ],
+            )
+
+        monkeypatch.setattr(service, "_build_rag_context", retrieved)
+
+        await service.chat("how does it work?", use_rag=True)
+
+        assert "retrieved_helper" in captured["message"]
+        assert "retrieved_helper" not in captured["system_prompt"]
+{% endif %}
 
 class TestChatAttribution:
     async def test_default_agent_keeps_builtin_persona_and_tags_usage(

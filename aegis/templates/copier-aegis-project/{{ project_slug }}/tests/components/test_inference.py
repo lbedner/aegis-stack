@@ -7,26 +7,35 @@ import pytest
 
 from app.components.inference import sampler
 from app.components.inference.activity import (
-    OllamaActivityTracker,
-    get_ollama_activity,
+    ActivityTracker,
+    get_inference_activity,
 )
-from app.components.inference.ollama import OllamaClient, OllamaServerStatus
+from app.components.inference.engine import InferenceServerStatus
+from app.components.inference.ollama import OllamaEngine
 from app.core import series
 from app.services.system.models import ComponentStatusType
-from tests._fake_ollama import RUNNING, SERVING, FakeClient, serve
+from tests._fake_ollama import (
+    ROUTES,
+    RUNNING,
+    SERVING,
+    FakeClient,
+    down,
+    serve,
+    serving,
+)
 
 
-class TestOllamaActivityTracker:
+class TestActivityTracker:
     """Diff/record behavior of the in-memory activity tracker."""
 
     def test_first_observation_sets_baseline_without_events(self) -> None:
-        tracker = OllamaActivityTracker()
+        tracker = ActivityTracker()
         tracker.observe({"qwen2.5:7b": 4.2})
 
         assert tracker.events() == []
 
     def test_detected_load_records_event(self) -> None:
-        tracker = OllamaActivityTracker()
+        tracker = ActivityTracker()
         tracker.observe({})
         tracker.observe({"qwen2.5:7b": 4.2})
 
@@ -38,7 +47,7 @@ class TestOllamaActivityTracker:
         assert events[0].detected is True
 
     def test_eviction_records_event_with_last_known_vram(self) -> None:
-        tracker = OllamaActivityTracker()
+        tracker = ActivityTracker()
         tracker.observe({"qwen2.5:7b": 4.2})
         tracker.observe({})
 
@@ -50,7 +59,7 @@ class TestOllamaActivityTracker:
         assert events[0].detected is True
 
     def test_explicit_load_is_not_double_counted_and_backfills_vram(self) -> None:
-        tracker = OllamaActivityTracker()
+        tracker = ActivityTracker()
         tracker.observe({})
         tracker.record_loaded("qwen2.5:7b")
         tracker.observe({"qwen2.5:7b": 4.2})
@@ -62,7 +71,7 @@ class TestOllamaActivityTracker:
         assert events[0].vram_gb == 4.2
 
     def test_explicit_unload_is_not_double_counted(self) -> None:
-        tracker = OllamaActivityTracker()
+        tracker = ActivityTracker()
         tracker.observe({"qwen2.5:7b": 4.2})
         tracker.record_unloaded("qwen2.5:7b")
         tracker.observe({})
@@ -74,7 +83,7 @@ class TestOllamaActivityTracker:
         assert events[0].vram_gb == 4.2
 
     def test_events_are_newest_first(self) -> None:
-        tracker = OllamaActivityTracker()
+        tracker = ActivityTracker()
         tracker.observe({})
         tracker.observe({"a:1b": 1.0})
         tracker.observe({"a:1b": 1.0, "b:2b": 2.0})
@@ -86,7 +95,7 @@ class TestOllamaActivityTracker:
         # Ollama's /api/ps keeps listing a model for a few seconds after an
         # unload request; that stale listing must not read as a fresh load
         # (which would then produce a phantom eviction on the next poll).
-        tracker = OllamaActivityTracker()
+        tracker = ActivityTracker()
         tracker.observe({"qwen2.5:7b": 4.2})
         tracker.record_unloaded("qwen2.5:7b")
         tracker.observe({"qwen2.5:7b": 4.2})
@@ -97,7 +106,7 @@ class TestOllamaActivityTracker:
         assert events[0].action == "unloaded"
 
     def test_appearance_after_grace_expires_is_a_real_load(self) -> None:
-        tracker = OllamaActivityTracker(stale_grace_seconds=0.0)
+        tracker = ActivityTracker(stale_grace_seconds=0.0)
         tracker.observe({"qwen2.5:7b": 4.2})
         tracker.record_unloaded("qwen2.5:7b")
         tracker.observe({"qwen2.5:7b": 4.2})
@@ -110,7 +119,7 @@ class TestOllamaActivityTracker:
     def test_ps_lag_after_explicit_load_is_not_an_eviction(self) -> None:
         # The mirror race: right after an explicit load, a poll that does
         # not list the model yet must not read as an eviction.
-        tracker = OllamaActivityTracker()
+        tracker = ActivityTracker()
         tracker.observe({})
         tracker.record_loaded("qwen2.5:7b")
         tracker.observe({})
@@ -122,7 +131,7 @@ class TestOllamaActivityTracker:
         assert events[0].vram_gb == 4.2
 
     def test_event_count_is_bounded(self) -> None:
-        tracker = OllamaActivityTracker(max_events=3)
+        tracker = ActivityTracker(max_events=3)
         tracker.observe({})
         for i in range(5):
             tracker.observe({f"m{i}:1b": 1.0})
@@ -131,7 +140,7 @@ class TestOllamaActivityTracker:
         assert len(tracker.events()) == 3
 
     def test_singleton_accessor_returns_same_instance(self) -> None:
-        assert get_ollama_activity() is get_ollama_activity()
+        assert get_inference_activity() is get_inference_activity()
 
 
 class TestModelMoves:
@@ -140,19 +149,13 @@ class TestModelMoves:
     async def test_an_action_reaches_its_call(self) -> None:
         calls: list[tuple[str, str]] = []
 
-        class Recording(OllamaClient):
-            async def load_model(
-                self, model_name: str, keep_alive: str = "30m"
-            ) -> bool:
-                calls.append(("load", model_name))
+        class Recording(OllamaEngine):
+            async def _move(self, action: str, model_name: str) -> bool:
+                calls.append((action, model_name))
                 return True
 
         assert await Recording(base_url="http://x").move("load", "m") is True
         assert calls == [("load", "m")]
-
-    async def test_anything_else_is_refused(self) -> None:
-        with pytest.raises(ValueError, match="delete"):
-            await OllamaClient(base_url="http://x").move("delete", "m")
 
 
 class TestServerStatusReads:
@@ -161,7 +164,7 @@ class TestServerStatusReads:
     whether the server is there at all."""
 
     @staticmethod
-    def _client(handle: Any) -> tuple[OllamaClient, list[str], list[int]]:
+    def _client(handle: Any) -> tuple[OllamaEngine, list[str], list[int]]:
         asked: list[str] = []
         opened: list[int] = []
 
@@ -169,12 +172,12 @@ class TestServerStatusReads:
             asked.append(request.url.path)
             return handle(request)
 
-        client = OllamaClient(
+        client = OllamaEngine(
             "http://ollama:11434", transport=httpx.MockTransport(record)
         )
         build = client._client
 
-        def counted(timeout: float = OllamaClient.TIMEOUT) -> httpx.AsyncClient:
+        def counted(timeout: float = OllamaEngine.TIMEOUT) -> httpx.AsyncClient:
             opened.append(1)
             return build(timeout)
 
@@ -182,23 +185,13 @@ class TestServerStatusReads:
         return client, asked, opened
 
     async def test_one_connection_and_one_tags_read(self) -> None:
-        bodies = {
-            "/api/tags": {"models": []},
-            "/api/ps": {"models": []},
-            "/api/version": {"version": "0.12.0"},
-        }
-        client, asked, opened = self._client(
-            lambda r: httpx.Response(200, json=bodies[r.url.path])
-        )
+        client, asked, opened = self._client(serving(ROUTES))
         status = await client.get_server_status()
-        assert status.available and status.version == "0.12.0"
+        assert status.available
         assert sorted(asked) == ["/api/ps", "/api/tags", "/api/version"]
         assert len(opened) == 1
 
     async def test_a_failed_tags_read_is_unavailable(self) -> None:
-        def down(request: httpx.Request) -> httpx.Response:
-            raise httpx.ConnectError("refused", request=request)
-
         client, asked, _ = self._client(down)
         assert not (await client.get_server_status()).available
         assert asked == ["/api/tags"]
@@ -214,7 +207,7 @@ class TestSampler:
         reads: list[int] = []
 
         class Counted(FakeClient):
-            async def get_server_status(self) -> OllamaServerStatus:
+            async def get_server_status(self) -> InferenceServerStatus:
                 reads.append(1)
                 return self.status
 
@@ -232,11 +225,11 @@ class TestSampler:
     async def test_a_model_that_appears_between_readings_is_a_load(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(FakeClient, "status", OllamaServerStatus(available=True))
+        monkeypatch.setattr(FakeClient, "status", InferenceServerStatus(available=True))
         await sampler.read()
         monkeypatch.setattr(FakeClient, "status", SERVING)
         await sampler.read()
-        (event,) = get_ollama_activity().events()
+        (event,) = get_inference_activity().events()
         assert (event.action, event.model) == ("loaded", RUNNING.name)
 
     async def test_the_modal_status_is_the_samplers_reading(

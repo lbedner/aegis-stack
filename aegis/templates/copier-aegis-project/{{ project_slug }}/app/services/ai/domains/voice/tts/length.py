@@ -16,10 +16,12 @@ _RATES = {3: (44100, 48000, 32000), 2: (22050, 24000, 16000), 0: (11025, 12000, 
 
 
 def wav_seconds(wav: bytes) -> float | None:
-    """A WAV's length, from its header."""
+    """A WAV's length, from the frames it holds: a streamed one's header
+    can carry a placeholder size (Kokoro-FastAPI's 0xFFFFFFFF), even whole."""
     try:
         with wave.open(io.BytesIO(wav)) as w:
-            return w.getnframes() / w.getframerate()
+            held = len(w.readframes(w.getnframes()))
+            return held / (w.getsampwidth() * w.getnchannels() * w.getframerate())
     except (wave.Error, EOFError):
         return None
 

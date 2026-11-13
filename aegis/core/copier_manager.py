@@ -30,6 +30,7 @@ from ..constants import (
     AuthLevels,
     InferenceEngines,
     InferencePlacement,
+    InferenceSpeech,
     OllamaMode,
     PaymentProviders,
     PostgresProviders,
@@ -206,6 +207,9 @@ def generate_with_copier(
         ),
         AnswerKeys.INFERENCE_PLACEMENT: template_context.get(
             AnswerKeys.INFERENCE_PLACEMENT, InferencePlacement.DEFAULT
+        ),
+        AnswerKeys.INFERENCE_SPEECH: template_context.get(
+            AnswerKeys.INFERENCE_SPEECH, InferenceSpeech.DEFAULT
         ),
         AnswerKeys.INSIGHTS_GITHUB: template_context.get(
             AnswerKeys.INSIGHTS_GITHUB, "no"

@@ -71,7 +71,7 @@ The **AI Service** brings a complete AI platform to your Aegis Stack project: mu
 
     ---
 
-    Text-to-speech and speech-to-text with OpenAI, Groq Whisper, and local providers
+    Text-to-speech and speech-to-text with OpenAI, Groq Whisper, Kokoro, and other local providers
 
     [:octicons-arrow-right-24: Voice](voice.md)
 

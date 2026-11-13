@@ -172,7 +172,7 @@ See **[Evolving Your Stack](https://docs.aegis-stack.io/evolving-your-stack/)** 
 | **[Browser](https://docs.aegis-stack.io/components/browser/)** | Remote Chromium in its own container, driven over Playwright: JavaScript pages, sign-ins, a bot that joins a meeting | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Database](https://docs.aegis-stack.io/components/database/)** | Postgres (self-hosted or Neon serverless) or SQLite + SQLModel ORM | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Deploy](https://docs.aegis-stack.io/components/deploy/)** | Deployment target (Docker Compose), read by the Overseer | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Inference](https://docs.aegis-stack.io/components/inference/)** | Local AI models via Ollama | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Inference](https://docs.aegis-stack.io/components/inference/)** | Local AI models via Ollama, speech via Kokoro | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Ingress](https://docs.aegis-stack.io/components/ingress/)** | Traefik v3 reverse proxy with TLS | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[MCP](https://docs.aegis-stack.io/components/mcp/)** | Serves the app's own tools to Claude Desktop, Claude Code or a local model over MCP: the tools you grant, never a write | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Observability](https://docs.aegis-stack.io/components/observability/)** | Pydantic Logfire tracing + metrics + logging | ![Optional](https://img.shields.io/badge/-optional-blue) |
@@ -236,25 +236,28 @@ Aegis Stack is the orchestration layer. Services and components wire into best-i
 <tr>
 <td align="center" width="16.66%"><a href="https://github.com"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/github-dark.svg"><img src="docs/images/integrations/github.svg" loading="lazy" style="height:32px;width:auto" alt="GitHub" title="GitHub: OAuth provider" /></picture></a></td>
 <td align="center" width="16.66%"><a href="https://www.google.com"><img src="docs/images/integrations/google.svg" loading="lazy" style="height:32px;width:auto" alt="Google" title="Google: AI provider and OAuth" /></a></td>
+<td align="center" width="16.66%"><a href="https://github.com/remsky/Kokoro-FastAPI"><img src="docs/images/integrations/kokoro.png" loading="lazy" style="height:32px;width:auto" alt="Kokoro" title="Kokoro: Local text-to-speech (Kokoro-FastAPI)" /></a></td>
 <td align="center" width="16.66%"><a href="https://www.langchain.com"><img src="docs/images/integrations/langchain.png" loading="lazy" style="height:32px;width:auto" alt="LangChain" title="LangChain: AI provider abstraction" /></a></td>
 <td align="center" width="16.66%"><a href="https://neon.tech"><img src="docs/images/integrations/neon.svg" loading="lazy" style="height:32px;width:auto" alt="Neon" title="Neon: Serverless Postgres, database provider" /></a></td>
 <td align="center" width="16.66%"><a href="https://ollama.com"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/ollama-dark.svg"><img src="docs/images/integrations/ollama.svg" loading="lazy" style="height:32px;width:auto" alt="Ollama" title="Ollama: Local LLM runtime" /></picture></a></td>
-<td align="center" width="16.66%"><a href="https://plausible.io"><img src="docs/images/integrations/plausibleanalytics.svg" loading="lazy" style="height:32px;width:auto" alt="Plausible" title="Plausible: Analytics source for Insights service" /></a></td>
 </tr>
 <tr>
+<td align="center" width="16.66%"><a href="https://plausible.io"><img src="docs/images/integrations/plausibleanalytics.svg" loading="lazy" style="height:32px;width:auto" alt="Plausible" title="Plausible: Analytics source for Insights service" /></a></td>
 <td align="center" width="16.66%"><a href="https://www.postgresql.org"><img src="docs/images/integrations/postgresql.svg" loading="lazy" style="height:32px;width:auto" alt="Postgres" title="Postgres: Database component" /></a></td>
 <td align="center" width="16.66%"><a href="https://pydantic.dev"><img src="docs/images/integrations/pydantic.svg" loading="lazy" style="height:32px;width:auto" alt="Pydantic" title="Pydantic: validation, Pydantic AI, Logfire (observability)" /></a></td>
 <td align="center" width="16.66%"><a href="https://www.reddit.com"><img src="docs/images/integrations/reddit.svg" loading="lazy" style="height:32px;width:auto" alt="Reddit" title="Reddit: Insights service signal source" /></a></td>
 <td align="center" width="16.66%"><a href="https://redis.io"><img src="docs/images/integrations/redis.svg" loading="lazy" style="height:32px;width:auto" alt="Redis" title="Redis: Cache component, worker queue backing" /></a></td>
 <td align="center" width="16.66%"><a href="https://resend.com"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/resend-dark.svg"><img src="docs/images/integrations/resend.svg" loading="lazy" style="height:32px;width:auto" alt="Resend" title="Resend: Transactional email" /></picture></a></td>
-<td align="center" width="16.66%"><a href="https://www.sqlite.org"><img src="docs/images/integrations/sqlite.svg" loading="lazy" style="height:32px;width:auto" alt="SQLite" title="SQLite: Database component (default)" /></a></td>
 </tr>
 <tr>
+<td align="center" width="16.66%"><a href="https://www.sqlite.org"><img src="docs/images/integrations/sqlite.svg" loading="lazy" style="height:32px;width:auto" alt="SQLite" title="SQLite: Database component (default)" /></a></td>
 <td align="center" width="16.66%"><a href="https://stripe.com"><img src="docs/images/integrations/stripe.svg" loading="lazy" style="height:32px;width:auto" alt="Stripe" title="Stripe: Payments service" /></a></td>
 <td align="center" width="16.66%"><a href="https://supabase.com"><img src="docs/images/integrations/supabase.svg" loading="lazy" style="height:32px;width:auto" alt="Supabase" title="Supabase: Auth backend and hosted Postgres (planned)" /></a></td>
 <td align="center" width="16.66%"><a href="https://taskiq-python.github.io"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/taskiq-dark.svg"><img src="docs/images/integrations/taskiq.svg" loading="lazy" style="height:32px;width:auto" alt="Taskiq" title="Taskiq: Worker backend" /></picture></a></td>
 <td align="center" width="16.66%"><a href="https://traefik.io"><img src="docs/images/integrations/traefikproxy.svg" loading="lazy" style="height:32px;width:auto" alt="Traefik" title="Traefik: Ingress and reverse proxy" /></a></td>
 <td align="center" width="16.66%"><a href="https://www.twilio.com"><img src="docs/images/integrations/twilio.svg" loading="lazy" style="height:32px;width:auto" alt="Twilio" title="Twilio: SMS and voice for Comms service" /></a></td>
+</tr>
+<tr>
 <td align="center" width="16.66%"><a href="https://typer.tiangolo.com"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/integrations/typer-dark.svg"><img src="docs/images/integrations/typer.svg" loading="lazy" style="height:32px;width:auto" alt="Typer" title="Typer: CLI framework" /></picture></a></td>
 </tr>
 </table>

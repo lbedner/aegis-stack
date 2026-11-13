@@ -1,0 +1,41 @@
+{# The speech server the inference component tracks, as its sampler reads
+   it: what it reports of itself and where the app reaches it (``_speech_body``,
+   re-sent over SSE every tick while open), its voices by accent and gender,
+   each played by the server itself through the inference API, and its
+   memory, requests and the app's calls to it charted live. #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/icons.html" import icon %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% from "pages/overseer/_macros.html" import live_charts %}
+{% if speech %}
+<div id="speech" class="space-y-4" hx-ext="sse" sse-connect="{{ speech_charts.events }}">
+  <div sse-swap="{{ speech_event }}" hx-target="this">{% include "pages/overseer/inference/_speech_body.html" %}</div>
+  {% call card("Voices", "Press one to hear it from the server." ~ (" AI > Voice speaks in them too." if voice_page else "")) %}
+    {% if voices %}
+    <dl class="space-y-2">
+      {% for group, names in voices %}
+      <div data-voice-group class="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3">
+        <dt class="sm:w-48 shrink-0 text-xs text-aegis-muted">{{ group }}</dt>
+        <dd class="flex flex-wrap gap-1.5">
+          {%- for name in names %}
+          <button type="button" data-voice="{{ name }}" data-say="{{ say }}?voice={{ name|urlencode }}"
+                  x-data="{ playing: false }" :data-tone="playing ? 'ok' : ''" data-tone=""
+                  @click="if (playing) return; playing = true; const audio = new Audio($el.dataset.say); audio.onended = () => playing = false; audio.onerror = () => { playing = false; toast('No audio came back in ' + $el.dataset.voice, 'error') }; audio.play().catch(() => playing = false)"
+                  class="toned inline-flex items-center gap-1 whitespace-nowrap font-mono text-xs hover:text-aegis-text">
+            {{ icon("speaker", "w-3 h-3") }}{{ name }}
+          </button>
+          {%- endfor %}
+        </dd>
+      </div>
+      {% endfor %}
+    </dl>
+    {% if voice_page %}<a href="{{ voice_page }}" class="mt-3 inline-block text-xs text-aegis-teal hover:underline">Open AI > Voice</a>{% endif %}
+    {% elif speech.available %}
+    {{ empty_state("No voices", "The server answered, but lists none.") }}
+    {% endif %}
+  {% endcall %}
+  {{ live_charts(speech_charts, "#speech", request.url.path) }}
+</div>
+{% else %}
+{{ empty_state("No speech server", unset) }}
+{% endif %}

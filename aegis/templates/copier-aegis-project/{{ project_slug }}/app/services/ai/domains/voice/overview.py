@@ -30,7 +30,7 @@ from .catalog import (
     get_voice,
     speaking_model,
 )
-from .models import DEFAULT_TTS_VOICES, TTSProvider, install_line
+from .models import DEFAULT_TTS_VOICES, TTSProvider, install_line, unserved
 
 if TYPE_CHECKING:
     # Only a stack with a database has it; a voice-only one does not.
@@ -111,9 +111,13 @@ def provider_key(provider: Any) -> str | None:
 
 def blocked(provider: Any, found: dict[str, str | None]) -> str | None:
     """What a speech or hearing provider cannot run without: the packages
-    it lacks (the line installing them), else its key (``missing_from``);
-    None when it can run."""
-    return install_line(provider.id) or missing_from(provider_key(provider), found)
+    it lacks (the line installing them), a speech server's address, else
+    its key (``missing_from``); None when it can run."""
+    return (
+        install_line(provider.id)
+        or unserved(provider.id, settings.SPEECH_BASE_URL)
+        or missing_from(provider_key(provider), found)
+    )
 
 
 def _vendor_key(slug: str) -> str | None:

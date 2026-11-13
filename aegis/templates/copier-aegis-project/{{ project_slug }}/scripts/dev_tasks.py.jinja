@@ -135,6 +135,7 @@ def serve(*, detach: bool = False) -> None:
         postgres={% if database_engine == "postgres" %}True{% else %}False{% endif %},
         redis={% if include_redis %}True{% else %}False{% endif %},
         ollama={% if ollama_mode == "docker" %}True{% else %}False{% endif %},
+        speech={% if ollama_mode == "docker" and inference_speech == "kokoro_fastapi" %}True{% else %}False{% endif %},
         browser={% if include_browser %}True{% else %}False{% endif %},
         storage={% if include_storage %}True{% else %}False{% endif %},
     )

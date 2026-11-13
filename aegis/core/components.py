@@ -16,6 +16,7 @@ from ..constants import (
     DeployTargets,
     InferenceEngines,
     InferencePlacement,
+    InferenceSpeech,
     OllamaMode,
     SecretsBackends,
     StorageBackends,
@@ -569,6 +570,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "Ollama on the host (host.docker.internal:11434) or the ollama "
                 "compose service; OLLAMA_BASE_URL"
             ),
+            cli_groups=["inference"],
             env_groups=["COMPONENT SETTINGS"],
         ),
         name="inference",
@@ -578,16 +580,18 @@ COMPONENTS: dict[str, ComponentSpec] = {
         page="inference",
         order=110,
         type=ComponentType.INFRASTRUCTURE,
-        description="Local AI models via Ollama",
+        description="Local AI models via Ollama, speech via Kokoro",
         long_description=(
             "Runs language models locally: an Ollama server on the machine, "
             "where a Mac's GPU is, or as a compose service. The AI service's "
             "ollama provider talks to it, the model catalog lists what it "
-            "serves, and the dashboards show its models and activity."
+            "serves, and the dashboards show its models and activity. A "
+            "speech server can run beside it (Kokoro-FastAPI), which "
+            "ai[voice] speaks through."
         ),
-        # The container only exists for ``placement=docker``; the template
-        # generator drops it for ``host``.
-        docker_services=["ollama"],
+        # The containers only exist for ``placement=docker``, the speech
+        # server's only with one; the template generator drops the rest.
+        docker_services=["ollama", "kokoro-fastapi"],
         options=[
             OptionSpec(
                 name="engine",
@@ -604,23 +608,37 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 answer_key=AnswerKeys.INFERENCE_PLACEMENT,
                 about="guided.choice.inference",
             ),
+            OptionSpec(
+                name="speech",
+                mode=OptionMode.SINGLE,
+                choices=list(InferenceSpeech.ALL),
+                default=InferenceSpeech.DEFAULT,
+                answer_key=AnswerKeys.INFERENCE_SPEECH,
+                about="guided.choice.inference_speech",
+            ),
         ],
         # ``ollama_mode`` mirrors the placement; without the component there
         # is no Ollama, and a later re-add starts from the default.
         reset_answers_on_remove={
             AnswerKeys.OLLAMA_MODE: OllamaMode.NONE,
             AnswerKeys.INFERENCE_PLACEMENT: InferencePlacement.DEFAULT,
+            AnswerKeys.INFERENCE_SPEECH: InferenceSpeech.DEFAULT,
         },
         docs_path="components/inference",
         marker_path="app/components/inference/ollama.py",
         files=FileManifest(
             primary=[
                 "app/components/inference",
+                "app/components/backend/api/inference.py",
+                "app/cli/inference.py",
                 "app/services/system/health_ollama.py",
+                "app/services/system/health_speech.py",
                 "app/components/frontend/dashboard/cards/inference_card.py",
                 "app/components/frontend/dashboard/modals/inference_modal",
                 "tests/components/test_inference.py",
                 "tests/components/test_inference_engine.py",
+                "tests/api/test_inference_endpoints.py",
+                "tests/cli/test_inference_cli.py",
                 "tests/components/frontend/test_inference_model_table.py",
                 "tests/_fake_ollama.py",
             ],

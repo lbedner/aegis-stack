@@ -75,7 +75,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "База данных с SQLModel ORM (SQLite или PostgreSQL)",
     "component.ingress": "Traefik — обратный прокси и балансировщик",
     "component.observability": "Logfire — наблюдаемость, трассировка и метрики",
-    "component.inference": "Local model serving (Ollama)",
+    "component.inference": "Local AI models via Ollama, speech via Kokoro",
     "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.deploy": "Цель развёртывания (Docker Compose), читается Overseer",
     "component.mcp": "MCP server: an outside assistant reads the app's tools",
@@ -207,6 +207,7 @@ MESSAGES: dict[str, str] = {
     "interactive.ai_ollama_docker_hint": (
         "Примечание: первый запуск может занять время для загрузки моделей"
     ),
+    "interactive.inference_speech": "Run a speech server (Kokoro-FastAPI) beside it, for ai[voice]?",
     "interactive.ai_rag_label": "RAG (Retrieval-Augmented Generation):",
     "interactive.ai_rag_prompt": (
         "Включить RAG для индексации документов и семантического поиска?"
@@ -1155,6 +1156,7 @@ MESSAGES: dict[str, str] = {
     "guided.sidebar.components": "КОМПОНЕНТЫ",
     "guided.sidebar.services": "СЕРВИСЫ",
     "guided.prompt.inference_placement": "Where does Ollama run?",
+    "guided.prompt.inference_speech": "Run a speech server beside it?",
     "guided.prompt.worker_backend": "Выберите бэкенд воркера",
     "guided.prompt.scheduler_backend": "Постоянство планировщика: сохранять историю задач между перезапусками?",
     "guided.prompt.database_engine": "Движок базы данных для {context}",
@@ -1243,6 +1245,8 @@ MESSAGES: dict[str, str] = {
     "guided.choice.scheduler.postgres": "Хранить историю задач, уровень продакшена.",
     "guided.choice.inference.docker": "Run Ollama as a container in the project's compose stack.",
     "guided.choice.inference.host": "Use the Ollama already running on this machine. The default.",
+    "guided.choice.inference_speech.none": "No speech server. The default.",
+    "guided.choice.inference_speech.kokoro_fastapi": "Text to speech for ai[voice], where Ollama runs.",
     "guided.choice.worker.arq": "Простой, хорошо протестированный асинхронный воркер с минимальной настройкой. Лучше всего для I/O-задач. По умолчанию.",
     "guided.choice.worker.dramatiq": "Многопроцессная модель акторов. Лучше всего для CPU-задач, выигрывающих от нескольких процессов ОС.",
     "guided.choice.worker.taskiq": "Асинхронный по природе, с брокерами на каждую очередь и транспортом Redis Streams с подтверждениями.",

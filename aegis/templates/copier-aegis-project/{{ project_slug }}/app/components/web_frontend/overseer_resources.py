@@ -14,7 +14,7 @@ from app.services.system import container_health, ui_resources
 from app.services.system.models import ComponentStatus
 
 from .filters import health_tone
-from .overseer_live import chart_frames, chart_panel, fragments_events
+from .overseer_live import Drawn, chart_panel, live_events
 from .overseer_nav import NavItem, SectionRequest, runtime_page_url
 from .rendering import chart, fragment
 
@@ -96,14 +96,10 @@ async def _view(*, wait: bool) -> dict[str, Any]:
 def events(  # noqa: ANN201 - async iterator
     window: int = series.DEFAULT_WINDOW, max_frames: int | None = None
 ):
-    """The snapshot and each chart over SSE, each sent again only when it
-    changes (``overseer_live.chart_frames``); a long window's charts are
-    read again only when its tier moves (``series.Redraw``)."""
-    held: dict[str, tuple[list[str], int]] = {}
-    redraw = series.Redraw(window)
+    """The snapshot and each chart over SSE (``overseer_live.live_events``)."""
 
-    async def frame() -> dict[str, str]:
-        if redraw.due():
+    async def read(draw: bool) -> tuple[dict[str, str], Drawn]:
+        if draw:
             view, drawn = await asyncio.gather(
                 _view(wait=True), ui_resources.charts(window)
             )
@@ -113,6 +109,6 @@ def events(  # noqa: ANN201 - async iterator
             _split_event(split): fragment(SPLIT, split=split)
             for split in view["resources"]["split"]
         }
-        return sent if drawn is None else sent | chart_frames(EVENT, drawn, held)
+        return sent, drawn
 
-    return fragments_events(frame, series.TICK_SECONDS, max_frames)
+    return live_events(EVENT, read, window, max_frames)

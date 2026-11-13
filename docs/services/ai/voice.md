@@ -21,7 +21,7 @@ Voice capabilities add Text-to-Speech (TTS) and Speech-to-Text (STT) to the AI s
 
 - **Text-to-Speech** - Convert text to audio with multiple voices and speed control
 - **Speech-to-Text** - Transcribe audio with timestamps and segment detection
-- **Multiple providers** - Cloud (OpenAI, Gemini, Groq) and local, in the app (Kokoro, Parakeet, Whisper, faster-whisper)
+- **Multiple providers** - Cloud (OpenAI, Gemini, Groq), local in the app (Kokoro, Parakeet, Whisper, faster-whisper), and a speech server you run (Kokoro-FastAPI)
 - **Voice catalog** - Browse providers, models, and voices via API
 - **Voice previews** - Generate audio samples to compare voices
 - **Usage tracking** - TTS and STT operations tracked alongside LLM usage
@@ -35,6 +35,7 @@ Voice capabilities add Text-to-Speech (TTS) and Speech-to-Text (STT) to the AI s
 | **OpenAI** | Cloud | gpt-realtime-2.1-mini (gpt-4o-mini-tts, tts-1, tts-1-hd shut down Jan 6, 2027) | 13 (marin, cedar, alloy, ...); 10 on gpt-realtime-2.1-mini | The /v1/audio/speech models only | `OPENAI_API_KEY` |
 | **Gemini** | Cloud | gemini-3.8-flash-tts, gemini-3.8-flash-lite-tts | 30 prebuilt (Kore, Puck, Charon, ...) and its voice library | No | `GOOGLE_API_KEY` |
 | **Kokoro** | Local | kokoro-v1.0 (Kokoro-82M, int8) | 28 English (af_heart, bm_george, ...) | No | None (`uv add kokoro-onnx`) |
+| **Kokoro-FastAPI** (a speech server) | Local | kokoro | 28 English, then whatever the server lists | Yes | None (`SPEECH_BASE_URL`) |
 
 Each speech model records what its delivery instructions steer, as its
 provider documents it: OpenAI's gpt-realtime and gpt-4o voices take the
@@ -187,6 +188,43 @@ kokoro-onnx release into `~/.cache/kokoro-onnx`, and Parakeet (about
 names no tone, so the voice designer finds its voices by gender and
 accent; each is named by its id (`af_alloy`), since half share a name with
 an OpenAI or Gemini voice. Usage is recorded at no cost.
+
+---
+
+## A Speech Server
+
+A speech server you run speaks over OpenAI's speech endpoint, reached the
+way Ollama is. [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI)
+serves Kokoro-82M (Apache-2.0) on port 8880. On a Mac, run it natively so
+it speaks on the GPU (MPS); in Docker it has none:
+
+```bash
+git clone https://github.com/remsky/Kokoro-FastAPI && cd Kokoro-FastAPI
+ALLOW_DEV_UNLOAD=true ENABLE_DEBUG_ENDPOINTS=true ./start-gpu_mac.sh
+
+# .env
+SPEECH_BASE_URL=http://host.docker.internal:8880/v1
+TTS_PROVIDER=local_server   # its voice defaults to local_server:af_heart
+```
+
+With the inference component, `inference[kokoro_fastapi]` sets that
+address for you, or ships the server as a container, and Overseer >
+Inference > Speech shows the server whole: its model, its memory, its
+voices to play, and how long each line takes, this provider's included
+([Inference](../../components/inference.md#a-speech-server); the two flags
+open its model and its process to it). The provider's rows on Voice >
+Models lead there. Until the
+address is set, the provider is locked with
+`SPEECH_BASE_URL missing`, in the Overseer, the voice designer and
+`ai tts-status` alike, which also lists its voices.
+Its 28 English voices are listed from the start under ids of their own
+(`local_server:af_heart`, since the in-app Kokoro has the same names). The
+first listing asks the server for the rest in the background (its other
+languages, the mixes it saved), and they appear as they come in; a server
+not running yet is asked again on the next listing. Speech is asked for as
+WAV, whole or streamed, and usage is recorded at no cost. `SPEECH_SERVER`
+names which server it is, for what it takes beyond OpenAI's fields:
+`kokoro_fastapi`, the only one so far.
 
 ---
 
@@ -518,6 +556,8 @@ The Flet Overseer's voice tab has the same two views, over the API.
 | `TTS_MODEL` | `gpt-realtime-2.1-mini` | TTS model (Gemini: `gemini-3.8-flash-tts`) |
 | `TTS_VOICE` | `alloy` | Default voice |
 | `TTS_SPEED` | `1.0` | Speed multiplier (0.25-4.0) |
+| `SPEECH_BASE_URL` | unset | A speech server's address (`http://host.docker.internal:8880/v1`) |
+| `SPEECH_SERVER` | `kokoro_fastapi` | Which speech server it is |
 | `STT_PROVIDER` | `openai_whisper` | STT provider |
 | `STT_MODEL` | `whisper-1` | STT model |
 | `STT_LANGUAGE` | auto-detect | Language for transcription |

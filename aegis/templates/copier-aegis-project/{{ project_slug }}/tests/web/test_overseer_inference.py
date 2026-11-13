@@ -13,9 +13,18 @@ import pytest
 from app.components.inference import activity, sampler
 from app.components.inference.engine import InferenceServerStatus
 from app.components.web_frontend import overseer_inference
+from app.core import speech_server
 from app.services.system.models import ComponentStatus, ComponentStatusType
-from tests._fake_ollama import SERVING, FakeClient, serve
-from tests.web.dom import chart_json, one, select, text
+from tests._fake_ollama import (
+    SERVING,
+    SPEECH_DOWN,
+    SPEECH_READY,
+    SPEECH_URL,
+    FakeClient,
+    serve,
+    speaking,
+)
+from tests.web.dom import chart_json, one, select, stat, text
 from tests.web.overseer import sent_events, sign_in, status_with
 
 PAGE = "/overseer/components/ollama"
@@ -51,14 +60,123 @@ def _figures(html: str) -> dict[str, str]:
     }
 
 
-def test_sections_are_overview_models_and_activity(signed_in: TestClient) -> None:
+def test_sections_are_overview_models_activity_and_speech(
+    signed_in: TestClient,
+) -> None:
     assert [text(a) for a in select(_get(signed_in), "#overseer-subnav nav a")] == [
         "Overview",
         "Models",
         "Activity",
+        "Speech",
         "Container",
         "Logs",
     ]
+
+
+# Kokoro-FastAPI with its flags on: what it reports past the listings.
+SPEECH_REPORTING = SPEECH_READY.model_copy(
+    update={
+        "version": "0.10.1",
+        "device": "mps",
+        "loaded": True,
+        "active_requests": 0,
+        "memory_bytes": 812 * 2**20,
+        "threads": 12,
+    }
+)
+
+
+def test_speech_says_what_the_server_has(
+    signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    speaking(monkeypatch, SPEECH_READY)
+
+    html = _get(signed_in, "speech")
+
+    assert stat(html, "Voices") == "2"
+    assert speech_server.NAME in text(one(html, "#card-server"))
+    groups = select(html, "#card-voices [data-voice-group]")
+    assert [text(one(g, "dt")) for g in groups] == [
+        "General American, female",
+        "British, male",
+    ]
+    heart = one(html, "#card-voices [data-voice=af_heart]")
+    assert heart.get("data-say") == f"{overseer_inference.SAY}?voice=af_heart"
+
+
+def test_speech_shows_what_the_server_reports_of_itself(
+    signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    speaking(monkeypatch, SPEECH_REPORTING)
+
+    html = _get(signed_in, "speech")
+
+    assert (stat(html, "Version"), stat(html, "Model")) == ("0.10.1", "Loaded")
+    assert (stat(html, "Device"), stat(html, "Memory")) == ("mps", "812.0 MB")
+    unload = one(html, "#card-server [data-speech-action=unload]")
+    assert unload.get("hx-post") == overseer_inference.MOVE.format(action="unload")
+    assert not select(html, "[data-speech-closed]")
+
+
+def test_a_flag_left_off_says_what_to_turn_on(
+    signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A plain OpenAI-compatible server reports nothing past its listings
+    and has no flags to name; Kokoro-FastAPI names those it was started
+    without."""
+    closed = ["ALLOW_DEV_UNLOAD", "ENABLE_DEBUG_ENDPOINTS"]
+    speaking(monkeypatch, SPEECH_READY.model_copy(update={"closed": closed}))
+
+    html = _get(signed_in, "speech")
+
+    said = text(one(html, "[data-speech-closed]"))
+    assert "ALLOW_DEV_UNLOAD=true" in said and "ENABLE_DEBUG_ENDPOINTS=true" in said
+    assert not select(html, "[data-speech-action]")
+
+
+def test_speech_charts_the_server_and_the_apps_calls(
+    signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core import series
+
+    speaking(monkeypatch, SPEECH_REPORTING)
+    asyncio.run(series.sample(sampler.SPEECH))
+    asyncio.run(series.record({speech_server.LATENCY["file"]: 0.4}))
+
+    html = _get(signed_in, "speech")
+
+    memory = chart_json(html, "chart-speech-memory-data")
+    assert memory["series"][0]["values"] == [812.0 * 2**20]
+    latency = chart_json(html, "chart-speech-latency-data")
+    assert latency["series"] == [{"label": "file", "values": [0.4]}]
+    live = one(html, "#speech")
+    assert live.get("sse-connect", "").startswith(overseer_inference.SPEECH_EVENTS)
+
+
+@pytest.mark.asyncio
+async def test_the_speech_stream_sends_the_server_card(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    speaking(monkeypatch, SPEECH_REPORTING)
+
+    events = await sent_events(overseer_inference.speech_events(max_frames=1))
+
+    sent = [e.split("\n", 1)[0] for e in events]
+    assert f"event: {overseer_inference.SPEECH_EVENT}" in sent
+
+
+def test_a_speech_server_that_does_not_answer_says_where_it_looked(
+    signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    speaking(monkeypatch, SPEECH_DOWN)
+
+    assert SPEECH_URL in text(one(_get(signed_in, "speech"), "[role=alert]"))
+
+
+def test_without_a_speech_server_it_says_how_to_add_one(
+    signed_in: TestClient,
+) -> None:
+    assert "SPEECH_BASE_URL" in text(one(_get(signed_in, "speech"), "[data-empty]"))
 
 
 def test_overview_says_what_is_loaded(signed_in: TestClient) -> None:

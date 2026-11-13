@@ -108,12 +108,27 @@ async def test_a_provider_without_its_key_is_one_line_not_its_voices(
 
     assert view.find.cards
     assert all(v.provider_name != "Gemini" for v in view.find.cards)
-    [gemini] = view.locked
+    [gemini] = [p for p in view.locked if p.provider_name == "Gemini"]
     assert (gemini.provider_name, gemini.voices, gemini.needs) == (
         "Gemini",
         30,
         "GOOGLE_API_KEY missing",
     )
+
+
+async def test_a_profile_with_no_voice_opens_on_its_own_providers(
+    async_db_session: AsyncSession, hers: VoiceProfile
+) -> None:
+    """Seeded from a .env that names a provider and no voice: its provider's
+    default, not OpenAI's."""
+    hers.tts_provider, hers.tts_model, hers.tts_voice = "local_server", "kokoro", None
+    async_db_session.add(hers)
+    await async_db_session.commit()
+
+    view = await design.design_view(async_db_session, hers.id, None)
+    [summary] = await design.profile_summaries(async_db_session)
+
+    assert (view.voice, summary.voice) == ("local_server:af_heart", "af_heart")
 
 
 async def test_each_profile_is_summed_up(

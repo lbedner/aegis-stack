@@ -216,3 +216,28 @@ def chart_frames(
             held[event] = (lines, data["labels"][-1])
         sent[event] = str(chart_data(event, data))
     return sent
+
+
+Drawn = list[dict[str, Any]] | None
+
+
+def live_events(
+    prefix: str,
+    read: Callable[[bool], Awaitable[tuple[dict[str, str], Drawn]]],
+    window: int,
+    max_frames: int | None = None,
+) -> AsyncIterator[str]:
+    """A page's live parts and its charts on one stream, each sent again
+    only when it changes: ``read(draw)`` gives the parts' html by event and,
+    asked to draw, its charts (``chart_panel``'s, by ``prefix``). A long
+    window's charts are drawn again only when its tier moves
+    (``series.Redraw``), and sent whole, then only their new points
+    (``chart_frames``)."""
+    held: dict[str, tuple[list[str], int]] = {}
+    redraw = series.Redraw(window)
+
+    async def frame() -> dict[str, str]:
+        sent, drawn = await read(redraw.due())
+        return sent if drawn is None else sent | chart_frames(prefix, drawn, held)
+
+    return fragments_events(frame, series.TICK_SECONDS, max_frames)

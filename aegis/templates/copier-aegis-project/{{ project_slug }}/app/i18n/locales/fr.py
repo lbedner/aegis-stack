@@ -671,7 +671,7 @@ MESSAGES: dict[str, str] = {
     "ai.tts_status_title": "Statut du service TTS",
     "ai.voice_label": "Voix :",
     "ai.speed_label": "Vitesse :",
-    "ai.openai_voices": "Voix OpenAI :",
+    "ai.voices_label": "Voix :",
     "ai.file_not_found": "Fichier introuvable : {path}",
     "ai.unsupported_format": "Format non pris en charge : {ext}",
     "ai.supported_formats": "Formats pris en charge : {formats}",

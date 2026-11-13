@@ -15,22 +15,15 @@ from app.services.ai.domains.voice import (
     VoiceInfo,
     VoiceSettingsResponse,
 )
+from tests._voice_settings import voice_settings
 
 
 @pytest.fixture
 def mock_voice_settings() -> MagicMock:
     """Create mock settings for voice service testing."""
-    settings = MagicMock()
-    settings.TTS_PROVIDER = TTSProvider.OPENAI.value
-    settings.TTS_MODEL = "tts-1"
-    settings.TTS_VOICE = OpenAIVoice.ALLOY.value
-    settings.TTS_SPEED = 1.0
-    settings.TTS_INSTRUCTIONS = None
-    settings.STT_PROVIDER = STTProvider.OPENAI_WHISPER.value
-    settings.STT_MODEL = "whisper-1"
-    settings.STT_LANGUAGE = None
-    settings.STT_DEVICE = None
-    return settings
+    return voice_settings(
+        TTS_MODEL="tts-1", TTS_VOICE=OpenAIVoice.ALLOY.value, STT_MODEL="whisper-1"
+    )
 
 
 @pytest.fixture

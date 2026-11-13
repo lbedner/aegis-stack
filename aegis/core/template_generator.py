@@ -18,6 +18,7 @@ from ..constants import (
     ComponentNames,
     InferenceEngines,
     InferencePlacement,
+    InferenceSpeech,
     OllamaMode,
     PaymentProviders,
     PostgresProviders,
@@ -210,6 +211,7 @@ class TemplateGenerator:
         """
         self.inference_engine = InferenceEngines.DEFAULT
         self.inference_placement = InferencePlacement.DEFAULT
+        self.inference_speech = InferenceSpeech.DEFAULT
         found = next(
             (
                 c
@@ -227,6 +229,7 @@ class TemplateGenerator:
         parsed = parse_options(found, COMPONENTS[ComponentNames.INFERENCE])
         self.inference_engine = parsed["engine"]
         self.inference_placement = parsed["placement"]
+        self.inference_speech = parsed["speech"]
         if "[" not in found:
             from ..cli.interactive import get_ollama_mode_selection
 
@@ -365,6 +368,7 @@ class TemplateGenerator:
             # The inference component's axes
             AnswerKeys.INFERENCE_ENGINE: self.inference_engine,
             AnswerKeys.INFERENCE_PLACEMENT: self.inference_placement,
+            AnswerKeys.INFERENCE_SPEECH: self.inference_speech,
             # Where Ollama runs: the placement, or none without the component.
             # Templates read this one value.
             AnswerKeys.OLLAMA_MODE: self.inference_placement
@@ -396,14 +400,21 @@ class TemplateGenerator:
             spec = self.component_specs.get(base_name)
             if spec is None or not spec.docker_services:
                 continue
-            # Inference on the host has no container of its own.
-            if (
-                base_name == ComponentNames.INFERENCE
-                and self.inference_placement != InferencePlacement.DOCKER
-            ):
+            if base_name == ComponentNames.INFERENCE:
+                services.extend(self._inference_containers())
                 continue
             services.extend(spec.docker_services)
         return list(dict.fromkeys(services))  # Preserve order, remove duplicates
+
+    def _inference_containers(self) -> list[str]:
+        """The inference containers: none on the host; on docker Ollama's,
+        and the speech server's where there is one."""
+        if self.inference_placement != InferencePlacement.DOCKER:
+            return []
+        ollama, speech = COMPONENTS[ComponentNames.INFERENCE].docker_services
+        if self.inference_speech == InferenceSpeech.NONE:
+            return [ollama]
+        return [ollama, speech]
 
     def _get_pyproject_deps(self) -> list[str]:
         """

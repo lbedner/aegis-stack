@@ -45,6 +45,9 @@ PACKAGE_SHARE_MIN_LINES = 400
 
 # Lists rather than logic: read by grep, never end to end.
 DECLARATION_PARTS = ("models", "schemas", "i18n", "seeds", "fixtures", "locales")
+# Written whole by a generator, one record per part (``make parts``): a list
+# by construction, whatever its name.
+DECLARATION_FILES = ("core/parts.py",)
 
 # path -> line count when recorded. The refactoring backlog, largest first.
 BUDGET: dict[str, int] = {
@@ -104,6 +107,8 @@ def _is_declaration(rel: str) -> bool:
     the 900-line allowance to ``models_tab.py`` and ``_i18n_click.py``,
     neither of which is a declaration.
     """
+    if rel in DECLARATION_FILES:
+        return True
     segments = rel.split("/")
     stem = segments[-1].removesuffix(".jinja").removesuffix(".py")
     return any(part in segments[:-1] for part in DECLARATION_PARTS) or any(

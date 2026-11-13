@@ -165,6 +165,15 @@ inference_placement:
     - "docker"
   when: "{{ include_inference }}"
 
+inference_speech:
+  type: str
+  help: "A speech server beside the inference engine, where it runs"
+  default: "none"
+  choices:
+    - "none"
+    - "kokoro_fastapi"
+  when: "{{ include_inference }}"
+
 include_secrets:
   type: bool
   help: "Include the encrypted credential store (keys editable, live)?"

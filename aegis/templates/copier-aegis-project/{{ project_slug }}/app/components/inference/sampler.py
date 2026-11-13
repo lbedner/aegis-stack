@@ -1,9 +1,11 @@
-"""The inference sampler (``app.core.series``): Ollama read once a tick for
+"""The inference samplers (``app.core.series``): Ollama read once a tick for
 every viewer, rather than once a second by each. Each loaded model's memory
 and VRAM for the charts, and the server as a whole for the Inference page
 and the Flet Ollama modal (``current_status``). It is also the one reader
 that notices models loading and leaving (``get_inference_activity``): Ollama
 has no event API, so each reading's running set is diffed with the last.
+
+The speech server is read the same way (``SPEECH``) for Inference > Speech.
 """
 
 import httpx
@@ -11,7 +13,7 @@ import httpx
 from app.components.inference import get_inference_engine
 from app.components.inference.activity import get_inference_activity
 from app.components.inference.engine import InferenceServerStatus
-from app.core import series
+from app.core import series, speech_server
 from app.core.log import logger
 from app.core.series import Sample, Sampler
 from app.services.system.models import ComponentStatus
@@ -69,6 +71,61 @@ HOST = Host(
             empty="No calls to a loaded model in {window}.",
             style="events",
         ),
+    ),
+)
+
+
+REQUESTS = "requests"
+
+
+async def read_speech() -> Sample:
+    """The speech server now (``app.core.speech_server``): its process's
+    memory and its requests in flight for the charts, where it reports them,
+    and the reading whole for the Speech section; nothing where none is
+    set."""
+    from app.core.config import settings
+
+    url = speech_server.reach(settings)
+    if url is None:
+        return Sample({}, None)
+    reading = await speech_server.read(url)
+    found = {series.MEMORY: reading.memory_bytes, REQUESTS: reading.active_requests}
+    values = {
+        f"{speech_server.NAME}:{metric}": float(value)
+        for metric, value in found.items()
+        if value is not None
+    }
+    return Sample(values, reading)
+
+
+SPEECH = Sampler(speech_server.SAMPLER, read_speech)
+SPEECH_CHARTS = (
+    Chart(
+        "memory",
+        "Memory",
+        f"{speech_server.SAMPLER}:",
+        series.MEMORY,
+        "bytes",
+        empty="Nothing reported in {window}: it reports its memory with "
+        f"{speech_server.DEBUG}=true.",
+    ),
+    Chart(
+        "requests",
+        "Requests in flight",
+        f"{speech_server.SAMPLER}:",
+        REQUESTS,
+        empty="Nothing reported in {window}: it reports its requests with "
+        f"{speech_server.DEV}=true.",
+    ),
+    Chart(
+        "latency",
+        "Latency",
+        f"{speech_server.CALLS}:",
+        series.LATENCY,
+        "seconds",
+        empty="No line said in {window}: a whole file, or a stream until its "
+        "first audio.",
+        style="events",
     ),
 )
 

@@ -671,7 +671,7 @@ MESSAGES: dict[str, str] = {
     "ai.tts_status_title": "TTS 文字轉語音服務狀態",
     "ai.voice_label": "語音：",
     "ai.speed_label": "速度：",
-    "ai.openai_voices": "OpenAI 語音：",
+    "ai.voices_label": "語音：",
     "ai.file_not_found": "檔案未找到：{path}",
     "ai.unsupported_format": "不支援的格式：{ext}",
     "ai.supported_formats": "支援的格式：{formats}",

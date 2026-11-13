@@ -12,7 +12,7 @@ from typing import Any
 
 from ..models import (
     MEDIA_TYPES,
-    NotInstalledError,
+    CannotRunError,
     SpeechRequest,
     SpeechResult,
     SpeechTokens,
@@ -46,12 +46,14 @@ def unsaid(exc: BaseException) -> str:
     cause: BaseException | None = exc
     while cause is not None and id(cause) not in seen:
         seen.add(id(cause))
-        if isinstance(cause, NotInstalledError):
+        if isinstance(cause, CannotRunError):
             return str(cause)
         if said := UNSAID.get(getattr(cause, "status_code", None) or 0):
             return said
         if isinstance(cause, TimeoutError):
             return "The voice's provider did not answer in time."
+        if isinstance(cause, ConnectionError):  # a speech server not running
+            return "The voice's provider could not be reached."
         cause = cause.__cause__
     return "The voice could not be made. The log says why."
 
@@ -174,6 +176,8 @@ class TTSService:
                 api_key=api_key,
                 model=model,
                 voice=voice,
+                server_url=self._config.server_url,
+                server=self._config.server,
             )
 
         return self._provider_instance

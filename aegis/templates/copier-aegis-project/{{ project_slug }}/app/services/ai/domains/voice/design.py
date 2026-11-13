@@ -38,7 +38,6 @@ from app.services.ai.domains.voice.delivery import (
 )
 from app.services.ai.domains.voice.finder import Finding, VoiceChoice, find
 from app.services.ai.domains.voice.models import (
-    DEFAULT_TTS_VOICE,
     TTS_KEYS,
     TTS_ORGS,
     TTSProvider,
@@ -52,6 +51,7 @@ from app.services.ai.domains.voice.overview import (
     read_keys,
 )
 from app.services.ai.domains.voice.traits import family_of, language_of
+from app.services.ai.domains.voice.tts.config import get_tts_config
 from app.services.ai.models.voice import VoiceProfile
 
 SPEED_RANGE = (TTS_SPEED_MIN, TTS_SPEED_MAX)
@@ -172,6 +172,12 @@ class DesignView(Frozen):
     form: dict[str, str]
 
 
+def _voice_of(profile: VoiceProfile) -> str:
+    """The voice a profile speaks in: its own, else its provider's default
+    (one seeded from a .env that names no voice)."""
+    return get_tts_config(profiles.settings_for(profile, app_settings)).get_voice()
+
+
 async def _voices(chosen: str) -> tuple[list[VoiceChoice], list[LockedProvider]]:
     """The voices that can be heard (and the chosen one, whatever), and
     each provider locked out by what it lacks."""
@@ -253,7 +259,7 @@ async def design_view(
     one ``query`` asks for (``finder``)."""
     profile = await _profile(db, profile_id)
     shown = picked or Design(
-        voice=profile.tts_voice or DEFAULT_TTS_VOICE,
+        voice=_voice_of(profile),
         model=profile.tts_model,
         delivery=Delivery(**(profile.tts_delivery or {})),
         speed=profile.tts_speed,
@@ -403,9 +409,7 @@ async def profile_summaries(db: AsyncSession) -> list[ProfileSummary]:
             id=p.id,  # type: ignore[arg-type]
             name=p.name,
             voice=(
-                found.name
-                if (found := get_voice(p.tts_voice or ""))
-                else DEFAULT_TTS_VOICE.title()
+                found.name if (found := get_voice(spoken := _voice_of(p))) else spoken
             ),
             style=(
                 STYLES[style].label

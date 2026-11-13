@@ -198,6 +198,17 @@ class InferencePlacement:
     DEFAULT = HOST
 
 
+class InferenceSpeech:
+    """The speech server the inference component runs beside its engine,
+    where the engine runs; ai[voice] speaks through it (SPEECH_BASE_URL)."""
+
+    NONE = "none"
+    KOKORO_FASTAPI = "kokoro_fastapi"
+
+    ALL = [NONE, KOKORO_FASTAPI]
+    DEFAULT = NONE
+
+
 class SecretsBackends:
     """Where the secrets component keeps writable credentials. The database
     is the one durable store every stack can have; Vault or a cloud manager
@@ -317,6 +328,7 @@ class AnswerKeys:
     INFERENCE = "include_inference"
     INFERENCE_ENGINE = "inference_engine"
     INFERENCE_PLACEMENT = "inference_placement"
+    INFERENCE_SPEECH = "inference_speech"
     SECRETS = "include_secrets"
     SECRETS_BACKEND = "secrets_backend"
     DEPLOY = "include_deploy"

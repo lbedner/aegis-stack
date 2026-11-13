@@ -23,7 +23,7 @@ from .models import (
     VoiceInfo,
 )
 from .stt.config import STTConfig
-from .tts import realtime
+from .tts import realtime, server
 from .tts.config import TTSConfig
 
 # =============================================================================
@@ -227,9 +227,9 @@ _TTS_VOICES += [
     )
     for name, (gender, tone) in _GEMINI_VOICES.items()
 ]
-_TTS_PROVIDERS.append(local.TTS_PROVIDER)
-_TTS_MODELS += local.TTS_MODELS
-_TTS_VOICES += local.VOICES
+_TTS_PROVIDERS += [local.TTS_PROVIDER, server.PROVIDER]
+_TTS_MODELS += local.TTS_MODELS + server.MODELS
+_TTS_VOICES += local.VOICES + server.VOICES
 
 # Each voice and speech model by id, for the lookups a page makes per row.
 _VOICES_BY_ID = {v.id: v for v in _TTS_VOICES}
@@ -382,11 +382,12 @@ def get_tts_models(provider_id: str | None = None) -> list[ModelInfo]:
 def get_tts_voices(
     provider_id: str | None = None, model_id: str | None = None
 ) -> list[VoiceInfo]:
-    """Get TTS voices (with any of Gemini's library listed so far),
-    optionally filtered by provider and/or model."""
+    """Get TTS voices (with any of Gemini's library, and a speech server's,
+    listed so far), optionally filtered by provider and/or model."""
     from .library import KEPT
 
-    voices = [*_TTS_VOICES, *KEPT.values()]
+    server.ask_for_voices()
+    voices = [*_TTS_VOICES, *KEPT.values(), *server.LISTED.values()]
 
     if provider_id is not None:
         voices = [v for v in voices if v.provider_id == provider_id]
@@ -398,11 +399,13 @@ def get_tts_voices(
 
 
 def get_voice(voice_id: str) -> VoiceInfo | None:
-    """Get a specific voice by ID (one of Gemini's library listed so far
-    among them)."""
+    """Get a specific voice by ID (one of Gemini's library listed so far,
+    or any of a speech server's, among them)."""
     from .library import KEPT
 
-    return _VOICES_BY_ID.get(voice_id) or KEPT.get(voice_id)
+    return (
+        _VOICES_BY_ID.get(voice_id) or KEPT.get(voice_id) or server.voice_of(voice_id)
+    )
 
 
 def get_tts_model(model_id: str) -> ModelInfo | None:

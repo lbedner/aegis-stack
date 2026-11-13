@@ -1,0 +1,21 @@
+"""Where the app reaches a speech server (``app.core.speech_server``): the
+one the inference component runs beside Ollama (``inference[kokoro_fastapi]``),
+or any set in ``.env``. Kept out of config.py's size budget; ai[voice]'s
+settings build on these.
+"""
+
+from pydantic_settings import BaseSettings
+
+
+class SpeechServerSettings(BaseSettings):
+    # Its OpenAI-compatible base, None for none. Docker reaches one on the
+    # host at host.docker.internal; a shell on the host, at localhost.
+{%- if inference_speech == "none" or ollama_mode == "none" %}
+    SPEECH_BASE_URL: str | None = None
+{%- elif ollama_mode == "docker" %}
+    SPEECH_BASE_URL: str | None = "http://kokoro-fastapi:8880/v1"
+{%- else %}
+    SPEECH_BASE_URL: str | None = "http://host.docker.internal:8880/v1"
+{%- endif %}
+    # The host port ``make serve`` published its container on (``.env.ports``).
+    SPEECH_HOST_PORT: int | None = None

@@ -17,6 +17,8 @@ from urllib.parse import urlencode
 
 from fastapi import UploadFile
 
+from app.core import discovery
+
 from .assets import static_url
 from .overseer_ai_common import PARTIALS, icon_url, section_url, tab_links
 
@@ -28,14 +30,20 @@ API = "/api/v1/voice"
 # A voice said: by the voice in the path, or as a field beside the line.
 SAY = f"{API}/preview"
 PREVIEW = f"{SAY}/"
+# The speech server's own page (Inference > Speech), where the inference
+# component tracks it: what it reports of itself, its model, its charts.
+SPEECH_PAGE = discovery.optional(
+    "app.components.web_frontend.overseer_inference", "SPEECH_PAGE"
+)
 
 
 def _shipped_marks() -> dict[str, str]:
-    """The mark of each provider that runs in the app, which no catalog org
-    holds, as the static route serves it."""
+    """The mark of each provider that runs in the app, or a server of its
+    own, which no catalog org holds, as the static route serves it."""
     from app.services.ai.service import TTSProvider
 
-    return {TTSProvider.KOKORO.value: static_url("marks/kokoro.png")}
+    kokoro = static_url("marks/kokoro.png")
+    return {TTSProvider.KOKORO.value: kokoro, TTSProvider.LOCAL_SERVER.value: kokoro}
 
 
 def _speak(voice: str, model: str) -> str:
@@ -45,11 +53,16 @@ def _speak(voice: str, model: str) -> str:
 
 def _row(row: Any, colors: dict[str, int]) -> dict[str, Any]:
     """A row as the page draws it: its provider's color, the models a
-    filter matches, and where it is heard."""
+    filter matches, where it is heard, and the speech server's page for a
+    row of its."""
+    from app.services.ai.service import TTSProvider
+
+    served = row.provider == TTSProvider.LOCAL_SERVER.value
     return row.model_dump() | {
         "color": colors[row.provider],
         "models": " ".join(row.models),
         "speak": _speak(*row.sample) if row.sample else None,
+        "speech_page": SPEECH_PAGE if served else None,
     }
 
 

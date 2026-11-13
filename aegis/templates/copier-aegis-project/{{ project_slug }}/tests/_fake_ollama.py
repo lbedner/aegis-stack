@@ -1,7 +1,8 @@
 """An Ollama server for tests (``app.components.inference``): one model
-loaded and two installed, behind a client that answers without a network.
-Shared by the inference component's tests and the Overseer Inference page's,
-so it ships with the component, not with either frontend."""
+loaded and two installed, behind a client that answers without a network;
+and the speech server it tracks, up and down. Shared by the inference
+component's tests and the Overseer Inference page's, so it ships with the
+component, not with either frontend."""
 
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -17,6 +18,7 @@ from app.components.inference.engine import (
     RunningModel,
 )
 from app.components.inference.ollama import OllamaEngine
+from app.core.speech_server import SpeechServerReading
 
 NOW = datetime(2026, 9, 30, 12, 0, tzinfo=UTC)
 DETAILS = ModelDetails(
@@ -52,6 +54,44 @@ SERVING = InferenceServerStatus(
     installed_models=[_installed("qwen2.5:7b"), _installed("llama3.1:8b")],
     total_vram_gb=4.2,
 )
+
+SPEECH_URL = "http://host.docker.internal:8880/v1"
+SPEECH_READY = SpeechServerReading(
+    base_url=SPEECH_URL,
+    available=True,
+    models=["kokoro", "tts-1"],
+    voices=["af_heart", "bm_george"],
+)
+SPEECH_DOWN = SpeechServerReading(base_url=SPEECH_URL, available=False, error="refused")
+
+
+def speaking(
+    monkeypatch: pytest.MonkeyPatch, reading: SpeechServerReading = SPEECH_READY
+) -> list[tuple[str, ...]]:
+    """The speech server set and faked (``app.core.speech_server``): it
+    reads as ``reading``, says every line as ``b"ID3"`` and takes every
+    action it knows. Returns each line said and action taken."""
+    from app.core import speech_server
+    from app.core.config import settings
+
+    done: list[tuple[str, ...]] = []
+
+    async def read(url: str) -> SpeechServerReading:
+        return reading
+
+    async def say(url: str, text: str, voice: str) -> bytes:
+        done.append(("say", text, voice))
+        return b"ID3"
+
+    async def move(url: str, action: str) -> None:
+        if action not in speech_server.ACTIONS:
+            raise ValueError(f"No action {action}.")
+        done.append(("move", action))
+
+    monkeypatch.setattr(settings, "SPEECH_BASE_URL", reading.base_url)
+    for name, fake in (("read", read), ("say", say), ("move", move)):
+        monkeypatch.setattr(speech_server, name, fake)
+    return done
 
 
 class FakeClient(OllamaEngine):

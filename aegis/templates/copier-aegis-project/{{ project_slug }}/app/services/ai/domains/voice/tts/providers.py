@@ -7,9 +7,11 @@ Provides a unified interface for Text-to-Speech synthesis.
 from abc import ABC, abstractmethod
 import asyncio
 import base64
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 import logging
 from typing import Any
+
+from app.core.voice_settings import setting_default
 
 from ..models import (
     DEFAULT_TTS_MODEL,
@@ -20,11 +22,12 @@ from ..models import (
     REALTIME_TTS_MODELS,
     TTS_FORMATS,
     AudioFormat,
-    NotInstalledError,
+    CannotRunError,
     SpeechRequest,
     SpeechResult,
     TTSProvider,
     not_installed,
+    unserved,
 )
 from . import length, realtime
 
@@ -86,6 +89,8 @@ class OpenAITTSProvider(BaseTTSProvider):
     """
 
     provider_type = TTSProvider.OPENAI
+    # Sent past OpenAI's own fields for a whole file (``tts/server.py``).
+    whole: Mapping[str, Any] = {}
 
     def __init__(
         self,
@@ -137,7 +142,7 @@ class OpenAITTSProvider(BaseTTSProvider):
             "model": self.model,
             "voice": request.voice or self.default_voice,
             "input": request.text,
-            "response_format": "mp3",
+            "response_format": TTS_FORMATS[self.provider_type].value,
         }
         if request.speed:
             kwargs["speed"] = request.speed
@@ -175,7 +180,9 @@ class OpenAITTSProvider(BaseTTSProvider):
         client = self._get_client()
 
         try:
-            response = await client.audio.speech.create(**self._speech_kwargs(request))
+            response = await client.audio.speech.create(
+                **self._speech_kwargs(request), extra_body=self.whole or None
+            )
 
             audio = response.content
             spoken_as = TTS_FORMATS[self.provider_type]
@@ -302,6 +309,8 @@ def get_tts_provider(
     api_key: str | None = None,
     model: str | None = None,
     voice: str | None = None,
+    server_url: str | None = None,
+    server: str = setting_default("SPEECH_SERVER"),
     **kwargs: Any,
 ) -> BaseTTSProvider:
     """Factory function to create a TTS provider instance.
@@ -311,6 +320,8 @@ def get_tts_provider(
         api_key: Optional API key for cloud providers.
         model: Optional model name to use.
         voice: Optional voice name to use.
+        server_url: A speech server's address (``local_server``).
+        server: Which speech server it is (``tts/server.py`` SERVERS).
         **kwargs: Additional provider-specific arguments.
 
     Returns:
@@ -318,10 +329,11 @@ def get_tts_provider(
 
     Raises:
         ValueError: If provider type is not supported.
-        RuntimeError: If an in-process provider's packages are not installed.
+        CannotRunError: An in-process provider's packages are not installed,
+            or a speech server's address is not set.
     """
-    if refused := not_installed(provider):
-        raise NotInstalledError(refused)
+    if refused := not_installed(provider) or unserved(provider, server_url):
+        raise CannotRunError(refused)
     if provider == TTSProvider.OPENAI:
         return OpenAITTSProvider(
             api_key=api_key,
@@ -339,5 +351,14 @@ def get_tts_provider(
         from .kokoro import KokoroProvider  # it imports this module
 
         return KokoroProvider(voice=voice or DEFAULT_TTS_VOICES[provider])
+    elif provider == TTSProvider.LOCAL_SERVER and server_url:
+        from .server import ServerTTSProvider  # it imports this module
+
+        return ServerTTSProvider(
+            base_url=server_url,
+            server=server,
+            model=model or DEFAULT_TTS_MODELS[provider],
+            voice=voice or DEFAULT_TTS_VOICES[provider],
+        )
     else:
         raise ValueError(f"Unsupported TTS provider: {provider}")

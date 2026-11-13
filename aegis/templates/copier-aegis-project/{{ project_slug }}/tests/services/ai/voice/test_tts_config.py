@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 from app.services.ai.domains.voice.models import TTSProvider
 from app.services.ai.domains.voice.tts import TTSConfig, get_tts_config
+from tests._voice_settings import voice_settings
 
 
 class TestTTSConfigDefaults:
@@ -35,12 +36,7 @@ class TestTTSConfigFromSettings:
 
     def test_from_settings_with_all_values(self) -> None:
         """Test creating config from settings with all values set."""
-        settings = MagicMock()
-        settings.TTS_PROVIDER = "openai"
-        settings.TTS_MODEL = "tts-1-hd"
-        settings.TTS_VOICE = "nova"
-        settings.TTS_SPEED = 1.5
-        settings.TTS_INSTRUCTIONS = None
+        settings = voice_settings(TTS_MODEL="tts-1-hd", TTS_VOICE="nova", TTS_SPEED=1.5)
 
         config = TTSConfig.from_settings(settings)
 
@@ -62,12 +58,7 @@ class TestTTSConfigFromSettings:
 
     def test_from_settings_invalid_provider_falls_back(self) -> None:
         """Test invalid provider string falls back to OpenAI."""
-        settings = MagicMock()
-        settings.TTS_PROVIDER = "invalid_provider"
-        settings.TTS_MODEL = None
-        settings.TTS_VOICE = None
-        settings.TTS_SPEED = 1.0
-        settings.TTS_INSTRUCTIONS = None
+        settings = voice_settings(TTS_PROVIDER="invalid_provider")
 
         config = TTSConfig.from_settings(settings)
 
@@ -80,12 +71,7 @@ class TestTTSConfigFromSettings:
         ]
 
         for provider_str, expected_enum in providers:
-            settings = MagicMock()
-            settings.TTS_PROVIDER = provider_str
-            settings.TTS_MODEL = None
-            settings.TTS_VOICE = None
-            settings.TTS_SPEED = 1.0
-            settings.TTS_INSTRUCTIONS = None
+            settings = voice_settings(TTS_PROVIDER=provider_str)
 
             config = TTSConfig.from_settings(settings)
             assert config.provider == expected_enum, f"Failed for {provider_str}"
@@ -201,12 +187,7 @@ class TestGetTTSConfigFunction:
 
     def test_get_tts_config_returns_tts_config(self) -> None:
         """Test get_tts_config returns TTSConfig instance."""
-        settings = MagicMock()
-        settings.TTS_PROVIDER = "openai"
-        settings.TTS_MODEL = None
-        settings.TTS_VOICE = None
-        settings.TTS_SPEED = 1.0
-        settings.TTS_INSTRUCTIONS = None
+        settings = voice_settings()
 
         config = get_tts_config(settings)
 

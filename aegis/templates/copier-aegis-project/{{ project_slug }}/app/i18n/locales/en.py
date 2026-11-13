@@ -716,7 +716,7 @@ MESSAGES: dict[str, str] = {
     "ai.tts_status_title": "TTS Service Status",
     "ai.voice_label": "Voice:",
     "ai.speed_label": "Speed:",
-    "ai.openai_voices": "OpenAI Voices:",
+    "ai.voices_label": "Voices:",
     "ai.file_not_found": "File not found: {path}",
     "ai.unsupported_format": "Unsupported format: {ext}",
     "ai.supported_formats": "Supported formats: {formats}",

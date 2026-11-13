@@ -23,6 +23,7 @@ from app.services.ai.domains.voice.models import (
     VoiceInfo,
 )
 from tests._voice_packages import packages_installed
+from tests._voice_settings import voice_settings
 
 
 class TestGetTtsProviders:
@@ -368,18 +369,7 @@ class TestGetCurrentVoiceConfig:
 
     def test_get_current_voice_config_with_none_values(self) -> None:
         """Test that None values fall back to defaults."""
-        from unittest.mock import MagicMock
-
-        settings = MagicMock()
-        settings.TTS_PROVIDER = None
-        settings.TTS_MODEL = None
-        settings.TTS_VOICE = None
-        settings.TTS_SPEED = None
-        settings.STT_PROVIDER = None
-        settings.STT_MODEL = None
-        settings.STT_LANGUAGE = None
-        settings.TTS_INSTRUCTIONS = None
-        settings.STT_DEVICE = None
+        settings = voice_settings(TTS_PROVIDER=None, TTS_SPEED=None, STT_PROVIDER=None)
 
         config = get_current_voice_config(settings)
         # Should use defaults for None values
@@ -392,18 +382,14 @@ class TestGetCurrentVoiceConfig:
 
     def test_get_current_voice_config_with_custom_values(self) -> None:
         """Test config with custom settings values."""
-        from unittest.mock import MagicMock
-
-        settings = MagicMock()
-        settings.TTS_PROVIDER = TTSProvider.OPENAI.value
-        settings.TTS_MODEL = "tts-1-hd"
-        settings.TTS_VOICE = OpenAIVoice.ECHO.value
-        settings.TTS_SPEED = 0.8
-        settings.STT_PROVIDER = STTProvider.GROQ_WHISPER.value
-        settings.STT_MODEL = "whisper-large-v3"
-        settings.STT_LANGUAGE = "en"
-        settings.TTS_INSTRUCTIONS = None
-        settings.STT_DEVICE = None
+        settings = voice_settings(
+            TTS_MODEL="tts-1-hd",
+            TTS_VOICE=OpenAIVoice.ECHO.value,
+            TTS_SPEED=0.8,
+            STT_PROVIDER=STTProvider.GROQ_WHISPER.value,
+            STT_MODEL="whisper-large-v3",
+            STT_LANGUAGE="en",
+        )
 
         config = get_current_voice_config(settings)
         assert config["tts_provider"] == TTSProvider.OPENAI.value
@@ -451,7 +437,8 @@ class TestEveryVoiceIsDescribed:
     def test_every_voice_has_a_gender_and_a_tone(self) -> None:
         for voice in get_tts_voices():
             assert voice.gender in ("female", "male", "neutral"), voice.id
-            assert voice.tone or voice.provider_id == TTSProvider.KOKORO, voice.id
+            kokoro = (TTSProvider.KOKORO, TTSProvider.LOCAL_SERVER)
+            assert voice.tone or voice.provider_id in kokoro, voice.id
 
 
 class TestWhatEachModelSteers:

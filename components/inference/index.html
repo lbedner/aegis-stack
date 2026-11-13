@@ -2268,6 +2268,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-speech-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A speech server
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#changing-placement" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7104,6 +7115,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-speech-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A speech server
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#changing-placement" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7175,10 +7197,70 @@
 <li><strong>A dashboard card and modal</strong>: installed models with load and unload, and an activity tab of recent loads and evictions.</li>
 <li><strong>The LLM catalog</strong> lists the installed models when the AI service is present (<code>my-app llm sync --source ollama</code>).</li>
 </ul>
+<h2 id="a-speech-server">A speech server</h2>
+<p>A speech server runs beside Ollama, where Ollama runs, and <code>ai[voice]</code> speaks through it. Kokoro-FastAPI is the one so far: Kokoro-82M, text to speech only.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>kokoro_fastapi<span class="o">]</span><span class="w">          </span><span class="c1"># Kokoro-FastAPI on the host</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker,kokoro_fastapi<span class="o">]</span><span class="w">   </span><span class="c1"># a kokoro-fastapi service in the compose stack</span>
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Placement</th>
+<th>What ships</th>
+<th>Reaches it at</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>host</code></td>
+<td>No container. Run it yourself (<a href="../../services/ai/voice/#a-speech-server">how</a>).</td>
+<td><code>http://host.docker.internal:8880/v1</code> from containers, <code>localhost:8880</code> from the host</td>
+</tr>
+<tr>
+<td><code>docker</code></td>
+<td>A <code>kokoro-fastapi</code> service (the CPU image, 2G memory limit), started with <code>ALLOW_DEV_UNLOAD</code> and <code>ENABLE_DEBUG_ENDPOINTS</code> on.</td>
+<td><code>http://kokoro-fastapi:8880/v1</code></td>
+</tr>
+</tbody>
+</table>
+<p>The answer sets <code>SPEECH_BASE_URL</code>'s default; <code>.env</code> can point it anywhere. With an address set:</p>
+<ul>
+<li><strong>Overseer &gt; Inference &gt; Speech</strong> shows the server whole, read once a second while it is open:<ul>
+<li><strong>Figures:</strong> its version, whether its model is loaded, the device it runs on, requests in flight, its memory and its voices.</li>
+<li><strong>Server:</strong> where the app reaches it, its backend and models (OpenAI's model names it answers to, for OpenAI's clients, listed apart as aliases), how long it has been idle, when it unloads, its threads. Unload and Reload move its model out of memory and back.</li>
+<li><strong>Voices</strong> by accent and gender. Press one to hear a line from the server itself, with or without <code>ai[voice]</code>.</li>
+<li><strong>Charts:</strong> its memory, its requests in flight, and how long each line took, as a whole file or a stream until its first audio (the page's own and <code>ai[voice]</code>'s).</li>
+</ul>
+</li>
+<li><strong>The CLI and API</strong> do the same: <code>my-app inference speech</code>, <code>my-app inference speak "a line" -v af_heart -o line.mp3</code>, <code>my-app inference speech-model unload|reload</code>; <code>GET /api/v1/inference/speech</code>, <code>GET /api/v1/inference/speech/say?voice=</code>, <code>POST /api/v1/inference/speech/{unload,reload}</code>.</li>
+<li><strong>The health check</strong> carries it under the inference check (<code>my-app health status</code>, <code>/health/detailed</code>).</li>
+<li><strong><code>ai[voice]</code></strong> offers it as the Kokoro-FastAPI provider, with every voice it lists (<a href="../../services/ai/voice/#a-speech-server">Voice</a>).</li>
+</ul>
+<p>A server with OpenAI's speech API alone shows its voices, its models and the app's own timings. Kokoro-FastAPI reports its version always, and the rest only with its flags on. A server you run yourself needs them set, or the page names the ones missing:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">ALLOW_DEV_UNLOAD</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="nv">ENABLE_DEBUG_ENDPOINTS</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>./start-gpu_mac.sh
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Opens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ALLOW_DEV_UNLOAD</code></td>
+<td>Its model's state (loaded, device, requests, idle), and Unload and Reload</td>
+</tr>
+<tr>
+<td><code>ENABLE_DEBUG_ENDPOINTS</code></td>
+<td>Its process: memory and threads</td>
+</tr>
+</tbody>
+</table>
 <h2 id="changing-placement">Changing placement</h2>
-<p>The placement is an answer in <code>.copier-answers.yml</code> (<code>inference_placement</code>). Remove and re-add the component to switch:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>aegis<span class="w"> </span>remove<span class="w"> </span>inference
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker<span class="o">]</span>
+<p>The placement is an answer in <code>.copier-answers.yml</code> (<code>inference_placement</code>), and the speech server another (<code>inference_speech</code>). Remove and re-add the component to switch:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>aegis<span class="w"> </span>remove<span class="w"> </span>inference
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker<span class="o">]</span>
 </span></code></pre></div>
 
 

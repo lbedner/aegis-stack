@@ -1,5 +1,5 @@
-"""Actions for the Overseer Inference page: load a model into Ollama's
-memory, or unload it. Mounted by ``routes/pages.py`` at
+"""Actions for the Overseer Inference page: load a model into the
+inference server's memory, or unload it. Mounted by ``routes/pages.py`` at
 ``overseer_inference.PARTIALS``. The action runs in the background and
 answers at once; the Models table's stream shows it arriving.
 """
@@ -9,7 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import Response, StreamingResponse
 
-from app.components.inference.ollama import MODEL_ACTIONS
+from app.components.inference.engine import MODEL_ACTIONS
 from app.components.web_frontend import overseer_inference
 from app.components.web_frontend.overseer_live import event_stream
 

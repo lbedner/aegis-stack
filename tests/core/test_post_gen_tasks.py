@@ -536,8 +536,8 @@ class TestInferenceCleanup:
     OLLAMA_FILES = (
         "app/components/inference/ollama.py",
         "app/components/inference/activity.py",
-        "app/components/frontend/dashboard/cards/ollama_card.py",
-        "app/components/frontend/dashboard/modals/ollama_modal/dialog.py",
+        "app/components/frontend/dashboard/cards/inference_card.py",
+        "app/components/frontend/dashboard/modals/inference_modal/dialog.py",
         "app/services/system/health_ollama.py",
     )
 

@@ -14,7 +14,7 @@ from typing import Any
 import flet as ft
 
 from app.components.frontend.controls.tabs import PulseTabs
-from app.components.inference.activity import get_ollama_activity
+from app.components.inference.activity import get_inference_activity
 from app.core.constants import ComponentName
 from app.core.log import logger
 from app.services.system.models import ComponentStatus
@@ -42,7 +42,7 @@ def _data_snapshot(component_data: ComponentStatus) -> tuple[Any, ...]:
     from app.core.config import settings
 
     metadata = component_data.metadata or {}
-    events = get_ollama_activity().events()
+    events = get_inference_activity().events()
     return (
         component_data.status,
         metadata.get("version"),
@@ -60,7 +60,7 @@ def _data_snapshot(component_data: ComponentStatus) -> tuple[Any, ...]:
     )
 
 
-class OllamaDetailDialog(BaseDetailPopup):
+class InferenceDetailDialog(BaseDetailPopup):
     """
     Ollama local LLM infrastructure detail popup dialog.
 

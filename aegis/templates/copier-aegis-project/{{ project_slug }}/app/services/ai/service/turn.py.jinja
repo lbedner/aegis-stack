@@ -132,18 +132,22 @@ class TurnMixin(PromptMixin):
 {%- endif %}
 {% endif %}
 
+        # What this turn alone brings, beside the question
+        # (``PromptMixin._system_prompt_for``).
+        now = (await wrong).line() if wrong else None
+{% if ai_rag %}
+        now = self._this_turn(rag_context, now)
+{% endif %}
 {%- if ai_framework == "pydantic-ai" %}
         agent, conversation_context = await self._prepare_agent_and_context(
             conversation,
-{% if ai_rag %}
-            rag_context=rag_context,
-{% endif %}            agent_config=agent_config,
+            agent_config=agent_config,
 {% if ai_backend != "memory" %}            memory_context=memory_context,
             agent_modules_context=agent_modules_context,
             history_budget=history_budget,
             context_window=context_window,
             readings=readings,
-{% endif %}            right_now=(await wrong).line() if wrong else None,
+{% endif %}            right_now=now,
         )
         return TurnSetup(
             conversation=conversation,
@@ -155,10 +159,9 @@ class TurnMixin(PromptMixin):
 {%- else %}
         llm, messages, tools = await self._prepare_llm_and_messages(
             conversation,
-{% if ai_rag %}            rag_context=rag_context,
-{% endif %}            agent_config=agent_config,
+            agent_config=agent_config,
 {% if ai_backend != "memory" %}            memory_context=memory_context,
-{% endif %}            right_now=(await wrong).line() if wrong else None,
+{% endif %}            right_now=now,
         )
         return TurnSetup(
             conversation=conversation,

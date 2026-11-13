@@ -18,7 +18,7 @@ from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.theme import AegisTheme as Theme
 
 if TYPE_CHECKING:
-    from .dialog import OllamaDetailDialog
+    from .dialog import InferenceDetailDialog
 
 
 class UseModelControl(ft.Container):
@@ -35,7 +35,7 @@ class UseModelControl(ft.Container):
         model_name: str,
         page: ft.Page,
         is_active: bool,
-        dialog: OllamaDetailDialog | None = None,
+        dialog: InferenceDetailDialog | None = None,
     ) -> None:
         super().__init__()
         self._model_name = model_name
@@ -83,15 +83,14 @@ class ModelActionButton(ft.Container):
 
     One class rather than two: LoadModelButton and UnloadModelButton ran
     to 163 lines that differed in the verb, the label, the button
-    variant, and which OllamaClient method they called.
+    variant, and which engine method they called.
     """
 
     def __init__(
         self,
         model_name: str,
         page: ft.Page,
-        ollama_url: str,
-        dialog: OllamaDetailDialog | None = None,
+        dialog: InferenceDetailDialog | None = None,
         *,
         action: str = "load",
     ) -> None:
@@ -99,14 +98,12 @@ class ModelActionButton(ft.Container):
         Args:
             model_name: Name of the model to act on
             page: Flet page instance for updates
-            ollama_url: Ollama server URL
             dialog: Parent dialog, refreshed after the action succeeds
             action: ``"load"`` or ``"unload"``
         """
         super().__init__()
         self._model_name = model_name
         self._page = page
-        self._ollama_url = ollama_url
         self._dialog = dialog
         self._action = action
         # Only under the pointer: an action button on every row turns the
@@ -145,9 +142,9 @@ class ModelActionButton(ft.Container):
         self._page.update()
 
         try:
-            from app.components.inference.ollama import OllamaClient
+            from app.components.inference import get_inference_engine
 
-            client = OllamaClient(base_url=self._ollama_url)
+            client = get_inference_engine()
             if await client.move(self._action, self._model_name):
                 if self._dialog:
                     await self._dialog.refresh_data()

@@ -1,7 +1,6 @@
 """The per-request context builder{% if ai_rag %}: the code RAG retrieves for a
-turn (``_build_rag_context``), which the prompt layer injects into the
-system prompt{% endif %}. Nothing live rides there
-(``PromptMixin._system_prompt_for``).
+turn (``_build_rag_context``){% endif %}. Nothing live rides the system
+prompt (``PromptMixin._system_prompt_for``).
 """
 
 {% if ai_rag %}

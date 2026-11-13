@@ -140,7 +140,7 @@ def table_width(columns: list[DataTableColumn]) -> int:
 # the modal can be sized to hold it. A column left to flex among fixed
 # siblings renders at ZERO width once the row overflows rather than
 # wrapping - invisible to a control-tree test, so the arithmetic is the
-# guard (see test_ollama_model_table.py).
+# guard (see test_inference_model_table.py).
 MODEL_TABLE_WIDTH = table_width(MODEL_COLUMNS)
 
 

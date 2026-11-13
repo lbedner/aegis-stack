@@ -271,13 +271,11 @@ def _refused(model_id: str, message: str, *, vendor: str | None = None) -> SetMo
 async def _ollama_vendor(model_id: str) -> str | None:
     """"Ollama" when a local Ollama has ``model_id`` pulled."""
     try:
-        from app.components.inference.ollama import OllamaClient
+        from app.components.inference import get_inference_engine
 
-        client = OllamaClient()
-        if await client.is_available():
-            pulled = await client.fetch_models()
-            if any(m.model_id == model_id for m in pulled):
-                return "Ollama"
+        pulled = await get_inference_engine().fetch_models()
+        if any(m.model_id == model_id for m in pulled):
+            return "Ollama"
     except Exception:
         pass  # Ollama not available: not found anywhere
     return None

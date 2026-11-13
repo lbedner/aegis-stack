@@ -34,7 +34,7 @@ from .columns import CAPABILITIES, MODEL_COLUMNS
 from .model_actions import ModelActionButton, UseModelControl
 
 if TYPE_CHECKING:
-    from .dialog import OllamaDetailDialog
+    from .dialog import InferenceDetailDialog
 
 
 class ModelsSection(ft.Container):
@@ -44,7 +44,7 @@ class ModelsSection(ft.Container):
         self,
         ollama_component: ComponentStatus,
         page: ft.Page,
-        dialog: OllamaDetailDialog | None = None,
+        dialog: InferenceDetailDialog | None = None,
     ) -> None:
         """
         Initialize models section.
@@ -62,7 +62,6 @@ class ModelsSection(ft.Container):
         installed_models = metadata.get("installed_models", [])
         running_models = metadata.get("running_models", [])
         total_vram_gb = metadata.get("total_vram_gb", 0.0)
-        ollama_url = metadata.get("base_url", "http://localhost:11434")
 
         # Build a map of running model names to their VRAM usage
         running_model_map: dict[str, float] = {}
@@ -71,7 +70,7 @@ class ModelsSection(ft.Container):
 
         # Build row data for DataTable (includes total VRAM row if applicable)
         rows = self._build_rows(
-            installed_models, running_model_map, page, ollama_url, dialog, total_vram_gb
+            installed_models, running_model_map, page, dialog, total_vram_gb
         )
 
         if rows:
@@ -128,8 +127,7 @@ class ModelsSection(ft.Container):
         installed_models: list[dict[str, Any]],
         running_model_map: dict[str, float],
         page: ft.Page,
-        ollama_url: str,
-        dialog: OllamaDetailDialog | None,
+        dialog: InferenceDetailDialog | None,
         total_vram_gb: float = 0.0,
     ) -> list[list[Any]]:
         """Build row data for DataTable.
@@ -138,7 +136,6 @@ class ModelsSection(ft.Container):
             installed_models: List of installed model dicts
             running_model_map: Map of running model names to VRAM usage
             page: Flet page instance
-            ollama_url: Ollama server URL
             dialog: Parent dialog for refresh
             total_vram_gb: Total VRAM usage to show in footer row
 
@@ -192,7 +189,6 @@ class ModelsSection(ft.Container):
             status_control: ft.Control = ModelActionButton(
                 model_name=model_name,
                 page=page,
-                ollama_url=ollama_url,
                 dialog=dialog,
                 action="unload" if is_warm else "load",
             )
@@ -258,7 +254,7 @@ class ModelsTab(ft.Container):
         self,
         component_data: ComponentStatus,
         page: ft.Page,
-        dialog: OllamaDetailDialog | None = None,
+        dialog: InferenceDetailDialog | None = None,
     ) -> None:
         super().__init__()
         self.content = ft.Column(

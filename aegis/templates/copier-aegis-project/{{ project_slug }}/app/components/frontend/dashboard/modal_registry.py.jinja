@@ -81,7 +81,7 @@ def modal_registry() -> dict[str, type[ft.Container]]:
     from app.components.frontend.dashboard.modals.browser_modal import BrowserDetailDialog
     {%- endif %}
     {%- if ollama_mode != "none" %}
-    from app.components.frontend.dashboard.modals.ollama_modal import OllamaDetailDialog
+    from app.components.frontend.dashboard.modals.inference_modal import InferenceDetailDialog
     {%- endif %}
     {%- if include_redis %}
     from app.components.frontend.dashboard.modals.redis_modal import RedisDetailDialog
@@ -150,7 +150,7 @@ def modal_registry() -> dict[str, type[ft.Container]]:
         ComponentName.BROWSER: BrowserDetailDialog,
         {%- endif %}
         {%- if ollama_mode != "none" %}
-        ComponentName.OLLAMA: OllamaDetailDialog,
+        ComponentName.OLLAMA: InferenceDetailDialog,
         {%- endif %}
         {%- if include_redis %}
         ComponentName.CACHE: RedisDetailDialog,

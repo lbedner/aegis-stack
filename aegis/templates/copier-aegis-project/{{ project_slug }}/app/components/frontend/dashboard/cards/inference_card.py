@@ -11,15 +11,15 @@ from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer
+from .card_metadata import metadata_number, metadata_text
 from .card_utils import (
     create_header_row,
     create_metric_container,
     get_status_colors,
 )
-from .card_metadata import metadata_number, metadata_text
 
 
-class OllamaCard:
+class InferenceCard:
     """
     A clean Ollama card with key infrastructure metrics.
 
@@ -40,7 +40,9 @@ class OllamaCard:
         running_models = self.metadata.get("running_models", [])
         if isinstance(running_models, list) and running_models:
             first = running_models[0]
-            model_name = first.get("name", "Unknown") if isinstance(first, dict) else "Unknown"
+            model_name = (
+                first.get("name", "Unknown") if isinstance(first, dict) else "Unknown"
+            )
             # Truncate long model names
             if len(model_name) > 18:
                 return model_name[:15] + "..."

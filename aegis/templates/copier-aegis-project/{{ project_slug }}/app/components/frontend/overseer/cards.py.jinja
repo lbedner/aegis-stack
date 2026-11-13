@@ -78,7 +78,7 @@ from ..dashboard.cards import (
     BrowserCard,
 {% endif %}
 {% if ollama_mode != "none" %}
-    OllamaCard,
+    InferenceCard,
 {% endif %}
 {% if include_payment %}
     PaymentCard,
@@ -226,7 +226,7 @@ def create_component_card(
 {% endif %}
 {% if ollama_mode != "none" %}
         elif component_name == ComponentName.OLLAMA:
-            return OllamaCard(component_data).build()
+            return InferenceCard(component_data).build()
 {% endif %}
 {% if include_scheduler %}
         elif component_name == ComponentName.SCHEDULER:

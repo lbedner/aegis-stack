@@ -1,8 +1,8 @@
 """
 API clients for fetching LLM model data from public sources.
 
-Note: OllamaClient and OllamaModel are imported from app.components.inference.ollama
-(the main Ollama module), not from this ETL clients package.
+Note: local models come from the inference engine (app.components.inference),
+not from this ETL clients package.
 """
 
 from app.services.ai.domains.llm.etl.clients.litellm_client import LiteLLMClient, LiteLLMModel

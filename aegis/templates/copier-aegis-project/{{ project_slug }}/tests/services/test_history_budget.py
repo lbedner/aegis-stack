@@ -10,6 +10,7 @@ from app.services.ai.service.prompt import (
     HISTORY_CHAR_BUDGET_DEFAULT,
     HISTORY_CHAR_BUDGET_MAX,
     HISTORY_CHAR_BUDGET_MIN,
+    _history_start,
     history_char_budget,
 )
 
@@ -39,3 +40,28 @@ class TestHistoryCharBudget:
             <= HISTORY_CHAR_BUDGET_DEFAULT
             <= HISTORY_CHAR_BUDGET_MAX
         )
+
+
+class TestHistoryStart:
+    """Past the budget, history is cut a slab at a time (``_history_start``):
+    sixty messages of 1,030 chars, against a 20,000-char budget."""
+
+    LENGTHS = [1_030] * 60
+    BUDGET = 20_000
+    TURNS = range(20, 61)  # every turn past the budget
+
+    def test_most_turns_replay_the_start_the_last_one_did(self) -> None:
+        starts = [_history_start(self.LENGTHS[:n], self.BUDGET) for n in self.TURNS]
+
+        moved = sum(a != b for a, b in zip(starts, starts[1:]))
+
+        assert moved <= 0.2 * (len(starts) - 1)
+
+    def test_a_cut_keeps_half_the_budget_less_one_message(self) -> None:
+        for n in self.TURNS:
+            kept = sum(self.LENGTHS[_history_start(self.LENGTHS[:n], self.BUDGET) : n])
+
+            assert self.BUDGET // 2 - self.LENGTHS[0] <= kept <= self.BUDGET
+
+    def test_a_thread_inside_the_budget_keeps_everything(self) -> None:
+        assert _history_start([100, 100], self.BUDGET) == 0

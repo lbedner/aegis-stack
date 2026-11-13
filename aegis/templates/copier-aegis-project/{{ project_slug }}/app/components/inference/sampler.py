@@ -2,14 +2,15 @@
 every viewer, rather than once a second by each. Each loaded model's memory
 and VRAM for the charts, and the server as a whole for the Inference page
 and the Flet Ollama modal (``current_status``). It is also the one reader
-that notices models loading and leaving (``get_ollama_activity``): Ollama
+that notices models loading and leaving (``get_inference_activity``): Ollama
 has no event API, so each reading's running set is diffed with the last.
 """
 
 import httpx
 
-from app.components.inference.activity import get_ollama_activity
-from app.components.inference.ollama import OllamaClient, OllamaServerStatus
+from app.components.inference import get_inference_engine
+from app.components.inference.activity import get_inference_activity
+from app.components.inference.engine import InferenceServerStatus
 from app.core import series
 from app.core.log import logger
 from app.core.series import Sample, Sampler
@@ -19,10 +20,10 @@ from app.services.system.ui_runtime import Chart, Host
 
 async def read() -> Sample:
     """The server now: ``latest`` is it with where it was looked for."""
-    client = OllamaClient()
+    client = get_inference_engine()
     server = await client.get_server_status()
     if server.available:
-        get_ollama_activity().observe(
+        get_inference_activity().observe(
             {m.name: m.size_vram_gb for m in server.running_models}
         )
     values: dict[str, float] = {}
@@ -83,6 +84,6 @@ async def current_status(*, fresh: bool = False) -> ComponentStatus:
     except httpx.HTTPError as exc:  # /api/ps failed after /api/tags answered
         logger.warning("ollama.status_read_failed", error=str(exc))
         return ollama_status(
-            OllamaServerStatus(available=False), OllamaClient().base_url
+            InferenceServerStatus(available=False), get_inference_engine().base_url
         )
     return ollama_status(server, url)

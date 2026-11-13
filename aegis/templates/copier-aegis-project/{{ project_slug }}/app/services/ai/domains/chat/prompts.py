@@ -6,7 +6,6 @@ Centralized prompt management for Illiana, the Aegis Stack AI assistant.
 
 
 def build_system_prompt(
-    rag_context: str | None = None,
     current_model: str | None = None,
     current_provider: str | None = None,
     persona: str | None = None,
@@ -15,14 +14,15 @@ def build_system_prompt(
     """
     Build system prompt with project context.
 
+    Nothing in it changes turn to turn (``PromptMixin._system_prompt_for``).
+
     Args:
-        rag_context: Optional formatted RAG context to include
         current_model: Current model being used for this request
         current_provider: Current provider (openai, anthropic, etc.)
         persona: The agent row's prompt (``DEFAULT_SYSTEM_PROMPT`` is the
             one it is seeded with); None for that same default. The
-            session, retrieved code and memory sections are appended after
-            it (nothing live: ``PromptMixin._system_prompt_for``).
+            session and memory sections are appended after it (nothing
+            live: ``PromptMixin._system_prompt_for``).
         memory_context: Optional guarded per-user memory block (from
             ``user_memory.build_user_memory_context``) to append.
 
@@ -47,18 +47,27 @@ There are no API costs - all processing happens on your hardware. When reporting
 stats, $0.00 cost is expected and normal for Ollama models.
 """
 
-    if rag_context:
-        critical_line = (
-            '**CRITICAL:** When the user asks "how does X work" or '
-            '"what is X", answer based on THIS CODE - explain what it '
-            "does in this codebase, not generic explanations."
-        )
-        elsewhere_bullet = (
-            "- Explain what the actual code does, not what similar "
-            "code might do elsewhere"
-        )
+    if memory_context:
         prompt += f"""
-## Codebase Context (USE THIS TO ANSWER QUESTIONS)
+## Saved User Memory
+{memory_context}
+"""
+
+    return prompt
+
+
+def codebase_context(rag_context: str) -> str:
+    """The code retrieved for one question, as the section that tells the
+    model to answer from it (where it rides: ``PromptMixin._system_prompt_for``)."""
+    critical_line = (
+        '**CRITICAL:** When the user asks "how does X work" or '
+        '"what is X", answer based on THIS CODE - explain what it '
+        "does in this codebase, not generic explanations."
+    )
+    elsewhere_bullet = (
+        "- Explain what the actual code does, not what similar code might do elsewhere"
+    )
+    return f"""## Codebase Context (USE THIS TO ANSWER QUESTIONS)
 The following code was retrieved from THIS project's codebase.
 
 {critical_line}
@@ -70,14 +79,6 @@ The following code was retrieved from THIS project's codebase.
 
 {rag_context}
 """
-
-    if memory_context:
-        prompt += f"""
-## Saved User Memory
-{memory_context}
-"""
-
-    return prompt
 
 
 # The assistant's persona: the text its agent row is seeded with, edited
@@ -167,6 +168,7 @@ def get_rag_system_prompt(rag_context: str | None = None) -> str:
 
 __all__ = [
     "build_system_prompt",
+    "codebase_context",
     "DEFAULT_SYSTEM_PROMPT",
     "LEGACY_SYSTEM_PROMPT",
     "meant",

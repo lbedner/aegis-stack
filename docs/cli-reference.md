@@ -278,6 +278,12 @@ aegis init cron-app --components "scheduler[sqlite]"
 # Result: backend + frontend + database + scheduler
 ```
 
+**Rendering from a checkout:** with `AEGIS_TEMPLATE_PATH` set to a clone of
+the repo, an installed `aegis init` renders that template and does not clone
+it from GitHub. Like `--template-path` on `aegis update`, this pins the
+project: `_src_path` in `.copier-answers.yml` becomes a path on your machine.
+Set it back to `gh:lbedner/aegis-stack` before committing.
+
 ---
 
 ### aegis add

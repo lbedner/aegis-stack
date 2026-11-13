@@ -9,6 +9,9 @@
 
 ### Added
 
+- **`aegis init` from a checkout you name.** With `AEGIS_TEMPLATE_PATH` set
+  to a clone of the repo, an installed `aegis init` renders that template
+  and does not clone it from GitHub, as `aegis update` already did.
 - **Voice that runs in the app.** `ai[voice]` can speak with Kokoro
   (`TTS_PROVIDER=kokoro`) and hear with NVIDIA Parakeet v3
   (`STT_PROVIDER=parakeet`) in its own process, on the CPU, with no key and
@@ -29,6 +32,12 @@
 
 ### Fixed
 
+- **A project's CI no longer counts as its clones.** GitHub counts every
+  checkout as a clone, and a generated project's CI checked out in each of
+  its five or six jobs on every push. One job fetches now and hands the rest
+  a copy; CodeQL is a CI job, so `security.yml` is gone; and a new push to a
+  pull request cancels the run it replaces. `aegis update` brings it to an
+  existing project.
 - **Local Whisper is no longer offered when it cannot run.** Whisper (Local)
   and faster-whisper were listed and accepted with their packages absent,
   then failed on the first transcription. Their packages stay opt-in; until

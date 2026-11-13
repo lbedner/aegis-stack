@@ -2,6 +2,7 @@
 Init command implementation.
 """
 
+import os
 from pathlib import Path
 from typing import cast
 
@@ -22,7 +23,11 @@ from ..cli.interactive import (
 )
 from ..cli.utils import detect_scheduler_backend
 from ..cli.validators import validate_project_name
-from ..config.defaults import DEFAULT_PYTHON_VERSION, SUPPORTED_PYTHON_VERSIONS
+from ..config.defaults import (
+    DEFAULT_PYTHON_VERSION,
+    GITHUB_TEMPLATE_URL,
+    SUPPORTED_PYTHON_VERSIONS,
+)
 from ..constants import StorageBackends
 from ..core.ai_service_parser import BACKENDS, FRAMEWORKS, PROVIDERS
 from ..core.component_utils import (
@@ -310,6 +315,26 @@ def init_command(
     if to_version:
         typer.echo(f"{brand.muted_text(t('init.template_version'))} {to_version}")
 
+    # AEGIS_TEMPLATE_PATH, as ``aegis update`` reads it: an installed CLI
+    # pointed at a checkout renders that, not a clone of GitHub. Checked
+    # here, before a question is asked or --force removes anything.
+    template_path = os.getenv("AEGIS_TEMPLATE_PATH")
+    if template_path:
+        from ..core.copier_updater import get_template_root
+
+        try:
+            template_root = get_template_root(template_path)
+        except ValueError as e:
+            brand.error(str(e), err=True)
+            raise typer.Exit(1) from None
+        brand.warn(
+            t(
+                "update.local_template_pinned",
+                path=f"git+file://{template_root}",
+                url=GITHUB_TEMPLATE_URL,
+            )
+        )
+
     # Check if directory already exists
     if project_path.exists():
         if not force:
@@ -446,6 +471,7 @@ def init_command(
                     skip_llm_sync=skip_llm_sync or get_skip_llm_sync_selection(),
                     dev_mode=dev,
                     reporter=reporter,
+                    template_path=template_path,
                 )
                 return project_path
 
@@ -542,6 +568,7 @@ def init_command(
             vcs_ref=to_version,
             skip_llm_sync=skip_llm_sync,
             dev_mode=dev,
+            template_path=template_path,
         )
 
         # Note: Comprehensive setup output is now handled by the post-generation hook

@@ -64,6 +64,26 @@ jobs:
             echo "stack=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # GitHub counts every checkout as a clone, and ~40 jobs a push buried
+      # the real ones: this is the run's one fetch, and the jobs below start
+      # from a copy of it, the commit alone as their own checkout was (no
+      # history, no tags). Uncompressed: the tree is mostly compressed media.
+      - name: Copy the commit for the other jobs
+        if: steps.paths.outputs.stack == 'true'
+        run: |
+          git clone --quiet --depth 1 --no-local "file://$GITHUB_WORKSPACE" "$RUNNER_TEMP/repo"
+          git -C "$RUNNER_TEMP/repo" remote set-url origin "https://github.com/${{ github.repository }}"
+          tar -C "$RUNNER_TEMP/repo" -cf "$RUNNER_TEMP/repo.tar" .
+
+      - name: Hand it over
+        if: steps.paths.outputs.stack == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: repo
+          path: ${{ runner.temp }}/repo.tar
+          compression-level: 0
+          retention-days: 1
+
   # Full validation (generate → uv sync → lint → typecheck → pytest), one
   # stack per runner. The list mirrors STACK_COMBINATIONS in
   # tests/cli/test_stack_generation.py — the guard job below fails if the
@@ -115,7 +135,15 @@ jobs:
           - everything
     name: validate (${{ matrix.stack }})
     steps:
-      - uses: actions/checkout@v7
+      # ``changes``' copy of the commit, from the run's artifacts, not GitHub.
+      - &get-repo
+        name: Get the commit
+        uses: actions/download-artifact@v8
+        with:
+          name: repo
+      - &unpack-repo
+        name: Unpack it
+        run: tar -xf repo.tar && rm repo.tar
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -143,7 +171,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - *get-repo
+      - *unpack-repo
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -173,7 +202,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - *get-repo
+      - *unpack-repo
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -333,7 +363,8 @@ jobs:
     timeout-minutes: 20
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v7
+      - *get-repo
+      - *unpack-repo
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7

@@ -16,6 +16,16 @@
   "onnx-asr[cpu,hub]" av`) and each fetches its int8 model on first use.
   Kokoro's 28 English voices are in the catalog, the voice designer and the
   Overseer's voice models, and usage is recorded at no cost.
+- **A speech server you run.** `inference[kokoro_fastapi]` tracks
+  Kokoro-FastAPI on the host, or as a compose service with
+  `inference[docker,kokoro_fastapi]`, at `SPEECH_BASE_URL`, and the inference
+  health check carries it. `ai[voice]` speaks through it as the
+  `local_server` provider, with every voice it lists and no cost. Overseer >
+  Inference > Speech shows the server whole: its version, model state,
+  device, requests, memory and voices; Unload and Reload; each voice played
+  from the server, with or without `ai[voice]`; and charts of its memory,
+  its requests and how long each line took. `my-app inference speech`,
+  `speak` and `speech-model`, and `/api/v1/inference/speech`, do the same.
 
 ### Fixed
 

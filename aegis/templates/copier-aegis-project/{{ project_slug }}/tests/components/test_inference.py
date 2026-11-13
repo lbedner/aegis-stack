@@ -12,12 +12,18 @@ from app.components.inference.activity import (
 )
 from app.components.inference.engine import InferenceServerStatus
 from app.components.inference.ollama import OllamaEngine
-from app.core import series
+from app.core import series, speech_server
+from app.core.config import settings
+from app.core.speech_server import SpeechServerReading
+from app.services.system.health_ollama import check_ollama_health
 from app.services.system.models import ComponentStatusType
 from tests._fake_ollama import (
     ROUTES,
     RUNNING,
     SERVING,
+    SPEECH_DOWN,
+    SPEECH_READY,
+    SPEECH_URL,
     FakeClient,
     down,
     serve,
@@ -240,6 +246,67 @@ class TestSampler:
         assert first.status == ComponentStatusType.HEALTHY
         assert RUNNING.name in first.message and first == second
         assert len(fake_server) == 1
+
+
+class TestSpeechServer:
+    """The speech server's status in the inference health check."""
+
+    @pytest.fixture(autouse=True)
+    def ollama(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        serve(monkeypatch)
+        monkeypatch.setattr(settings, "SPEECH_BASE_URL", SPEECH_URL)
+
+    def _answers(
+        self, monkeypatch: pytest.MonkeyPatch, reading: SpeechServerReading
+    ) -> None:
+        async def read(url: str) -> SpeechServerReading:
+            return reading
+
+        monkeypatch.setattr(speech_server, "read", read)
+
+    async def test_its_voices_are_in_the_inference_check(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._answers(monkeypatch, SPEECH_READY)
+
+        status = await check_ollama_health()
+
+        speech = status.sub_components["speech"]
+        assert status.message.startswith(RUNNING.name)
+        assert speech.status == ComponentStatusType.HEALTHY
+        assert "2 voices" in speech.message
+        assert speech.metadata["base_url"] == SPEECH_URL
+
+    async def test_one_that_does_not_answer_is_unhealthy(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._answers(monkeypatch, SPEECH_DOWN)
+
+        speech = (await check_ollama_health()).sub_components["speech"]
+
+        assert speech.status == ComponentStatusType.UNHEALTHY
+
+    async def test_it_is_carried_while_ollama_fails(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class Failing(FakeClient):
+            async def get_server_status(self) -> InferenceServerStatus:
+                raise httpx.ReadError("/api/ps failed")
+
+        serve(monkeypatch, Failing)
+        self._answers(monkeypatch, SPEECH_READY)
+
+        status = await check_ollama_health()
+
+        assert status.status == ComponentStatusType.UNHEALTHY
+        assert status.sub_components["speech"].status == ComponentStatusType.HEALTHY
+
+    async def test_without_an_address_there_is_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "SPEECH_BASE_URL", None)
+
+        assert (await check_ollama_health()).sub_components == {}
 
 
 def test_the_inference_page_charts_come_with_the_component() -> None:

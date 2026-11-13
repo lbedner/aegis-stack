@@ -35,7 +35,7 @@ from . import (
     overseer_zoom,
 )
 from .filters import health_tone, worst_tone
-from .overseer_live import chart_frames, chart_panel, fragments_events
+from .overseer_live import Drawn, chart_panel, fragments_events, live_events
 from .overseer_nav import NavItem, current_navigation, runtime_page_url
 from .rendering import fragment, with_query
 
@@ -482,18 +482,11 @@ def events(  # noqa: ANN201 - async iterator
     max_frames: int | None = None,
     charts: tuple[str, ...] = (),
 ):
-    """The cards and each chart over SSE, each sent again only when it
-    changes (``overseer_live.chart_frames``); a long window's charts are
-    read again only when its tier moves (``series.Redraw``). Given
-    ``charts``, those alone and no cards (a page's Overview)."""
-    held: dict[str, tuple[list[str], int]] = {}
-    redraw = series.Redraw(window)
+    """The cards and each chart over SSE (``overseer_live.live_events``).
+    Given ``charts``, those alone and no cards (a page's Overview)."""
 
-    async def frame() -> dict[str, str]:
-        table, drawn = await ui_runtime.section(
-            page, window, draw=redraw.due(), only=charts
-        )
-        sent = {} if charts else {EVENT: render(table)}
-        return sent | chart_frames(EVENT, drawn or [], held)
+    async def read(draw: bool) -> tuple[dict[str, str], Drawn]:
+        table, drawn = await ui_runtime.section(page, window, draw=draw, only=charts)
+        return ({} if charts else {EVENT: render(table)}), drawn
 
-    return fragments_events(frame, series.TICK_SECONDS, max_frames)
+    return live_events(EVENT, read, window, max_frames)

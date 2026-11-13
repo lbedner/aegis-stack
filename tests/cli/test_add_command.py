@@ -110,6 +110,29 @@ class TestAddCommand:
         assert (project_path / "app/components/inference/ollama.py").is_file()
         assert "ollama:" in (project_path / "docker-compose.yml").read_text()
 
+    def test_add_inference_with_a_speech_server_in_docker(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """The speech server is an answer of its own, follows the placement
+        into compose, and brings its health check."""
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "add",
+            "inference[docker,kokoro_fastapi]",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+
+        assert result.success, f"Command failed: {result.stderr}"
+        answers = load_copier_answers(project_path)
+        assert answers.get("inference_speech") == "kokoro_fastapi"
+        assert (project_path / "app/services/system/health_speech.py").is_file()
+        assert "kokoro-fastapi:" in (project_path / "docker-compose.yml").read_text()
+        speech = (project_path / "app/core/speech_settings.py").read_text()
+        assert '"http://kokoro-fastapi:8880/v1"' in speech
+
     def test_the_ollama_provider_brings_inference_with_its_answers(
         self, project_factory: ProjectFactory
     ) -> None:

@@ -11,7 +11,7 @@ runtime that did not answer. No UI framework imports.
 """
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -311,6 +311,18 @@ async def charts(
         tables = await series.latest(SAMPLER) if runtime.deployed() else None
     rows = ((tables or {}).get(page) or {}).get("rows", [])
     specs = [s for s in _charts_for(page, tables) if not only or s.key in only]
+    return await draw(specs, window, page, rows)
+
+
+async def draw(
+    specs: Iterable[Chart],
+    window: int,
+    page: str = "",
+    rows: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """``specs`` over the last ``window`` seconds, as views take them
+    (``entry``): ``page`` fills each prefix, ``rows`` (a page's containers)
+    its limits."""
     words = series.phrase(window)
     read: dict[str, dict[str, list[tuple[float, float]]]] = {}
     lines: dict[str, set[str]] = {}
@@ -327,7 +339,7 @@ async def charts(
             fmt=spec.fmt,
             window=window,
             style=spec.style,
-            thresholds=_thresholds(spec, rows),
+            thresholds=_thresholds(spec, rows or []),
         )
         drawn.append(entry(spec, data, words))
     return drawn

@@ -9,7 +9,7 @@ from typing import Any, Self
 
 from pydantic import BaseModel, Field
 
-from app.core import secrets
+from app.core import secrets, speech_server
 from app.core.voice_settings import TTS_SPEED_MAX, TTS_SPEED_MIN, setting_default
 
 from ..models import (
@@ -19,6 +19,7 @@ from ..models import (
     TTS_KEYS,
     TTSProvider,
     not_installed,
+    unserved,
 )
 
 
@@ -37,6 +38,9 @@ class TTSConfig(BaseModel):
         default=setting_default("TTS_SPEED"), ge=TTS_SPEED_MIN, le=TTS_SPEED_MAX
     )
     instructions: str | None = None  # how to say it; gpt-4o models only
+    # A speech server's address and which server it is (``local_server``).
+    server_url: str | None = None
+    server: str = setting_default("SPEECH_SERVER")
 
     @classmethod
     def from_settings(cls, settings: Any) -> Self:
@@ -54,6 +58,8 @@ class TTSConfig(BaseModel):
             voice=getattr(settings, "TTS_VOICE", None),
             speed=getattr(settings, "TTS_SPEED", None) or setting_default("TTS_SPEED"),
             instructions=getattr(settings, "TTS_INSTRUCTIONS", None),
+            server_url=speech_server.reach(settings),
+            server=getattr(settings, "SPEECH_SERVER", setting_default("SPEECH_SERVER")),
         )
 
     def get_model(self) -> str:
@@ -90,7 +96,9 @@ class TTSConfig(BaseModel):
                     f"Missing API key for {self.provider.value}. "
                     f"Set {key_name} environment variable."
                 )
-        if refused := not_installed(self.provider):
+        if refused := not_installed(self.provider) or unserved(
+            self.provider, self.server_url
+        ):
             errors.append(refused)
 
         return errors

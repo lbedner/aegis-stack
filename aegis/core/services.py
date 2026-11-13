@@ -650,6 +650,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "tests/_voice_catalog.py",
                     "tests/_voice_packages.py",
                     "tests/_voice_errors.py",
+                    "tests/_voice_settings.py",
                     "tests/_realtime.py",
                     "app/components/backend/api/voice",
                     # The spoken-turn endpoints under /ai.

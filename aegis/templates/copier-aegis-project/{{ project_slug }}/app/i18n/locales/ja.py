@@ -671,7 +671,7 @@ MESSAGES: dict[str, str] = {
     "ai.tts_status_title": "TTSサービスステータス",
     "ai.voice_label": "音声：",
     "ai.speed_label": "速度：",
-    "ai.openai_voices": "OpenAI音声：",
+    "ai.voices_label": "音声：",
     "ai.file_not_found": "ファイルが見つかりません：{path}",
     "ai.unsupported_format": "未対応のフォーマット：{ext}",
     "ai.supported_formats": "対応フォーマット：{formats}",

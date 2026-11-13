@@ -9,6 +9,7 @@ from app.services.ai.domains.voice.tts import TTSService
 from app.services.ai.domains.voice.tts.service import unsaid
 from tests._voice_errors import AnsweredError
 from tests._voice_packages import packages_installed
+from tests._voice_settings import voice_settings
 
 
 class TestTTSServiceInit:
@@ -16,12 +17,7 @@ class TestTTSServiceInit:
 
     def test_init_with_settings(self) -> None:
         """Test initialization with settings object."""
-        settings = MagicMock()
-        settings.TTS_PROVIDER = "openai"
-        settings.TTS_MODEL = "tts-1-hd"
-        settings.TTS_VOICE = "nova"
-        settings.TTS_SPEED = 1.5
-        settings.TTS_INSTRUCTIONS = None
+        settings = voice_settings(TTS_MODEL="tts-1-hd", TTS_VOICE="nova", TTS_SPEED=1.5)
 
         service = TTSService(settings)
 
@@ -132,13 +128,7 @@ class TestTTSServiceValidation:
 
     async def test_validate_with_valid_config(self) -> None:
         """Test validate returns empty list for valid config."""
-        settings = MagicMock()
-        settings.OPENAI_API_KEY = "sk-test-key"
-        settings.TTS_PROVIDER = "openai"
-        settings.TTS_MODEL = None
-        settings.TTS_VOICE = None
-        settings.TTS_SPEED = 1.0
-        settings.TTS_INSTRUCTIONS = None
+        settings = voice_settings(OPENAI_API_KEY="sk-test-key")
 
         service = TTSService(settings)
         errors = await service.validate()
@@ -157,13 +147,7 @@ class TestTTSServiceValidation:
 
     async def test_is_available_true_when_valid(self) -> None:
         """Test is_available returns True when validation passes."""
-        settings = MagicMock()
-        settings.OPENAI_API_KEY = "sk-test-key"
-        settings.TTS_PROVIDER = "openai"
-        settings.TTS_MODEL = None
-        settings.TTS_VOICE = None
-        settings.TTS_SPEED = 1.0
-        settings.TTS_INSTRUCTIONS = None
+        settings = voice_settings(OPENAI_API_KEY="sk-test-key")
 
         service = TTSService(settings)
 
@@ -183,13 +167,7 @@ class TestTTSServiceStatus:
 
     async def test_get_status_returns_dict(self) -> None:
         """Test get_status returns status dictionary."""
-        settings = MagicMock()
-        settings.OPENAI_API_KEY = "sk-test-key"
-        settings.TTS_PROVIDER = "openai"
-        settings.TTS_MODEL = None
-        settings.TTS_VOICE = None
-        settings.TTS_SPEED = 1.0
-        settings.TTS_INSTRUCTIONS = None
+        settings = voice_settings(OPENAI_API_KEY="sk-test-key")
 
         service = TTSService(settings)
         status = await service.get_status()
@@ -214,13 +192,7 @@ class TestTTSServiceStatus:
 
     async def test_get_status_shows_initialized(self) -> None:
         """Test get_status shows initialized when provider created."""
-        settings = MagicMock()
-        settings.OPENAI_API_KEY = "sk-test-key"
-        settings.TTS_PROVIDER = "openai"
-        settings.TTS_MODEL = None
-        settings.TTS_VOICE = None
-        settings.TTS_SPEED = 1.0
-        settings.TTS_INSTRUCTIONS = None
+        settings = voice_settings(OPENAI_API_KEY="sk-test-key")
 
         service = TTSService(settings)
         # Force provider creation
@@ -248,14 +220,7 @@ class TestStreamingRecordsUsage:
         provider = MagicMock()
         provider.synthesize_stream = _chunks
         service = TTSService(
-            MagicMock(
-                TTS_PROVIDER="openai",
-                TTS_MODEL="gpt-4o-mini-tts",
-                TTS_VOICE=None,
-                TTS_SPEED=1.0,
-                TTS_INSTRUCTIONS=None,
-                OPENAI_API_KEY="k",
-            )
+            voice_settings(TTS_MODEL="gpt-4o-mini-tts", OPENAI_API_KEY="k")
         )
         monkeypatch.setattr(service, "_get_provider", AsyncMock(return_value=provider))
         record = AsyncMock()
@@ -293,10 +258,8 @@ class TestTheConfiguredVoiceIsUsed:
 
         provider = MagicMock()
         provider.synthesize_stream = _chunks
-        settings = MagicMock(
-            TTS_PROVIDER="openai",
+        settings = voice_settings(
             TTS_MODEL="gpt-4o-mini-tts",  # the streamed speech endpoint
-            TTS_VOICE=None,
             TTS_SPEED=speed,
             TTS_INSTRUCTIONS=instructions,
             OPENAI_API_KEY="k",
@@ -337,13 +300,7 @@ class TestWhatEachSpeaksIn:
             ("gemini", None, "audio/wav"),
             ("gemini", "gemini-3.8-flash-lite-tts", "audio/wav"),
         ):
-            settings = MagicMock(
-                TTS_PROVIDER=provider,
-                TTS_MODEL=model,
-                TTS_VOICE=None,
-                TTS_SPEED=1.0,
-                TTS_INSTRUCTIONS=None,
-            )
+            settings = voice_settings(TTS_PROVIDER=provider, TTS_MODEL=model)
             assert TTSService(settings).media_type == media, (provider, model)
 
 
@@ -362,15 +319,7 @@ class TestStreamingMeasuresTheSpeech:
 
         provider = MagicMock()
         provider.synthesize_stream = _chunks
-        service = TTSService(
-            MagicMock(
-                TTS_PROVIDER="openai",
-                TTS_MODEL="gpt-4o-mini-tts",
-                TTS_VOICE=None,
-                TTS_SPEED=1.0,
-                TTS_INSTRUCTIONS=None,
-            )
-        )
+        service = TTSService(voice_settings(TTS_MODEL="gpt-4o-mini-tts"))
         monkeypatch.setattr(service, "_get_provider", AsyncMock(return_value=provider))
         record = AsyncMock()
         monkeypatch.setattr(service, "_record_usage", record)
@@ -391,6 +340,7 @@ class TestUnsaid:
             (AnsweredError(401), "key"),
             (AnsweredError(404), "model"),
             (TimeoutError("Gemini did not answer"), "in time"),
+            (ConnectionRefusedError(61, "Connection refused"), "reached"),
         ],
     )
     def test_says_what_the_provider_answered(

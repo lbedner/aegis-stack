@@ -46,6 +46,7 @@ class QKeys:
     DATABASE_ENGINE = "database_engine"
     POSTGRES_PROVIDER = "postgres_provider"
     INFERENCE_PLACEMENT = "inference_placement"
+    INFERENCE_SPEECH = "inference_speech"
     AUTH_LEVEL = "auth_level"
     AI_FRAMEWORK = "ai_framework"
     AI_STORAGE = "ai_storage"
@@ -59,6 +60,7 @@ class QKeys:
         DATABASE_ENGINE,
         POSTGRES_PROVIDER,
         INFERENCE_PLACEMENT,
+        INFERENCE_SPEECH,
         AUTH_LEVEL,
         AI_FRAMEWORK,
         AI_STORAGE,

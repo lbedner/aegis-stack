@@ -16,6 +16,9 @@ from app.components.backend.api import worker
 {%- if scheduler_backend != "memory" %}
 from app.components.backend.api import scheduler
 {%- endif %}
+{%- if include_inference %}
+from app.components.backend.api import inference
+{%- endif %}
 {%- if include_auth %}
 from app.components.backend.api.auth.router import router as auth_router
 {%- endif %}
@@ -135,6 +138,9 @@ def include_routers(app: FastAPI) -> None:
     {%- endif %}
     {%- if scheduler_backend != "memory" %}
     app.include_router(scheduler.router, prefix="/api/v1")
+    {%- endif %}
+    {%- if include_inference %}
+    app.include_router(inference.router, prefix="/api/v1")
     {%- endif %}
     {%- if include_auth %}
     app.include_router(auth_router, prefix="/api/v1")

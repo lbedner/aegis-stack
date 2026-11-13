@@ -100,6 +100,12 @@ services:
       # container still listens on 11434 for in-network clients.
       - "127.0.0.1:${OLLAMA_HOST_PORT:-11434}:11434"
 {%- endif %}
+{%- if ollama_mode == "docker" and inference_speech == "kokoro_fastapi" %}
+
+  kokoro-fastapi:
+    ports:
+      - "127.0.0.1:${SPEECH_HOST_PORT:-8880}:8880"
+{%- endif %}
 {%- if include_ingress %}
 
   traefik:

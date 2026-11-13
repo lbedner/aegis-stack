@@ -28,3 +28,21 @@ def test_speak_names_the_file_by_what_came_back(
 
     assert result.exit_code == 0, result.output
     assert (tmp_path / "speech.wav").read_bytes() == b"RIFF"
+
+
+def test_tts_status_says_its_providers_voices_and_what_it_lacks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.core.config import settings
+
+    served = settings.model_copy(
+        update={"TTS_PROVIDER": "local_server", "SPEECH_BASE_URL": None}
+    )
+    monkeypatch.setattr(speech, "speaking_settings", AsyncMock(return_value=served))
+
+    result = invoke(["ai", "tts-status"])
+
+    assert result.exit_code == 0, result.output
+    assert "bm_george" in result.output  # one of its voices, not the one in use
+    assert "shimmer" not in result.output
+    assert "SPEECH_BASE_URL missing" in result.output

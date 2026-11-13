@@ -341,11 +341,11 @@ PARTS: dict[str, Part] = {
         category=Category.AI,
         cli="inference",
         marker="app/components/inference/ollama.py",
-        containers=("ollama",),
+        containers=("ollama", "kokoro-fastapi"),
         tier=2,
         page="inference",
         order=110,
-        description="Local AI models via Ollama",
+        description="Local AI models via Ollama, speech via Kokoro",
         options=(
             Option(
                 name="engine",
@@ -368,6 +368,20 @@ PARTS: dict[str, Part] = {
                     (
                         "docker",
                         "Run Ollama as a container in the project's compose stack.",
+                    ),
+                ),
+            ),
+            Option(
+                name="speech",
+                mode="single",
+                choices=("none", "kokoro_fastapi"),
+                default="none",
+                answer="inference_speech",
+                about=(
+                    ("none", "No speech server. The default."),
+                    (
+                        "kokoro_fastapi",
+                        "Text to speech for ai[voice], where Ollama runs.",
                     ),
                 ),
             ),

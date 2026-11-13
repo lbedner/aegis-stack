@@ -1,0 +1,21 @@
+{# Speech's live part (overseer_inference.speech_view): what the server
+   reports of itself, where the app reaches it, the flags it was started
+   without, and its model unloaded or reloaded by the inference API. #}
+{% from "components/macros/layout.html" import card, stats_strip, facts %}
+{% from "components/macros/form.html" import action %}
+{% from "components/macros/feedback.html" import error_banner %}
+<div class="space-y-4">
+  {{ stats_strip(figures, id="speech-figures") }}
+  {{ error_banner(errors) }}
+  {% if left_off %}<p data-speech-closed class="text-xs text-aegis-muted">{{ left_off }}</p>{% endif %}
+  {% call card("Server") %}
+    {{ facts(server) }}
+    {% if actions %}
+    <div class="mt-3 flex gap-2">
+      {%- for key, label, url in actions %}
+      {{ action(label, 'data-write data-speech-action="' ~ key ~ '" hx-post="' ~ url ~ '" hx-swap="none"') }}
+      {%- endfor %}
+    </div>
+    {% endif %}
+  {% endcall %}
+</div>

@@ -28,7 +28,7 @@ from app.services.ai.domains.voice import profiles  # noqa: E402
 from app.services.ai.models.voice import VoiceProfile  # noqa: E402
 from tests._voice_catalog import keep_voice_settings, only_profile  # noqa: E402
 from tests._voice_packages import packages_installed  # noqa: E402
-from tests.web.dom import one, select, text, triggers  # noqa: E402
+from tests.web.dom import one, row_text, select, text, triggers  # noqa: E402
 from tests.web.overseer import AI, on_session, sign_in, status_with  # noqa: E402
 
 PAGE = "/overseer/services/ai"
@@ -104,6 +104,29 @@ async def test_every_model_and_voice_is_a_row_the_filters_narrow(
     assert "gemini-3.8-flash-tts" in kore.get("data-facet-model").split()
     _row(html, "tts", "gemini-3.8-flash-lite-tts")
     _row(html, "stt", "whisper-1")
+
+
+async def test_the_speech_servers_rows_lead_to_its_own_page(
+    client: TestClient, hers: VoiceProfile, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Where the inference component tracks the speech server, Inference >
+    Speech shows it whole: its rows lead there."""
+    pytest.importorskip("app.components.inference.sampler", reason="no inference")
+    from app.services.ai.domains.voice import library
+    from app.services.ai.domains.voice.tts import server
+
+    url = "http://localhost:8880/v1"
+    monkeypatch.setattr(settings, "SPEECH_BASE_URL", url)
+    monkeypatch.setattr(library, "TRIED", {"gemini", server.PREFIX + url})
+
+    html = _voice(client)
+
+    served = select(html, f'{ROWS}[data-facet-provider="{server.PROVIDER_ID}"]')
+    assert served
+    for row in served:
+        link = one(row, "a[data-speech-page]")
+        assert link.get("href") == overseer_ai_voice.SPEECH_PAGE
+    assert not select(_row(html, "voice", "Kore"), "a[data-speech-page]")
 
 
 async def test_each_voice_plays_on_a_model_that_speaks_it(
@@ -217,7 +240,7 @@ async def test_the_voice_step_opens_on_the_profiles_voice(
         == "alloy"
     )
     assert one(html, "[aria-current=step]").get("value") == "voice"
-    assert "GOOGLE_API_KEY" in text(one(html, "[data-voice-locked]"))
+    assert "GOOGLE_API_KEY" in row_text(html, "[data-voice-locked]", "Gemini")
     assert not html.count('data-voice-card="Kore"')
 
 

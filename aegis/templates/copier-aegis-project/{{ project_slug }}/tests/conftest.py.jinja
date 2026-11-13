@@ -237,6 +237,18 @@ def _no_background_sampling(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(series, "get_store", lambda: history)
 
 
+{% if (include_ai and ai_voice) or ollama_mode != "none" -%}
+@pytest.fixture(autouse=True)
+def _no_speech_server(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No speech server (SPEECH_BASE_URL, which inference[kokoro_fastapi]
+    or ``.env`` sets): one reached from a test would be the dev stack's. A
+    test that needs one sets its own address."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "SPEECH_BASE_URL", None)
+
+
+{% endif -%}
 @pytest.fixture(autouse=True)
 def _no_load_cost_measuring(monkeypatch: pytest.MonkeyPatch) -> None:
     """A page asking what each part costs to load (``load_cost``) starts

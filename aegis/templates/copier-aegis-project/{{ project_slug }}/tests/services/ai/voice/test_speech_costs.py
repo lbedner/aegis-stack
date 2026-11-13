@@ -8,8 +8,6 @@ model calls and live calls.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -22,6 +20,7 @@ from app.services.ai.domains.voice.tts import TTSService
 from app.services.ai.models.llm import LLMUsage
 from tests._session import opens
 from tests._voice_catalog import seed_voice_catalog
+from tests._voice_settings import voice_settings
 
 
 @pytest.fixture
@@ -60,26 +59,12 @@ class TestRates:
         assert await usage_recording.speech_cost("gpt-transcribe") == 0.0
 
 
-def _settings(**values: object) -> MagicMock:
-    settings = MagicMock()
-    for key, value in values.items():
-        setattr(settings, key, value)
-    return settings
-
-
 class TestHearing:
     @pytest.mark.asyncio
     async def test_a_transcription_is_priced_and_in_the_ledger(
         self, ledger: AsyncSession
     ) -> None:
-        stt = STTService(
-            _settings(
-                STT_PROVIDER="openai_whisper",
-                STT_MODEL="gpt-transcribe",
-                STT_LANGUAGE=None,
-                STT_DEVICE=None,
-            )
-        )
+        stt = STTService(voice_settings(STT_MODEL="gpt-transcribe"))
         await stt._record_usage(
             input_duration_seconds=30,
             latency_ms=900,
@@ -120,15 +105,7 @@ class TestSpeaking:
     async def test_a_spoken_reply_is_priced_by_its_characters(
         self, ledger: AsyncSession
     ) -> None:
-        tts = TTSService(
-            _settings(
-                TTS_PROVIDER="openai",
-                TTS_MODEL="tts-1",
-                TTS_VOICE="marin",
-                TTS_SPEED=1.0,
-                TTS_INSTRUCTIONS=None,
-            )
-        )
+        tts = TTSService(voice_settings(TTS_MODEL="tts-1", TTS_VOICE="marin"))
         await tts._record_usage(
             input_characters=2_000,
             output_duration_seconds=None,
@@ -147,13 +124,7 @@ class TestRealtimeSpeechInTheLedger:
     @pytest.mark.asyncio
     async def test_a_realtime_line_keeps_its_tokens(self, ledger: AsyncSession) -> None:
         tts = TTSService(
-            _settings(
-                TTS_PROVIDER="openai",
-                TTS_MODEL="gpt-realtime-2.1-mini",
-                TTS_VOICE="marin",
-                TTS_SPEED=1.0,
-                TTS_INSTRUCTIONS=None,
-            )
+            voice_settings(TTS_MODEL="gpt-realtime-2.1-mini", TTS_VOICE="marin")
         )
         await tts._record_usage(
             input_characters=12,

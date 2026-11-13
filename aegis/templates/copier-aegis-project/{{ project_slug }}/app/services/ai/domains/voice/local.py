@@ -8,6 +8,8 @@ from functools import cache
 import threading
 from typing import Any
 
+from app.core import speech_server
+
 from .models import (
     DEFAULT_STT_MODELS,
     DEFAULT_TTS_MODELS,
@@ -72,28 +74,40 @@ STT_MODELS = [
     )
 ]
 
-# Kokoro v1.0's English voices. The prefix is the accent (a: American, b:
-# British) and the gender (f, m); Kokoro names no tone. Each is named by
-# its id: half share a name with an OpenAI or Gemini voice (af_alloy,
-# af_kore), and a second "Alloy" would read as the same one.
-_ACCENTS = {"a": "General American", "b": "British"}
-_GENDERS = {"f": "female", "m": "male"}
-_KOKORO_VOICES = (
-    "af_heart af_alloy af_aoede af_bella af_jessica af_kore af_nicole af_nova "
-    "af_river af_sarah af_sky am_adam am_echo am_eric am_fenrir am_liam "
-    "am_michael am_onyx am_puck am_santa bf_alice bf_emma bf_isabella bf_lily "
-    "bm_daniel bm_fable bm_george bm_lewis"
-).split()
+# Kokoro v1.0's English voices, the ones the app speaks in-process. The
+# prefix is the language or accent and the gender (``speech_server.traits``);
+# Kokoro names no tone. Each is named by its id: half share a name with an
+# OpenAI or Gemini voice (af_alloy, af_kore), and a second "Alloy" would read
+# as the same one.
+KOKORO_VOICES = tuple(
+    (
+        "af_heart af_alloy af_aoede af_bella af_jessica af_kore af_nicole af_nova "
+        "af_river af_sarah af_sky am_adam am_echo am_eric am_fenrir am_liam "
+        "am_michael am_onyx am_puck am_santa bf_alice bf_emma bf_isabella bf_lily "
+        "bm_daniel bm_fable bm_george bm_lewis"
+    ).split()
+)
+
+
+def kokoro_voice(
+    name: str, provider: str, models: list[str], id: str = ""
+) -> VoiceInfo:
+    """One of Kokoro's voices as the catalog lists it, its accent and gender
+    read off its name (``bf_``: British, female); a name past that (a mix a
+    server saved) is listed as it is."""
+    accent, gender = speech_server.traits(name) or (None, None)
+    return VoiceInfo(
+        id=id or name,
+        name=name,
+        provider_id=provider,
+        model_ids=models,
+        description=f"Kokoro, {accent} {gender}" if accent else "Kokoro",
+        gender=gender,
+        accent=accent,
+    )
+
 
 VOICES = [
-    VoiceInfo(
-        id=voice,
-        name=voice,
-        provider_id=TTSProvider.KOKORO.value,
-        model_ids=[m.id for m in TTS_MODELS],
-        description=f"Kokoro, {_ACCENTS[voice[0]]} {_GENDERS[voice[1]]}",
-        gender=_GENDERS[voice[1]],
-        accent=_ACCENTS[voice[0]],
-    )
-    for voice in _KOKORO_VOICES
+    kokoro_voice(voice, TTSProvider.KOKORO.value, [m.id for m in TTS_MODELS])
+    for voice in KOKORO_VOICES
 ]

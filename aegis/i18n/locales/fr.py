@@ -75,7 +75,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "Base de données avec ORM SQLModel (SQLite ou PostgreSQL)",
     "component.ingress": "Reverse proxy et répartiteur de charge Traefik",
     "component.observability": "Observabilité, traçage et métriques Logfire",
-    "component.inference": "Local model serving (Ollama)",
+    "component.inference": "Local AI models via Ollama, speech via Kokoro",
     "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.deploy": "Cible de déploiement (Docker Compose), lue par l'Overseer",
     "component.mcp": "MCP server: an outside assistant reads the app's tools",
@@ -219,6 +219,7 @@ MESSAGES: dict[str, str] = {
     "interactive.ai_ollama_docker_hint": (
         "Note : le premier démarrage peut prendre du temps pour télécharger les modèles"
     ),
+    "interactive.inference_speech": "Run a speech server (Kokoro-FastAPI) beside it, for ai[voice]?",
     "interactive.ai_rag_label": "RAG (Retrieval-Augmented Generation) :",
     "interactive.ai_rag_prompt": (
         "Activer RAG pour l'indexation de documents et la recherche sémantique ?"
@@ -1193,6 +1194,7 @@ MESSAGES: dict[str, str] = {
     "guided.sidebar.components": "COMPOSANTS",
     "guided.sidebar.services": "SERVICES",
     "guided.prompt.inference_placement": "Where does Ollama run?",
+    "guided.prompt.inference_speech": "Run a speech server beside it?",
     "guided.prompt.worker_backend": "Choisissez un backend de worker",
     "guided.prompt.scheduler_backend": "Persistance du planificateur : conserver l'historique des tâches après redémarrage ?",
     "guided.prompt.database_engine": "Moteur de base de données pour {context}",
@@ -1281,6 +1283,8 @@ MESSAGES: dict[str, str] = {
     "guided.choice.scheduler.postgres": "Conserve l'historique des tâches, niveau production.",
     "guided.choice.inference.docker": "Run Ollama as a container in the project's compose stack.",
     "guided.choice.inference.host": "Use the Ollama already running on this machine. The default.",
+    "guided.choice.inference_speech.none": "No speech server. The default.",
+    "guided.choice.inference_speech.kokoro_fastapi": "Text to speech for ai[voice], where Ollama runs.",
     "guided.choice.worker.arq": "Worker asynchrone simple et bien testé, avec une configuration minimale. Idéal pour les tâches liées aux E/S. Le choix par défaut.",
     "guided.choice.worker.dramatiq": "Modèle d'acteurs multi-processus. Idéal pour les tâches gourmandes en CPU qui profitent de plusieurs processus système.",
     "guided.choice.worker.taskiq": "Asynchrone par nature, avec des brokers par file et un transport Redis Streams avec accusés de réception.",

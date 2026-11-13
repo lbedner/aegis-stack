@@ -7,7 +7,8 @@ from ``.env`` like every other setting.
 from typing import Any, Literal
 
 from pydantic import Field
-from pydantic_settings import BaseSettings
+
+from app.core.speech_settings import SpeechServerSettings
 
 # The speech speed the TTS API accepts, and the longest quiet before a
 # live call checks in: every model, form and profile bounds by these.
@@ -21,7 +22,7 @@ Reply = Literal["live", "answer"]
 WorkingSound = Literal["typing", "none"]
 
 
-class VoiceSettings(BaseSettings):
+class VoiceSettings(SpeechServerSettings):
     # Speech-to-Text (STT) Configuration
     # Provider: an STTProvider value (app/services/ai/domains/voice/models.py)
     STT_PROVIDER: str = "openai_whisper"  # Default to OpenAI Whisper API
@@ -44,6 +45,10 @@ class VoiceSettings(BaseSettings):
     # How it is said - tone, emotion, pacing - sent as ``instructions``
     # (gpt-4o models only). OpenAI's documented way to steer delivery.
     TTS_INSTRUCTIONS: str | None = None
+
+    # Which speech server is at SPEECH_BASE_URL (``SpeechServerSettings``)
+    # says what it is asked (``tts/server.py`` SERVERS).
+    SPEECH_SERVER: Literal["kokoro_fastapi"] = "kokoro_fastapi"
 
     # How a spoken turn's reply is heard. "live": each sentence as it
     # streams, narration included, as soon as it is complete. "answer": the

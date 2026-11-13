@@ -8,11 +8,13 @@ register_health_check machinery.
 {% if ollama_mode != "none" %}
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 from app.core.constants import ComponentName
 from app.core.log import logger
 
+from .health_speech import check_speech_health
 from .models import ComponentStatus, ComponentStatusType
 
 if TYPE_CHECKING:
@@ -20,12 +22,16 @@ if TYPE_CHECKING:
 
 
 async def check_ollama_health() -> ComponentStatus:
-    """
-    Check Ollama server health and running models.
+    """Ollama's health and running models, with the speech server the
+    component tracks as a sub-component, read beside it: one of the two
+    failing leaves the other's reading."""
+    status, speech = await asyncio.gather(_ollama_health(), check_speech_health())
+    if speech is not None:
+        status.sub_components[speech.name] = speech
+    return status
 
-    Returns:
-        ComponentStatus indicating Ollama infrastructure health with model info
-    """
+
+async def _ollama_health() -> ComponentStatus:
     try:
         from app.components.inference import get_inference_engine
 

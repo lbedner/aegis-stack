@@ -181,6 +181,7 @@ class ScriptedUI:
         database_engine: str = "sqlite",
         postgres_provider: str = "container",
         inference_placement: str = "host",
+        inference_speech: str = "none",
         auth_level: str = "basic",
         ai_config: tuple[str, str, list[str], bool, bool] = (
             "memory",
@@ -196,6 +197,7 @@ class ScriptedUI:
         self._database_engine = database_engine
         self._postgres_provider = postgres_provider
         self._inference_placement = inference_placement
+        self._inference_speech = inference_speech
         self._auth_level = auth_level
         self._ai_config = ai_config
         self.transcript: list[str] = []
@@ -222,6 +224,10 @@ class ScriptedUI:
     def choose_inference_placement(self) -> str:
         self.transcript.append("[inference placement]")
         return self._inference_placement
+
+    def choose_inference_speech(self) -> str:
+        self.transcript.append("[inference speech]")
+        return self._inference_speech
 
     def choose_scheduler_backend(self) -> str:
         self.transcript.append("[scheduler backend]")
@@ -404,6 +410,22 @@ class TestInferenceStep:
         )
         state = run_project_selection(ui)
         assert state.components == ["inference[docker]"]
+
+    def test_a_speech_server_joins_the_bracket(self) -> None:
+        """Asked after where Ollama runs; none, the default, adds nothing."""
+        from aegis.cli.interactive import run_project_selection
+
+        for placement, expected in (
+            ("host", "inference[kokoro_fastapi]"),
+            ("docker", "inference[docker,kokoro_fastapi]"),
+        ):
+            ui = ScriptedUI(
+                confirms=self._accept_only_inference(),
+                inference_placement=placement,
+                inference_speech="kokoro_fastapi",
+            )
+            assert run_project_selection(ui).components == [expected]
+            assert "[inference speech]" in ui.transcript
 
     def test_the_ollama_provider_reuses_the_placement(self) -> None:
         """Chosen at the inference step, the AI's Ollama question is not asked

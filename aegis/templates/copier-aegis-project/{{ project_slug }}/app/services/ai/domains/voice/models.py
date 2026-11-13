@@ -31,6 +31,7 @@ class TTSProvider(str, Enum):
     OPENAI = "openai"  # OpenAI TTS API
     GEMINI = "gemini"  # Gemini's speech models, the voices Gemini Live speaks
     KOKORO = "kokoro"  # Kokoro in the app (kokoro-onnx)
+    LOCAL_SERVER = "local_server"  # a speech server you run (tts/server.py)
 
 
 class OpenAIVoice(str, Enum):
@@ -67,11 +68,15 @@ DEFAULT_TTS_MODELS: dict[TTSProvider, str] = {
     TTSProvider.OPENAI: DEFAULT_TTS_MODEL,
     TTSProvider.GEMINI: "gemini-3.8-flash-tts",
     TTSProvider.KOKORO: "kokoro-v1.0",
+    # Kokoro-FastAPI's (the one server SPEECH_SERVER names so far).
+    TTSProvider.LOCAL_SERVER: "kokoro",
 }
 DEFAULT_TTS_VOICES: dict[TTSProvider, str] = {
     TTSProvider.OPENAI: DEFAULT_TTS_VOICE,
     TTSProvider.GEMINI: "Kore",
     TTSProvider.KOKORO: "af_heart",  # Kokoro's own pick
+    # tts/server.py's id for Kokoro's af_heart: its ids name their provider.
+    TTSProvider.LOCAL_SERVER: f"{TTSProvider.LOCAL_SERVER.value}:af_heart",
 }
 DEFAULT_STT_MODEL = "whisper-1"
 # Each provider's model when none is named.
@@ -130,9 +135,16 @@ def not_installed(provider: str) -> str | None:
     return f"{name} is not installed: {install}" if install else None
 
 
-class NotInstalledError(RuntimeError):
-    """A provider factory's refusal (``not_installed``): words of the app's
-    own, so safe to show where a provider's text is not."""
+def unserved(provider: str, url: str | None) -> str | None:
+    """Why a provider reached over the network cannot run: its server's
+    address (SPEECH_BASE_URL, ``url``) is not set."""
+    served = provider == TTSProvider.LOCAL_SERVER
+    return "SPEECH_BASE_URL missing" if served and not url else None
+
+
+class CannotRunError(RuntimeError):
+    """A provider factory's refusal (``not_installed``, ``unserved``): words
+    of the app's own, so safe to show where a provider's text is not."""
 
 
 class AudioFormat(str, Enum):
@@ -171,6 +183,9 @@ TTS_FORMATS: dict[TTSProvider, AudioFormat] = {
     TTSProvider.OPENAI: AudioFormat.MP3,
     TTSProvider.GEMINI: AudioFormat.WAV,
     TTSProvider.KOKORO: AudioFormat.WAV,
+    # Asked of every speech server: each one known speaks it, so none needs
+    # a transcode.
+    TTSProvider.LOCAL_SERVER: AudioFormat.WAV,
 }
 
 

@@ -477,6 +477,29 @@ services:
       - dev
       - prod
 {%- endif %}
+{%- if ollama_mode == "docker" and inference_speech == "kokoro_fastapi" %}
+
+  kokoro-fastapi:
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
+    hostname: kokoro-fastapi
+    environment:
+      ALLOW_DEV_UNLOAD: "true"
+      ENABLE_DEBUG_ENDPOINTS: "true"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8880/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    profiles:
+      - dev
+      - prod
+{%- endif %}
 
 {%- if include_ingress %}
   # TRAEFIK REVERSE PROXY

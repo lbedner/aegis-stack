@@ -13,7 +13,7 @@ from pydantic_settings import SettingsConfigDict
 from app.core.configurable import Configurable, asgi_engines, event_loops, timezones
 from app.core.constants import DEV_ENVS, AppEnv, ComponentName{% if include_worker %}, QueueName{% endif %}
 from app.core.settings_base import SettingsBase
-{% if include_ai and ai_voice %}from app.core.voice_settings import VoiceSettings{% endif %}
+{% set speech = ("voice_settings", "VoiceSettings") if include_ai and ai_voice else ("speech_settings", "SpeechServerSettings") if ollama_mode != "none" else none %}{% if speech %}from app.core.{{ speech[0] }} import {{ speech[1] }}{% endif %}
 {% if include_browser %}from app.components.browser.settings import BrowserSettings{% endif %}
 {% if include_meetings %}from app.services.meetings.settings import MeetingsSettings{% endif %}
 {% if include_worker %}from app.core.queue_workers import DEFAULT_QUEUES, QueueWorker{% endif %}
@@ -38,8 +38,8 @@ class Settings(
     {{ s.symbol }},
 {%- endfor %}
 {%- endfor %}
-{%- if include_ai and ai_voice %}
-    VoiceSettings,
+{%- if speech %}
+    {{ speech[1] }},
 {%- endif %}{%- if include_browser %}
     BrowserSettings,{%- endif %}{%- if include_meetings %}
     MeetingsSettings,{%- endif %}

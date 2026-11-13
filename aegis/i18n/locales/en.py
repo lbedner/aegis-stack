@@ -77,7 +77,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "Postgres (self-hosted or Neon serverless) or SQLite + SQLModel ORM",
     "component.ingress": "Traefik v3 reverse proxy with TLS",
     "component.observability": "Pydantic Logfire tracing + metrics + logging",
-    "component.inference": "Local AI models via Ollama",
+    "component.inference": "Local AI models via Ollama, speech via Kokoro",
     "component.secrets": "Encrypted credential store: keys set while the app runs, checked with the provider on paste, never shown again",
     "component.deploy": "Deployment target (Docker Compose), read by the Overseer",
     "component.mcp": "Serves the app's own tools to Claude Desktop, Claude Code or a local model over MCP: the tools you grant, never a write",
@@ -224,6 +224,7 @@ MESSAGES: dict[str, str] = {
     "interactive.ai_ollama_docker_hint": (
         "Note: First startup may take time to download models"
     ),
+    "interactive.inference_speech": "Run a speech server (Kokoro-FastAPI) beside it, for ai[voice]?",
     "interactive.ai_rag_label": "RAG (Retrieval-Augmented Generation):",
     "interactive.ai_rag_prompt": (
         "Enable RAG for document indexing and semantic search?"
@@ -1293,6 +1294,7 @@ MESSAGES: dict[str, str] = {
     "guided.sidebar.components": "COMPONENTS",
     "guided.sidebar.services": "SERVICES",
     "guided.prompt.inference_placement": "Where does Ollama run?",
+    "guided.prompt.inference_speech": "Run a speech server beside it?",
     "guided.prompt.worker_backend": "Pick a worker backend",
     "guided.prompt.scheduler_backend": "Scheduler persistence: keep job history across restarts?",
     "guided.prompt.database_engine": "Database engine for {context}",
@@ -1360,7 +1362,7 @@ MESSAGES: dict[str, str] = {
     "component.redis.long": "In-memory data store used as a cache and message broker. Powers background job queues and pub/sub messaging between your services, and gives request handlers a fast shared cache.",
     "component.ingress.long": "Reverse proxy and traffic routing with Traefik: automatic service discovery, admin endpoint protection, and optional TLS via Let's Encrypt. The front door for deployments.",
     "component.observability.long": "Distributed tracing, metrics, and log correlation with Pydantic Logfire. Auto-instruments your application and adapts to whichever components you enable, so you can see what production is actually doing.",
-    "component.inference.long": "Serves open-weight models from your own machine. Ollama runs on the host by default, where it already lives, and the app reaches it over host.docker.internal; pick docker to ship it as a container instead. The AI service's ollama provider pulls it in, and it stands alone for a model server with no AI service.",
+    "component.inference.long": "Serves open-weight models from your own machine. Ollama runs on the host by default, where it already lives, and the app reaches it over host.docker.internal; pick docker to ship it as a container instead. The AI service's ollama provider pulls it in, and it stands alone for a model server with no AI service. A speech server (Kokoro-FastAPI) can run beside it, for ai[voice] to speak through.",
     "component.secrets.long": "Makes credentials writable without a restart: keys are stored encrypted in the database, read live by the webserver, worker and scheduler, and never shown again after saving (only their last four characters). A key set in .env still wins. Swap the backend later (Vault, a cloud secrets manager) without touching the code that reads keys.",
     "component.deploy.long": "Where the app runs, as a component: Docker Compose on a host today. Adds a socket proxy, the only container that touches the Docker socket, answering read-only queries (containers, stats, logs, disk) so the Overseer can show what is running without the webserver ever holding the socket.",
     "component.mcp.long": "Serves the app's own registered tools to an outside assistant (Claude Desktop, Claude Code, a local model) over MCP, through FastMCP. A client sees only the tools granted in MCP_TOOLS, and never a write; every call is recorded with the client that made it.",
@@ -1381,6 +1383,8 @@ MESSAGES: dict[str, str] = {
     "guided.choice.scheduler.postgres": "Persist job history, production-grade.",
     "guided.choice.inference.docker": "Run Ollama as a container in the project's compose stack.",
     "guided.choice.inference.host": "Use the Ollama already running on this machine. The default.",
+    "guided.choice.inference_speech.none": "No speech server. The default.",
+    "guided.choice.inference_speech.kokoro_fastapi": "Text to speech for ai[voice], where Ollama runs.",
     "guided.choice.worker.arq": "Simple, well-tested async worker with minimal configuration. Best for I/O-bound tasks. The default.",
     "guided.choice.worker.dramatiq": "Multi-process actor model. Best for CPU-bound tasks that benefit from multiple OS processes.",
     "guided.choice.worker.taskiq": "Async-native with per-queue brokers and Redis Streams transport with acknowledgements.",

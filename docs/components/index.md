@@ -31,7 +31,7 @@ For complete workflows with real-world examples, see **[Evolving Your Stack →]
 | **[Browser](https://docs.aegis-stack.io/components/browser/)** | Remote Chromium in its own container, driven over Playwright: JavaScript pages, sign-ins, a bot that joins a meeting | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Database](https://docs.aegis-stack.io/components/database/)** | Postgres (self-hosted or Neon serverless) or SQLite + SQLModel ORM | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Deploy](https://docs.aegis-stack.io/components/deploy/)** | Deployment target (Docker Compose), read by the Overseer | ![Optional](https://img.shields.io/badge/-optional-blue) |
-| **[Inference](https://docs.aegis-stack.io/components/inference/)** | Local AI models via Ollama | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Inference](https://docs.aegis-stack.io/components/inference/)** | Local AI models via Ollama, speech via Kokoro | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Ingress](https://docs.aegis-stack.io/components/ingress/)** | Traefik v3 reverse proxy with TLS | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[MCP](https://docs.aegis-stack.io/components/mcp/)** | Serves the app's own tools to Claude Desktop, Claude Code or a local model over MCP: the tools you grant, never a write | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Observability](https://docs.aegis-stack.io/components/observability/)** | Pydantic Logfire tracing + metrics + logging | ![Optional](https://img.shields.io/badge/-optional-blue) |

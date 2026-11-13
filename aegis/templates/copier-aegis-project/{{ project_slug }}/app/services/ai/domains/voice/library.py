@@ -10,6 +10,7 @@ so far.
 """
 
 import asyncio
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 from app.core.concurrency import background
@@ -73,12 +74,29 @@ async def fill(key: str) -> None:
         logger.exception("Gemini's voice library could not be read")
 
 
+def _looping() -> bool:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:  # no loop: a sync caller
+        return False
+    return True
+
+
+def load_once(name: str, load: Callable[[], Coroutine[object, object, None]]) -> None:
+    """``load`` started in the background the first time ``name`` is asked
+    for in this process (one that could not be read is not asked again,
+    unless its load forgets it in ``TRIED``); none waits on it. Outside a
+    running loop (a sync caller) nothing starts: the next ask in one does."""
+    if name in TRIED or not _looping():
+        return
+    TRIED.add(name)
+    task = background(load())
+    LOADING.add(task)
+    task.add_done_callback(LOADING.discard)
+
+
 async def gemini_library(key: str) -> list[VoiceInfo]:
     """The library's voices in so far; the first ask (per process) starts
-    the load, and none waits on it."""
-    if "gemini" not in TRIED:
-        TRIED.add("gemini")
-        task = background(fill(key))
-        LOADING.add(task)
-        task.add_done_callback(LOADING.discard)
+    the load (``load_once``)."""
+    load_once("gemini", lambda: fill(key))
     return list(KEPT.values())

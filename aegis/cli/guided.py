@@ -53,6 +53,7 @@ from ..blueprints.spec import ACCEPT_PREFIX, QKeys, pick_index, pick_multi
 from ..constants import (
     AIProviders,
     InferencePlacement,
+    InferenceSpeech,
     PostgresProviders,
     StorageBackends,
     WorkerBackends,
@@ -489,6 +490,31 @@ class GuidedSelectionUI(BlueprintScreens):
         ].value
         set_ollama_mode_selection("ai", placement)
         return placement
+
+    def choose_inference_speech(self) -> str:
+        choices = [
+            _Choice(
+                InferenceSpeech.NONE,
+                "None",
+                _g("choice.inference_speech.none", "No speech server. The default."),
+            ),
+            _Choice(
+                InferenceSpeech.KOKORO_FASTAPI,
+                "Kokoro-FastAPI",
+                _g(
+                    "choice.inference_speech.kokoro_fastapi",
+                    "Text to speech for ai[voice], where Ollama runs.",
+                ),
+            ),
+        ]
+        return choices[
+            self._select(
+                _g("prompt.inference_speech", "Run a speech server beside it?"),
+                choices,
+                crumb="amend",
+                qkey=QKeys.INFERENCE_SPEECH,
+            )
+        ].value
 
     def choose_database_engine(self, context: str) -> tuple[str, str | None]:
         choices = [

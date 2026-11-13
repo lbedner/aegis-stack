@@ -8,6 +8,8 @@ service's ``ollama`` provider pulls it in; ``ollama_mode`` survives only as a
 value aegis derives from the component, never asked.
 """
 
+from typing import Any
+
 from aegis.constants import AnswerKeys, ComponentNames
 from aegis.core.components import COMPONENTS, ComponentType
 from aegis.core.option_spec import compute_auto_requires, parse_options
@@ -18,19 +20,95 @@ from aegis.core.template_generator import TemplateGenerator
 def test_inference_is_an_infrastructure_component() -> None:
     spec = COMPONENTS[ComponentNames.INFERENCE]
     assert spec.type is ComponentType.INFRASTRUCTURE
-    assert spec.docker_services == ["ollama"]
+    assert spec.docker_services == ["ollama", "kokoro-fastapi"]
     assert spec.marker_path == "app/components/inference/ollama.py"
     assert "app/components/inference" in spec.files.primary
 
 
-def test_the_engine_and_placement_parse_from_brackets() -> None:
+def test_the_engine_placement_and_speech_server_parse_from_brackets() -> None:
     spec = COMPONENTS[ComponentNames.INFERENCE]
-    assert parse_options("inference", spec) == {"engine": "ollama", "placement": "host"}
+    assert parse_options("inference", spec) == {
+        "engine": "ollama",
+        "placement": "host",
+        "speech": "none",
+    }
     assert parse_options("inference[docker]", spec)["placement"] == "docker"
-    assert parse_options("inference[ollama,docker]", spec) == {
+    assert parse_options("inference[ollama,docker,kokoro_fastapi]", spec) == {
         "engine": "ollama",
         "placement": "docker",
+        "speech": "kokoro_fastapi",
     }
+
+
+def test_a_speech_server_in_docker_is_a_container_of_its_own() -> None:
+    """It follows the component's placement: a compose service on docker,
+    the machine's own on the host."""
+
+    def context(component: str) -> dict[str, Any]:
+        return TemplateGenerator("demo", [component]).get_template_context()
+
+    found = context("inference[docker,kokoro_fastapi]")
+    assert found[AnswerKeys.INFERENCE_SPEECH] == "kokoro_fastapi"
+    assert "kokoro-fastapi" in found["docker_services"]
+    for elsewhere in ("inference[kokoro_fastapi]", "inference[docker]"):
+        assert "kokoro-fastapi" not in context(elsewhere)["docker_services"]
+
+
+def test_the_speech_server_says_where_the_app_reaches_it() -> None:
+    def address(**answers: object) -> str:
+        found = _render("app/core/speech_settings.py.jinja", **answers)
+        return next(line for line in found.splitlines() if "SPEECH_BASE_URL:" in line)
+
+    # Settings carry it with the component, with or without ai[voice].
+    config = _render(
+        "app/core/config.py.jinja",
+        include_ai=False,
+        ai_voice=False,
+        include_inference=True,
+        ollama_mode="host",
+    )
+    assert "    SpeechServerSettings,\n" in config
+
+    assert address(ollama_mode="host", inference_speech="kokoro_fastapi").endswith(
+        '"http://host.docker.internal:8880/v1"'
+    )
+    assert address(ollama_mode="docker", inference_speech="kokoro_fastapi").endswith(
+        '"http://kokoro-fastapi:8880/v1"'
+    )
+    assert address(ollama_mode="host", inference_speech="none").endswith("= None")
+
+
+def test_only_a_speech_server_in_docker_ships_a_container() -> None:
+    def compose(**answers: object) -> str:
+        return _render("docker-compose.yml.jinja", include_inference=True, **answers)
+
+    assert "kokoro-fastapi:" in compose(
+        ollama_mode="docker", inference_speech="kokoro_fastapi"
+    )
+    assert "kokoro-fastapi:" not in compose(
+        ollama_mode="host", inference_speech="kokoro_fastapi"
+    )
+    assert "kokoro-fastapi:" not in compose(
+        ollama_mode="docker", inference_speech="none"
+    )
+
+
+def test_the_speech_container_reports_all_it_can() -> None:
+    """Overseer > Inference > Speech shows its model and its process only
+    where Kokoro-FastAPI was started with the flags that open them."""
+    import yaml
+
+    found = yaml.safe_load(
+        _render(
+            "docker-compose.yml.jinja",
+            include_inference=True,
+            ollama_mode="docker",
+            inference_speech="kokoro_fastapi",
+        )
+    )
+    environment = found["services"]["kokoro-fastapi"]["environment"]
+    assert environment["ALLOW_DEV_UNLOAD"] == environment["ENABLE_DEBUG_ENDPOINTS"]
+    assert environment["ALLOW_DEV_UNLOAD"] == "true"
 
 
 def test_the_ollama_provider_pulls_inference_in() -> None:
@@ -65,6 +143,7 @@ def test_adding_the_component_answers_every_axis_and_ollama_mode() -> None:
     assert component_option_answers("inference") == {
         AnswerKeys.INFERENCE_ENGINE: "ollama",
         AnswerKeys.INFERENCE_PLACEMENT: "host",
+        AnswerKeys.INFERENCE_SPEECH: "none",
         AnswerKeys.OLLAMA_MODE: "host",
     }
     assert (
@@ -77,6 +156,7 @@ def test_adding_the_component_answers_every_axis_and_ollama_mode() -> None:
 def test_removing_the_component_resets_ollama_mode() -> None:
     reset = COMPONENTS[ComponentNames.INFERENCE].reset_answers_on_remove
     assert reset[AnswerKeys.OLLAMA_MODE] == "none"
+    assert reset[AnswerKeys.INFERENCE_SPEECH] == "none"
 
 
 def test_the_template_context_carries_the_component() -> None:

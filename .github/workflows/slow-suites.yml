@@ -55,6 +55,11 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
+          # Unpruned, under its own key: the upgrade matrix installs a
+          # released aegis-stack from PyPI, and a pruned cache drops that
+          # wheel, so every night downloaded it again as an "install".
+          prune-cache: false
+          cache-suffix: slow-suites
 
       - name: Set up Python
         run: uv python install 3.11

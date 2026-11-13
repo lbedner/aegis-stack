@@ -124,9 +124,6 @@ jobs:
       name: release
       url: https://pypi.org/project/aegis-stack/
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
       - name: Download distribution artifacts
         uses: actions/download-artifact@v8
         with:

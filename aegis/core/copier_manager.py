@@ -119,6 +119,7 @@ def generate_with_copier(
     skip_llm_sync: bool = False,
     dev_mode: bool = False,
     reporter: "BuildReporter | None" = None,
+    template_path: str | None = None,
 ) -> Path:
     """
     Generate project using Copier template engine.
@@ -128,6 +129,8 @@ def generate_with_copier(
         output_dir: Directory to create the project in
         vcs_ref: Git reference (tag, branch, or commit) to generate from
         skip_llm_sync: Whether to skip LLM catalog sync after generation
+        template_path: A checkout to render from (``AEGIS_TEMPLATE_PATH``),
+            so an installed CLI does not clone the template from GitHub
 
     Returns:
         Path to the generated project
@@ -244,7 +247,7 @@ def generate_with_copier(
     # - Production (pip/uvx install): Use GitHub URL (no local git repo)
     from .copier_updater import get_template_root, resolve_version_to_ref
 
-    template_root = get_template_root()
+    template_root = get_template_root(template_path)
 
     dev_template_dir: tempfile.TemporaryDirectory[str] | None = None
 

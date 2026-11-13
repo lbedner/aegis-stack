@@ -30,7 +30,7 @@ def test_the_evals_run_once_a_model_is_named() -> None:
         "vars.AI_MODEL != '' && (github.event_name == 'push'"
         " || github.event.pull_request.head.repo.full_name == github.repository)"
     )
-    assert job["needs"] == ["test"]
+    assert "test" in job["needs"]
     assert job["runs-on"] == "${{ vars.EVALS_RUNNER || 'ubuntu-latest' }}"
     assert job["env"]["AI_MODEL"] == "${{ vars.AI_MODEL }}"
     assert job["env"]["AI_PROVIDER"] == "${{ vars.AI_PROVIDER || 'openai' }}"

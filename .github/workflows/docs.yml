@@ -3,6 +3,13 @@ name: Deploy Documentation
 on:
   push:
     branches: [ main ]
+    # Only what the site is built from; scripts/gen_docs.py reads README.md.
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'scripts/gen_docs.py'
+      - 'README.md'
+      - '.github/workflows/docs.yml'
 
 permissions:
   contents: write

@@ -1,4 +1,14 @@
-{#- Every job's checkout is followed by the same uv, Python and install. #}
+{#- GitHub counts every checkout as a clone: one job fetches the repo, and
+    the rest start from the copy it hands on. #}
+{%- macro repo() %}    - name: Get the commit
+      uses: actions/download-artifact@v8
+      with:
+        name: repo
+
+    - name: Unpack it
+      run: tar -xf repo.tar && rm repo.tar
+{% endmacro -%}
+{#- Every job's copy is followed by the same uv, Python and install. #}
 {%- macro setup() %}    - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
@@ -35,22 +45,51 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  # For CodeQL: a week with no push is still scanned.
+  schedule:
+    - cron: '0 6 * * 1'
+
+# A new push to a pull request stops the run it replaces. Main's runs never
+# cancel, so every merge is tested.
+concurrency:
+  group: ci-{% raw %}${{ github.ref }}{% endraw %}
+  cancel-in-progress: {% raw %}${{ github.event_name == 'pull_request' }}{% endraw %}
 
 jobs:
-  lint:
+  # The run's one fetch. GitHub counts every checkout as a clone, and a job
+  # each buried the repository's real clones under its own CI. No credentials
+  # are kept, so none ride along in the copy.
+  repo:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
 
+    - name: Copy the commit for the other jobs
+      run: tar -cf "$RUNNER_TEMP/repo.tar" .
+
+    - name: Hand it over
+      uses: actions/upload-artifact@v7
+      with:
+        name: repo
+        path: {% raw %}${{ runner.temp }}{% endraw %}/repo.tar
+        retention-days: 1
+
+  lint:
+    needs: repo
+    runs-on: ubuntu-latest
+    steps:
+{{ repo() }}
 {{ setup() }}
     - name: Run linting
       run: uv run ruff check .
 
   typecheck:
+    needs: repo
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
-
+{{ repo() }}
 {{ setup() }}
     - name: Run type checking
       run: uv run ty check
@@ -59,14 +98,14 @@ jobs:
   # running a worker per CPU.
   test-shard:
     name: test {% raw %}${{ matrix.shard }}{% endraw %}/2
+    needs: repo
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2]
     steps:
-    - uses: actions/checkout@v6
-
+{{ repo() }}
 {{ setup() }}
     - name: Run tests{% if include_database %} (fails on new N+1 query sites too)
       run: uv run pytest --queryspy-strict --queryspy-baseline .queryspy-baseline.json --shard {% raw %}${{ matrix.shard }}{% endraw %}/2{% else %}
@@ -81,6 +120,34 @@ jobs:
     steps:
     - name: Every shard passed
       run: test "{% raw %}${{ needs.test-shard.result }}{% endraw %}" = success
+
+  # Its name is a required check where a repository made it one.
+  codeql:
+    name: CodeQL Analysis
+    if: {% raw %}${{ !github.event.repository.private }}{% endraw %}
+    needs: repo
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+{{ repo() }}
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v4
+      with:
+        languages: python
+        # Tests assert on URLs as plain strings ("api.example.com" in a
+        # message), which CodeQL reads as URL sanitising: scan the app only.
+        config: |
+          paths-ignore:
+            - tests
+
+    - name: Autobuild
+      uses: github/codeql-action/autobuild@v4
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v4
 
   # Illiana's review of a pull request: docs/services/ai/illiana.md
   # ("Pull Request Review"). Nothing here fails a repository that has not
@@ -180,7 +247,7 @@ jobs:
 {%- set providers = ai_providers.split(",") | map("trim") | select | list %}
   evals:
     name: Evals
-    needs: [test]
+    needs: [repo, test]
     # A fork's pull request gets no secrets.
     if: vars.AI_MODEL != '' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: {% raw %}${{ vars.EVALS_RUNNER || 'ubuntu-latest' }}{% endraw %}
@@ -200,8 +267,7 @@ jobs:
       OLLAMA_BASE_URL_LOCAL: {% raw %}${{ vars.OLLAMA_BASE_URL }}{% endraw %}
 {%- endif %}
     steps:
-    - uses: actions/checkout@v6
-
+{{ repo() }}
 {{ setup() }}
     - name: Score every dataset
       run: |

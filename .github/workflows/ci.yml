@@ -14,12 +14,48 @@ env:
   # "Can't load plugin: sqlalchemy.dialects:sqlite"). Copy mode avoids it.
   UV_LINK_MODE: "copy"
 
+# A new push to a PR (a rebase, mostly) stops the run it replaces. Main's runs
+# never cancel, so every merge is tested.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  lint:
+  # GitHub counts every checkout as a clone, and nine jobs a push buried the
+  # real clones under CI's: this is the run's one fetch, and the jobs below
+  # start from a copy of it. No credentials are kept, so none ride along in
+  # the copy. Uncompressed: the tree is mostly compressed media.
+  repo:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
-    
+      with:
+        persist-credentials: false
+
+    - name: Copy the commit for the other jobs
+      run: tar -cf "$RUNNER_TEMP/repo.tar" .
+
+    - name: Hand it over
+      uses: actions/upload-artifact@v7
+      with:
+        name: repo
+        path: ${{ runner.temp }}/repo.tar
+        compression-level: 0
+        retention-days: 1
+
+  lint:
+    needs: repo
+    runs-on: ubuntu-latest
+    steps:
+    - &get-repo
+      name: Get the commit
+      uses: actions/download-artifact@v8
+      with:
+        name: repo
+    - &unpack-repo
+      name: Unpack it
+      run: tar -xf repo.tar && rm repo.tar
+
     - name: Install uv
       uses: astral-sh/setup-uv@v7
       with:
@@ -36,9 +72,11 @@ jobs:
       run: uv run ruff check .
 
   typecheck:
+    needs: repo
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7
+    - *get-repo
+    - *unpack-repo
     
     - name: Install uv
       uses: astral-sh/setup-uv@v7
@@ -59,13 +97,15 @@ jobs:
   # one 4-worker job ran ~11 minutes; each shard is about half of it.
   test-shard:
     name: test ${{ matrix.shard }}/2
+    needs: repo
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2]
     steps:
-    - uses: actions/checkout@v7
+    - *get-repo
+    - *unpack-repo
     
     - name: Install uv
       uses: astral-sh/setup-uv@v7
@@ -103,6 +143,7 @@ jobs:
   # they were split out, under this same environment.
   generation-shard:
     name: generation ${{ matrix.shard }}/4
+    needs: repo
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -110,7 +151,8 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     steps:
-    - uses: actions/checkout@v7
+    - *get-repo
+    - *unpack-repo
     
     - name: Install uv
       uses: astral-sh/setup-uv@v7
@@ -128,9 +170,11 @@ jobs:
       run: uv run pytest tests/cli/test_stack_generation.py -v --tb=short --shard ${{ matrix.shard }}/4
 
   test-uvx:
+    needs: repo
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7
+    - *get-repo
+    - *unpack-repo
     
     - name: Install uv
       uses: astral-sh/setup-uv@v7

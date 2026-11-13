@@ -8,6 +8,12 @@ on:
   schedule:
     - cron: '0 6 * * 1'  # Weekly on Monday at 6 AM UTC
 
+# A new push to a PR (a rebase, mostly) stops the run it replaces. Main's runs
+# never cancel, so every merge is checked.
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   codeql:
     name: CodeQL Analysis

@@ -8451,6 +8451,11 @@
 </span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a>aegis<span class="w"> </span>init<span class="w"> </span>cron-app<span class="w"> </span>--components<span class="w"> </span><span class="s2">&quot;scheduler[sqlite]&quot;</span>
 </span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="c1"># Result: backend + frontend + database + scheduler</span>
 </span></code></pre></div></p>
+<p><strong>Rendering from a checkout:</strong> with <code>AEGIS_TEMPLATE_PATH</code> set to a clone of
+the repo, an installed <code>aegis init</code> renders that template and does not clone
+it from GitHub. Like <code>--template-path</code> on <code>aegis update</code>, this pins the
+project: <code>_src_path</code> in <code>.copier-answers.yml</code> becomes a path on your machine.
+Set it back to <code>gh:lbedner/aegis-stack</code> before committing.</p>
 <hr />
 <h3 id="aegis-add">aegis add</h3>
 <p>Add components to an existing Aegis Stack project. It also adds an installed

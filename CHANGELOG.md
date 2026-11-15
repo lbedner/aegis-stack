@@ -9,6 +9,13 @@
 
 ### Added
 
+- **MCP tokens without auth.** With MCP and a database, the webserver
+  serves `/mcp` and tokens can be made, listed and revoked (Overseer's MCP
+  page, `mcp-tokens`, the token API) without the auth service. Such a token
+  is the operator's: its calls act for `MCP_OWNER_USER_ID` and reach the
+  admin reads, as stdio's do, and it is made on the CLI anywhere or on the
+  local dev build. With auth nothing changes; a token made before auth was
+  added is refused once it is.
 - **`aegis init` from a checkout you name.** With `AEGIS_TEMPLATE_PATH` set
   to a clone of the repo, an installed `aegis init` renders that template
   and does not clone it from GitHub, as `aegis update` already did.

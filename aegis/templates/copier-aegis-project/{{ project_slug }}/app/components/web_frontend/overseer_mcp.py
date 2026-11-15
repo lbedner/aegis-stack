@@ -1,6 +1,7 @@
 """Overseer > MCP: what an outside assistant is served (and each granted
 tool it is not, with why), how to connect one, what each client did, and
-(with auth) the viewer's tokens, from ``ui_mcp``. The grant is
+(with a database) the viewer's tokens, or the operator's without auth,
+from ``ui_mcp``. The grant is
 ``MCP_TOOLS``, and a client's proposals are approved where every card is;
 tokens are made and revoked through ``routes/partials/overseer_mcp``."""
 
@@ -12,7 +13,7 @@ from app.services.system.models import ComponentStatus
 from .overseer_nav import SectionRequest
 from .rendering import columns, status_cell
 
-# Tokens belong to people, so only with auth.
+# Tokens are rows, so only with a database.
 SECTIONS = (
     (
         None,
@@ -65,10 +66,12 @@ async def section_context(
 
 
 async def _tokens(req: SectionRequest) -> dict[str, Any]:
-    """The viewer's tokens (offered only with auth, so ``tokens`` is there)."""
+    """The viewer's tokens, the operator's without auth (offered only with a
+    database, so ``tokens`` is there)."""
     from app.components.mcp import tokens
+    from app.services.shared.deps import actor_of
 
-    rows = await tokens.live(req.db, req.viewer.id)
+    rows = await tokens.live(req.db, actor_of(req.viewer).id)
     return {
         "section_subtitle": "What a client beyond stdio signs in with. Each reaches what its scope allows.",
         "tokens": [ui_mcp.token_row(row.model_dump()) for row in rows],

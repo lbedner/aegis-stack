@@ -111,7 +111,7 @@ from app.components.backend.api.database import router as database_router
 {%- if include_deploy %}
 from app.components.backend.api.deploy.router import router as deploy_router
 {%- endif %}
-{%- if include_mcp and include_auth %}
+{%- if include_mcp and include_database %}
 from app.components.backend.api.mcp_tokens import router as mcp_tokens_router
 {%- endif %}
 {%- for p in _plugins | default([]) %}
@@ -210,7 +210,7 @@ def include_routers(app: FastAPI) -> None:
     {%- if include_deploy %}
     app.include_router(deploy_router, prefix="/api/v1")
     {%- endif %}
-    {%- if include_mcp and include_auth %}
+    {%- if include_mcp and include_database %}
     app.include_router(mcp_tokens_router, prefix="/api/v1")
     {%- endif %}
     {%- if include_finance %}

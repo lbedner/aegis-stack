@@ -13,6 +13,7 @@ import pytest
 
 from app.components.web_frontend.assets import STATIC_DIR
 from app.services.shared.deps import NO_AUTH_REFUSAL
+from tests._audit import at_localhost
 from tests.web.dom import none, one, select, text
 from tests.web.overseer import overseer_calls, sign_in, status_with
 
@@ -30,9 +31,7 @@ def test_nothing_refuses_the_local_dev_build(
     lets every page, partial and action through."""
     sign_in(app, monkeypatch, status_with(), admin=False)
     # A 500 is not a refusal; this walk asks only who may get in.
-    client = TestClient(
-        app, base_url="http://localhost:8000", raise_server_exceptions=False
-    )
+    client = at_localhost(app, raise_server_exceptions=False)
     calls = [(m, p) for m, p in overseer_calls(app) if "/events" not in p]
     assert ("GET", "/overseer") in calls
     refused = []
@@ -83,7 +82,7 @@ def test_the_local_dev_build_keeps_them(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sign_in(app, monkeypatch, status_with())
-    html = TestClient(app, base_url="http://localhost:8000").get("/overseer").text
+    html = at_localhost(app).get("/overseer").text
     none(html, "[data-read-only]")
     none(html, "[data-operator-refusal]")
 

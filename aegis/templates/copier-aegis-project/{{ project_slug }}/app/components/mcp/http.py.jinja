@@ -1,7 +1,9 @@
 """MCP over HTTP: the stdio server's tools, mounted in the webserver at
 ``/mcp`` for a client elsewhere. Every request carries an MCP token
-(``Authorization: Bearer mcp_...``); no token, no tools. Its owner is who
-the calls act for and its scope what they reach (``server.Attribution``).
+(``Authorization: Bearer mcp_...``); no token, no tools. {% if include_auth %}Its owner is who
+the calls act for{% else %}With no one to sign
+in a token is the operator's: its calls act for ``MCP_OWNER_USER_ID``, as
+stdio's do{% endif %}, and its scope is what they reach (``server._reach``).
 
 No CORS: desktop and coding clients are not browsers. Not through the dev
 tunnel, whose guard admits only the Plaid webhook.
@@ -13,12 +15,14 @@ from fastmcp.server.http import StarletteWithLifespan
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.tools import load_tools
+{%- if include_auth %}
 from app.models.user import User
-from app.services.auth.deps import is_admin
+from app.services.shared.deps import owner_is_admin
+{%- endif %}
 
 from . import tokens
 from .activity import record
-from .server import build_server
+from .server import build_server, operator
 
 PATH = "/mcp"
 # The app ``main.py`` mounted at PATH (``mount_app``), for the backend's
@@ -27,24 +31,30 @@ mounted: StarletteWithLifespan | None = None
 
 
 class McpTokens(TokenVerifier):
-    """A request's bearer token, resolved to its owner and the effects its
-    scope reaches. A revoked or unknown token is refused (401)."""
+    """A request's bearer token, resolved to who its calls act for and the
+    effects its scope reaches. A revoked or unknown token is refused (401){% if include_auth %},
+    and so is one with no owner: made before auth was added, it was the
+    operator's, and now a token is a person's{% endif %}."""
 
     async def verify_token(self, token: str) -> AccessToken | None:
         async with get_async_session() as db:
             row = await tokens.resolve(db, token)
-            owner = await db.get(User, row.user_id) if row is not None else None
+{%- if include_auth %}
+            owner = await db.get(User, row.user_id) if row and row.user_id else None
+            admin = owner is not None and await owner_is_admin(db, row.user_id)
         if row is None or owner is None:
             return None
+        acts_for = row.user_id
+{%- else %}
+        if row is None:
+            return None
+        acts_for, admin = operator()
+{%- endif %}
         return AccessToken(
             token=token,
             client_id=f"mcp-token-{row.id}",
             scopes=sorted(tokens.SCOPES[row.scope]),
-            claims={
-                "user_id": row.user_id,
-                "token": row.name,
-                "admin": is_admin(owner),
-            },
+            claims={"user_id": acts_for, "token": row.name, "admin": admin},
         )
 
 

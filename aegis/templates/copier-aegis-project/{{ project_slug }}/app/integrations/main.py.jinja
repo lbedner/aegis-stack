@@ -34,7 +34,7 @@ from app.components.backend.security.trusted_proxies import (  # noqa: E402
     TrustedProxyMiddleware,
 )
 from app.components.frontend.main import create_frontend_app  # noqa: E402
-{%- if include_mcp and include_auth %}
+{%- if include_mcp and include_database %}
 from app.components.mcp.http import PATH as MCP_PATH  # noqa: E402
 from app.components.mcp.http import mount_app as mount_mcp_app  # noqa: E402
 {%- endif %}
@@ -124,7 +124,7 @@ def create_integrated_app() -> FastAPI:
         )
 
     create_backend_app(app)
-{%- if include_mcp and include_auth %}
+{%- if include_mcp and include_database %}
     # MCP over HTTP, token required (its lifespan runs from the backend's
     # hooks). Mounted before the pages so no page route answers for it.
     app.mount(MCP_PATH, mount_mcp_app())

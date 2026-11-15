@@ -808,15 +808,14 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "tests/components/frontend/test_mcp_modal.py",
             ],
             extras={
-                # The activity record: only with a database to keep it in.
+                # The activity record and tokens: only with a database to
+                # keep them in. A token is a person's with auth, the
+                # operator's without (``tokens.py``).
                 AnswerKeys.DATABASE: [
                     "app/components/mcp/models/__init__.py",
                     "app/components/mcp/models/calls.py",
                     "app/components/mcp/activity.py",
                     "tests/components/test_mcp_activity.py",
-                ],
-                # Tokens: each belongs to a person, so only with auth.
-                AnswerKeys.AUTH: [
                     "app/components/mcp/models/tokens.py",
                     "app/components/mcp/tokens.py",
                     "app/components/mcp/http.py",

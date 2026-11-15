@@ -87,15 +87,24 @@ TOKEN_FILES = (
 )
 
 
-def test_tokens_come_with_auth() -> None:
-    """A token belongs to a person, so the token files are auth's to bring."""
-    by_auth = COMPONENTS[ComponentNames.MCP].files.extras[AnswerKeys.AUTH]
-    assert set(TOKEN_FILES) <= set(by_auth)
+def test_tokens_come_with_the_database() -> None:
+    """A token is a row: it needs a database, not a person. Without auth it
+    is the operator's."""
+    extras = COMPONENTS[ComponentNames.MCP].files.extras
+    assert set(TOKEN_FILES) <= set(extras[AnswerKeys.DATABASE])
+    assert AnswerKeys.AUTH not in extras
 
 
-@pytest.mark.parametrize(("services", "kept"), [(["auth"], True), ([], False)])
-def test_init_keeps_the_token_files_only_with_auth(
-    tmp_path: Any, services: list[str], kept: bool
+@pytest.mark.parametrize(
+    ("components", "services", "kept"),
+    [
+        (["database", "mcp"], ["auth"], True),
+        (["database", "mcp"], [], True),
+        (["mcp"], [], False),
+    ],
+)
+def test_init_keeps_the_token_files_only_with_a_database(
+    tmp_path: Any, components: list[str], services: list[str], kept: bool
 ) -> None:
     from aegis.core.post_gen_tasks import cleanup_components
 
@@ -104,7 +113,7 @@ def test_init_keeps_the_token_files_only_with_auth(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# stub\n")
     context = TemplateGenerator(
-        "demo", ["database", "mcp"], selected_services=services
+        "demo", components, selected_services=services
     ).get_template_context()
 
     cleanup_components(tmp_path, context)
@@ -198,16 +207,16 @@ def test_mcp_leaves_the_lifespan_alone() -> None:
 
 
 @pytest.mark.parametrize(
-    ("auth", "label"),
+    ("database", "label"),
     [
         (False, "Outside assistants, over stdio"),
         (True, "Outside assistants, over stdio and HTTP"),
     ],
 )
 def test_its_subtitle_names_the_transports_it_is_served_over(
-    auth: bool, label: str
+    database: bool, label: str
 ) -> None:
-    """HTTP is served only with auth (each token is someone's)."""
+    """HTTP is served only with a database to keep its tokens in."""
     env = Environment(
         loader=FileSystemLoader(str(get_template_path())), keep_trailing_newline=True
     )
@@ -215,7 +224,7 @@ def test_its_subtitle_names_the_transports_it_is_served_over(
         **get_copier_defaults(),
         "project_slug": "demo",
         "include_mcp": True,
-        "include_auth": auth,
+        "include_database": database,
     }
     rendered = env.get_template(
         "{{ project_slug }}/app/services/system/ui.py.jinja"

@@ -1,7 +1,7 @@
-{% if include_mcp and include_auth %}"""MCP tokens: the credential a person makes for an outside assistant beyond
-stdio. Kept only as a hash, shown once, revocable, and scoped: a token
-reaches the granted tools its scope allows (read, or read and propose),
-never a write."""
+{% if include_mcp and include_database %}"""MCP tokens: the credential made for an outside assistant beyond stdio.
+Kept only as a hash, shown once, revocable, and scoped: a token reaches the
+granted tools its scope allows (read, or read and propose), never a write.
+{%- if include_auth %} Each is a person's.{% else %} With no one to sign in, each is the operator's.{% endif %}"""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -14,6 +14,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.cli import mcp_tokens_cli
 from app.components.mcp import tokens
 from app.core.tools import register_tool
+{%- if not include_auth %}
+from tests._audit import at_localhost
+{%- endif %}
 
 URL = "/api/v1/mcp/tokens"
 
@@ -34,28 +37,26 @@ async def save(note: str) -> str:
 
 
 async def test_a_token_is_shown_once_and_kept_only_as_a_hash(
-    async_db_session: AsyncSession, user_factory: Any
+    async_db_session: AsyncSession, token_owner: int | None
 ) -> None:
-    user = await user_factory()
-
-    row, value = await tokens.create(async_db_session, user.id, "laptop", "read")
+    row, value = await tokens.create(async_db_session, token_owner, "laptop", "read")
 
     assert value.startswith(tokens.PREFIX)
     assert value not in {str(v) for v in row.model_dump().values()}
     found = await tokens.resolve(async_db_session, value)
-    assert found is not None and found.id == row.id
+    assert found is not None and found.id == row.id and found.user_id == token_owner
 
 
 async def test_a_revoked_token_fails_on_its_next_use(
-    async_db_session: AsyncSession, user_factory: Any
+    async_db_session: AsyncSession, token_owner: int | None
 ) -> None:
-    user = await user_factory()
-    row, value = await tokens.create(async_db_session, user.id, "laptop", "read")
+    row, value = await tokens.create(async_db_session, token_owner, "laptop", "read")
 
-    assert await tokens.revoke(async_db_session, row.id, user.id)
+    assert await tokens.revoke(async_db_session, row.id, token_owner)
 
     assert await tokens.resolve(async_db_session, value) is None
-    assert await tokens.live(async_db_session, user.id) == []
+    assert await tokens.live(async_db_session, token_owner) == []
+{%- if include_auth %}
 
 
 async def test_nobody_revokes_another_persons_token(
@@ -65,7 +66,10 @@ async def test_nobody_revokes_another_persons_token(
     row, value = await tokens.create(async_db_session, alice.id, "laptop", "read")
 
     assert not await tokens.revoke(async_db_session, row.id, bob.id)
+    assert not await tokens.revoke(async_db_session, row.id, None)
+    assert await tokens.live(async_db_session, None) == []
     assert await tokens.resolve(async_db_session, value) is not None
+{%- endif %}
 
 
 async def test_an_unknown_token_resolves_to_nobody(
@@ -75,12 +79,10 @@ async def test_an_unknown_token_resolves_to_nobody(
 
 
 async def test_an_unknown_scope_is_refused(
-    async_db_session: AsyncSession, user_factory: Any
+    async_db_session: AsyncSession, token_owner: int | None
 ) -> None:
-    user = await user_factory()
-
     with pytest.raises(ValueError):
-        await tokens.create(async_db_session, user.id, "laptop", "admin")
+        await tokens.create(async_db_session, token_owner, "laptop", "admin")
 
 
 def test_a_token_reaches_only_the_tools_its_scope_allows(
@@ -93,45 +95,68 @@ def test_a_token_reaches_only_the_tools_its_scope_allows(
 
     assert tokens.scoped(grant, "read") == ["look"]
     assert tokens.scoped(grant, "propose") == ["look", "file_it"]
+{%- if include_auth %}
 
 
-def test_the_api_shows_a_token_once_then_lists_it_without_it(
-    authenticated_client: TestClient,
-) -> None:
-    made = authenticated_client.post(URL, json={"name": "laptop", "scope": "read"})
+@pytest.fixture
+def maker(authenticated_client: TestClient) -> TestClient:
+    """Who makes tokens over the API: a signed-in person, their own."""
+    return authenticated_client
 
-    assert made.status_code == 201
+
+def test_the_api_needs_someone_signed_in(async_client_with_db: TestClient) -> None:
+    assert async_client_with_db.get(URL).status_code == 401
+{%- else %}
+
+
+@pytest.fixture
+def maker(async_client_with_db: TestClient) -> TestClient:
+    """Who makes tokens over the API: the operator, on the local dev build."""
+    return at_localhost(async_client_with_db.app)
+
+
+def test_without_auth_another_host_is_refused(async_client_with_db: TestClient) -> None:
+    """An operator's change, so only where ``operator_refusal`` allows it."""
+    made = async_client_with_db.post(URL, json={"name": "laptop", "scope": "read"})
+
+    assert made.status_code == 403
+
+
+def test_without_auth_another_host_may_list_them(async_client_with_db: TestClient) -> None:
+    """A read, not a change: open as Overseer's pages are."""
+    assert async_client_with_db.get(URL).status_code == 200
+{%- endif %}
+
+
+def test_the_api_shows_a_token_once_then_lists_it_without_it(maker: TestClient) -> None:
+    made = maker.post(URL, json={"name": "laptop", "scope": "read"})
+
+    assert made.status_code == 201, made.text
     value = made.json()["token"]
-    listed = authenticated_client.get(URL)
+    listed = maker.get(URL)
     assert [t["name"] for t in listed.json()] == ["laptop"]
     assert value not in listed.text
 
 
 async def test_the_api_revokes_a_token(
-    authenticated_client: TestClient, async_db_session: AsyncSession
+    maker: TestClient, async_db_session: AsyncSession
 ) -> None:
-    made = authenticated_client.post(URL, json={"name": "laptop", "scope": "propose"})
+    made = maker.post(URL, json={"name": "laptop", "scope": "propose"})
 
-    gone = authenticated_client.delete(f"{URL}/{made.json()['id']}")
+    gone = maker.delete(f"{URL}/{made.json()['id']}")
 
     assert gone.status_code == 204
     assert await tokens.resolve(async_db_session, made.json()["token"]) is None
 
 
-def test_the_api_refuses_to_revoke_a_token_that_is_not_yours(
-    authenticated_client: TestClient,
-) -> None:
-    assert authenticated_client.delete(f"{URL}/999").status_code == 404
+def {% if include_auth %}test_the_api_refuses_to_revoke_a_token_that_is_not_yours{% else %}test_the_api_refuses_to_revoke_an_unknown_token{% endif %}(maker: TestClient) -> None:
+    assert maker.delete(f"{URL}/999").status_code == 404
 
 
-def test_the_api_refuses_an_unknown_scope(authenticated_client: TestClient) -> None:
-    made = authenticated_client.post(URL, json={"name": "laptop", "scope": "admin"})
+def test_the_api_refuses_an_unknown_scope(maker: TestClient) -> None:
+    made = maker.post(URL, json={"name": "laptop", "scope": "admin"})
 
     assert made.status_code == 422
-
-
-def test_the_api_needs_someone_signed_in(async_client_with_db: TestClient) -> None:
-    assert async_client_with_db.get(URL).status_code == 401
 
 
 @pytest.fixture
@@ -147,23 +172,29 @@ def cli_session(
     monkeypatch.setattr(mcp_tokens_cli, "get_async_session", test_session)
 
 
-async def test_the_cli_creates_lists_and_revokes_a_persons_tokens(
+async def test_the_cli_creates_lists_and_revokes_tokens(
     cli_session: None,
     async_db_session: AsyncSession,
+{%- if include_auth %}
     user_factory: Any,
+{%- endif %}
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    user = await user_factory()
+{%- if include_auth %}
+    whose: dict[str, Any] = {"email": (await user_factory()).email}
+{%- else %}
+    whose: dict[str, Any] = {}
+{%- endif %}
 
-    await mcp_tokens_cli.create(email=user.email, name="laptop", scope="read")
+    await mcp_tokens_cli.create(**whose, name="laptop", scope="read")
     value = next(
         word for word in capsys.readouterr().out.split() if word.startswith(tokens.PREFIX)
     )
     row = await tokens.resolve(async_db_session, value)
     assert row is not None
-    await mcp_tokens_cli.list_tokens(email=user.email)
+    await mcp_tokens_cli.list_tokens(**whose)
     listed = capsys.readouterr().out
-    await mcp_tokens_cli.revoke(email=user.email, token_id=row.id)
+    await mcp_tokens_cli.revoke(**whose, token_id=row.id)
 
     assert "laptop" in listed and value not in listed
     assert row.revoked_at is not None

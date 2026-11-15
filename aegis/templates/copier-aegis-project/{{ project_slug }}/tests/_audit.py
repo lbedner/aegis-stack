@@ -31,6 +31,12 @@ def recording(client: TestClient) -> Recorded:
     return recorded
 
 
+def at_localhost(app: Any, **options: Any) -> TestClient:
+    """A client for ``app`` from the local dev build's own host, where the
+    operator's changes are let through without auth (``refusal_at``)."""
+    return TestClient(app, base_url="http://localhost:8000", **options)
+
+
 def as_admin(client: TestClient) -> TestClient:
     """``client`` acting as ``ADMIN``: its changes and its reads."""
     client.app.dependency_overrides[get_admin_actor] = lambda: ADMIN

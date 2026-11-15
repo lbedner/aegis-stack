@@ -468,7 +468,7 @@ class GuidedSelectionUI(BlueprintScreens):
                 "Host",
                 _g(
                     "choice.inference.host",
-                    "Use the Ollama already running on this machine. The default.",
+                    "Use the one already running on this machine. The default.",
                 ),
             ),
             _Choice(
@@ -476,13 +476,16 @@ class GuidedSelectionUI(BlueprintScreens):
                 "Docker",
                 _g(
                     "choice.inference.docker",
-                    "Run Ollama as a container in the project's compose stack.",
+                    "Run it as a container in the project's compose stack.",
                 ),
             ),
         ]
         placement = choices[
             self._select(
-                _g("prompt.inference_placement", "Where does Ollama run?"),
+                _g(
+                    "prompt.inference_placement",
+                    "Where does the local model server run?",
+                ),
                 choices,
                 crumb="amend",
                 qkey=QKeys.INFERENCE_PLACEMENT,
@@ -503,7 +506,7 @@ class GuidedSelectionUI(BlueprintScreens):
                 "Kokoro-FastAPI",
                 _g(
                     "choice.inference_speech.kokoro_fastapi",
-                    "Text to speech for ai[voice], where Ollama runs.",
+                    "Text to speech for ai[voice], where the model server runs.",
                 ),
             ),
         ]

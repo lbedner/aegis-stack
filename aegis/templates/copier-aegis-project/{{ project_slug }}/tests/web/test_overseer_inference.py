@@ -236,6 +236,15 @@ def test_an_engine_that_cannot_move_its_model_offers_no_buttons(
     assert "Loaded" in _rows(page)["qwen2.5:7b"]
 
 
+def test_an_empty_table_says_how_the_engine_takes_a_model(
+    signed_in: TestClient,
+) -> None:
+    """Each engine adds a model its own way (``engine.ADD_MODEL``)."""
+    FakeClient.status = InferenceServerStatus(available=True)
+    empty = text(one(_get(signed_in, "models"), "#inference-models [data-empty]"))
+    assert FakeClient.ADD_MODEL in empty
+
+
 def test_the_table_fits_without_the_digest(signed_in: TestClient) -> None:
     rows = _rows(_get(signed_in, "models"))
     assert "7.6B, 4-bit" in rows["llama3.1:8b"]

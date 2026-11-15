@@ -126,8 +126,8 @@ MESSAGES: dict[str, str] = {
     "health.msg.comms_none": "구성된 통신 제공자 없음",
     "health.msg.comms_partial": "통신 서비스 부분 구성됨",
     "health.msg.comms_ok": "통신 서비스 전체 구성 완료",
-    "health.msg.ollama_not_reachable": "Ollama 서버에 연결할 수 없습니다",
-    "health.msg.ollama_no_models": "Ollama 실행 중이지만 설치된 모델이 없습니다",
+    "health.msg.engine_not_reachable": "{engine} 서버에 연결할 수 없습니다",
+    "health.msg.engine_no_models": "{engine} 실행 중이지만 설치된 모델이 없습니다",
     "health.msg.worker_offline": "워커 오프라인 — 상태 확인 데이터 없음",
     "health.msg.failed": "{count}개 실패 ({pct}%)",
     # Queue descriptions
@@ -271,7 +271,7 @@ MESSAGES: dict[str, str] = {
     # Sync
     "llm.dry_run_mode": "드라이런 모드 — 변경 사항이 저장되지 않습니다",
     "llm.refresh_dry_run": "새로고침 요청됨 — 모든 LLM 테이블을 비울 예정입니다",
-    "llm.syncing_ollama": "Ollama 모델 동기화 중",
+    "llm.syncing_local": "{engine} 모델 동기화 중",
     "llm.syncing_catalog_all": "LLM 카탈로그 동기화 중 (mode={mode}, source=all)",
     "llm.syncing_catalog": "LLM 카탈로그 동기화 중 (mode={mode})",
     "llm.sync_results": "동기화 결과",
@@ -340,7 +340,7 @@ MESSAGES: dict[str, str] = {
     "llm.top_vendors": "모델 수 기준 상위 벤더",
     # Help text
     "llm.help": "LLM 카탈로그 및 모델 관리 명령어",
-    "llm.help_sync": "클라우드 API 또는 로컬 Ollama에서 LLM 카탈로그를 로컬 데이터베이스에 동기화합니다.",
+    "llm.help_sync": "클라우드 API 또는 로컬 추론 엔진에서 LLM 카탈로그를 로컬 데이터베이스에 동기화합니다.",
     "llm.help_status": "LLM 카탈로그 통계를 표시합니다 (벤더, 모델, 배포, 가격).",
     "llm.help_vendors": "카탈로그의 모든 LLM 벤더와 모델 수를 표시합니다.",
     "llm.help_modalities": "카탈로그의 모든 모달리티와 모델 수를 표시합니다.",
@@ -349,7 +349,7 @@ MESSAGES: dict[str, str] = {
     "llm.help_use": "다른 LLM 모델로 전환합니다. .env의 AI_MODEL을 업데이트합니다.",
     "llm.help_info": "특정 LLM 모델의 상세 정보를 표시합니다.",
     "llm.opt_mode": "모드 필터: 'chat', 'embedding', 또는 'all'",
-    "llm.opt_source": "데이터 소스: 'cloud' (OpenRouter/LiteLLM), 'ollama', 또는 'all'",
+    "llm.opt_source": "데이터 소스: 'cloud' (OpenRouter/LiteLLM), 'local', 또는 'all'",
     "llm.opt_dry_run": "데이터베이스를 수정하지 않고 변경 사항을 미리 봅니다",
     "llm.opt_refresh": "동기화 전 모든 LLM 테이블을 초기화합니다 (전체 새로고침)",
     "llm.arg_pattern": "모델 ID 또는 제목 검색 패턴 (대소문자 무시)",

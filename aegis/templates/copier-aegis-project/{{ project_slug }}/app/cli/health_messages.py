@@ -28,8 +28,6 @@ _HEALTH_MSG_EXACT: dict[str, str] = {
     "AI service is disabled": "health.msg.ai_disabled",
     "No communication providers configured": "health.msg.comms_none",
     "Communications service fully configured": "health.msg.comms_ok",
-    "Ollama server not reachable": "health.msg.ollama_not_reachable",
-    "Ollama running but no models installed": "health.msg.ollama_no_models",
     "worker offline - no health check data": "health.msg.worker_offline",
 }
 
@@ -73,6 +71,17 @@ _HEALTH_MSG_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
     (re.compile(r"^(\d+) completed$"), "health.msg.completed", "count"),
     (re.compile(r"^(\d+) failed \(([\d.]+)%\)$"), "health.msg.failed", "count,pct"),
     (re.compile(r"^AI service ready"), "health.msg.ai_ready", ""),
+    # The inference engine, by its label (Ollama, llama.cpp).
+    (
+        re.compile(r"^(.+) server not reachable$"),
+        "health.msg.engine_not_reachable",
+        "engine",
+    ),
+    (
+        re.compile(r"^(.+) running but no models installed$"),
+        "health.msg.engine_no_models",
+        "engine",
+    ),
     (
         re.compile(r"^Comms service partially configured"),
         "health.msg.comms_partial",

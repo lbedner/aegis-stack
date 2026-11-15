@@ -126,8 +126,8 @@ MESSAGES: dict[str, str] = {
     "health.msg.comms_none": "通信プロバイダ未設定",
     "health.msg.comms_partial": "通信サービス一部設定済み",
     "health.msg.comms_ok": "通信サービス完全設定済み",
-    "health.msg.ollama_not_reachable": "Ollamaサーバーに到達不可",
-    "health.msg.ollama_no_models": "Ollama稼働中だがモデル未インストール",
+    "health.msg.engine_not_reachable": "{engine}サーバーに到達不可",
+    "health.msg.engine_no_models": "{engine}稼働中だがモデル未インストール",
     "health.msg.worker_offline": "ワーカーオフライン — ヘルスチェックデータなし",
     "health.msg.failed": "{count} 件失敗（{pct}%）",
     # キューの説明
@@ -271,7 +271,7 @@ MESSAGES: dict[str, str] = {
     # 同期
     "llm.dry_run_mode": "ドライランモード — 変更は保存されません",
     "llm.refresh_dry_run": "リフレッシュ要求 — 全LLMテーブルを切り詰めます",
-    "llm.syncing_ollama": "Ollamaモデルを同期中",
+    "llm.syncing_local": "{engine}モデルを同期中",
     "llm.syncing_catalog_all": "LLMカタログを同期中（mode={mode}、source=all）",
     "llm.syncing_catalog": "LLMカタログを同期中（mode={mode}）",
     "llm.sync_results": "同期結果",
@@ -340,7 +340,7 @@ MESSAGES: dict[str, str] = {
     "llm.top_vendors": "モデル数上位ベンダー",
     # ヘルプ
     "llm.help": "LLMカタログ・モデル管理コマンド",
-    "llm.help_sync": "クラウドAPIまたはローカルOllamaからLLMカタログをローカルDBに同期します。",
+    "llm.help_sync": "クラウドAPIまたはローカル推論エンジンからLLMカタログをローカルDBに同期します。",
     "llm.help_status": "LLMカタログ統計（ベンダー、モデル、デプロイメント、価格）を表示します。",
     "llm.help_vendors": "カタログ内の全LLMベンダーをモデル数付きで一覧表示します。",
     "llm.help_modalities": "カタログ内の全モダリティをモデル数付きで一覧表示します。",
@@ -349,7 +349,7 @@ MESSAGES: dict[str, str] = {
     "llm.help_use": "別のLLMモデルに切り替えます。.envのAI_MODELを更新します。",
     "llm.help_info": "特定のLLMモデルの詳細情報を表示します。",
     "llm.opt_mode": "モードフィルタ：'chat'、'embedding'、または 'all'",
-    "llm.opt_source": "データソース：'cloud'（OpenRouter/LiteLLM）、'ollama'、または 'all'",
+    "llm.opt_source": "データソース：'cloud'（OpenRouter/LiteLLM）、'local'、または 'all'",
     "llm.opt_dry_run": "データベースを変更せずに変更内容をプレビュー",
     "llm.opt_refresh": "同期前に全LLMテーブルを切り詰め（完全リフレッシュ）",
     "llm.arg_pattern": "モデルIDまたはタイトルの検索パターン（大文字小文字区別なし）",

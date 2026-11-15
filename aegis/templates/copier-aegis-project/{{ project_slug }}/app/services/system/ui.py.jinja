@@ -153,6 +153,10 @@ def get_component_title(component_name: str) -> str:
 
 def get_component_label(component_name: str) -> str:
     """Map component keys to user-facing labels (brand or friendly name)."""
+    {%- if include_inference %}
+    from app.components.inference import inference_engine_class
+    {%- endif %}
+
     mapping = {
         ComponentName.BACKEND: "FastAPI + Flet",
         {%- if include_htmx %}
@@ -173,7 +177,7 @@ def get_component_label(component_name: str) -> str:
         ComponentName.SCHEDULER: "APScheduler",
         {%- endif %}
         {%- if include_inference %}
-        ComponentName.OLLAMA: "Ollama",
+        ComponentName.OLLAMA: inference_engine_class().LABEL,
         {%- endif %}
         {%- if include_ai %}
         "service_ai": "LLM Provider",

@@ -119,6 +119,16 @@ def inference_engine(component: str, providers: list[str]) -> str:
     return InferenceEngines.DEFAULT
 
 
+def local_providers_on(providers: str | list[str], engine: str) -> str:
+    """``ai_providers`` (copier's comma-separated answer, or a list) once the
+    engine is ``engine``: a local provider becomes the engine's, the rest
+    stay."""
+    listed = providers.split(",") if isinstance(providers, str) else providers
+    chosen = [p.strip() for p in listed if p.strip()]
+    moved = [engine if p in AIProviders.LOCAL else p for p in chosen]
+    return ",".join(dict.fromkeys(moved))
+
+
 def local_engine_rule(providers: list[str], engine: str) -> str | None:
     """A local AI provider chats with the inference engine of its name, so
     ``ai[llamacpp]`` beside an Ollama engine has nothing to talk to."""

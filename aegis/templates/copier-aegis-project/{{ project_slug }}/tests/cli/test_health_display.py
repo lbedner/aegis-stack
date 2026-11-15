@@ -75,6 +75,23 @@ def test_labels_take_their_colon_from_the_locale() -> None:
     )
 
 
+@pytest.mark.parametrize("engine", ["Ollama", "llama.cpp"])
+def test_an_engine_message_translates_whichever_engine_it_names(engine: str) -> None:
+    """The inference health names the app's engine (``engine.LABEL``)."""
+    from app.i18n.registry import set_locale
+
+    set_locale("de")
+    try:
+        assert _translate_health_msg(f"{engine} server not reachable") == (
+            f"{engine}-Server nicht erreichbar"
+        )
+        assert _translate_health_msg(
+            f"{engine} running but no models installed"
+        ) == (f"{engine} läuft, aber keine Modelle installiert")
+    finally:
+        set_locale("en")
+
+
 def test_tree_guides_hold_under_a_warning_parent() -> None:
     warning = ComponentStatusType.WARNING
     backend = _part("backend", warning, memory=_part("memory", warning))

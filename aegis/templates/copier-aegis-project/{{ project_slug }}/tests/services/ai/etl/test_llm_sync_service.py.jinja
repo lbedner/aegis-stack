@@ -760,7 +760,7 @@ class TestLocalModelsPresent:
     """The picker's ``usable`` filter shows only vendors the install can
     call. With no API keys that is Ollama alone, and the remote catalog
     never carries a local tag - so a fresh Ollama stack opened an empty
-    picker until someone knew to run ``llm sync --source ollama``. The
+    picker until someone knew to run ``llm sync --source local``. The
     startup hook syncs local tags when none are present; this is the
     check it asks."""
 

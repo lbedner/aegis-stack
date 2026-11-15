@@ -90,17 +90,18 @@ class LLMSyncService(UpsertMixin):
         Args:
             mode_filter: One mode ("chat", "realtime", ...), "all", or None
                 for the kinds the app uses (CATALOG_MODES).
-            source: Data source - "cloud" (OpenRouter/LiteLLM), "ollama", or "all".
+            source: Data source - "cloud" (OpenRouter/LiteLLM), "local" (the
+                inference engine), or "all".
             dry_run: If True, don't commit changes to database.
 
         Returns:
             SyncResult with counts and any errors.
         """
-        # Handle Ollama-only sync
-        if source == "ollama":
+        # The inference engine's models only
+        if source == "local":
             return await self.sync_ollama(dry_run=dry_run)
 
-        # Handle "all" - sync both cloud and ollama
+        # Handle "all" - sync both cloud and the engine
         if source == "all":
             cloud_result = await self._sync_cloud(mode_filter, dry_run)
             ollama_result = await self.sync_ollama(dry_run=dry_run)
@@ -409,7 +410,7 @@ async def sync_llm_catalog(
         session: Database session.
         mode: One mode ("chat", "realtime", ...), "all", or None for the
             kinds the app uses (chat and the voice kinds).
-        source: Data source - "cloud", "ollama", or "all".
+        source: Data source - "cloud", "local", or "all".
         dry_run: If True, don't commit changes.
 
     Returns:

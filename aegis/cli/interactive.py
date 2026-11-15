@@ -939,7 +939,8 @@ def clear_ollama_mode_selection() -> None:
 
 
 def select_inference_placement(service_name: str = AnswerKeys.SERVICE_AI) -> str:
-    """Ask where Ollama runs (host or docker) and record it for generation."""
+    """Ask where the local model server runs (host or docker) and record it
+    for generation. Asked before the AI providers, so it names no engine."""
     typer.echo(f"\n{t('interactive.ai_ollama_label')}")
     typer.echo(f"  {t('interactive.ai_ollama_intro')}")
     typer.echo(f"    1. {t('interactive.ai_ollama_host')}")

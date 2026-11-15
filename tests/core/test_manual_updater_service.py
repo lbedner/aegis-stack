@@ -308,6 +308,34 @@ class TestAddServiceVariantUpgrade:
         answers = _make_updater(project).answers
         assert answers[AnswerKeys.AUTH_LEVEL] == "org"
 
+    def test_an_engine_switch_takes_the_local_provider_with_it(
+        self, tmp_path: Path
+    ) -> None:
+        """A local provider chats with the engine of its name, so moving the
+        engine moves it; the cloud providers stay."""
+        project = tmp_path / "demo"
+        project.mkdir()
+        (project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS
+            + "include_inference: true\ninference_engine: ollama\n"
+            + "include_ai: true\nai_providers: ollama,openai\n"
+        )
+        with (
+            patch.object(
+                ManualUpdater, "_regenerate_shared_files", return_value=([], [], [])
+            ),
+            patch("aegis.core.manual_updater.get_component_files", return_value=[]),
+        ):
+            result = _make_updater(project).add_component(
+                "inference",
+                {AnswerKeys.INFERENCE_ENGINE: "llamacpp"},
+                run_post_gen=False,
+            )
+        assert result.success, result.error_message
+        answers = _make_updater(project).answers
+        assert answers[AnswerKeys.INFERENCE_ENGINE] == "llamacpp"
+        assert answers[AnswerKeys.AI_PROVIDERS] == "llamacpp,openai"
+
     def test_same_variant_is_still_already_enabled(self, tmp_path: Path) -> None:
         project = self._project_with_basic_auth(tmp_path)
         with patch.object(

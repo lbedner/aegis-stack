@@ -126,8 +126,8 @@ MESSAGES: dict[str, str] = {
     "health.msg.comms_none": "未設定通信服務",
     "health.msg.comms_partial": "通信服務部分設定",
     "health.msg.comms_ok": "通信服務已全部設定",
-    "health.msg.ollama_not_reachable": "Ollama 服務器無法連接",
-    "health.msg.ollama_no_models": "Ollama 運行中但未安裝模型",
+    "health.msg.engine_not_reachable": "{engine} 服務器無法連接",
+    "health.msg.engine_no_models": "{engine} 運行中但未安裝模型",
     "health.msg.worker_offline": "Worker 離線——無健康檢查數據",
     "health.msg.failed": "{count} 個失敗（{pct}%）",
     # 隊列描述
@@ -271,7 +271,7 @@ MESSAGES: dict[str, str] = {
     # 同步
     "llm.dry_run_mode": "試運行模式 - 不會保存任何更改",
     "llm.refresh_dry_run": "已請求刷新 - 將清空所有 LLM 數據表",
-    "llm.syncing_ollama": "正在同步 Ollama 模型",
+    "llm.syncing_local": "正在同步 {engine} 模型",
     "llm.syncing_catalog_all": "正在同步 LLM 目錄（模式={mode}，來源=全部）",
     "llm.syncing_catalog": "正在同步 LLM 目錄（模式={mode}）",
     "llm.sync_results": "同步結果",
@@ -340,7 +340,7 @@ MESSAGES: dict[str, str] = {
     "llm.top_vendors": "模型數量最多的供應商",
     # 幫助文本
     "llm.help": "LLM 目錄與模型管理相關命令",
-    "llm.help_sync": "從雲端 API 或本地 Ollama 同步 LLM 目錄到本地數據庫。",
+    "llm.help_sync": "從雲端 API 或本地推理引擎同步 LLM 目錄到本地數據庫。",
     "llm.help_status": "查看 LLM 目錄統計（供應商、模型、部署、定價）。",
     "llm.help_vendors": "列出目錄中所有 LLM 供應商及模型數。",
     "llm.help_modalities": "列出目錄中所有能力類型及模型數。",
@@ -349,7 +349,7 @@ MESSAGES: dict[str, str] = {
     "llm.help_use": "切換到其他 LLM 模型，更新 .env 中的 AI_MODEL。",
     "llm.help_info": "查看指定 LLM 模型的詳細訊息。",
     "llm.opt_mode": "模式篩選：'chat'、'embedding' 或 'all'",
-    "llm.opt_source": "數據來源：'cloud'（OpenRouter/LiteLLM）、'ollama' 或 'all'",
+    "llm.opt_source": "數據來源：'cloud'（OpenRouter/LiteLLM）、'local' 或 'all'",
     "llm.opt_dry_run": "預覽變更，不修改數據庫",
     "llm.opt_refresh": "同步前清空所有 LLM 數據表（完整刷新）",
     "llm.arg_pattern": "模型 ID 或名稱的搜索關鍵詞（不區分大小寫）",

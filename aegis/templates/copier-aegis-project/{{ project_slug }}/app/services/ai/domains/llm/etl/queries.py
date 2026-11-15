@@ -88,7 +88,7 @@ def local_models_present(session: Session) -> bool:
     The remote catalog never carries a local tag, and the picker's
     ``usable`` filter shows only vendors the install can call - with no
     API keys, Ollama alone. A fresh Ollama stack therefore opened an
-    empty picker until someone knew to run ``llm sync --source ollama``.
+    empty picker until someone knew to run ``llm sync --source local``.
     The startup hook syncs local tags when this says none are there.
     """
     first = session.exec(

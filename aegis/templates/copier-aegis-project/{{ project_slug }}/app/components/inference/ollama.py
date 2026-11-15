@@ -36,6 +36,7 @@ class OllamaEngine(BaseInferenceEngine):
     LABEL = "Ollama"
     DEFAULT_URL = "http://localhost:11434"
     START = "ollama serve"
+    ADD_MODEL = "ollama pull <model>"
 
     async def _version(self, client: httpx.AsyncClient) -> str | None:
         try:

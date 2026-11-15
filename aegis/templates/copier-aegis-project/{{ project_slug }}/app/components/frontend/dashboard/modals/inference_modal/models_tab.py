@@ -21,6 +21,7 @@ from app.components.frontend.controls.data_table import (
 )
 from app.components.frontend.controls.table import TableNameText
 from app.components.frontend.theme import AegisTheme as Theme
+from app.components.inference import inference_engine_class
 from app.components.inference.formatting import format_model_id, format_quantization
 from app.core.model_picker import format_context_window
 from app.services.system.models import ComponentStatus
@@ -112,7 +113,7 @@ class ModelsSection(ft.Container):
                                 ),
                                 SecondaryText("No models installed"),
                                 SecondaryText(
-                                    "Use 'ollama pull <model>' to install a model",
+                                    f"Use '{inference_engine_class().ADD_MODEL}' to add a model",
                                     size=Theme.Typography.CAPTION,
                                 ),
                             ],

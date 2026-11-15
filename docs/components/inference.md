@@ -36,6 +36,17 @@ llama-server -hf ggml-org/Qwen3-1.7B-GGUF --alias qwen3:1.7b \
 
 In docker, the `llamacpp` service downloads `LLAMACPP_MODEL` (a Hugging Face `repo[:quant]`, default `ggml-org/Qwen3-1.7B-GGUF`) into a volume on its first start and serves it at `LLAMACPP_CONTEXT` (default 32768).
 
+### Switching engines
+
+The engine holds nothing of the project's (its models live where it keeps them), so an installed component switches in place. The AI service's local provider moves with it, the placement stays, and everything that branches on the engine re-renders:
+
+```bash
+aegis add inference[llamacpp]   # an Ollama project, now on llama.cpp
+aegis add inference[ollama]     # and back
+```
+
+Point `LLAMACPP_BASE_URL` in `.env` at the server if it is not on the default port.
+
 ## Where it runs
 
 | Placement | What ships | Reaches the engine at |
@@ -55,7 +66,7 @@ ollama pull llama3.1
 - **Settings:** `INFERENCE_ENGINE`; `OLLAMA_BASE_URL` or `LLAMACPP_BASE_URL` (defaulted from the placement), `OLLAMA_BASE_URL_LOCAL` for CLI commands run on the host, `OLLAMA_HOST_PORT` / `LLAMACPP_HOST_PORT` for the port `make serve` publishes, `OLLAMA_API_KEY` for a server behind auth.
 - **A health check** on the system status: server reachable, installed and running models, VRAM in use.
 - **A dashboard card and modal**: installed models with load and unload, and an activity tab of recent loads and evictions.
-- **The LLM catalog** lists the installed models when the AI service is present (`my-app llm sync --source ollama`).
+- **The LLM catalog** lists the installed models when the AI service is present (`my-app llm sync --source local`).
 
 ## A speech server
 

@@ -484,6 +484,25 @@ class TestVariantDelta:
         with pytest.raises(VariantConflictError, match="ai_backend"):
             variant_delta("ai[postgres]", self._backend(), {"ai_backend": "sqlite"})
 
+    def test_a_switchable_choice_moves_to_any_other(self) -> None:
+        """An inference engine's models live outside the project: either
+        engine may move to the other, and the real spec says so."""
+        from aegis.core.components import COMPONENTS
+
+        inference = COMPONENTS["inference"]
+        assert variant_delta(
+            "inference[llamacpp]", inference, {"inference_engine": "ollama"}
+        ) == {"inference_engine": "llamacpp"}
+        assert variant_delta(
+            "inference[ollama]", inference, {"inference_engine": "llamacpp"}
+        ) == {"inference_engine": "ollama"}
+        assert (
+            variant_delta(
+                "inference[ollama]", inference, {"inference_engine": "ollama"}
+            )
+            == {}
+        )
+
     def test_fresh_install_ignores_recorded_defaults(self) -> None:
         """Copier records ``ai_backend: memory`` even when AI is not
         installed. A fresh ``ai[sqlite]`` names sqlite and compares with

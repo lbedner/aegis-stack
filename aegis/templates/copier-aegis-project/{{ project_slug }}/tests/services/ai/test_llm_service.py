@@ -790,6 +790,33 @@ class TestSetActiveModel:
         assert "not found in catalog" in result.message
         assert "Use --force" in result.message
 
+    async def test_a_served_model_not_yet_catalogued_is_the_engines(
+        self, mock_async_session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A model the inference engine serves but the catalog has not synced
+        is set under that engine's provider, whichever engine it is."""
+        inference = pytest.importorskip("app.components.inference")
+        from types import SimpleNamespace
+
+        async def served() -> list[Any]:
+            return [SimpleNamespace(model_id="qwen3:1.7b")]
+
+        engine = SimpleNamespace(NAME="llamacpp", fetch_models=served)
+        monkeypatch.setattr(inference, "get_inference_engine", lambda: engine)
+        with (
+            patch(
+                "app.services.ai.domains.llm.llm_service.get_async_session",
+                mock_async_session,
+            ),
+            patch(
+                "app.services.ai.domains.llm.llm_service.update_env_file"
+            ) as mock_update,
+        ):
+            result = await set_active_model("qwen3:1.7b")
+
+        assert result.success is True, result.message
+        assert mock_update.call_args[0][0]["AI_PROVIDER"] == "llamacpp"
+
     async def test_model_not_found_with_force(
         self,
         mock_async_session,

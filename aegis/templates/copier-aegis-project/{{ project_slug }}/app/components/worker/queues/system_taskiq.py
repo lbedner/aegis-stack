@@ -16,6 +16,9 @@ from app.core.constants import QueueName
 from app.core.discovery import present
 from app.core.log import logger
 
+# A batch to embed or a run of evals: a model call after another.
+SLOW_SECONDS = 30 * 60
+
 # Use redis_url_effective for Docker vs local auto-detection
 redis_url = settings.redis_url_effective
 
@@ -117,7 +120,7 @@ async def embed_files_task(key: str, n: int, files: list[str]) -> None:
 
 # Registered only where the service is: elsewhere the task reaches nothing.
 if present("app.services.rag"):
-    embed_files_task = broker.task(embed_files_task)
+    embed_files_task = broker.task(timeout=SLOW_SECONDS)(embed_files_task)
 
 
 async def run_evals_task(
@@ -141,8 +144,8 @@ async def generate_evals_task(
 
 # Registered only where evals keep their runs: elsewhere it reaches nothing.
 if present("app.services.ai.domains.evals.jobs"):
-    run_evals_task = broker.task(run_evals_task)
-    generate_evals_task = broker.task(generate_evals_task)
+    run_evals_task = broker.task(timeout=SLOW_SECONDS)(run_evals_task)
+    generate_evals_task = broker.task(timeout=SLOW_SECONDS)(generate_evals_task)
 
 
 # The scheduled service jobs, bound here so the registry sees them as this

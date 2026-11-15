@@ -19,8 +19,8 @@ from structlog.contextvars import bound_contextvars
 from app.core.discovery import declared_by
 from app.core.log_attribution import remember_exception_origin
 
-# Seconds a worker lets a long job run, where the queue's own limit (five
-# minutes) is too short. A ceiling, not a measurement.
+# Seconds a worker lets a long job run, where the queue's own limit
+# (``QueueWorker.timeout_seconds``) is too short. A ceiling, not a measurement.
 LONG_RUNNING = 60 * 60
 
 

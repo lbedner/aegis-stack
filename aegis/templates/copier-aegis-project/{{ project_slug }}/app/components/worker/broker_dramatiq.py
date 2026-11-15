@@ -23,6 +23,7 @@ from app.components.worker.heartbeat import PAUSE_KEY, PAUSE_POLL_SECONDS
 from app.components.worker.middleware import EventPublishMiddleware
 from app.core.config import settings
 from app.core.key_family import KeyFamily
+from app.core.queue_workers import settings_for
 # ``_RedisConsumer`` is dramatiq's internal consumer; there is no public
 # base class to subclass for pause support, so we extend it to gate
 # ``__next__`` on the pause flag. The dramatiq pin is capped to < 2.0 so a
@@ -74,6 +75,19 @@ class _PausableRedisConsumer(_RedisConsumer):
         return super().__next__()
 
 
+class QueueTimeLimit(dramatiq.Middleware):
+    """An actor with no ``time_limit`` of its own takes its queue's
+    (``QueueWorker.timeout_seconds``), in place of Dramatiq's ten minutes
+    whatever the queue. After the declaration, as the broker replays that
+    for actors declared before this was added."""
+
+    def after_declare_actor(
+        self, broker: dramatiq.Broker, actor: dramatiq.Actor
+    ) -> None:
+        limit = settings_for(actor.queue_name).timeout_seconds * 1000
+        actor.options.setdefault("time_limit", limit)
+
+
 class PausableRedisBroker(RedisBroker):
     """``RedisBroker`` variant whose consumer respects ``PAUSE_KEY``."""
 
@@ -93,6 +107,7 @@ broker = PausableRedisBroker(url=redis_url)
 broker.add_middleware(AsyncIO())
 broker.add_middleware(Results(backend=result_backend))
 broker.add_middleware(EventPublishMiddleware())
+broker.add_middleware(QueueTimeLimit())
 
 # Set as the global broker so @dramatiq.actor uses it
 dramatiq.set_broker(broker)

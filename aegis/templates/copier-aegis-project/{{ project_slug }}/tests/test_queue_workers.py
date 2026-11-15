@@ -80,3 +80,18 @@ def test_each_queue_has_a_backlog_limit() -> None:
     assert QueueWorker().max_wait_seconds > 0
     with pytest.raises(ValidationError):
         QueueWorker(max_wait_seconds=0)
+
+
+def test_each_queue_has_a_job_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """How long a job may run, and what the Overseer shows for the queue."""
+    from app.components.worker import queue_discovery
+    from app.core.config import settings
+
+    assert QueueWorker().timeout_seconds > 0
+    with pytest.raises(ValidationError):
+        QueueWorker(timeout_seconds=0)
+    monkeypatch.setattr(
+        settings, "WORKER_QUEUES", {"system": QueueWorker(timeout_seconds=42)}
+    )
+    assert queue_discovery.build_metadata("system", [])["timeout"] == 42
+    assert queue_discovery.build_metadata("system", [], timeout=9)["timeout"] == 9

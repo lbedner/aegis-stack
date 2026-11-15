@@ -38,6 +38,7 @@ from app.services.change_queue.schemas import (
     ProposedBatch,
     Withdrawn,
 )
+from app.services.shared.deps import caller_is_admin
 
 Answer = TypeVar("Answer")
 
@@ -58,7 +59,7 @@ async def change_types() -> dict[str, ChangeTypeContract]:
     """The changes you can propose: each change type's title, when to use
     it, and its payload's JSON schema (``propose``'s ``payload`` must match
     it exactly). Read this before proposing a type you have not used."""
-    return change_queue.change_type_contracts()
+    return change_queue.change_type_contracts(admin=await caller_is_admin())
 
 
 async def _committed(
@@ -74,7 +75,11 @@ async def _committed(
             result = await work(session)
             await session.commit()
         except ValueError as e:
-            contracts = change_queue.change_type_contracts() if vocabulary else None
+            contracts = (
+                change_queue.change_type_contracts(admin=await caller_is_admin())
+                if vocabulary
+                else None
+            )
             return NotFiled(error=str(e), change_types=contracts)
     return result
 

@@ -23,7 +23,7 @@ from app.core.chat_transcript import WITHDRAWN, card_outcome
 from app.core.time import utcnow
 from app.services.change_queue.models import PendingChange
 from app.services.change_queue.queries import batch_rows, get_change
-from app.services.change_queue.registry import executor_for
+from app.services.change_queue.registry import ChangeExecutor, executor_for
 from app.services.change_queue.schemas import (
     BatchResolveResponse,
     ChangeDisplayRow,
@@ -41,6 +41,19 @@ def _freeze(display: list[ChangeDisplayRow]) -> list[dict[str, str]]:
 MAX_BATCH_SIZE = 100
 
 
+async def _for_an_admin(
+    db: AsyncSession, executor: ChangeExecutor, owner_user_id: int | None
+) -> None:
+    """ValueError where ``executor`` is an admin's and the owner is not
+    one. A queue with no owners (None) is one tenant's, theirs to run."""
+    if not executor.admin or owner_user_id is None:
+        return
+    from app.services.shared.deps import owner_is_admin
+
+    if not await owner_is_admin(db, owner_user_id):
+        raise ValueError(f"Only an admin can propose or approve {executor.change_type}")
+
+
 async def _file(
     db: AsyncSession,
     change_type: str,
@@ -56,6 +69,7 @@ async def _file(
     door instead of becoming a card the user cannot safely approve, and a
     batch with one bad member dies whole."""
     executor = executor_for(change_type)
+    await _for_an_admin(db, executor, owner_user_id)
     models = []
     for index, payload in enumerate(payloads):
         try:
@@ -271,6 +285,7 @@ async def _approve(
         # A savepoint per row: a write that fails at flush is undone alone,
         # never the batch's approvals before it.
         async with db.begin_nested():
+            await _for_an_admin(db, executor, row.owner_user_id)
             result = await executor.execute(db, model, row.owner_user_id)
     except Exception as e:
         # The row stays PENDING: the error is audit, the decision is

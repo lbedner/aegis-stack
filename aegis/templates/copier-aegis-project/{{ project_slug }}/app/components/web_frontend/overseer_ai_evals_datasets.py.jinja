@@ -1,7 +1,8 @@
 {%- if ai_backend != "memory" -%}
 """What the Evals section does to a dataset (``overseer_ai_evals`` shows
 them): a new one written by the model as a job, one exported as YAML,
-one deleted behind a confirmation (an import is the store's
+one deleted behind a confirmation, a case added to one from a reply in
+the chat (an import is the store's
 ``add_eval_dataset_file`` as is). Each goes through the dataset store the
 CLI and the API use."""
 
@@ -17,6 +18,12 @@ from app.services.ai.service import (
     EVAL_NAME,
     EVAL_NAME_HINT,
     UnknownDatasetError,
+    UnknownTurnError,
+    add_eval_case,
+    eval_calls_from,
+    eval_calls_typed,
+    eval_case_drawn_as,
+    eval_case_from_turn,
     eval_dataset_text,
     eval_datasets,
     remove_eval_dataset,
@@ -31,6 +38,7 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 DATASETS_URL = f"{PARTIALS}/evals/datasets"
+CASES_URL = f"{PARTIALS}/evals/cases"
 
 
 def options(names: list[str]) -> list[dict[str, str]]:
@@ -72,6 +80,52 @@ async def write_dataset(form: Mapping[str, str]) -> str:
         cases=form_number(form.get("cases"), "Cases") or EVAL_CASES,
         like=form.get("like") or None,
     )
+
+
+def _lines(typed: str | None) -> list[str]:
+    """What a box of one-a-line entries holds."""
+    return [line.strip() for line in (typed or "").splitlines() if line.strip()]
+
+
+async def new_case(
+    db: "AsyncSession", turn: str, form: Mapping[str, str] | None, errors: list[str]
+) -> dict[str, Any]:
+    """The Make this an eval dialog for assistant message ``turn``: what
+    the turn asked and called to start from (404 for no such turn), or
+    ``form`` as typed when ``errors`` say why not."""
+    if form is None:
+        try:
+            drawn = await eval_case_from_turn(db, turn, "")
+        except UnknownTurnError:
+            raise HTTPException(status_code=404, detail="No such turn.") from None
+        calls = "\n".join(eval_calls_typed(drawn.calls))
+        form = {"name": drawn.name, "message": drawn.message, "calls": calls}
+    return {
+        "form": form,
+        "errors": errors,
+        "turn": turn,
+        "datasets": await eval_datasets(db),
+        "post_url": CASES_URL,
+    }
+
+
+async def add_case(db: "AsyncSession", form: Mapping[str, str]) -> str:
+    """Keep the form's case in its dataset, with the script its turn took:
+    the dataset's name. ValueError for whatever ``add_eval_case`` refuses
+    (no such turn or dataset among it), or calls that do not read."""
+    dataset = form.get("dataset", "").strip()
+    said = {
+        "name": form.get("name", "").strip(),
+        "message": form.get("message", "").strip(),
+        "calls": eval_calls_from(_lines(form.get("calls"))),
+        "says": _lines(form.get("says")),
+        "avoids": _lines(form.get("avoids")),
+        "why": form.get("why", "").strip() or None,
+        "about": form.get("about", "").strip() or None,
+    }
+    drawn = await eval_case_from_turn(db, form.get("turn", ""), dataset)
+    await add_eval_case(db, eval_case_drawn_as(drawn, said))
+    return dataset
 
 
 async def export(db: "AsyncSession", name: str) -> str:

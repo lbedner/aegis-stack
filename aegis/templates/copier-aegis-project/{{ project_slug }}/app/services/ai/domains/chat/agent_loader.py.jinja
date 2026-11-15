@@ -139,6 +139,10 @@ def default_agent_config() -> AgentConfig:
 {%- if ai_rag %}
             "knowledge",
 {%- endif %}
+{%- if ai_evals and ai_backend != "memory" %}
+            # The eval datasets and runs, for an admin.
+            "evals",
+{%- endif %}
 {%- for plugin in _plugins | default([]) %}
 {%- for tool in plugin.wiring.agent_tools | default([]) %}
             "{{ tool.name }}",

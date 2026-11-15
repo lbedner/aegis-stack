@@ -1,0 +1,95 @@
+{%- if ai_backend != "memory" -%}
+"""The ``evals`` tool: what an agent driving the loop reads. The datasets
+and the latest runs, one dataset's, a run's failing cases and why, and two
+runs compared."""
+
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.tools import Refused, get_tool
+from app.services.ai.domains.evals import tool
+from app.services.ai.domains.evals.datasets import add
+from app.services.ai.domains.evals.queries import Comparison
+from tests._session import opens
+
+from ._kept import two_runs
+from ._mini import DATASET
+
+pytestmark = pytest.mark.queryspy(allow_n_plus_one=True)
+
+
+@pytest.fixture(autouse=True)
+def session(async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tool, "get_async_session", opens(async_db_session))
+
+
+async def test_no_argument_reads_the_datasets_and_the_latest_runs(
+    async_db_session: AsyncSession,
+) -> None:
+    await add(async_db_session, "mini", DATASET)
+    before, after = await two_runs(async_db_session)
+
+    found = await tool.evals()
+
+    assert isinstance(found, tool.Kept)
+    assert [(d.name, len(d.cases)) for d in found.datasets] == [("mini", 2)]
+    assert [(r.id, r.passed, r.cases) for r in found.runs] == [(after, 1, 2), (before, 2, 2)]
+    assert "note" not in found.runs[0].model_dump()
+    assert found.runs[1].note == "baseline"
+
+
+async def test_a_dataset_reads_its_own(async_db_session: AsyncSession) -> None:
+    await add(async_db_session, "mini", DATASET)
+    await add(async_db_session, "other", DATASET)
+    await two_runs(async_db_session)
+
+    mini, other = await tool.evals(dataset="mini"), await tool.evals(dataset="other")
+
+    assert isinstance(mini, tool.Kept) and isinstance(other, tool.Kept)
+    assert ([d.name for d in mini.datasets], len(mini.runs)) == (["mini"], 2)
+    assert ([d.name for d in other.datasets], other.runs) == (["other"], [])
+    assert await tool.evals(dataset="gone") == Refused(error="No dataset 'gone'")
+
+
+async def test_a_run_reads_what_failed_and_why(async_db_session: AsyncSession) -> None:
+    _, after = await two_runs(async_db_session)
+
+    found = await tool.evals(run=after)
+
+    assert isinstance(found, tool.RunDetail)
+    assert (found.run.id, found.run.model, found.passed) == (after, "gpt-other", ["never deletes"])
+    (failed,) = found.failed
+    assert failed.model_dump() == {
+        "name": "reads the paper",
+        "asked": "what does the letter say?",
+        "answered": "I could not find it.",
+        "called": "called no tools",
+        "verdicts": [
+            {
+                "evaluator": "ToolCalls",
+                "rule": "calls paper once",
+                "value": 0.0,
+                "passed": False,
+                "reason": "paper was called 0 times, expected 1",
+            }
+        ],
+    }
+    assert await tool.evals(run=after + 100) == Refused(error=f"No run {after + 100}")
+
+
+async def test_a_run_against_another_reads_what_changed(
+    async_db_session: AsyncSession,
+) -> None:
+    before, after = await two_runs(async_db_session)
+
+    found = await tool.evals(run=after, against=before)
+
+    assert isinstance(found, Comparison)
+    assert [(c.name, c.change.value) for c in found.cases] == [("reads the paper", "flipped")]
+
+
+def test_it_is_an_admins() -> None:
+    registered = get_tool("evals")
+
+    assert registered is not None and registered.admin
+{%- endif %}

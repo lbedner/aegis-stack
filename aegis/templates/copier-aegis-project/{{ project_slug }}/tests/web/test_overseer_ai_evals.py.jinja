@@ -20,10 +20,10 @@ from app.components.web_frontend import (
 )
 from app.components.web_frontend.overseer_live import JOB_DONE
 from app.services.ai.domains.evals import queries
-from app.services.ai.domains.evals.datasets import DatasetSummary, add
+from app.services.ai.domains.evals.datasets import DatasetSummary, add, describe
 from app.services.system.jobs import get_job_runner
 from tests.services.ai.evals import _kept as kept
-from tests.services.ai.evals._mini import DATASET
+from tests.services.ai.evals._mini import DATASET, turn
 from tests.web.dom import (
     chosen,
     location,
@@ -354,6 +354,54 @@ def test_a_name_taken_is_said_in_the_dialog(
     assert response.status_code == 422
     assert "already exists" in response.text
     assert one(Markup(response.text), "input[name=about]").get("value") == "Reads."
+
+
+@pytest.fixture
+async def reply(async_db_session: AsyncSession) -> str:
+    """A reply in the chat that called ``paper`` once: its id."""
+    return (await turn(async_db_session)).id
+
+
+def test_a_reply_is_made_an_eval_in_a_dialog(client: TestClient, reply: str) -> None:
+    url = f"{PARTIALS}/evals/cases/new"
+
+    form = one(Markup(client.get(url, params={"turn": reply}).text), "form")
+
+    assert form.get("hx-post") == f"{PARTIALS}/evals/cases"
+    assert one(form, "input[name=turn]").get("value") == reply
+    assert one(form, "input[name=message]").get("value") == "what does the letter say?"
+    assert text(one(form, "textarea[name=calls]")) == "paper=1"
+    assert [o.get("value") for o in select(form, "datalist option")] == ["mini"]
+    assert client.get(url, params={"turn": "nope"}).status_code == 404
+
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # each request reads the dataset
+@pytest.mark.usefixtures("client")
+async def test_the_case_is_kept_and_the_chat_left_as_it_is(
+    hx: TestClient, reply: str, async_db_session: AsyncSession
+) -> None:
+    said = {
+        "turn": reply,
+        "dataset": "mini",
+        "name": "the letter is read",
+        "message": "what does the letter say?",
+        "calls": "paper\ndelete=0",
+        "says": "hello",
+    }
+
+    kept_ = hx.post(f"{PARTIALS}/evals/cases", data=said)
+    again = hx.post(f"{PARTIALS}/evals/cases", data=said)
+
+    assert kept_.status_code == 200, kept_.text
+    assert "dialog:close" in triggers(kept_) and "mini" in triggers(kept_)["toast"]["text"]
+    assert "HX-Location" not in kept_.headers
+    added = (await describe(async_db_session, "mini")).cases[-1]
+    assert (added.name, added.checks) == (
+        "the letter is read",
+        ["calls paper once", "never calls delete", 'says "hello"'],
+    )
+    assert again.status_code == 422 and "already has a case" in again.text
+    assert text(one(Markup(again.text), "textarea[name=calls]")) == "paper delete=0"
 
 
 @pytest.mark.queryspy(allow_n_plus_one=True)  # each request reads the dataset

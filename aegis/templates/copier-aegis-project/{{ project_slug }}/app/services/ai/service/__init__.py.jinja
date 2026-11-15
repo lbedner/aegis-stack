@@ -232,6 +232,16 @@ if TYPE_CHECKING:
 {%- endif %}
 {%- if ai_evals and ai_backend != "memory" %}
     from app.services.ai.domains.evals import queries as eval_runs
+    from app.services.ai.domains.evals.cases import (
+        NewCase as NewEvalCase,
+        UnknownTurnError,
+        add_case as add_eval_case,
+        calls_from as eval_calls_from,
+        calls_typed as eval_calls_typed,
+        drawn_as as eval_case_drawn_as,
+        from_turn as eval_case_from_turn,
+    )
+    from app.services.ai.domains.evals.changes import RunToStart as EvalRunToStart
     from app.services.ai.domains.evals.datasets import (
         NAME as EVAL_NAME,
         NAME_HINT as EVAL_NAME_HINT,

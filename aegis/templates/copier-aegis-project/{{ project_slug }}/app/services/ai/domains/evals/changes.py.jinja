@@ -1,0 +1,137 @@
+{%- if ai_backend != "memory" -%}
+"""What an agent may propose of the evals, on the change queue: a case
+added to a dataset (``ADD_CASE``) and a dataset run (``START_RUN``, each
+case a turn on the model, paid for). Nothing lands until a person approves
+the card; an admin's to file and approve (``admin``), as the evals are
+everywhere."""
+
+from pydantic import BaseModel, ConfigDict, Field
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.figures import FIGURES
+from app.services.ai.models.evals import EvalDatasetRecord, EvalRun
+from app.services.change_queue.registry import ChangeExecutor, register
+from app.services.change_queue.schemas import ChangeDisplayRow
+
+from .cases import NewCase, add_case, checks
+from .datasets import names
+from .evaluators import explain
+
+ADD_CASE = "eval_dataset.add_case"
+START_RUN = "eval_run.start"
+
+
+class CaseAdded(BaseModel):
+    """A case kept: where, and how many cases its dataset now has."""
+
+    model_config = FIGURES
+
+    dataset: str
+    case: str
+    cases: int
+
+
+class RunToStart(BaseModel):
+    """A dataset to run, each case a real turn on the model."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    dataset: str = Field(description="The dataset, from evals()")
+    model: str | None = Field(default=None, description="This model; the one in force when unset")
+    note: str | None = Field(default=None, description="Why it is run, kept with the run")
+
+
+class RunStarted(BaseModel):
+    """A run started as a job; ``evals()`` shows it once it is kept."""
+
+    model_config = FIGURES
+
+    dataset: str
+    job_id: str
+
+
+async def add_case_execute(
+    session: AsyncSession, payload: NewCase, owner_user_id: int | None
+) -> CaseAdded:
+    found = await add_case(session, payload)
+    return CaseAdded(dataset=found.name, case=payload.name, cases=len(found.cases))
+
+
+def _case_rows(new: NewCase, kept: set[str]) -> list[ChangeDisplayRow]:
+    dataset = new.dataset if new.dataset in kept else f"{new.dataset} (new: {new.about})"
+    rows = [
+        ChangeDisplayRow(label="Dataset", value=dataset),
+        ChangeDisplayRow(label="Case", value=new.name),
+        ChangeDisplayRow(label="Asks", value=new.message),
+        ChangeDisplayRow(
+            label="Passes if", value="; ".join(explain(check) for check in checks(new))
+        ),
+    ]
+    if new.why:
+        rows.append(ChangeDisplayRow(label="Why", value=new.why))
+    return rows
+
+
+async def add_case_describe(
+    session: AsyncSession, payloads: list[NewCase], owner_user_id: int | None
+) -> list[list[ChangeDisplayRow]]:
+    kept = set(await names(session))
+    return [_case_rows(new, kept) for new in payloads]
+
+
+async def start_run_execute(
+    session: AsyncSession, payload: RunToStart, owner_user_id: int | None
+) -> RunStarted:
+    # The runner loads the AI service, which loads the tools and this with them.
+    from .jobs import start_evals
+
+    job_id = await start_evals(payload.dataset, model=payload.model, note=payload.note)
+    return RunStarted(dataset=payload.dataset, job_id=job_id)
+
+
+def _run_rows(run: RunToStart, kept: set[str]) -> list[ChangeDisplayRow]:
+    dataset = run.dataset if run.dataset in kept else f"{run.dataset} (missing)"
+    rows = [
+        ChangeDisplayRow(label="Dataset", value=dataset),
+        ChangeDisplayRow(label="Model", value=run.model or "the one in force"),
+    ]
+    if run.note:
+        rows.append(ChangeDisplayRow(label="Note", value=run.note))
+    return rows
+
+
+async def start_run_describe(
+    session: AsyncSession, payloads: list[RunToStart], owner_user_id: int | None
+) -> list[list[ChangeDisplayRow]]:
+    kept = set(await names(session))
+    return [_run_rows(run, kept) for run in payloads]
+
+
+register(
+    ChangeExecutor(
+        change_type=ADD_CASE,
+        title="Add an eval case",
+        payload_model=NewCase,
+        execute=add_case_execute,
+        describe=add_case_describe,
+        description="State what a turn should do, as a case in a dataset: the "
+        "message, the tools it calls or never calls, what its answer says or "
+        "leaves out. Write it to fail first, then change what makes it pass.",
+        object=EvalDatasetRecord,
+        admin=True,
+    )
+)
+register(
+    ChangeExecutor(
+        change_type=START_RUN,
+        title="Run an eval dataset",
+        payload_model=RunToStart,
+        execute=start_run_execute,
+        describe=start_run_describe,
+        description="Score a dataset on the model: every case a real turn, "
+        "paid for. evals(run=...) reads how it went, and why each case failed.",
+        object=EvalRun,
+        admin=True,
+    )
+)
+{%- endif %}

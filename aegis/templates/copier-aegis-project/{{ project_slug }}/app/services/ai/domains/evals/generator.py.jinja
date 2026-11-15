@@ -11,13 +11,10 @@ then is the dataset kept)."""
 
 from collections.abc import Collection
 import inspect
-import textwrap
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 from pydantic_evals.generation import generate_dataset
 from sqlmodel.ext.asyncio.session import AsyncSession
-import yaml
 
 from app.core.config import settings
 from app.core.tools import get_tool, load_tools
@@ -36,6 +33,7 @@ from .datasets import (
     taken,
     unknown,
     without,
+    written,
 )
 from .datasets import about as about_of
 from .evaluators import EVALUATORS, SPANS
@@ -141,21 +139,6 @@ def instructions(
     if like is not None:
         told.append(f"Write like this dataset:\n\n{_unscripted(like)}")
     return "\n\n".join(told)
-
-
-def written(dataset: EvalDataset, about: str) -> str:
-    """``dataset`` as YAML: ``about`` as its leading comment, then its
-    cases with only the fields they set (the short forms a person writes)."""
-    dumped: dict[str, Any] = dataset.model_dump(
-        mode="json",
-        by_alias=True,
-        exclude_defaults=True,
-        exclude_none=True,
-        context={"use_short_form": True},
-    )
-    dumped.pop("name", None)
-    comment = textwrap.fill(about, 72, initial_indent="# ", subsequent_indent="# ")
-    return f"{comment}\n{yaml.safe_dump(dumped, sort_keys=False, allow_unicode=True)}"
 
 
 def check_new(

@@ -56,6 +56,21 @@ Then each case runs once on that model, and only the cases that pass are kept, e
 
 Overseer > AI > Evals > Datasets does the same from "New dataset", as a job (on the worker where there is one) that the tab follows.
 
+### One case at a time
+
+A case is added without its YAML written by hand. Say what the turn should do:
+
+```bash
+uv run my-app ai evals add ops "what went wrong today?" --name "reads the errors" \
+  --calls errors --calls delete=0 --says "error" --avoids "I think" --why "today's errors come from the log"
+```
+
+`--calls errors` is one call, `--calls errors=2` two, `--calls delete=0` a tool it never calls. `--says` and `--avoids` are text the answer contains and never says. A case has to check something, and its name is unique in its dataset. A dataset there is none of is made by its first case, when `--about` says what it checks.
+
+`--turn <message id>` draws the case from a turn that happened: its question, each tool it called and how many times, and the script it took, so the case plays in CI too. Whatever is said beside it (a name, other checks) goes over what the turn did, which is how a wrong turn becomes the case it should have passed.
+
+In Overseer > AI > Chat, the flask under a reply opens the same thing as a form, "Make this an eval": the dataset, the case's name, what it asks, its calls, what the answer says and never says. The turn's script is kept with it.
+
 ### In and out
 
 YAML is how a dataset comes in and goes out. `ai evals import` keeps each file as a dataset named by the file (`ops.yaml` is `ops`), and `--replace` puts it over the one of that name, for a shipped file edited since it was seeded. `ai evals export` prints one back, as it was written:
@@ -99,6 +114,7 @@ uv run my-app ai evals run starter --model gpt-4o-mini
 uv run my-app ai evals list                     # kept runs, newest first
 uv run my-app ai evals datasets                 # each dataset: what it checks, how many cases
 uv run my-app ai evals datasets ops             # one dataset: each case, what it asks and passes on
+uv run my-app ai evals add ops "what broke?" --name "reads the errors" --calls errors  # one case, no YAML
 uv run my-app ai evals delete ops               # delete it, once confirmed (--yes skips the question)
 uv run my-app ai evals show 12                  # each case: pass or fail, how long; each failed check and why
 uv run my-app ai evals show 12 "reads the letter" # one case: its answer, every check and why, the tools it called
@@ -113,6 +129,8 @@ make evals                                      # ai evals run, every dataset
 | `POST /api/v1/ai/evals/runs` | `{"dataset", "model"?, "note"?}`: starts the run as a job and returns its `job_id` (202). The run goes to the worker when the stack has one, and runs in the webserver otherwise. `/api/v1/jobs/{id}/events` streams each case as it starts (`3 of 12 · reads the letter`), then the run's id. |
 | `POST /api/v1/ai/evals/datasets` | `{"name", "about", "cases"?, "like"?}`: has the model write dataset `name` as a job and returns its `job_id` (202), as `ai evals generate` does. 422 for a name taken or not a dataset name, an `about` under 10 characters, or a count out of range; 404 for an unknown `like`. |
 | `POST /api/v1/ai/evals/datasets/import` | `{"name", "text", "replace"?}`: keeps `text` (the YAML) as dataset `name` and returns it read (201), as `ai evals import` does. 422 for a name taken (unless `replace`) or not a dataset name, or YAML that is no dataset. |
+| `POST /api/v1/ai/evals/cases` | `{"dataset", "name", "message", "calls"?, "says"?, "avoids"?, "why"?, "agent"?, "script"?, "about"?}`: adds the case to its dataset and returns the dataset read (201), as `ai evals add` does. `calls` is `{"errors": 1, "delete": 0}`. 404 for a dataset not there (unless `about` starts one); 422 for a name the dataset has, or a case that checks nothing. |
+| `GET /api/v1/ai/evals/cases/draft?turn=&dataset=` | The case an assistant message would be: its question, calls and script, to edit and post back. 404 for no such turn. |
 | `GET /api/v1/ai/evals/datasets` | Every dataset: what it checks, and each case with what it asks and passes on. One that cannot be read (a check it names has gone) is listed with why, and no cases. `/datasets/{name}` reads one (404 for one not there), `/datasets/{name}/yaml` its YAML as written. |
 | `DELETE /api/v1/ai/evals/datasets/{name}` | Deletes the dataset (204; 404 for one not there). Its kept runs stay, and the startup seed never brings a shipped one back. |
 | `GET /api/v1/ai/evals/runs` | Kept runs, newest first (`?dataset=`, `?model=`, `?limit=`). |
@@ -134,6 +152,21 @@ async with get_async_session() as session:
     for case in (await eval_runs.compare(session, before.id, after.id)).cases:
         print(case.name, case.change)
 ```
+
+## Driven by an agent
+
+An agent can run the loop: read what failed, state what should happen as a case, have it run, read the result. It reads with one tool and changes nothing without a person.
+
+- **`evals`** (a read, an admin's). No argument: every dataset with its cases, and the latest runs. `dataset="ops"`: that one and its runs. `run=12`: the cases the run failed, each with what was asked, what came back, the tools called and why each check said no. `run=12, against=11`: the cases that changed between the two.
+- **`eval_dataset.add_case`** and **`eval_run.start`** are change types on the [approval queue](agents.md#proposals-writes-the-user-approves). The agent files one with `propose`, a card shows what the case asks and passes on (or which dataset runs, on which model), and it lands when an admin approves it. A run is real turns on the model, so starting one is a person's call.
+
+The default assistant holds `evals`; to have it propose, grant it `propose` and `change_types` in Overseer > AI > Agents. Both change types are an admin's: only an admin's agent is told of them, and the queue files and approves them for no one else. Over [MCP](../../components/mcp.md), `evals` is in `MCP_TOOLS` wherever the stack has both, so a coding agent reads the runs with a read token. To let it propose too, grant the queue's tools and use a token with the `propose` scope:
+
+```bash
+MCP_TOOLS=["evals","change_types","propose","pending","withdraw"]
+```
+
+`change_types` tells it what each change takes.
 
 ## In CI
 

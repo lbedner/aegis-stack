@@ -1,0 +1,125 @@
+{%- if ai_backend != "memory" -%}
+"""What an agent may propose of the evals: a case added, a dataset run.
+Each is a card first; only approving it does anything."""
+
+from typing import Any
+
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services import change_queue
+from app.services.ai.domains.evals import changes, jobs
+from app.services.ai.domains.evals.datasets import add, describe
+from app.services.shared import deps
+
+from ._mini import BALANCE, DATASET
+
+pytestmark = pytest.mark.queryspy(allow_n_plus_one=True)
+
+
+async def _card(session: AsyncSession, row: Any) -> list[tuple[str, str]]:
+    card = await change_queue.card(session, row)
+    return [(line.label, line.value) for line in card.display]
+
+
+async def test_a_proposed_case_joins_its_dataset_once_approved(
+    async_db_session: AsyncSession,
+) -> None:
+    await add(async_db_session, "mini", DATASET)
+
+    row = await change_queue.propose(
+        async_db_session, changes.ADD_CASE, BALANCE.model_dump(mode="json"), owner_user_id=None
+    )
+
+    assert await _card(async_db_session, row) == [
+        ("Dataset", "mini"),
+        ("Case", "a balance is read"),
+        ("Asks", "what is my balance?"),
+        (
+            "Passes if",
+            'calls ledger once; never calls delete; says "balance"; never says "sorry"',
+        ),
+        ("Why", "a number is read, never guessed"),
+    ]
+    assert len((await describe(async_db_session, "mini")).cases) == 2
+
+    outcome = await change_queue.approve_rows(async_db_session, [row])
+
+    assert (outcome.approved, outcome.failed) == (1, 0)
+    assert row.result is not None
+    assert (row.result["case"], row.result["cases"]) == ("a balance is read", 3)
+    assert len((await describe(async_db_session, "mini")).cases) == 3
+
+
+async def test_a_case_for_a_dataset_there_is_none_of_says_so(
+    async_db_session: AsyncSession,
+) -> None:
+    new = BALANCE.model_copy(update={"dataset": "money", "about": "Money is read.", "why": None})
+
+    row = await change_queue.propose(
+        async_db_session, changes.ADD_CASE, new.model_dump(mode="json"), owner_user_id=None
+    )
+
+    assert (await _card(async_db_session, row))[0] == ("Dataset", "money (new: Money is read.)")
+
+
+async def test_a_proposed_run_starts_once_approved(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started: list[tuple[str, str | None, str | None]] = []
+
+    async def start(name: str, *, model: str | None, note: str | None) -> str:
+        started.append((name, model, note))
+        return "job-1"
+
+    monkeypatch.setattr(jobs, "start_evals", start)
+    await add(async_db_session, "mini", DATASET)
+
+    row = await change_queue.propose(
+        async_db_session, changes.START_RUN, {"dataset": "mini", "note": "after the fix"},
+        owner_user_id=None,
+    )
+
+    assert await _card(async_db_session, row) == [
+        ("Dataset", "mini"),
+        ("Model", "the one in force"),
+        ("Note", "after the fix"),
+    ]
+    assert started == []
+
+    await change_queue.approve_rows(async_db_session, [row])
+
+    assert started == [("mini", None, "after the fix")]
+    assert row.result is not None and row.result["job_id"] == "job-1"
+
+
+async def test_a_run_of_no_dataset_says_it_is_missing(
+    async_db_session: AsyncSession,
+) -> None:
+    row = await change_queue.propose(
+        async_db_session, changes.START_RUN, {"dataset": "gone", "model": "gpt-x"},
+        owner_user_id=None,
+    )
+
+    assert await _card(async_db_session, row) == [
+        ("Dataset", "gone (missing)"),
+        ("Model", "gpt-x"),
+    ]
+
+
+async def test_they_are_an_admins_to_file_and_to_read(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def nobody(session: AsyncSession, owner_user_id: int | None) -> bool:
+        return False
+
+    monkeypatch.setattr(deps, "owner_is_admin", nobody)
+    ours = {changes.ADD_CASE, changes.START_RUN}
+
+    with pytest.raises(ValueError, match="Only an admin"):
+        await change_queue.propose(
+            async_db_session, changes.START_RUN, {"dataset": "mini"}, owner_user_id=7
+        )
+    assert ours <= set(change_queue.change_type_contracts())
+    assert not ours & set(change_queue.change_type_contracts(admin=False))
+{%- endif %}

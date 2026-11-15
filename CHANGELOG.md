@@ -115,6 +115,17 @@
   one exclusive pick: `days` holds the values ticked and the row is a
   `data-checklist`, so over a list it narrows the rows with no request
   (`data-facets`).
+- **A case without its YAML, and the evals an agent can drive.** `ai evals
+  add`, `POST /api/v1/ai/evals/cases` and "Make this an eval" under a reply
+  in the Overseer's chat add one case to a dataset: the tools its turn
+  calls or never calls, what its answer says and avoids. `--turn` (and
+  `GET .../cases/draft`) draws it from a turn that happened, script
+  included. The `evals` tool reads the datasets, the runs, why a run's
+  cases failed and what changed between two runs; the assistant holds it
+  and MCP serves it. An agent adds a case or starts a run by proposing
+  `eval_dataset.add_case` or `eval_run.start`, which an admin approves.
+  A change type can be an admin's (`ChangeExecutor(admin=True)`): filed,
+  approved and named only for one.
 - **`ai[evals]`.** Datasets kept in the database (`eval_dataset`, each
   its YAML as written), the shipped `evals/*.yaml` added at startup and
   by the `ai evals` commands where the database has never had the name,

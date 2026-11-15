@@ -2,7 +2,7 @@
 """``ai evals``: score a dataset on the model in force and keep the run,
 then read kept runs back and compare two of them; and the datasets
 themselves: read, written by the model, deleted, imported from YAML and
-exported as it."""
+exported as it, and one case added to one."""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -24,9 +24,14 @@ from app.core.formatting import (
 from app.services.ai.service import (
     EVAL_CASES,
     EvalRun,
+    NewEvalCase,
     UnknownDatasetError,
+    add_eval_case,
     add_eval_dataset_file,
     eval_called,
+    eval_calls_from,
+    eval_case_drawn_as,
+    eval_case_from_turn,
     eval_dataset,
     eval_dataset_summaries,
     eval_dataset_text,
@@ -193,6 +198,47 @@ async def datasets(
     for case in dataset.cases:
         table.add_row(escape(case.name), escape(case.message), escape("; ".join(case.checks)))
     console.print(table)
+
+
+@evals.command("add")
+async def add_case(
+    dataset: str = typer.Argument(..., help="The dataset it joins"),
+    message: str | None = typer.Argument(None, help="What the person asks"),
+    name: str | None = typer.Option(None, "--name", "-n", help="What the case is, in a few words"),
+    turn: str | None = typer.Option(
+        None, "--turn", help="An assistant message's id: its question, calls and script"
+    ),
+    calls: list[str] = typer.Option(
+        [], "--calls", help="A tool the turn calls: ledger, ledger=2, delete=0 (never)"
+    ),
+    says: list[str] = typer.Option([], "--says", help="Text the answer contains"),
+    avoids: list[str] = typer.Option([], "--avoids", help="Text the answer never says"),
+    why: str | None = typer.Option(None, "--why", help="What it guards against"),
+    agent: str | None = typer.Option(None, "--agent", help="The agent asked"),
+    about: str | None = typer.Option(None, "--about", help="What a new dataset checks"),
+) -> None:
+    """Add one case to a dataset, its YAML written for it: said here, or
+    drawn from a turn that happened (``--turn``), whatever is said here
+    over what the turn did."""
+    if not turn and not (message and name):
+        theme.fail("Say the message and --name, or the --turn it is drawn from")
+    said = {"name": name, "message": message, "why": why, "agent": agent, "about": about}
+    try:
+        checks = {"calls": eval_calls_from(calls), "says": says, "avoids": avoids}
+        given = {key: value for key, value in (said | checks).items() if value}
+        async with _seeded() as session:
+            if turn:
+                drawn = await eval_case_from_turn(session, turn, dataset)
+                new = eval_case_drawn_as(drawn, given)
+            else:
+                new = NewEvalCase(dataset=dataset, **given)
+            found = await add_eval_case(session, new)
+    except ValueError as exc:  # no dataset or turn, a name taken, no check
+        theme.fail(str(exc))
+    console.print(
+        f"Added [bold]{escape(new.name)}[/bold] to [bold]{dataset}[/bold] "
+        f"({counted(len(found.cases), 'case')})"
+    )
 
 
 @evals.command("delete")

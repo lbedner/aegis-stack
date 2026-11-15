@@ -57,6 +57,9 @@ class ChangeExecutor:
     description: str = ""
     # The table it changes (the system model's ``object:<table>``).
     object: type[SQLModel] | None = None
+    # An operator's change: filed and approved only for an admin, and
+    # named only to one.
+    admin: bool = False
 
 
 _EXECUTORS: dict[str, ChangeExecutor] = {}
@@ -83,9 +86,10 @@ def registered_change_types() -> tuple[str, ...]:
     return tuple(sorted(_EXECUTORS))
 
 
-def change_type_contracts() -> dict[str, ChangeTypeContract]:
+def change_type_contracts(admin: bool = True) -> dict[str, ChangeTypeContract]:
     """Every registered type as an agent reads it, its payload's schema
-    straight from the payload model."""
+    straight from the payload model; an admin's types left out unless
+    ``admin``."""
     return {
         name: ChangeTypeContract(
             title=executor.title,
@@ -94,6 +98,7 @@ def change_type_contracts() -> dict[str, ChangeTypeContract]:
             payload_schema=executor.payload_model.model_json_schema(),
         )
         for name, executor in sorted(_EXECUTORS.items())
+        if admin or not executor.admin
     }
 
 

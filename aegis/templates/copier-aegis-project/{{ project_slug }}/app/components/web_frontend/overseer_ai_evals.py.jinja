@@ -126,9 +126,7 @@ async def _results(db: "AsyncSession", run: EvalRun) -> dict[str, dict[str, Any]
     """Each case of ``run`` as it went (``_result``), by name: the run's
     cases and their scores in two reads."""
     assert run.id is not None
-    by_case: dict[int | None, list[EvalScore]] = {}
-    for score in await eval_runs.run_scores(db, run.id):
-        by_case.setdefault(score.case_id, []).append(score)
+    by_case = await eval_runs.scores_by_case(db, run.id)
     return {
         case.name: _result(run, case, by_case.get(case.id, []))
         for case in await eval_runs.cases(db, run.id)

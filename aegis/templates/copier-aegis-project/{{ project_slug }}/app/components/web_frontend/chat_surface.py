@@ -69,6 +69,10 @@ class ChatSurface:
     # A reply's drawer edits the agent behind it (the Overseer's agent
     # editor); a mount without one leaves the link out.
     agent_drawer: bool = False
+    # Where a reply is made an eval case: the address its dialog opens
+    # from (the Overseer's Evals), the reply named by ``?turn=``. None
+    # leaves the action out.
+    eval_cases: str | None = None
     # What its conversations are about, within the surface: an app's
     # scope key (a project's id, say). The turn binds it for tools and
     # briefings (``current_subject``), and the history lists only its own.
@@ -372,6 +376,9 @@ def settled(
         "continue_vals": {"message": CONTINUE, "conversation_id": conversation_id},
         "model_icon": (icons or {}).get(str(meta.get("provider") or "")),
         "speech": f"{url}/speech" if HAS_VOICE else None,
+        "eval_url": f"{chat.eval_cases}?{urlencode({'turn': message.id})}"
+        if chat.eval_cases and message.role.value == "assistant"
+        else None,
     }
 
 

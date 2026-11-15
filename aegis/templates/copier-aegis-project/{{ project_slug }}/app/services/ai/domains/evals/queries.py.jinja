@@ -1,9 +1,11 @@
 {%- if ai_backend != "memory" -%}
 """Reading the datasets (``datasets.py`` writes them) and kept runs: newest
 first or one by id, a run's cases (or one by name), a case's scores or all
-of a run's, and two runs side by side (what changed)."""
+of a run's, and two runs side by side (what changed); and a turn a
+person had, for the case drawn from it (``cases.from_turn``)."""
 
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, computed_field
 from sqlalchemy import func
@@ -11,8 +13,9 @@ from sqlalchemy.orm import defer
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.models.conversation import ConversationMessage
+from app.services.ai.models.conversation import MessageRole
 from app.services.ai.models.evals import EvalCase, EvalDatasetRecord, EvalRun, EvalScore
-
 
 # A dataset not deleted.
 _LIVE = col(EvalDatasetRecord.deleted_at).is_(None)
@@ -43,6 +46,40 @@ async def dataset_record(session: AsyncSession, name: str) -> EvalDatasetRecord 
 async def dataset_rows(session: AsyncSession) -> list[EvalDatasetRecord]:
     """Every dataset's row, the deleted ones too."""
     return list(await session.exec(select(EvalDatasetRecord)))
+
+
+class Turn(BaseModel):
+    """A turn a person had: what they asked, what the assistant answered,
+    and the calls it made on the way (its trace, as the message keeps it)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    message: str
+    answer: str
+    trace: list[Any]
+
+
+async def turn(session: AsyncSession, message_id: str) -> Turn | None:
+    """The turn that ended in assistant message ``message_id``, with the
+    question before it in its conversation; None for no such answer."""
+    answer = await session.get(ConversationMessage, message_id)
+    if answer is None or answer.role != MessageRole.ASSISTANT:
+        return None
+    query = (
+        select(ConversationMessage.content)
+        .where(
+            ConversationMessage.conversation_id == answer.conversation_id,
+            ConversationMessage.role == MessageRole.USER,
+            col(ConversationMessage.timestamp) <= answer.timestamp,
+        )
+        .order_by(col(ConversationMessage.timestamp).desc())
+        .limit(1)
+    )
+    asked = (await session.exec(query)).first()
+    if asked is None:
+        return None
+    trace = (answer.meta_data or {}).get("tool_trace") or []
+    return Turn(message=asked, answer=answer.content, trace=trace)
 
 
 async def runs(
@@ -103,15 +140,32 @@ async def scores(session: AsyncSession, case_id: int) -> list[EvalScore]:
     return list(await session.exec(query))
 
 
-async def run_scores(session: AsyncSession, run_id: int) -> list[EvalScore]:
-    """Every verdict on a run's cases, in one query, in the order they ran."""
+async def run_scores(
+    session: AsyncSession, run_id: int, *, failed: bool = False
+) -> list[EvalScore]:
+    """Every verdict on a run's cases, in one query, in the order they ran;
+    with ``failed``, only those that did not pass, on cases that failed."""
     query = (
         select(EvalScore)
         .join(EvalCase, col(EvalCase.id) == EvalScore.case_id)
         .where(EvalCase.run_id == run_id)
         .order_by(col(EvalScore.id))
     )
+    if failed:
+        query = query.where(
+            col(EvalCase.passed).is_(False), col(EvalScore.passed).is_not(True)
+        )
     return list(await session.exec(query))
+
+
+async def scores_by_case(
+    session: AsyncSession, run_id: int, *, failed: bool = False
+) -> dict[int | None, list[EvalScore]]:
+    """``run_scores``, under the case each is on."""
+    by_case: dict[int | None, list[EvalScore]] = {}
+    for score in await run_scores(session, run_id, failed=failed):
+        by_case.setdefault(score.case_id, []).append(score)
+    return by_case
 
 
 class ScoreDelta(BaseModel):

@@ -3,6 +3,7 @@ dataset, for the evals tests."""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 import json
 from typing import Any
 
@@ -10,9 +11,12 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 import pytest
 from sqlmodel import delete
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
+from app.models import conversation as stored
 from app.services.ai.domains.evals import datasets
+from app.services.ai.domains.evals.cases import NewCase
 from app.services.ai.domains.evals.datasets import add, names, text
 from app.services.ai.models import ConversationMessage, MessageRole
 from app.services.ai.models.evals import EvalDatasetRecord
@@ -155,3 +159,46 @@ def writing(
 
     monkeypatch.setattr(generator, "model_for_active", in_force)
     return told
+
+
+# A case said as fields, for ``mini``.
+BALANCE = NewCase(
+    dataset="mini",
+    name="a balance is read",
+    message="what is my balance?",
+    why="a number is read, never guessed",
+    calls={"ledger": 1, "delete": 0},
+    says=["balance"],
+    avoids=["sorry"],
+)
+# A turn's trace: ``paper`` called once.
+PAPER_ONCE: list[dict[str, object]] = [{"tool": "paper", "args": "{}", "result": "hello"}]
+
+
+async def turn(
+    session: AsyncSession, trace: list[dict[str, object]] = PAPER_ONCE
+) -> stored.ConversationMessage:
+    """A person's question (``q1``) and the assistant's answer to it
+    (``a1``, returned), kept."""
+    asked = datetime(2026, 7, 1, tzinfo=UTC)
+    session.add(stored.Conversation(id="c1", user_id="u1"))
+    session.add(
+        stored.ConversationMessage(
+            id="q1",
+            conversation_id="c1",
+            role="user",
+            content="what does the letter say?",
+            timestamp=asked,
+        )
+    )
+    answer = stored.ConversationMessage(
+        id="a1",
+        conversation_id="c1",
+        role="assistant",
+        content="The letter says hello.",
+        timestamp=asked + timedelta(seconds=2),
+        meta_data={"tool_trace": trace},
+    )
+    session.add(answer)
+    await session.flush()
+    return answer

@@ -184,6 +184,32 @@ def test_datasets_are_listed_and_one_is_read_with_its_cases(mini: None) -> None:
 
 
 @pytest.mark.queryspy(allow_n_plus_one=True)  # each command reads the dataset
+def test_a_case_is_added_without_its_yaml_written(mini: None) -> None:
+    said = ["what is my balance?", "--name", "a balance is read"]
+    checks = ["--calls", "ledger", "--calls", "delete=0", "--says", "balance"]
+
+    added = invoke(["ai", "evals", "add", "mini", *said, *checks, "--avoids", "sorry"])
+    assert added.exit_code == 0, added.output
+    assert "a balance is read" in added.output and "3 cases" in added.output
+    assert "calls ledger once" in invoke(["ai", "evals", "datasets", "mini"]).output
+
+    again = invoke(["ai", "evals", "add", "mini", *said, *checks])
+    assert again.exit_code == 1 and "already has a case" in again.output
+    nothing = invoke(["ai", "evals", "add", "mini", "hello", "--name", "checks nothing"])
+    assert nothing.exit_code == 1 and "checks nothing" in nothing.output
+    unsaid = invoke(["ai", "evals", "add", "mini", "--says", "x"])
+    assert unsaid.exit_code == 1 and "--turn" in unsaid.output
+    odd = invoke(["ai", "evals", "add", "mini", *said, "--calls", "ledger=twice"])
+    assert odd.exit_code == 1 and "ledger=twice" in odd.output
+    no_turn = invoke(["ai", "evals", "add", "mini", "--turn", "nope"])
+    assert no_turn.exit_code == 1 and "No turn 'nope'" in no_turn.output
+    new = invoke(["ai", "evals", "add", "money", *said, *checks])
+    assert new.exit_code == 1 and "money" in new.output
+    made = invoke(["ai", "evals", "add", "money", *said, *checks, "--about", "Money is read."])
+    assert made.exit_code == 0 and "1 case" in made.output
+
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # each command reads the dataset
 def test_a_dataset_is_deleted_once_confirmed(mini: None) -> None:
     stays = invoke(["ai", "evals", "delete", "mini"], input="n\n")
     assert "Cancelled" in stays.output

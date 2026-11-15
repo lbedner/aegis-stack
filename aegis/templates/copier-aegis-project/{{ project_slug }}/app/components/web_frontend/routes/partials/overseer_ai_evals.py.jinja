@@ -1,7 +1,8 @@
 {%- if ai_backend != "memory" -%}
 """Fragments for the Overseer AI page's Evals section: a new dataset
 written by the model (its dialog), one imported from a YAML file or
-downloaded as it, one deleted (asked first), a run started as a job
+downloaded as it, one deleted (asked first), a reply in the chat kept as
+a case (its dialog), a run started as a job
 (``start_evals``), and the job followed over SSE. Mounted by
 ``overseer_ai``'s router where the section is (``HAS_EVALS``)."""
 
@@ -16,6 +17,7 @@ from app.components.web_frontend.overseer_access import Db, overseer_db
 from app.components.web_frontend.overseer_ai_common import section_url
 from app.components.web_frontend.overseer_live import event_stream, heartbeat
 from app.components.web_frontend.rendering import (
+    close_dialog,
     dialog,
     dialog_done,
     form_fields,
@@ -26,6 +28,7 @@ from app.services.ai.service import EVAL_YAML_TYPE, add_eval_dataset_file
 
 router = APIRouter(prefix="/evals")
 NEW = "pages/overseer/ai/_evals_new.html"
+NEW_CASE = "pages/overseer/ai/_evals_case.html"
 CONFIRM = "pages/overseer/_confirm.html"
 
 
@@ -95,6 +98,25 @@ async def delete_dataset(name: str, db: Db = Depends(overseer_db)) -> Response:
     """The dataset deleted; the section back on its datasets."""
     await datasets.deleted(db, name)
     return dialog_done(section_url("evals"), f"Deleted {name}.")
+
+
+@router.get("/cases/new")
+async def new_case(request: Request, turn: str, db: Db = Depends(overseer_db)) -> Response:
+    """The Make this an eval dialog, for the reply ``turn`` names."""
+    return dialog(request, NEW_CASE, **await datasets.new_case(db, turn, None, []))
+
+
+@router.post("/cases")
+async def add_case(request: Request, db: Db = Depends(overseer_db)) -> Response:
+    """The form's case kept in its dataset, the chat left as it is; why
+    not back in the dialog, as typed."""
+    form = await form_fields(request)
+    try:
+        name = await datasets.add_case(db, form)
+    except ValueError as exc:
+        context = await datasets.new_case(db, form.get("turn", ""), form, [str(exc)])
+        return dialog(request, NEW_CASE, 422, **context)
+    return close_dialog(toast_response(f"Added to {name}."))
 
 
 @router.post("/runs")

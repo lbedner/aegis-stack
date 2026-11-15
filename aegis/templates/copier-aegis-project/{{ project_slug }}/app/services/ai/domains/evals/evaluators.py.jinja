@@ -69,10 +69,15 @@ def _times(n: int) -> str:
     return "once" if n == 1 else f"{n} times"
 
 
+def call_counts(trace: list[dict[str, Any]]) -> Counter[str]:
+    """How many times a turn called each tool: a script (``run_code``) by
+    the calls it made."""
+    return Counter(c.name for c in calls_of(trace) if c.name != RUN_CODE)
+
+
 def called(trace: list[dict[str, Any]]) -> str:
-    """A turn's calls summed up, ``called errors 4 times, health once``: a
-    script (``run_code``) by the calls it made."""
-    counts = Counter(c.name for c in calls_of(trace) if c.name != RUN_CODE)
+    """A turn's calls summed up, ``called errors 4 times, health once``."""
+    counts = call_counts(trace)
     if not counts:
         return "called no tools"
     return "called " + ", ".join(f"{name} {_times(n)}" for name, n in counts.items())

@@ -9,7 +9,7 @@ from collections.abc import AsyncIterator
 import json
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic_ai.messages import ModelMessage, ModelResponse
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, DeltaToolCalls, FunctionModel
 
@@ -22,9 +22,9 @@ class Step(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    tool: str | None = None
-    args: dict[str, Any] = {}
-    text: str = ""
+    tool: str | None = Field(default=None, description="The tool called; unset for text")
+    args: dict[str, Any] = Field(default_factory=dict, description="What the call is given")
+    text: str = Field(default="", description="What is said, where no tool is called")
 
 
 def args_of(entry: dict[str, Any], *, whole: bool = False) -> dict[str, Any]:

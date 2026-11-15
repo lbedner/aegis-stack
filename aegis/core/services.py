@@ -80,6 +80,7 @@ EVALS_PAGES = [
     "app/components/web_frontend/overseer_ai_evals_datasets.py",
     "app/components/web_frontend/routes/partials/overseer_ai_evals.py",
     "app/components/web_frontend/templates/pages/overseer/ai/_evals.html",
+    "app/components/web_frontend/templates/pages/overseer/ai/_evals_case.html",
     "app/components/web_frontend/templates/pages/overseer/ai/_evals_compare.html",
     "app/components/web_frontend/templates/pages/overseer/ai/_evals_dataset.html",
     "app/components/web_frontend/templates/pages/overseer/ai/_evals_datasets.html",
@@ -666,6 +667,8 @@ SERVICES: dict[str, ServiceSpec] = {
                 # datasets, and the CLI and API that run and read them.
                 "ai_evals": [
                     "app/services/ai/domains/evals",
+                    # What an agent may propose of them (the change queue).
+                    "app/services/ai/change_types.py",
                     "app/services/ai/models/evals",
                     "tests/services/ai/evals",
                     "evals",

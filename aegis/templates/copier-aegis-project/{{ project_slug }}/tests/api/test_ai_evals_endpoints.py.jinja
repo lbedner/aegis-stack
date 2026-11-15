@@ -17,7 +17,7 @@ from app.services.ai.domains.evals import datasets
 from app.services.shared.deps import get_admin_actor, get_admin_reader
 from tests._audit import as_admin
 from tests.services.ai.evals import _kept as kept
-from tests.services.ai.evals._mini import DATASET, only_mini
+from tests.services.ai.evals._mini import DATASET, only_mini, turn
 
 BASE = "/api/v1/ai/evals"
 
@@ -52,8 +52,11 @@ def test_anyone_else_is_refused(
         f"{BASE}/runs/{after}/cases/reads the paper",
         f"{BASE}/compare?a={before}&b={after}",
     ]
+    added = async_client_with_db.post(f"{BASE}/cases", json={})
+    reads.append(f"{BASE}/cases/draft?turn=a1&dataset=mini")
     assert started.status_code == written.status_code == imported.status_code == 403
-    assert [async_client_with_db.get(url).status_code for url in reads] == [403] * 7
+    assert added.status_code == 403
+    assert [async_client_with_db.get(url).status_code for url in reads] == [403] * 8
 
 
 @pytest.fixture
@@ -178,6 +181,47 @@ def test_a_dataset_is_imported_and_exported_as_it_was_written(
     assert exported.text == written
     assert exported.headers["content-type"].startswith("application/yaml")
     assert async_client_with_db.get(f"{BASE}/datasets/nope/yaml").status_code == 404
+
+
+CASE = {
+    "dataset": "mini",
+    "name": "a balance is read",
+    "message": "what is my balance?",
+    "calls": {"ledger": 1, "delete": 0},
+}
+
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # each request reads the dataset
+def test_a_case_is_added_to_a_dataset(
+    async_client_with_db: TestClient, mini: None
+) -> None:
+    url = f"{BASE}/cases"
+
+    added = async_client_with_db.post(url, json=CASE)
+    again = async_client_with_db.post(url, json=CASE)
+    unknown = async_client_with_db.post(url, json=CASE | {"dataset": "nope"})
+    nothing = async_client_with_db.post(url, json=CASE | {"name": "idle", "calls": {}})
+
+    assert added.status_code == 201, added.text
+    assert added.json()["cases"][-1]["checks"] == ["calls ledger once", "never calls delete"]
+    assert again.status_code == 422 and "already has a case" in again.json()["detail"]
+    assert unknown.status_code == 404
+    assert nothing.status_code == 422 and "checks nothing" in nothing.json()["detail"]
+
+
+async def test_a_case_is_drafted_from_a_turn(
+    async_client_with_db: TestClient, async_db_session: AsyncSession
+) -> None:
+    answer = await turn(async_db_session)
+    url = f"{BASE}/cases/draft"
+
+    drafted = async_client_with_db.get(url, params={"turn": answer.id, "dataset": "mini"})
+    missing = async_client_with_db.get(url, params={"turn": "nope", "dataset": "mini"})
+
+    assert drafted.status_code == 200, drafted.text
+    assert drafted.json()["message"] == "what does the letter say?"
+    assert drafted.json()["calls"] == {"paper": 1}
+    assert missing.status_code == 404 and "nope" in missing.json()["detail"]
 
 
 @pytest.mark.queryspy(allow_n_plus_one=True)  # each request reads the datasets

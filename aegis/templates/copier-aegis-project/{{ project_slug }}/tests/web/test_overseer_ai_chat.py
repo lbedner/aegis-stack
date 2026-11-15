@@ -186,6 +186,18 @@ def test_a_settled_turn_is_the_servers_html(client: TestClient) -> None:
     assert client.get(f"{CHAT}/messages/other/m2").status_code == 404
 
 
+def test_a_reply_is_made_an_eval_where_the_evals_are(client: TestClient) -> None:
+    """The Overseer's replies open the Evals' dialog, named by their id; a
+    question, and a mount with no evals, have no such action."""
+    from app.components.web_frontend.overseer_ai_common import HAS_EVALS, PARTIALS
+
+    made = select(_chat_page(client), "[data-make-eval]")
+
+    assert [m.get("hx-get") for m in made] == (
+        [f"{PARTIALS}/evals/cases/new?turn=m2"] if HAS_EVALS else []
+    )
+
+
 def test_a_reply_cut_off_at_the_limit_says_so(client: TestClient) -> None:
     """Ending mid-sentence reads as a broken app; the bubble says it was the
     token limit, and how many tokens that was."""

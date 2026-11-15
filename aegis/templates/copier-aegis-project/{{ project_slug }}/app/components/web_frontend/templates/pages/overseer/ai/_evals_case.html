@@ -1,0 +1,20 @@
+{# The Make this an eval form (dialog body): a reply in the chat kept as
+   a case, its question and calls filled in and its script kept with it;
+   a 422 re-renders it with ``errors``. #}
+{% from "components/macros/layout.html" import dialog_title %}
+{% from "components/macros/form.html" import field, form_footer, text_input, textarea %}
+{% from "components/macros/feedback.html" import error_banner %}
+{{ dialog_title("Make this an eval", "What this turn asked and called, kept as a case with its script. Change the checks to what it should have done.") }}
+<form data-write {{ hx_dialog_post(post_url) }} hx-disabled-elt="find button[type=submit]" class="space-y-4">
+  {{ error_banner(errors) }}
+  <input type="hidden" name="turn" value="{{ turn }}">
+  {% call field("Dataset") %}{{ text_input("dataset", form.dataset, "ops", required=True, autofocus=True, attrs='list="eval-datasets" autocomplete="off"') }}<datalist id="eval-datasets">{% for name in datasets %}<option value="{{ name }}"></option>{% endfor %}</datalist>{% endcall %}
+  {% call field("Checks", hint="For a new dataset: what it checks") %}{{ text_input("about", form.about) }}{% endcall %}
+  {% call field("Case") %}{{ text_input("name", form.name, required=True) }}{% endcall %}
+  {% call field("Asks") %}{{ text_input("message", form.message, required=True) }}{% endcall %}
+  {% call field("Calls", hint="One a line: ledger, ledger=2, or delete=0 for never") %}{{ textarea("calls", form.calls, rows=3) }}{% endcall %}
+  {% call field("Says", hint="Text the answer contains, one a line") %}{{ textarea("says", form.says, rows=2) }}{% endcall %}
+  {% call field("Never says", hint="One a line") %}{{ textarea("avoids", form.avoids, rows=2) }}{% endcall %}
+  {% call field("Why") %}{{ text_input("why", form.why, "What it guards against") }}{% endcall %}
+  {{ form_footer("Add case") }}
+</form>

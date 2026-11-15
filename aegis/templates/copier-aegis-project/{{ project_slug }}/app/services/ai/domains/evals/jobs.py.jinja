@@ -15,7 +15,7 @@ from app.services.ai.models.evals import EvalRun
 from app.services.system import job_store
 from app.services.system.jobs import Report
 
-from .datasets import add, names, summaries, text, texts, unknown
+from .datasets import add, names, summaries, text, texts, unknown, written
 from .generator import (
     CASES,
     Dropped,
@@ -24,7 +24,6 @@ from .generator import (
     held,
     keep,
     write_cases,
-    written,
 )
 from .recorder import record_run
 from .runner import run_dataset

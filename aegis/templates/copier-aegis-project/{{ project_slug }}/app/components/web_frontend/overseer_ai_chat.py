@@ -6,7 +6,7 @@ instance at a time, answering as the default agent for the API's own user.
 from typing import Any
 
 from .chat_surface import ChatSurface
-from .overseer_ai_common import PARTIALS
+from .overseer_ai_common import HAS_EVALS, PARTIALS
 from .rendering import templates
 
 OVERSEER = ChatSurface(
@@ -15,6 +15,7 @@ OVERSEER = ChatSurface(
     user="api-user",
     surface="overseer",
     agent_drawer=True,
+    eval_cases=f"{PARTIALS}/evals/cases/new" if HAS_EVALS else None,
 )
 # The Overseer shell mounts the chat drawer wherever this is set.
 templates.env.globals["chat_path"] = OVERSEER.path

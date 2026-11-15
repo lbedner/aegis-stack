@@ -133,6 +133,8 @@ EXPECTED_EFFECTS = {
     "meetings": "read",
     # What an agent knows: its knowledge bases, searched.
     "knowledge": "read",
+    # The eval datasets and runs; a case or a run is proposed.
+    "evals": "read",
     "record_reading": "writes",
     "save_memory": "writes",
     "replace_memory": "writes",

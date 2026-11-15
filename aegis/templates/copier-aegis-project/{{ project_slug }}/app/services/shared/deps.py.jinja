@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 from fastapi import Request
 {%- if include_auth %}
 from fastapi import Depends, HTTPException, status
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 from app.core.db import get_async_session
@@ -28,10 +29,16 @@ from app.services.auth.deps import (
     require_admin,
 )
 {%- else %}
+from typing import TYPE_CHECKING
+
 from fastapi import HTTPException, status
 
 from app.core import exposure
 from app.core.tools import current_admin
+
+if TYPE_CHECKING:
+    # No database in every stack without auth: named for the checker only.
+    from sqlmodel.ext.asyncio.session import AsyncSession
 
 # Without auth, an operator's change is asked only at these (``refusal_at``).
 LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})
@@ -154,6 +161,20 @@ get_optional_owner_user_id = get_owner_user_id
 {%- endif %}
 
 
+async def owner_is_admin(session: "AsyncSession", owner_user_id: int | None) -> bool:
+    """Whether what is done for ``owner_user_id`` is done for an admin{% if include_auth %}: the
+    user by ``is_admin``. Where sign-in is off, everyone is one; nobody
+    signed in is not{% else %}: anyone, with no one to sign in{% endif %}."""
+{%- if include_auth %}
+    if not settings.AUTH_ENABLED or owner_user_id is None:
+        return not settings.AUTH_ENABLED
+    user = await session.get(User, owner_user_id)
+    return user is not None and is_admin(user)
+{%- else %}
+    return True
+{%- endif %}
+
+
 async def caller_is_admin() -> bool:
     """Whether the tool call being run acts for an admin: what its runner
     bound (``current_admin``: MCP's token, the CLI's shell, an admin-only
@@ -167,8 +188,7 @@ async def caller_is_admin() -> bool:
     if not settings.AUTH_ENABLED or owner is None:
         return not settings.AUTH_ENABLED
     async with get_async_session() as session:
-        user = await session.get(User, owner)
-    return user is not None and is_admin(user)
+        return await owner_is_admin(session, owner)
 {%- else %}
     return True
 {%- endif %}

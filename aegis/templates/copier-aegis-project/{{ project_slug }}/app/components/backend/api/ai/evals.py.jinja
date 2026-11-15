@@ -2,7 +2,8 @@
 """Eval runs over HTTP: start one as a job (its progress on the jobs API),
 read kept runs and their cases, compare two runs; and the datasets:
 read, a new one written by the model as a job, one deleted, one imported
-from YAML or exported as it. Admins only: each turn of a run reads as an
+from YAML or exported as it, and one case added to one (drafted from a
+turn where asked). Admins only: each turn of a run reads as an
 admin (``run_dataset``)."""
 
 from collections.abc import Iterator
@@ -20,9 +21,14 @@ from app.services.ai.service import (
     EvalCase,
     EvalDatasetSummary,
     EvalRun,
+    EvalRunToStart,
     EvalScore,
+    NewEvalCase,
     UnknownDatasetError,
+    UnknownTurnError,
+    add_eval_case,
     add_eval_dataset,
+    eval_case_from_turn,
     eval_dataset,
     eval_dataset_summaries,
     eval_dataset_text,
@@ -38,26 +44,16 @@ router = APIRouter(dependencies=[Depends(get_admin_reader)])
 
 @contextmanager
 def as_http() -> Iterator[None]:
-    """No such dataset is a 404; whatever else is refused (a ValueError,
-    saying why) a 422."""
+    """No such dataset or turn is a 404; whatever else is refused (a
+    ValueError, saying why) a 422."""
     try:
         yield
-    except UnknownDatasetError as exc:
+    except (UnknownDatasetError, UnknownTurnError) as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from None
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from None
-
-
-class StartRun(BaseModel):
-    """A dataset to run on the model in force, or ``model``."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    dataset: str
-    model: str | None = None
-    note: str | None = None
 
 
 class NewDataset(BaseModel):
@@ -103,7 +99,7 @@ class CaseDetail(BaseModel):
     status_code=status.HTTP_202_ACCEPTED,
     dependencies=[Depends(get_admin_actor)],
 )
-async def start_run(body: StartRun) -> JobStartedResponse:
+async def start_run(body: EvalRunToStart) -> JobStartedResponse:
     """Run a dataset as a job: the worker's where the stack has one."""
     with as_http():  # 422: a model that cannot answer chat here
         job_id = await start_evals(body.dataset, model=body.model, note=body.note)
@@ -140,6 +136,33 @@ async def import_dataset(
     not one, or YAML that is no dataset."""
     with as_http():
         return await add_eval_dataset(db, body.name, body.text, replace=body.replace)
+
+
+@router.post(
+    "/evals/cases",
+    response_model=EvalDatasetSummary,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(get_admin_actor)],
+)
+async def add_case(
+    body: NewEvalCase, db: AsyncSession = Depends(get_async_db)
+) -> EvalDatasetSummary:
+    """Add one case to its dataset, its YAML written for it: 404 for a
+    dataset there is none of (and no ``about`` to start one), 422 for a
+    name it has or a case that checks nothing."""
+    with as_http():
+        return await add_eval_case(db, body)
+
+
+@router.get("/evals/cases/draft", response_model=NewEvalCase)
+async def draft_case(
+    turn: str, dataset: str, db: AsyncSession = Depends(get_async_db)
+) -> NewEvalCase:
+    """The case assistant message ``turn`` would be in ``dataset``: its
+    question, the calls it made and the script it took. A start to edit and
+    post back; 404 for no such turn."""
+    with as_http():
+        return await eval_case_from_turn(db, turn, dataset)
 
 
 @router.get("/evals/datasets", response_model=list[EvalDatasetSummary])

@@ -3,11 +3,13 @@ as written, each case a message and what its turn should do. Pydantic
 Evals reads the YAML; a case may use its built-in evaluators (``Contains``,
 ``LLMJudge``) and the trace ones here. YAML is how a dataset comes in
 (``add``, ``add_file``, the shipped ``evals/*.yaml`` by ``seed_missing``)
-and goes out (``text``)."""
+and goes out (``text``); one changed here is written out again (``written``)."""
 
 import hashlib
 from pathlib import Path, PurePath
 import re
+import textwrap
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 from pydantic_evals import Dataset
@@ -71,6 +73,21 @@ def parse(name: str, written: str) -> EvalDataset:
         raise ValueError(f"Dataset {name!r} is not YAML: {exc}") from exc
     except ExceptionGroup as group:  # a check it names that is none here
         raise ValueError(f"Dataset {name!r}: {group.exceptions[0]}") from group
+
+
+def written(dataset: EvalDataset, about: str) -> str:
+    """``dataset`` as YAML: ``about`` as its leading comment, then its
+    cases with only the fields they set (the short forms a person writes)."""
+    dumped: dict[str, Any] = dataset.model_dump(
+        mode="json",
+        by_alias=True,
+        exclude_defaults=True,
+        exclude_none=True,
+        context={"use_short_form": True},
+    )
+    dumped.pop("name", None)
+    comment = textwrap.fill(about, 72, initial_indent="# ", subsequent_indent="# ")
+    return f"{comment}\n{yaml.safe_dump(dumped, sort_keys=False, allow_unicode=True)}"
 
 
 def fingerprint(written: str) -> str:

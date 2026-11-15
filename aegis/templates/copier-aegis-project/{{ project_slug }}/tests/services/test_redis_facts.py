@@ -72,6 +72,21 @@ class TestStream:
         assert [g.name for g in facts.groups] == ["overseer", "audit"]
         assert [g.lag for g in facts.groups] == ["caught up", "7 behind"]
 
+    def test_a_stream_that_drops_what_is_done_counts_no_minutes(self) -> None:
+        """A job queue holds the jobs waiting or running, not the last
+        hour's: its entries say nothing of how many went by."""
+        jobs = KeyFamily(
+            "taskiq:*", "stream", "Job queues", "Jobs", "Worker", history=False
+        )
+        redis = FakeRedis()
+        redis.streams["taskiq:system"] = [(_id(NOW - 20), {})]
+        redis.added["taskiq:system"] = 500
+        facts = _facts(jobs, redis, "taskiq:system")
+        figures = dict(facts.figures)
+        assert figures["Through it"] == "500 entries"
+        assert "Last hour" not in figures and "Last minute" not in figures
+        assert facts.spark is None
+
     def test_past_the_cap_the_newest_are_counted(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

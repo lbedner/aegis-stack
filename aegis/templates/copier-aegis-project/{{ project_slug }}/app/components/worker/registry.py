@@ -23,6 +23,7 @@ REDIS_KEYS = (
         "arq",
         columns=("Job id", "Run at"),
         holds="job",
+        history=False,  # a job leaves when a worker takes it
     ),
     KeyFamily(
         "arq:job:*",
@@ -127,9 +128,7 @@ def get_queue_metadata(queue_name: str) -> dict[str, Any]:
         getattr(settings_class, "queue_name", f"arq:queue:{queue_name}"),
         list(queue_tasks(queue_name)),
         max_jobs=getattr(settings_class, "max_jobs", None),
-        timeout=getattr(
-            settings_class, "job_timeout", discovery.DEFAULT_TIMEOUT_SECONDS
-        ),
+        timeout=getattr(settings_class, "job_timeout", None),
         description=getattr(settings_class, "description", None) or doc or None,
     )
 

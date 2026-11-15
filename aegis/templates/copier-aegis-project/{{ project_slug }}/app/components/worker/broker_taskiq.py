@@ -20,16 +20,22 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncGenerator
 import socket
+import time
 from typing import Any
 
 import redis.asyncio as aioredis
-from taskiq import AckableMessage
+from taskiq import AckableMessage, TaskiqMessage, TaskiqMiddleware
 from taskiq_redis import RedisStreamBroker
 from taskiq_redis.redis_broker import logger as _broker_logger
 
 from app.components.worker.heartbeat import PAUSE_KEY, PAUSE_POLL_SECONDS
 from app.core.config import settings
 from app.core.key_family import KeyFamily
+from app.core.queue_workers import settings_for
+from app.services.system.health_worker_rules import (
+    last_delivered,
+    taskiq_group_stats,
+)
 from app.services.system.redis_keys import decoded
 
 REDIS_KEYS = (
@@ -37,10 +43,12 @@ REDIS_KEYS = (
         "taskiq:*",
         "stream",
         "Job queues",
-        "One stream per queue: jobs waiting, and ones taken but not yet acked",
+        "One stream per queue: jobs waiting, and ones taken but not yet acked "
+        "(finished ones are dropped)",
         "TaskIQ broker",
         columns=("Message", "Payload"),
         holds="job",
+        history=False,
     ),
     KeyFamily(
         "[0-9a-f]" * 32,
@@ -63,6 +71,23 @@ REDIS_KEYS = (
 
 # A consumer that has read nothing this long and holds no job has left.
 STALE_CONSUMER_MS = 3_600_000
+# How often a listening worker drops finished jobs from its streams.
+DROP_FINISHED_SECONDS = 60.0
+
+
+class QueueTimeout(TaskiqMiddleware):
+    """A job with no ``timeout`` of its own takes its queue's
+    (``QueueWorker.timeout_seconds``).
+
+    Nothing else ends a job that hangs: it keeps its claim alive while it
+    runs, so it would hold its slot for good, and with it every job that
+    finished after it in the stream (``drop_finished_jobs``).
+    """
+
+    def pre_execute(self, message: TaskiqMessage) -> TaskiqMessage:
+        queue = self.broker.queue_name.removeprefix("taskiq:")
+        message.labels.setdefault("timeout", settings_for(queue).timeout_seconds)
+        return message
 
 
 class PausableRedisStreamBroker(RedisStreamBroker):
@@ -86,10 +111,43 @@ class PausableRedisStreamBroker(RedisStreamBroker):
         # never released; rare, and bounded by the redelivery cap.
         self._claims: dict[str, tuple[Any, Any]] = {}
         self._keeping: dict[str, asyncio.Task[None]] = {}
+        # When ``listen`` next drops finished jobs (``time.monotonic``).
+        self._drop_due = 0.0
+        self.add_middlewares(QueueTimeout())
 
     async def startup(self) -> None:
         await super().startup()
         await self.forget_stale_consumers()
+
+    async def drop_finished_jobs(self) -> None:
+        """Trim each stream to its oldest job still held, or to the last
+        one delivered when none is.
+
+        taskiq acks a finished job and leaves its entry in the stream, and a
+        stream has no TTL for Redis to evict by: left alone, every job ever
+        sent stays until Redis is full and refuses the next enqueue. An
+        entry older than the oldest one held is finished (a waiting job is
+        newer than every delivered one), so trimming there loses no work,
+        whatever the backlog; a length cap would drop waiting jobs past it.
+        Trimming from the old end only also keeps the group's ``lag``, which
+        deleting entries one by one would not.
+        """
+        async with aioredis.Redis(connection_pool=self.connection_pool) as conn:
+            for stream in [self.queue_name, *self.additional_streams]:
+                try:
+                    # One reply says both that nothing is held and where
+                    # delivery stood then; read apart, a job delivered in
+                    # between would fall under the floor.
+                    name = self.consumer_group_name
+                    groups = await conn.xinfo_groups(stream)
+                    if taskiq_group_stats(groups, 0, name)[1]:
+                        floor = (await conn.xpending(stream, name))["min"]
+                    else:
+                        floor = last_delivered(groups, name)
+                    if floor:  # none when the last held job just finished
+                        await conn.xtrim(stream, minid=floor, approximate=True)
+                except aioredis.RedisError as exc:  # no stream yet, or no Redis
+                    _broker_logger.debug("Nothing to drop on %s: %s", stream, exc)
 
     async def forget_stale_consumers(self) -> None:
         """Remove each stream's consumers that have read nothing for
@@ -183,6 +241,11 @@ class PausableRedisStreamBroker(RedisStreamBroker):
         async with aioredis.Redis(connection_pool=self.connection_pool) as redis_conn:
             while True:
                 await self._wait_while_paused(redis_conn)
+
+                now = time.monotonic()
+                if now >= self._drop_due:
+                    self._drop_due = now + DROP_FINISHED_SECONDS
+                    await self.drop_finished_jobs()
 
                 _broker_logger.debug("Starting fetching new messages")
                 fetched = await redis_conn.xreadgroup(

@@ -57,7 +57,7 @@ class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(settings.redis_url_effective)
     queue_name = "arq:queue:system"
     max_jobs = concurrency_for(QueueName.SYSTEM)  # Settings.WORKER_QUEUES
-    job_timeout = 300
+    job_timeout = settings_for(QueueName.SYSTEM).timeout_seconds
 ```
 
 ## Native arq CLI Usage
@@ -102,6 +102,11 @@ Every backend reads it: taskiq as `--max-async-tasks`, dramatiq as
 queue stops the worker at startup. Each worker reports what it actually
 runs with to Redis, and the Overseer's Worker > Runtime section shows it,
 flagging any worker running off its setting.
+
+`timeout_seconds` beside it is how long a job may run (300 by default):
+taskiq gives it to any job whose task names no `timeout` of its own, arq
+takes it as `WorkerSettings.job_timeout`, and dramatiq gives it to any
+actor with no `time_limit` of its own.
 
 ## Key Differences from Custom Worker Systems
 

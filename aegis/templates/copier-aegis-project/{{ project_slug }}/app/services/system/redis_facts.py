@@ -136,11 +136,15 @@ def _lag(lag: int | None) -> str:
     return "unknown" if lag is None else "caught up" if not lag else f"{lag:,} behind"
 
 
-async def _stream(client: Any, keys: list[str], now: float) -> Tally:
+async def _stream(
+    client: Any, keys: list[str], now: float, recent: bool = True
+) -> Tally:
     """Every entry the streams were given and hold, when the newest and
     oldest came, the hour's newest entries a minute at a time, and each
-    reader group with its lag: one round trip."""
-    since, each = str(int((now - HOUR) * 1000)), max(RECENT_CAP // len(keys), 1)
+    reader group with its lag: one round trip. Without ``recent`` the hour
+    is not read (one entry a stream stands in for it)."""
+    since = str(int((now - HOUR) * 1000))
+    each = max(RECENT_CAP // len(keys), 1) if recent else 1
     found = await _run(
         client,
         [_call("xinfo_stream", k, empty={}) for k in keys]
@@ -148,8 +152,8 @@ async def _stream(client: Any, keys: list[str], now: float) -> Tally:
         + [_call("xinfo_groups", k, empty=[]) for k in keys],
     )
     n = len(keys)
-    infos, recent, readers = found[:n], found[n : 2 * n], found[2 * n :]
-    times = [entry_time(entry[0]) for entries in recent for entry in entries]
+    infos, newest, readers = found[:n], found[n : 2 * n], found[2 * n :]
+    times = [entry_time(entry[0]) for entries in newest for entry in entries]
     firsts = [entry_time(i["first-entry"][0]) for i in infos if i.get("first-entry")]
     lasts = [entry_time(i["last-entry"][0]) for i in infos if i.get("last-entry")]
     groups = [
@@ -168,7 +172,7 @@ async def _stream(client: Any, keys: list[str], now: float) -> Tally:
         held=sum(int(i.get("length") or 0) for i in infos),
         through=sum(int(i.get("entries-added") or i.get("length") or 0) for i in infos),
         minutes=per_minute(times, now),
-        capped=any(len(entries) >= each for entries in recent),
+        capped=recent and any(len(entries) >= each for entries in newest),
         oldest=min(firsts, default=None),
         newest=max(lasts, default=None),
         groups=groups,
@@ -233,7 +237,7 @@ async def facts(
     tally = Tally()
     kind = family.kind
     if read and kind == "stream":
-        tally = await _stream(client, read, now)
+        tally = await _stream(client, read, now, recent=family.history)
     elif read and kind == "zset":
         tally = await _zset(client, read, now)
     elif read and kind == "string":
@@ -243,6 +247,8 @@ async def facts(
             client, [_call(TYPES[kind].counter, k, empty=0) for k in read]
         )
         tally = Tally(held=sum(counts))
+    if not family.history:
+        tally.minutes = None
     return described(family, tally, now, FACT_KEYS if len(keys) > FACT_KEYS else 0)
 
 

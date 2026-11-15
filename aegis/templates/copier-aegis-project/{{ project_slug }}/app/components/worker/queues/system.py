@@ -23,7 +23,7 @@ from app.components.worker.tasks.simple_system_tasks import (
 from app.core.config import settings
 from app.core.constants import QueueName
 from app.core.discovery import present
-from app.core.queue_workers import concurrency_for
+from app.core.queue_workers import concurrency_for, settings_for
 
 
 class WorkerSettings:
@@ -65,7 +65,7 @@ class WorkerSettings:
     )
     queue_name = "arq:queue:system"
     max_jobs = concurrency_for(QueueName.SYSTEM)  # Settings.WORKER_QUEUES
-    job_timeout = 300  # 5 minutes
+    job_timeout = settings_for(QueueName.SYSTEM).timeout_seconds
     keep_result = settings.WORKER_KEEP_RESULT_SECONDS
     max_tries = settings.WORKER_MAX_TRIES
     health_check_interval = settings.WORKER_HEALTH_CHECK_INTERVAL

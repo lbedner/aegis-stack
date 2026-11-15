@@ -19,10 +19,9 @@ from pathlib import Path
 from typing import Any
 
 from app.core.log import logger
-from app.core.queue_workers import concurrency_for
+from app.core.queue_workers import concurrency_for, settings_for
 
 QUEUES_PACKAGE = "app.components.worker.queues"
-DEFAULT_TIMEOUT_SECONDS = 300
 
 
 def queue_module(queue_name: str) -> Any | None:
@@ -104,7 +103,7 @@ def build_metadata(
     task_names: list[str],
     *,
     max_jobs: int | None = None,
-    timeout: int = DEFAULT_TIMEOUT_SECONDS,
+    timeout: int | None = None,
     description: str | None = None,
     **backend_fields: Any,
 ) -> dict[str, Any]:
@@ -113,7 +112,8 @@ def build_metadata(
     ``functions`` is the same list as ``tasks`` under the name the health
     check has always used. ``backend_fields`` carries what only one
     backend has - a stream name, a Redis list name. ``max_jobs`` left out
-    is the queue's concurrency from ``Settings.WORKER_QUEUES``.
+    is the queue's concurrency from ``Settings.WORKER_QUEUES``, and
+    ``timeout`` its ``timeout_seconds``.
     """
     return {
         "queue_name": queue_name,
@@ -121,8 +121,11 @@ def build_metadata(
         "task_count": len(task_names),
         "functions": task_names,
         "max_jobs": max_jobs if max_jobs is not None else concurrency_for(queue_name),
-        "timeout": timeout,
-        "description": description or f"{queue_name.replace('_', ' ').title()} worker queue",
+        "timeout": timeout
+        if timeout is not None
+        else settings_for(queue_name).timeout_seconds,
+        "description": description
+        or f"{queue_name.replace('_', ' ').title()} worker queue",
         **backend_fields,
     }
 
@@ -170,9 +173,9 @@ def describe_hooks(source: Any, hook_map: dict[str, str]) -> dict[str, dict[str,
     return hooks
 
 
-def docstrings_for(tasks: dict[str, Any], unwrap: Callable[[Any], Any]) -> dict[
-    str, dict[str, str]
-]:
+def docstrings_for(
+    tasks: dict[str, Any], unwrap: Callable[[Any], Any]
+) -> dict[str, dict[str, str]]:
     """Each task's first-line docstring and where it is defined.
 
     ``unwrap`` turns a backend's task object back into the function it

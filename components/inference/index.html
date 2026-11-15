@@ -2246,10 +2246,38 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#where-ollama-runs" class="md-nav__link">
+  <a href="#which-engine" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Where Ollama runs
+        Which engine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Which engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#running-llama-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running llama-server
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-it-runs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where it runs
       
     </span>
   </a>
@@ -7093,10 +7121,38 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#where-ollama-runs" class="md-nav__link">
+  <a href="#which-engine" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Where Ollama runs
+        Which engine
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Which engine">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#running-llama-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running llama-server
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-it-runs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where it runs
       
     </span>
   </a>
@@ -7158,49 +7214,85 @@
 
 
 <h1 id="inference">Inference</h1>
-<p>Local model serving: the Ollama client, its health check, and a dashboard for the models loaded into memory.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="w">                  </span><span class="c1"># Ollama on the host (the default)</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker<span class="o">]</span><span class="w">          </span><span class="c1"># Ollama as a container in the compose stack</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>ollama,docker<span class="o">]</span><span class="w">   </span><span class="c1"># the engine spelled out; ollama is the only one today</span>
+<p>Local model serving: the engine's client, its health check, and a dashboard for the models loaded into memory.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="w">                   </span><span class="c1"># Ollama on the host (the default)</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker<span class="o">]</span><span class="w">           </span><span class="c1"># Ollama as a container in the compose stack</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>llamacpp<span class="o">]</span><span class="w">         </span><span class="c1"># llama.cpp&#39;s llama-server on the host</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>llamacpp,docker<span class="o">]</span><span class="w">  </span><span class="c1"># llama-server as a container</span>
 </span></code></pre></div>
-<p>The AI service's <code>ollama</code> provider pulls the component in, so <code>aegis init --services "ai[ollama]"</code> gets it without asking. It also stands alone: a model server with no AI service still gets the client, the health check and the dashboard.</p>
-<h2 id="where-ollama-runs">Where Ollama runs</h2>
+<p>The AI service's local provider of the same name pulls the component in, so <code>aegis init --services "ai[ollama]"</code> (or <code>ai[llamacpp]</code>) gets it without asking; a local provider needs the engine of its name. It also stands alone: a model server with no AI service still gets the client, the health check and the dashboard.</p>
+<h2 id="which-engine">Which engine</h2>
+<p>Both sit behind one interface (<code>get_inference_engine()</code>), so the health check, the dashboards, the CLI and the catalog read either the same way.</p>
+<table>
+<thead>
+<tr>
+<th>Engine</th>
+<th>What it is</th>
+<th>Pick it for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ollama</code> (default)</td>
+<td>Pulls, loads and frees many models on request.</td>
+<td>Trying models; switching between several.</td>
+</tr>
+<tr>
+<td><code>llamacpp</code></td>
+<td><code>llama-server</code> serving the one model it was started with: no load or unload, so the dashboards offer none.</td>
+<td>Chat that runs long tool loops. Its prompt cache rereads a shared prefix fast: a follow-up on a 12k-token prefix takes 0.6 s, where Ollama takes 4.6 s (measured on an M4 Max, the same GGUF).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="running-llama-server">Running llama-server</h3>
+<p>On the host, start it with the flags chat needs, and name the model with <code>--alias</code>, which is how the catalog shows it:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>llama-server<span class="w"> </span>-hf<span class="w"> </span>ggml-org/Qwen3-1.7B-GGUF<span class="w"> </span>--alias<span class="w"> </span>qwen3:1.7b<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>--jinja<span class="w"> </span>-c<span class="w"> </span><span class="m">32768</span><span class="w"> </span>-np<span class="w"> </span><span class="m">1</span><span class="w"> </span>--metrics<span class="w"> </span>--port<span class="w"> </span><span class="m">8080</span>
+</span></code></pre></div>
+<ul>
+<li><code>--jinja</code>: the model's chat template, which tool calls need.</li>
+<li><code>-c</code>: the context. The catalog takes it from the server, and chat sizes its history to fit it.</li>
+<li><code>-np 1</code> (or a few): context and prompt cache are per slot, so <code>-c 32768 -np 2</code> gives each slot 16k.</li>
+<li><code>--metrics</code>: Prometheus counters at <code>/metrics</code>.</li>
+</ul>
+<p>In docker, the <code>llamacpp</code> service downloads <code>LLAMACPP_MODEL</code> (a Hugging Face <code>repo[:quant]</code>, default <code>ggml-org/Qwen3-1.7B-GGUF</code>) into a volume on its first start and serves it at <code>LLAMACPP_CONTEXT</code> (default 32768).</p>
+<h2 id="where-it-runs">Where it runs</h2>
 <table>
 <thead>
 <tr>
 <th>Placement</th>
 <th>What ships</th>
-<th>Reaches Ollama at</th>
+<th>Reaches the engine at</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td><code>host</code> (default)</td>
-<td>No container. Ollama runs where it already lives, with the host's GPU.</td>
-<td><code>http://host.docker.internal:11434</code> from containers, <code>localhost:11434</code> from the host</td>
+<td>No container. The server runs where it already lives, with the host's GPU.</td>
+<td>Ollama: <code>http://host.docker.internal:11434</code>; llama.cpp: <code>http://host.docker.internal:8080</code>. <code>localhost</code> from the host.</td>
 </tr>
 <tr>
 <td><code>docker</code></td>
-<td>An <code>ollama</code> service in the compose stack, models in a volume.</td>
-<td><code>http://ollama:11434</code></td>
+<td>An <code>ollama</code> or <code>llamacpp</code> service in the compose stack, models in a volume.</td>
+<td><code>http://ollama:11434</code>, <code>http://llamacpp:8080</code></td>
 </tr>
 </tbody>
 </table>
 <p>Install Ollama from <a href="https://ollama.com/">ollama.com</a> for host placement, then pull a model:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>ollama<span class="w"> </span>pull<span class="w"> </span>llama3.1
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>ollama<span class="w"> </span>pull<span class="w"> </span>llama3.1
 </span></code></pre></div>
 <h2 id="what-you-get">What you get</h2>
 <ul>
-<li><strong><code>app/components/inference/</code></strong>: <code>ollama.py</code>, an async client for the server's model list, running models, load and unload; <code>activity.py</code>, an in-memory record of models moving in and out of memory.</li>
-<li><strong>Settings:</strong> <code>OLLAMA_BASE_URL</code> (defaulted from the placement), <code>OLLAMA_BASE_URL_LOCAL</code> for CLI commands run on the host, <code>OLLAMA_HOST_PORT</code> for the port <code>make serve</code> publishes, <code>OLLAMA_API_KEY</code> for a server behind auth.</li>
+<li><strong><code>app/components/inference/</code></strong>: <code>engine.py</code>, the one interface; <code>ollama.py</code> and <code>llamacpp.py</code>, async clients for each server's models, running models, and (Ollama) load and unload; <code>activity.py</code>, an in-memory record of models moving in and out of memory.</li>
+<li><strong>Settings:</strong> <code>INFERENCE_ENGINE</code>; <code>OLLAMA_BASE_URL</code> or <code>LLAMACPP_BASE_URL</code> (defaulted from the placement), <code>OLLAMA_BASE_URL_LOCAL</code> for CLI commands run on the host, <code>OLLAMA_HOST_PORT</code> / <code>LLAMACPP_HOST_PORT</code> for the port <code>make serve</code> publishes, <code>OLLAMA_API_KEY</code> for a server behind auth.</li>
 <li><strong>A health check</strong> on the system status: server reachable, installed and running models, VRAM in use.</li>
 <li><strong>A dashboard card and modal</strong>: installed models with load and unload, and an activity tab of recent loads and evictions.</li>
 <li><strong>The LLM catalog</strong> lists the installed models when the AI service is present (<code>my-app llm sync --source ollama</code>).</li>
 </ul>
 <h2 id="a-speech-server">A speech server</h2>
 <p>A speech server runs beside Ollama, where Ollama runs, and <code>ai[voice]</code> speaks through it. Kokoro-FastAPI is the one so far: Kokoro-82M, text to speech only.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>kokoro_fastapi<span class="o">]</span><span class="w">          </span><span class="c1"># Kokoro-FastAPI on the host</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker,kokoro_fastapi<span class="o">]</span><span class="w">   </span><span class="c1"># a kokoro-fastapi service in the compose stack</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>kokoro_fastapi<span class="o">]</span><span class="w">          </span><span class="c1"># Kokoro-FastAPI on the host</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker,kokoro_fastapi<span class="o">]</span><span class="w">   </span><span class="c1"># a kokoro-fastapi service in the compose stack</span>
 </span></code></pre></div>
 <table>
 <thead>
@@ -7237,7 +7329,7 @@
 <li><strong><code>ai[voice]</code></strong> offers it as the Kokoro-FastAPI provider, with every voice it lists (<a href="../../services/ai/voice/#a-speech-server">Voice</a>).</li>
 </ul>
 <p>A server with OpenAI's speech API alone shows its voices, its models and the app's own timings. Kokoro-FastAPI reports its version always, and the rest only with its flags on. A server you run yourself needs them set, or the page names the ones missing:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">ALLOW_DEV_UNLOAD</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="nv">ENABLE_DEBUG_ENDPOINTS</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>./start-gpu_mac.sh
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">ALLOW_DEV_UNLOAD</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="nv">ENABLE_DEBUG_ENDPOINTS</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>./start-gpu_mac.sh
 </span></code></pre></div>
 <table>
 <thead>
@@ -7259,8 +7351,8 @@
 </table>
 <h2 id="changing-placement">Changing placement</h2>
 <p>The placement is an answer in <code>.copier-answers.yml</code> (<code>inference_placement</code>), and the speech server another (<code>inference_speech</code>). Remove and re-add the component to switch:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>aegis<span class="w"> </span>remove<span class="w"> </span>inference
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>aegis<span class="w"> </span>remove<span class="w"> </span>inference
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker<span class="o">]</span>
 </span></code></pre></div>
 
 

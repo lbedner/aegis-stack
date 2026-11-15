@@ -567,8 +567,9 @@ COMPONENTS: dict[str, ComponentSpec] = {
     "inference": ComponentSpec(
         readme=ReadmeWiring(
             reach=(
-                "Ollama on the host (host.docker.internal:11434) or the ollama "
-                "compose service; OLLAMA_BASE_URL"
+                "Ollama (OLLAMA_BASE_URL, :11434) or llama.cpp's llama-server "
+                "(LLAMACPP_BASE_URL, :8080), on the host or as a compose "
+                "service; get_inference_engine()"
             ),
             cli_groups=["inference"],
             env_groups=["COMPONENT SETTINGS"],
@@ -580,18 +581,20 @@ COMPONENTS: dict[str, ComponentSpec] = {
         page="inference",
         order=110,
         type=ComponentType.INFRASTRUCTURE,
-        description="Local AI models via Ollama, speech via Kokoro",
+        description="Local AI models via Ollama or llama.cpp, speech via Kokoro",
         long_description=(
-            "Runs language models locally: an Ollama server on the machine, "
-            "where a Mac's GPU is, or as a compose service. The AI service's "
-            "ollama provider talks to it, the model catalog lists what it "
-            "serves, and the dashboards show its models and activity. A "
+            "Runs language models locally: an Ollama server, or llama.cpp's "
+            "llama-server serving one model, on the machine, where a Mac's "
+            "GPU is, or as a compose service. The AI service's local "
+            "provider of the same name talks to it, the model catalog lists "
+            "what it serves, and the dashboards show its models and "
+            "activity. A "
             "speech server can run beside it (Kokoro-FastAPI), which "
             "ai[voice] speaks through."
         ),
         # The containers only exist for ``placement=docker``, the speech
         # server's only with one; the template generator drops the rest.
-        docker_services=["ollama", "kokoro-fastapi"],
+        docker_services=["ollama", "llamacpp", "kokoro-fastapi"],
         options=[
             OptionSpec(
                 name="engine",
@@ -641,6 +644,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "tests/cli/test_inference_cli.py",
                 "tests/components/frontend/test_inference_model_table.py",
                 "tests/_fake_ollama.py",
+                "tests/_fake_llamacpp.py",
             ],
             extras={
                 # The Overseer's Inference page, only where the htmx frontend

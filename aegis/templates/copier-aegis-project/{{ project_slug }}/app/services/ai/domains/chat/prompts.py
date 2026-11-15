@@ -4,6 +4,9 @@ AI service system prompts.
 Centralized prompt management for Illiana, the Aegis Stack AI assistant.
 """
 
+from app.services.ai.models import AIProvider
+from app.services.ai.models.provider_names import LOCAL_PROVIDERS, provider_label
+
 
 def build_system_prompt(
     current_model: str | None = None,
@@ -39,12 +42,14 @@ def build_system_prompt(
             f"You are running on model: **{current_model}**{provider_str}\n"
         )
 
-        # Add Ollama context so Illiana understands why costs are $0.00
-        if current_provider and current_provider.lower() == "ollama":
-            prompt += """
-**About Ollama:** This is a free, open-source model running locally on your machine.
+        # Add local-model context so Illiana understands why costs are $0.00
+        local = AIProvider.from_name(current_provider) if current_provider else None
+        if local in LOCAL_PROVIDERS:
+            label = provider_label(local)
+            prompt += f"""
+**About {label}:** This is a free, open-source model running locally on your machine.
 There are no API costs - all processing happens on your hardware. When reporting usage
-stats, $0.00 cost is expected and normal for Ollama models.
+stats, $0.00 cost is expected and normal for {label} models.
 """
 
     if memory_context:

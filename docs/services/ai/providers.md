@@ -246,6 +246,15 @@ AI_MODEL=llama3.1
 
 The `ollama` provider brings in the [Inference component](../../components/inference.md), which decides where Ollama runs: on the host by default, or as a container with `inference[docker]`.
 
+## llama.cpp (Local)
+
+`llama-server` serving one model, behind the same [Inference component](../../components/inference.md) as Ollama: `ai[llamacpp]` brings in `inference[llamacpp]`. It is the faster of the two for long multi-turn tool loops, because its prompt cache rereads a shared prefix quickly. See the component page for how to start it.
+
+```bash
+AI_PROVIDER=llamacpp
+AI_MODEL=qwen3:1.7b   # the server's --alias
+```
+
 ### Switching Models via CLI
 
 With the LLM Catalog, you can discover and switch Ollama models:

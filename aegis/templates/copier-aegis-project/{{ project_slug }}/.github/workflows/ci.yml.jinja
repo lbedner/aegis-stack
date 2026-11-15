@@ -259,7 +259,7 @@ jobs:
 {%- endif %}
       AI_PROVIDER: {% raw %}${{ vars.AI_PROVIDER || '{% endraw %}{{ providers[0] if providers else "public" }}{% raw %}' }}{% endraw %}
       AI_MODEL: {% raw %}${{ vars.AI_MODEL }}{% endraw %}
-{%- for provider in providers if provider != "ollama" %}
+{%- for provider in providers if provider not in ("ollama", "llamacpp") %}
 {%- set key = key_names.get(provider, provider | upper ~ "_API_KEY") %}
       {{ key }}: {% raw %}${{ secrets.{% endraw %}{{ key }}{% raw %} }}{% endraw %}
 {%- endfor %}

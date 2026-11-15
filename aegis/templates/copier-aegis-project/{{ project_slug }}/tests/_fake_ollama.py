@@ -119,8 +119,9 @@ def serve(
     and start the activity tracker afresh."""
     from app.components import inference
     from app.components.inference import activity
+    from app.core.config import settings
 
-    monkeypatch.setitem(inference.ENGINES, "ollama", client)
+    monkeypatch.setitem(inference.ENGINES, settings.INFERENCE_ENGINE, client)
     monkeypatch.setattr(activity, "_tracker", activity.ActivityTracker())
 
 

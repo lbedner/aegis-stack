@@ -226,6 +226,16 @@ def test_the_row_buttons_post_to_the_actions(signed_in: TestClient) -> None:
     }
 
 
+def test_an_engine_that_cannot_move_its_model_offers_no_buttons(
+    signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A single-model llama-server serves what it was started with."""
+    monkeypatch.setattr(FakeClient, "can_load_unload", False)
+    page = _get(signed_in, "models")
+    assert select(page, "#inference-models button[hx-post]") == []
+    assert "Loaded" in _rows(page)["qwen2.5:7b"]
+
+
 def test_the_table_fits_without_the_digest(signed_in: TestClient) -> None:
     rows = _rows(_get(signed_in, "models"))
     assert "7.6B, 4-bit" in rows["llama3.1:8b"]

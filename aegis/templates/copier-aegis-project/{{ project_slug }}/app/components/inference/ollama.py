@@ -32,11 +32,10 @@ class _Ps(BaseModel):
 class OllamaEngine(BaseInferenceEngine):
     """A local Ollama server."""
 
-    @classmethod
-    def configured_url(cls) -> str:
-        from app.core.config import settings
-
-        return getattr(settings, "ollama_base_url_effective", "http://localhost:11434")
+    NAME = "ollama"
+    LABEL = "Ollama"
+    DEFAULT_URL = "http://localhost:11434"
+    START = "ollama serve"
 
     async def _version(self, client: httpx.AsyncClient) -> str | None:
         try:

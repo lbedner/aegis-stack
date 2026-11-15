@@ -8,7 +8,7 @@ pages leave it out.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
 from pydantic import BaseModel, ConfigDict, computed_field, field_validator
@@ -128,6 +128,13 @@ class BaseInferenceEngine(ABC):
     """A local inference server, read and driven over HTTP."""
 
     TIMEOUT = 2.0  # Local server responds in <100ms; 2s is generous
+    NAME: ClassVar[str]  # its ``inference[<engine>]`` name, and its provider's
+    LABEL: ClassVar[str]  # how its name reads to a person
+    DEFAULT_URL: ClassVar[str]  # where it is when the settings do not say
+    START: ClassVar[str]  # how a person starts it, for a page it does not answer
+    # Whether it loads and frees models on request; one that serves the
+    # model it was started with offers neither (the pages hide the buttons).
+    can_load_unload: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -142,9 +149,13 @@ class BaseInferenceEngine(ABC):
         self._transport = transport  # tests answer through a MockTransport
 
     @classmethod
-    @abstractmethod
     def configured_url(cls) -> str:
-        """Where the settings say the server is."""
+        """Where the settings say the server is: ``<NAME>_base_url_effective``,
+        the setting the AI service's provider of the same name chats at
+        (``provider_names.local_base_url``)."""
+        from app.core.config import settings
+
+        return getattr(settings, f"{cls.NAME}_base_url_effective", cls.DEFAULT_URL)
 
     def _client(self, timeout: float = TIMEOUT) -> httpx.AsyncClient:
         """A client for one call or one status read (shared by its reads)."""

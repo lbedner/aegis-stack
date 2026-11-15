@@ -62,6 +62,7 @@ class TestAIProviderSelection:
             False,  # mistral
             False,  # cohere
             False,  # ollama
+            False,  # llamacpp
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
             *AFTER_AI,
@@ -107,6 +108,7 @@ class TestAIProviderSelection:
             False,  # mistral
             False,  # cohere
             False,  # ollama
+            False,  # llamacpp
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
             *AFTER_AI,
@@ -153,6 +155,7 @@ class TestAIProviderSelection:
             False,  # mistral
             False,  # cohere
             False,  # ollama
+            False,  # llamacpp
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
             *AFTER_AI,
@@ -249,6 +252,7 @@ class TestAIBackendSelection:
                 False,  # mistral
                 False,  # cohere
                 False,  # ollama
+                False,  # llamacpp
                 True,  # Enable RAG? Yes (default)
                 True,  # Enable voice?
                 *AFTER_AI,
@@ -309,6 +313,7 @@ class TestAIBackendSelection:
                 False,  # mistral
                 False,  # cohere
                 False,  # ollama
+                False,  # llamacpp
                 True,  # Enable RAG? Yes (default)
                 True,  # Enable voice?
                 *AFTER_AI,
@@ -359,6 +364,7 @@ class TestAIBackendSelection:
             False,  # mistral
             False,  # cohere
             False,  # ollama
+            False,  # llamacpp
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
             *AFTER_AI,
@@ -528,6 +534,7 @@ class TestAIConfigurationEndToEnd:
             False,
             False,
             False,  # Provider selection (openai yes, anthropic no, google yes, groq yes, mistral no, cohere no, ollama no)
+            False,  # llamacpp no
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
             *AFTER_AI,
@@ -636,6 +643,7 @@ class TestOllamaModeSelection:
             False,  # mistral
             False,  # cohere
             True,  # SELECT Ollama
+            False,  # llamacpp
             True,  # Ollama mode: connect to host (True = HOST)
             True,  # Enable RAG
             True,  # Enable voice?

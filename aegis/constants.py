@@ -139,9 +139,12 @@ class AIProviders:
     MISTRAL = "mistral"
     COHERE = "cohere"
     OLLAMA = "ollama"
+    LLAMACPP = "llamacpp"  # the inference component's llama-server
 
     # All valid providers (used for validation)
-    ALL = {PUBLIC, OPENAI, ANTHROPIC, GOOGLE, GROQ, MISTRAL, COHERE, OLLAMA}
+    ALL = {PUBLIC, OPENAI, ANTHROPIC, GOOGLE, GROQ, MISTRAL, COHERE, OLLAMA, LLAMACPP}
+    # Served by the inference component, each by the engine of its name.
+    LOCAL = {OLLAMA, LLAMACPP}
 
     # Default providers for bracket syntax (non-interactive)
     DEFAULT = [PUBLIC]
@@ -165,6 +168,7 @@ class AIProviders:
         (MISTRAL, "Mistral", "Open models", "Mostly paid", False),
         (COHERE, "Cohere", "Enterprise focus", "Limited free", False),
         (OLLAMA, "Ollama", "Local inference", "Free (local)", False),
+        (LLAMACPP, "llama.cpp", "Local inference", "Free (local)", False),
     ]
 
 
@@ -182,8 +186,9 @@ class InferenceEngines:
     """What serves local models for the inference component."""
 
     OLLAMA = "ollama"
+    LLAMACPP = "llamacpp"  # llama.cpp's llama-server, one model
 
-    ALL = [OLLAMA]
+    ALL = [OLLAMA, LLAMACPP]
     DEFAULT = OLLAMA
 
 

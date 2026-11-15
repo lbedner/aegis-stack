@@ -6,6 +6,7 @@ MESSAGES: dict[str, str] = {
         "プロジェクト名が不正です。英字・数字・ハイフン・アンダースコアのみ使用可能です。"
     ),
     "validation.reserved_name": "「{name}」は予約名のため使用できません。",
+    "validation.local_provider_engine": "AIプロバイダー {providers} には同名の inference コンポーネントのエンジンが必要です。ここでのエンジンは「{engine}」です。",
     "validation.name_too_long": "プロジェクト名が長すぎます。最大50文字です。",
     "validation.invalid_python": (
         "Python バージョン「{version}」は不正です。対応バージョン：{supported}"
@@ -70,7 +71,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "SQLModel ORM 付きデータベース（SQLite / PostgreSQL）",
     "component.ingress": "Traefik リバースプロキシ＆ロードバランサー",
     "component.observability": "Logfire による監視・トレース・メトリクス",
-    "component.inference": "Local AI models via Ollama, speech via Kokoro",
+    "component.inference": "Local AI models via Ollama or llama.cpp, speech via Kokoro",
     "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.deploy": "デプロイ先 (Docker Compose)、Overseer が参照",
     "component.mcp": "MCP server: an outside assistant reads the app's tools",

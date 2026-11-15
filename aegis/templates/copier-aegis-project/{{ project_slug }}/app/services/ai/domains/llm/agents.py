@@ -20,10 +20,11 @@ from app.services.ai.domains.llm.config import AIServiceConfig
 from app.services.ai.domains.llm.model_factory import (
     _grant_kwargs,
     _model_settings,
-    _ollama_model,
+    _local_model,
     model_for,
 )
 from app.services.ai.models import AIProvider
+from app.services.ai.models.provider_names import LOCAL_PROVIDERS
 
 _DEFAULT_PROMPT = (
     "You are a helpful AI assistant. Provide clear, accurate, "
@@ -94,9 +95,9 @@ async def get_agent(
                 agent_name=agent_name,
             )
 
-        # Special handling for OLLAMA provider (local, no API key required)
-        if config.provider == AIProvider.OLLAMA:
-            return _create_ollama_agent(
+        # A local provider (no API key required)
+        if config.provider in LOCAL_PROVIDERS:
+            return _create_local_agent(
                 config,
                 settings,
                 system_prompt_override,
@@ -331,7 +332,7 @@ async def _create_pollinations_agent(
         raise ProviderError(error_msg) from e
 
 
-def _create_ollama_agent(
+def _create_local_agent(
     config: AIServiceConfig,
     settings: Any,
     system_prompt_override: str | None = None,
@@ -341,9 +342,8 @@ def _create_ollama_agent(
     agent_name: str | None = None,
 ) -> Agent:
     """
-    Create agent for OLLAMA provider using local Ollama server.
-
-    Uses Ollama's OpenAI-compatible API endpoint.
+    Create agent for a local provider (Ollama, llama.cpp), over its
+    server's OpenAI-compatible API endpoint.
 
     Args:
         config: AI service configuration
@@ -351,11 +351,11 @@ def _create_ollama_agent(
         system_prompt_override: Optional custom system prompt (for RAG mode)
     """
     try:
-        model = _ollama_model(config, settings)
+        model = _local_model(config, settings)
 
         # Determine system prompt
         system_prompt = system_prompt_override or (
-            "You are a helpful AI assistant running locally via Ollama. "
+            "You are a helpful AI assistant running locally. "
             "Provide clear, accurate, and concise responses. "
             "Be friendly and professional."
         )

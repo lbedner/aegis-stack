@@ -17,7 +17,7 @@ from app.services.ai.domains.llm.etl.queries import (  # noqa: F401
     CatalogStats,
     catalog_is_populated,
     get_catalog_stats,
-    ollama_models_present,
+    local_models_present,
 )
 from app.services.ai.domains.llm.etl.results import SyncResult
 from app.services.ai.domains.llm.etl.vendor_metadata import (

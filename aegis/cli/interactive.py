@@ -984,8 +984,8 @@ def set_ai_service_config(
         _ai_backend_selection[service_name] = backend
     if providers is not None:
         _ai_provider_selection[service_name] = providers
-        # Auto-set ollama_mode to "host" when ollama is a provider (non-interactive default)
-        if AIProviders.OLLAMA in providers:
+        # Auto-set ollama_mode to "host" when a local provider is chosen (non-interactive default)
+        if AIProviders.LOCAL & set(providers):
             _ollama_mode_selection[service_name] = OllamaMode.HOST
 
 
@@ -1200,7 +1200,7 @@ def interactive_ai_service_config(
 
     # Where Ollama runs: asked once, reused when the inference step already
     # answered it.
-    if AIProviders.OLLAMA not in providers:
+    if not AIProviders.LOCAL & set(providers):
         _ollama_mode_selection[service_name] = OllamaMode.NONE
     elif get_ollama_mode_selection(service_name) == OllamaMode.NONE:
         select_inference_placement(service_name)

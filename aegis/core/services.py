@@ -13,6 +13,7 @@ from ..constants import (
     AnswerKeys,
     AuthLevels,
     ComponentNames,
+    InferenceEngines,
     PaymentProviders,
     StorageBackends,
 )
@@ -91,7 +92,44 @@ EVALS_PAGES = [
     "tests/web/test_overseer_ai_evals.py",
 ]
 
+
 # Service registry - single source of truth for all available services
+def local_inference(providers: list[str]) -> list[str]:
+    """The inference component a local provider brings: its engine of the
+    same name (on the host, unless inference[docker] says otherwise).
+    Ollama, the default engine, leaves the brackets off so the placement is
+    still asked."""
+    if not AIProviders.LOCAL & set(providers):
+        return []
+    if AIProviders.LLAMACPP in providers:
+        return [f"{ComponentNames.INFERENCE}[{AIProviders.LLAMACPP}]"]
+    return [ComponentNames.INFERENCE]
+
+
+def inference_engine(component: str, providers: list[str]) -> str:
+    """The engine an ``inference[...]`` runs: the one its brackets name,
+    else the one a chosen local provider needs (``inference[docker]``
+    beside ``ai[llamacpp]`` is llama.cpp), else the default."""
+    named = component.partition("[")[2].rstrip("]").split(",")
+    for engine in named:
+        if engine.strip() in InferenceEngines.ALL:
+            return engine.strip()
+    if AIProviders.LLAMACPP in providers:
+        return InferenceEngines.LLAMACPP
+    return InferenceEngines.DEFAULT
+
+
+def local_engine_rule(providers: list[str], engine: str) -> str | None:
+    """A local AI provider chats with the inference engine of its name, so
+    ``ai[llamacpp]`` beside an Ollama engine has nothing to talk to."""
+    wrong = sorted(AIProviders.LOCAL & set(providers) - {engine})
+    if not wrong:
+        return None
+    return t(
+        "validation.local_provider_engine", providers=", ".join(wrong), engine=engine
+    )
+
+
 SERVICES: dict[str, ServiceSpec] = {
     "auth": ServiceSpec(
         readme=ReadmeWiring(
@@ -495,12 +533,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 default=list(AIProviders.DEFAULT),
                 answer_key=AnswerKeys.AI_PROVIDERS,
                 about="guided.choice.provider",
-                # Ollama is served by the inference component: choosing the
-                # provider brings the server with it (on the host, unless
-                # inference[docker] says otherwise).
-                auto_requires=lambda v: [ComponentNames.INFERENCE]
-                if AIProviders.OLLAMA in v
-                else [],
+                auto_requires=local_inference,
             ),
             OptionSpec(
                 name="rag",

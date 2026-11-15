@@ -16,7 +16,7 @@ from app.components.worker.tasks.load_tasks import (
 )
 from app.core.config import settings
 from app.core.constants import QueueName
-from app.core.queue_workers import concurrency_for
+from app.core.queue_workers import concurrency_for, settings_for
 
 
 class WorkerSettings:
@@ -47,7 +47,7 @@ class WorkerSettings:
     )
     queue_name = "arq:queue:load_test"
     max_jobs = concurrency_for(QueueName.LOAD_TEST)  # Settings.WORKER_QUEUES
-    job_timeout = 60  # Quick tasks
+    job_timeout = settings_for(QueueName.LOAD_TEST).timeout_seconds
     keep_result = 60  # Short TTL — load test results are fire-and-forget
     max_tries = settings.WORKER_MAX_TRIES
     health_check_interval = settings.WORKER_HEALTH_CHECK_INTERVAL

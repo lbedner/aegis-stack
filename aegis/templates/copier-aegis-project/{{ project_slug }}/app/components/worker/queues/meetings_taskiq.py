@@ -28,8 +28,10 @@ broker = (
 )
 
 
-@broker.task
+# ponytail: a day stands in for no timeout, as on the arq queue (the bot's
+# own rules decide when it leaves).
+@broker.task(timeout=24 * 60 * 60)
 async def run_meeting_task(meeting_id: int) -> None:
-    """Take the bot through one meeting (``bot.run_meeting``). No timeout
-    and no retry: a call delivered twice finds its meeting taken."""
+    """Take the bot through one meeting (``bot.run_meeting``). No retry: a
+    call delivered twice finds its meeting taken."""
     await run_meeting(meeting_id)

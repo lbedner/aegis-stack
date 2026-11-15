@@ -18,7 +18,7 @@ Comprehensive guide to configuring and scaling the worker component in your Aegi
         functions = [system_health_check]
         queue_name = "arq:queue:system"
         max_jobs = 15
-        job_timeout = 300
+        job_timeout = settings_for(QueueName.SYSTEM).timeout_seconds  # Settings.WORKER_QUEUES
     ```
 
     **Load Test Worker (`app/components/worker/queues/load_test.py`):**
@@ -35,7 +35,7 @@ Comprehensive guide to configuring and scaling the worker component in your Aegi
         functions = [cpu_intensive_task, io_simulation_task, memory_operations_task, failure_testing_task]
         queue_name = "arq:queue:load_test"
         max_jobs = 50
-        job_timeout = 60
+        job_timeout = settings_for(QueueName.LOAD_TEST).timeout_seconds  # Settings.WORKER_QUEUES
     ```
 
     **Global Configuration (`app/core/config.py`):**
@@ -511,7 +511,7 @@ takes only what it can start:
 
 | Backend | Takes a job | A long job |
 |---------|-------------|------------|
-| **TaskIQ** | One `XREADGROUP` read per free slot | Its claim is refreshed while it runs (`XCLAIM ... JUSTID`), so it is never handed to another worker after the 10-minute idle timeout |
+| **TaskIQ** | One `XREADGROUP` read per free slot | Its claim is refreshed while it runs (`XCLAIM ... JUSTID`), so it is never handed to another worker after the 10-minute idle timeout; it ends at its queue's `timeout_seconds`, or its task's own `timeout` |
 | **Dramatiq** | Prefetches as many messages as it has threads, not twice that (set when the worker boots, however it is launched) | The consumer's heartbeat keeps its messages; a dead worker's are requeued |
 | **arq** | Takes a slot first, then claims the job | Its in-progress key lasts the job's timeout, which arq enforces |
 
@@ -619,11 +619,11 @@ once none are left Redis refuses the write instead of dropping work.
     ```python
     class WorkerSettings:  # system queue
         functions = [system_health_check, cleanup_temp_files]
-        job_timeout = 300  # 5 minutes for system tasks
+        job_timeout = settings_for(QueueName.SYSTEM).timeout_seconds  # Settings.WORKER_QUEUES
 
     class WorkerSettings:  # load_test queue
         functions = [cpu_intensive_task, io_simulation_task]
-        job_timeout = 60   # Quick test tasks
+        job_timeout = settings_for(QueueName.LOAD_TEST).timeout_seconds  # Settings.WORKER_QUEUES
         max_jobs = 50
     ```
 

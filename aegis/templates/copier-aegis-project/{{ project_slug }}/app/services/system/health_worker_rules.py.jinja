@@ -22,7 +22,7 @@ FAILURE_RATE_UNHEALTHY = 25
 
 
 def taskiq_group_stats(
-    groups: list[dict[str, Any]], stream_length: int
+    groups: list[dict[str, Any]], stream_length: int, group_name: str = "taskiq"
 ) -> tuple[int, int, int, int]:
     """Return (consumers, pending, entries_read, lag) for the ``taskiq`` group.
 
@@ -33,7 +33,7 @@ def taskiq_group_stats(
         name = group.get("name", b"")
         if isinstance(name, bytes):
             name = name.decode()
-        if name != "taskiq":
+        if name != group_name:
             continue
         lag = group.get("lag")
         return (
@@ -45,12 +45,12 @@ def taskiq_group_stats(
     return 0, 0, 0, stream_length
 
 
-def last_delivered(groups: list[dict[str, Any]]) -> str:
+def last_delivered(groups: list[dict[str, Any]], group_name: str = "taskiq") -> str:
     """The ``taskiq`` group's last delivered stream id; ``0-0`` when nothing
     has consumed the stream yet, so every entry is still waiting."""
     for group in groups:
         name = group.get("name", b"")
-        if (name.decode() if isinstance(name, bytes) else name) == "taskiq":
+        if (name.decode() if isinstance(name, bytes) else name) == group_name:
             last = group.get("last-delivered-id", b"0-0")
             return last.decode() if isinstance(last, bytes) else str(last)
     return "0-0"

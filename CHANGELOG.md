@@ -32,6 +32,18 @@
 
 ### Fixed
 
+- **A TaskIQ queue no longer fills Redis with finished jobs.** TaskIQ acks a
+  finished job and leaves it in its stream, which has no TTL, so every job
+  ever run stayed until Redis refused the next enqueue. Each worker now
+  trims its streams once a minute to the oldest job still held; nothing
+  waiting or running is dropped. A job that hung would hold that floor for
+  good, so a TaskIQ job now ends at its queue's `timeout_seconds`
+  (`WORKER_QUEUES`, 300s by default, 60s on `load_test`) unless its task
+  names its own `timeout`; before, it had none. arq reads its `job_timeout`
+  from the same setting, and a Dramatiq actor with no `time_limit` takes it
+  in place of ten minutes. The Redis page no
+  longer counts a job queue's last minute and hour from what it holds.
+  `aegis update` brings it to an existing project.
 - **A project's CI no longer counts as its clones.** GitHub counts every
   checkout as a clone, and a generated project's CI checked out in each of
   its five or six jobs on every push. One job fetches now and hands the rest

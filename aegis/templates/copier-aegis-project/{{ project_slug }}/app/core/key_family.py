@@ -20,6 +20,8 @@ class KeyFamily:
     values carry a credential out of it, named but never read. ``holds``
     says what an entry is, singular (``"event"``), for its figures; without
     it, the type's word (a stream's entry, a sorted set's member).
+    ``history=False`` is a key that drops what is done (a job queue):
+    what it holds is what is left, so nothing is counted by the minute.
     """
 
     pattern: str
@@ -31,3 +33,4 @@ class KeyFamily:
     columns: tuple[str, str] = ("Member", "Value")
     peek: bool = True
     holds: str | None = None
+    history: bool = True

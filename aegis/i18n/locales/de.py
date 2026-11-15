@@ -7,6 +7,7 @@ MESSAGES: dict[str, str] = {
         "und Unterstriche erlaubt."
     ),
     "validation.reserved_name": "'{name}' ist ein reservierter Name.",
+    "validation.local_provider_engine": "Der KI-Anbieter {providers} braucht die gleichnamige Engine der Inference-Komponente; die Engine hier ist '{engine}'.",
     "validation.name_too_long": ("Projektname zu lang. Maximal 50 Zeichen erlaubt."),
     "validation.invalid_python": (
         "Ungültige Python-Version '{version}'. Muss eine von: {supported} sein"
@@ -75,7 +76,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "Datenbank mit SQLModel ORM (SQLite oder PostgreSQL)",
     "component.ingress": "Traefik Reverse Proxy und Load Balancer",
     "component.observability": "Logfire Observability, Tracing und Metriken",
-    "component.inference": "Local AI models via Ollama, speech via Kokoro",
+    "component.inference": "Local AI models via Ollama or llama.cpp, speech via Kokoro",
     "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.deploy": "Deployment-Ziel (Docker Compose), vom Overseer gelesen",
     "component.mcp": "MCP server: an outside assistant reads the app's tools",

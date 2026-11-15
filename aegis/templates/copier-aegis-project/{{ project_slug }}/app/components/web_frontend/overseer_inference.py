@@ -19,7 +19,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
-from app.components.inference import get_inference_engine, sampler
+from app.components.inference import get_inference_engine, inference_engine_class, sampler
 from app.components.inference.activity import get_inference_activity
 from app.components.inference.engine import InferenceServerStatus
 from app.components.inference.formatting import format_quantization
@@ -127,7 +127,10 @@ def _overview(server: InferenceServerStatus, base_url: str) -> dict[str, Any]:
                 "label": "Loaded",
                 "value": f"{len(loaded)} / {server.installed_models_count}",
             },
-            {"label": "VRAM", "value": f"{server.total_vram_gb:.1f} GB"},
+            {
+                "label": "VRAM",
+                "value": f"{server.total_vram_gb:.1f} GB" if server.total_vram_gb else "-",
+            },
             {"label": "Version", "value": server.version or "-"},
         ],
         "loaded": loaded,
@@ -141,7 +144,8 @@ def _state(name: str, warm: dict[str, float]) -> dict[str, str]:
     if name in _failed:
         return status_cell(FAILED[_failed[name]], "error")
     if name in warm:
-        return status_cell(f"Loaded, {warm[name]:.1f} GB", "ok")
+        gb = warm[name]  # 0 where the engine does not report its VRAM
+        return status_cell(f"Loaded, {gb:.1f} GB" if gb else "Loaded", "ok")
     return status_cell("Idle", "muted")
 
 
@@ -188,8 +192,11 @@ async def _read_server() -> tuple[InferenceServerStatus, str]:
 
 
 def _reach(server: InferenceServerStatus, base_url: str) -> dict[str, Any]:
-    """Where nothing answered, for ``_unreachable.html``."""
-    return {"unreachable": None if server.available else base_url}
+    """Where nothing answered, and which engine, for ``_unreachable.html``."""
+    return {
+        "unreachable": None if server.available else base_url,
+        "engine": inference_engine_class(),
+    }
 
 
 async def models_view() -> dict[str, Any]:
@@ -199,6 +206,7 @@ async def models_view() -> dict[str, Any]:
     return _reach(server, base_url) | {
         "partials": PARTIALS,
         "models": model_rows(server),
+        "can_move": inference_engine_class().can_load_unload,
         "models_events": MODELS_EVENTS,
         "models_event": MODELS_EVENT,
     }

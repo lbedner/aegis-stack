@@ -33,12 +33,15 @@ from app.services.ai.domains.llm.model_factory import (
 from app.core.log import logger
 from app.services.ai.domains.llm.config import AIServiceConfig, api_key_env
 from app.services.ai.models import PROVIDERS, AIProvider
+{%- if ai_framework != "pydantic-ai" %}
+from app.services.ai.models.provider_names import LOCAL_PROVIDERS, local_base_url
+{%- endif %}
 {% if ai_framework == "pydantic-ai" %}
 {#- The ``openai`` package + pydantic-ai's OpenAI model ship only with the
     openai extra, which is installed only for OpenAI-compatible providers.
     Skip these module-level imports otherwise (e.g. an anthropic-only build),
     or the module fails to import a package that was never installed. #}
-{%- set _has_openai = "openai" in ai_providers or "public" in ai_providers or "pollinations" in ai_providers or "openrouter" in ai_providers or "ollama" in ai_providers or "mistral" in ai_providers or "cohere" in ai_providers %}
+{%- set _has_openai = "openai" in ai_providers or "public" in ai_providers or "pollinations" in ai_providers or "openrouter" in ai_providers or "ollama" in ai_providers or "llamacpp" in ai_providers or "mistral" in ai_providers or "cohere" in ai_providers %}
 
 import json
 import importlib
@@ -174,8 +177,8 @@ async def get_llm(config: AIServiceConfig, settings: Any):
 
         if provider in _KEYED_CHAT_MODELS:
             return await _create_keyed_llm(config, settings)
-        if provider == AIProvider.OLLAMA:
-            return _create_ollama_llm(config, settings)
+        if provider in LOCAL_PROVIDERS:
+            return _create_local_llm(config, settings)
         if provider == AIProvider.PUBLIC:
             return await _create_public_llm(config)
         if provider == AIProvider.POLLINATIONS:
@@ -222,7 +225,7 @@ async def _create_openai_compatible_llm(
 ):
     """A chat model on any server that speaks the OpenAI API.
 
-    The same trick ``_create_ollama_llm`` uses, with a real key: the
+    The same trick ``_create_local_llm`` uses, with a real key: the
     OpenAI client is not tied to api.openai.com, so an aggregator like
     OpenRouter needs no package of its own. The key goes to the CLIENT,
     never into ``OPENAI_API_KEY``, so a stack holding both keeps them
@@ -240,20 +243,17 @@ async def _create_openai_compatible_llm(
     )
 
 
-def _create_ollama_llm(config: AIServiceConfig, settings: Any):
-    """Create Ollama chat model using OpenAI-compatible endpoint."""
+def _create_local_llm(config: AIServiceConfig, settings: Any):
+    """Create a local provider's chat model (Ollama, llama.cpp) using its
+    server's OpenAI-compatible endpoint."""
     from langchain_openai import ChatOpenAI
-
-    # Get Ollama base URL from settings (effective URL for
-    # Docker/local auto-detection)
-    base_url = settings.ollama_base_url_effective
 
     return ChatOpenAI(
         model=config.model or "llama3.2",
         temperature=config.temperature,
         max_tokens=config.max_tokens,
-        api_key="ollama",  # Ollama doesn't require auth but client needs something
-        base_url=f"{base_url}/v1",
+        api_key="local",  # neither needs auth but the client needs something
+        base_url=local_base_url(config.provider, settings),
         timeout=config.timeout_seconds,
     )
 

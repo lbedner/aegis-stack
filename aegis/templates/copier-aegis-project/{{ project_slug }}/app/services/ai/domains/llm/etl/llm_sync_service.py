@@ -29,7 +29,7 @@ from app.services.ai.domains.llm.etl.queries import (  # noqa: F401
     CatalogStats,
     catalog_is_populated,
     get_catalog_stats,
-    ollama_models_present,
+    local_models_present,
 )
 from app.services.ai.domains.llm.etl.results import SyncResult
 from app.services.ai.domains.llm.etl.upserts import UpsertMixin
@@ -253,9 +253,9 @@ class LLMSyncService(UpsertMixin):
         self._sync_modalities(model, data, result, dry_run)
 
     async def sync_ollama(self, dry_run: bool = False) -> SyncResult:
-        """Sync locally installed Ollama models to catalog.
-
-        Fetches models from local Ollama server and adds them to the catalog.
+        """Sync the models the app's inference engine serves to the catalog
+        (Ollama's, or llama.cpp's one), under the engine's name, each at the
+        context it serves while loaded (unknown, 0, while it is not).
 
         Args:
             dry_run: If True, don't commit changes to database.
@@ -266,41 +266,42 @@ class LLMSyncService(UpsertMixin):
         result = SyncResult()
 
         if get_inference_engine is None:
-            result.errors.append("Ollama integration not available")
+            result.errors.append("Local inference integration not available")
             return result
 
         client = get_inference_engine()
-        logger.info(f"Syncing models from Ollama at {client.base_url}")
+        logger.info(f"Syncing models from {client.LABEL} at {client.base_url}")
 
-        try:
-            ollama_models = await client.fetch_models()
-        except Exception as e:
+        status = await client.get_server_status()
+        if not status.available:
             error_msg = (
-                f"Cannot read models from Ollama at {client.base_url} ({e}). "
-                "Make sure Ollama is running: ollama serve"
+                f"Cannot read models from {client.LABEL} at {client.base_url}. "
+                f"Make sure {client.LABEL} is running."
             )
             logger.error(error_msg)
             result.errors.append(error_msg)
             return result
+        ollama_models = status.installed_models
+        served = {m.name: m.context_length for m in status.running_models}
 
         if not ollama_models:
-            logger.info("No models found in Ollama")
+            logger.info(f"No models found in {client.LABEL}")
             return result
 
         # Pre-load caches
         self._load_caches()
 
-        # Ensure Ollama vendor exists
-        vendor = self._upsert_vendor("ollama", result, dry_run)
+        vendor = self._upsert_vendor(client.NAME, result, dry_run)
         if not vendor:
             return result
 
-        # Process each Ollama model
         for ollama_model in ollama_models:
             try:
-                self._sync_ollama_model(ollama_model, vendor, result, dry_run)
+                self._sync_ollama_model(
+                    ollama_model, vendor, served.get(ollama_model.name, 0), result, dry_run
+                )
             except Exception as e:
-                error_msg = f"Failed to sync Ollama model {ollama_model.name}: {e}"
+                error_msg = f"Failed to sync {client.LABEL} model {ollama_model.name}: {e}"
                 logger.warning(error_msg)
                 result.errors.append(error_msg)
                 continue
@@ -321,6 +322,7 @@ class LLMSyncService(UpsertMixin):
         self,
         ollama_model: InferenceModel,
         vendor: LLMOrg,
+        context_window: int,
         result: SyncResult,
         dry_run: bool,
     ) -> None:
@@ -328,7 +330,8 @@ class LLMSyncService(UpsertMixin):
 
         Args:
             ollama_model: Ollama model data from API.
-            vendor: Ollama vendor record.
+            vendor: The engine's vendor record.
+            context_window: The context it serves, 0 when not loaded.
             result: SyncResult to update.
             dry_run: If True, don't persist changes.
         """
@@ -358,6 +361,10 @@ class LLMSyncService(UpsertMixin):
                     self._update_if_changed(existing, "title", title),
                     self._update_if_changed(existing, "description", description),
                     self._update_if_changed(existing, "served_by_org_id", vendor.id),
+                    bool(context_window)
+                    and self._update_if_changed(
+                        existing, "context_window", context_window
+                    ),
                 ]
             )
 
@@ -371,10 +378,10 @@ class LLMSyncService(UpsertMixin):
                 model_id=model_id,
                 title=title,
                 description=description,
-                context_window=0,  # Unknown for local models
+                context_window=context_window,
                 streamable=True,
                 enabled=True,
-                color=VENDOR_METADATA.get("ollama", {}).get("color", "#FFFFFF"),
+                color=VENDOR_METADATA.get(vendor.name, {}).get("color", "#FFFFFF"),
                 family=model_data.details.family,
                 served_by_org_id=vendor.id,
             )

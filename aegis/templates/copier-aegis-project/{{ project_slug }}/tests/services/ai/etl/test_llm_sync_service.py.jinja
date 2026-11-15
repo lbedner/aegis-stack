@@ -13,7 +13,7 @@ from app.services.ai.domains.llm.etl.llm_sync_service import (
     LLMSyncService,
     SyncResult,
     get_catalog_stats,
-    ollama_models_present,
+    local_models_present,
 )
 from app.services.ai.models.llm import (
     Direction,
@@ -756,7 +756,7 @@ class TestCatalogStats:
         assert ("anthropic", 0) in get_catalog_stats(sync_db_session).top_vendors
 
 
-class TestOllamaModelsPresent:
+class TestLocalModelsPresent:
     """The picker's ``usable`` filter shows only vendors the install can
     call. With no API keys that is Ollama alone, and the remote catalog
     never carries a local tag - so a fresh Ollama stack opened an empty
@@ -765,15 +765,58 @@ class TestOllamaModelsPresent:
     check it asks."""
 
     def test_false_on_an_empty_catalog(self, sync_db_session: Session) -> None:
-        assert ollama_models_present(sync_db_session) is False
+        assert local_models_present(sync_db_session) is False
 
     def test_false_when_only_cloud_models_exist(self, sync_db_session: Session) -> None:
         TestCatalogStats._served_model(LLMSyncService(sync_db_session), "openai", "openai/gpt-4o")
-        assert ollama_models_present(sync_db_session) is False
+        assert local_models_present(sync_db_session) is False
 
     def test_true_once_a_local_tag_is_registered(self, sync_db_session: Session) -> None:
         TestCatalogStats._served_model(LLMSyncService(sync_db_session), "ollama", "gpt-oss:20b")
-        assert ollama_models_present(sync_db_session) is True
+        assert local_models_present(sync_db_session) is True
+
+    def test_true_once_a_llamacpp_model_is_registered(
+        self, sync_db_session: Session
+    ) -> None:
+        TestCatalogStats._served_model(LLMSyncService(sync_db_session), "llamacpp", "qwen2.5:7b")
+        assert local_models_present(sync_db_session) is True
+
+{%- if include_inference %}
+
+
+class TestLocalSync:
+    """The local sync reads the app's inference engine, whichever it is:
+    its models go under the engine's name, each at the context it serves."""
+
+    async def test_models_go_under_the_engine_at_their_served_context(
+        self, sync_db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import httpx
+
+        from app.components.inference.llamacpp import LlamaCppEngine
+        from app.services.ai.domains.llm.etl import llm_sync_service
+        from tests import _fake_llamacpp
+        from tests._fake_ollama import serving
+
+        engine = LlamaCppEngine(
+            "http://llamacpp:8080",
+            transport=httpx.MockTransport(serving(_fake_llamacpp.ROUTES)),
+        )
+        monkeypatch.setattr(llm_sync_service, "get_inference_engine", lambda: engine)
+
+        async def no_labs(session: Session, model_ids: list[str]) -> None:
+            """The maker lookup fetches from the registry (its own tests)."""
+
+        monkeypatch.setattr(llm_sync_service, "attach_labs", no_labs)
+        result = await LLMSyncService(sync_db_session).sync_ollama()
+
+        assert result.models_added == 1 and not result.errors
+        model = sync_db_session.exec(
+            select(LargeLanguageModel).where(LargeLanguageModel.model_id == "qwen2.5:7b")
+        ).one()
+        assert model.context_window == 32768
+        assert sync_db_session.get(LLMOrg, model.served_by_org_id).name == "llamacpp"
+{%- endif %}
 
 {% else %}
 # ETL sync service tests require database backend (ai_backend != "memory")

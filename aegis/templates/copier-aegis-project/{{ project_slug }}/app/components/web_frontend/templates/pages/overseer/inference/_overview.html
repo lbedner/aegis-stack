@@ -5,7 +5,7 @@
   {{ stats_strip(figures, id="inference-figures") }}
   {% include "pages/overseer/inference/_unreachable.html" %}
   <div class="grid gap-4 lg:grid-cols-2">
-    {% call card("In memory", "Models Ollama holds warm, ready to answer.") %}
+    {% call card("In memory", "Models the server holds warm, ready to answer.") %}
       {% if loaded %}
       <div class="flex flex-wrap gap-2">{% for name in loaded %}{{ badge(name, "ok") }}{% endfor %}</div>
       {% elif not unreachable %}

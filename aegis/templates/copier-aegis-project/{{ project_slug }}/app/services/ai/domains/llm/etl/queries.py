@@ -15,6 +15,7 @@ from typing import TypeVar
 
 from sqlmodel import Session, SQLModel, col, func, select
 
+from app.services.ai.models.provider_names import LOCAL_PROVIDERS
 from app.services.ai.models.llm import (
     LargeLanguageModel,
     LLMDeployment,
@@ -80,8 +81,9 @@ def catalog_is_populated(session: Session) -> bool:
     return first is not None
 
 
-def ollama_models_present(session: Session) -> bool:
-    """Whether any locally served Ollama tag is in the catalog.
+def local_models_present(session: Session) -> bool:
+    """Whether any locally served model (Ollama's, llama.cpp's) is in the
+    catalog.
 
     The remote catalog never carries a local tag, and the picker's
     ``usable`` filter shows only vendors the install can call - with no
@@ -92,7 +94,7 @@ def ollama_models_present(session: Session) -> bool:
     first = session.exec(
         select(LargeLanguageModel.id)
         .join(LLMOrg, LargeLanguageModel.served_by_org_id == LLMOrg.id)
-        .where(LLMOrg.name == "ollama")
+        .where(col(LLMOrg.name).in_([p.value for p in LOCAL_PROVIDERS]))
         .limit(1)
     ).first()
     return first is not None

@@ -19,6 +19,7 @@ class AIProvider(str, Enum):
     MISTRAL = "mistral"
     COHERE = "cohere"
     OLLAMA = "ollama"  # Local LLM inference via Ollama
+    LLAMACPP = "llamacpp"  # Local LLM inference via llama.cpp's llama-server
     PUBLIC = "public"  # LLM7.io: keyless anonymous tier; key unlocks premium
     POLLINATIONS = "pollinations"  # Pollinations: keyless anonymous tier
     OPENROUTER = "openrouter"  # Aggregator; speaks the OpenAI API
@@ -116,6 +117,13 @@ PROVIDER_CAPABILITIES = {
     ),
     AIProvider.OLLAMA: ProviderCapabilities(
         provider=AIProvider.OLLAMA,
+        supports_streaming=True,
+        supports_function_calling=False,
+        supports_vision=False,
+        free_tier_available=True,  # Local models, no API key required
+    ),
+    AIProvider.LLAMACPP: ProviderCapabilities(
+        provider=AIProvider.LLAMACPP,
         supports_streaming=True,
         supports_function_calling=False,
         supports_vision=False,
@@ -244,6 +252,12 @@ PROVIDERS: dict[AIProvider, ProviderSpec] = {
         model=_OPENAI_CHAT,
         # Its address is a setting, not a constant, so the model is built
         # rather than described.
+        builds_own_client=True,
+    ),
+    AIProvider.LLAMACPP: ProviderSpec(
+        env_var="LLAMACPP_API_KEY",
+        capabilities=PROVIDER_CAPABILITIES[AIProvider.LLAMACPP],
+        model=_OPENAI_CHAT,
         builds_own_client=True,
     ),
     AIProvider.PUBLIC: ProviderSpec(

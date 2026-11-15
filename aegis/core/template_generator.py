@@ -47,7 +47,7 @@ from .insights_service_parser import (
     parse_insights_service_config,
 )
 from .option_spec import parse_options
-from .services import SERVICES
+from .services import SERVICES, inference_engine, local_inference
 
 
 class TemplateGenerator:
@@ -204,7 +204,7 @@ class TemplateGenerator:
         """The inference component's engine and placement.
 
         From ``inference[engine,placement]``, or pulled in by the AI
-        service's ollama provider (the resolver usually added it already;
+        service's local provider (the resolver usually added it already;
         this covers callers that did not run it). A bracket-less
         ``inference`` takes the placement the interactive Ollama prompt
         chose, else the default.
@@ -220,14 +220,14 @@ class TemplateGenerator:
             ),
             None,
         )
-        if found is None and AIProviders.OLLAMA in self._ai_providers():
-            found = ComponentNames.INFERENCE
+        if found is None and (brought := local_inference(self._ai_providers())):
+            found = brought[0]
             self.components.append(found)
         self.has_inference = found is not None
         if found is None:
             return
         parsed = parse_options(found, COMPONENTS[ComponentNames.INFERENCE])
-        self.inference_engine = parsed["engine"]
+        self.inference_engine = inference_engine(found, self._ai_providers())
         self.inference_placement = parsed["placement"]
         self.inference_speech = parsed["speech"]
         if "[" not in found:
@@ -407,14 +407,15 @@ class TemplateGenerator:
         return list(dict.fromkeys(services))  # Preserve order, remove duplicates
 
     def _inference_containers(self) -> list[str]:
-        """The inference containers: none on the host; on docker Ollama's,
-        and the speech server's where there is one."""
+        """The inference containers: none on the host; on docker the
+        engine's (its service is named as the engine is), and the speech
+        server's where there is one."""
         if self.inference_placement != InferencePlacement.DOCKER:
             return []
-        ollama, speech = COMPONENTS[ComponentNames.INFERENCE].docker_services
+        engine = [self.inference_engine]
         if self.inference_speech == InferenceSpeech.NONE:
-            return [ollama]
-        return [ollama, speech]
+            return engine
+        return engine + COMPONENTS[ComponentNames.INFERENCE].docker_services[-1:]
 
     def _get_pyproject_deps(self) -> list[str]:
         """
@@ -589,6 +590,7 @@ class TemplateGenerator:
                 "public": "openai",  # LLM7.io uses OpenAI-compatible API
                 "pollinations": "openai",  # Pollinations uses OpenAI-compatible API
                 "openrouter": "openai",  # OpenRouter uses OpenAI-compatible API
+                "llamacpp": "openai",  # llama-server's OpenAI-compatible API
                 # Future OpenAI-compatible providers go here:
                 # "together": "openai",
                 # "fireworks": "openai",
@@ -626,10 +628,10 @@ class TemplateGenerator:
                 if provider in langchain_packages:
                     deps.append(langchain_packages[provider])
                 elif (
-                    provider in ("public", "pollinations")
+                    provider in ("public", "pollinations", "ollama", "llamacpp")
                     and "langchain-openai>=1.1.0,<2" not in deps
                 ):
-                    # Keyless providers use OpenAI-compatible endpoints
+                    # Keyless and local providers use OpenAI-compatible endpoints
                     deps.append("langchain-openai>=1.1.0,<2")
 
             return deps

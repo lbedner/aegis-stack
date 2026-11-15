@@ -7,6 +7,7 @@ MESSAGES: dict[str, str] = {
         "guiones y guiones bajos."
     ),
     "validation.reserved_name": "'{name}' es un nombre reservado.",
+    "validation.local_provider_engine": "El proveedor de IA {providers} necesita el motor del mismo nombre del componente inference; aquí el motor es '{engine}'.",
     "validation.name_too_long": (
         "Nombre de proyecto demasiado largo. Máximo 50 caracteres."
     ),
@@ -77,7 +78,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "Base de datos con SQLModel ORM (SQLite o PostgreSQL)",
     "component.ingress": "Traefik reverse proxy y balanceador de carga",
     "component.observability": "Logfire observabilidad, trazas y métricas",
-    "component.inference": "Local AI models via Ollama, speech via Kokoro",
+    "component.inference": "Local AI models via Ollama or llama.cpp, speech via Kokoro",
     "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.deploy": "Destino de despliegue (Docker Compose), leído por el Overseer",
     "component.mcp": "MCP server: an outside assistant reads the app's tools",

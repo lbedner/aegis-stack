@@ -140,7 +140,7 @@ class TestModelFor:
         assert model is chat_model.return_value
         # Ollama speaks OpenAI at /v1 and wants no real key.
         assert client.call_args.kwargs["base_url"] == "http://localhost:11434/v1"
-        assert client.call_args.kwargs["api_key"] == "ollama"
+        assert client.call_args.kwargs["api_key"] == "local"
         assert chat_model.call_args.kwargs["model_name"] == "qwen2.5:7b"
 
     async def test_keyless_public_provider_is_refused_with_a_pointer(self) -> None:

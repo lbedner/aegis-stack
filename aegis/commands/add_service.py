@@ -18,6 +18,7 @@ from ..constants import (
     AIProviders,
     AnswerKeys,
     ComponentNames,
+    InferenceEngines,
     Messages,
     StorageBackends,
 )
@@ -287,6 +288,20 @@ def add_service_command(
                 ai_config["backend"] = config.backend
                 ai_config["framework"] = config.framework
                 ai_config["providers"] = config.providers
+
+    # A local provider needs the engine of its name, and an installed
+    # inference component keeps the engine it has.
+    if existing_answers.get(AnswerKeys.include_key(ComponentNames.INFERENCE)) is True:
+        from ..core.services import local_engine_rule
+
+        providers = ai_config.get("providers")
+        rule = local_engine_rule(
+            providers if isinstance(providers, list) else [],
+            existing_answers.get(AnswerKeys.INFERENCE_ENGINE, InferenceEngines.DEFAULT),
+        )
+        if rule:
+            brand.error(rule, err=True)
+            raise typer.Exit(1)
 
     # Resolve service dependencies to components
     try:

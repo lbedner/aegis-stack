@@ -100,7 +100,7 @@ class ActivitySection(ft.Container):
                         color=ACTIVITY_EVENT_COLORS[event.action],
                     ),
                     NumericText(vram_display, color=Theme.Colors.TEXT_SECONDARY),
-                    SecondaryText("Ollama" if event.detected else "App"),
+                    SecondaryText("Server" if event.detected else "App"),
                     when_text,
                 ]
             )

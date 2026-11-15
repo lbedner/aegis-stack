@@ -253,10 +253,11 @@ class TestProviderApiKeyUrls:
 
     def test_all_paid_providers_have_urls(self) -> None:
         """All paid providers should have API key URLs."""
-        # PUBLIC and OLLAMA don't need API keys
+        # PUBLIC and the local providers don't need API keys
         no_api_key_providers = {
             AIProvider.PUBLIC,
             AIProvider.OLLAMA,
+            AIProvider.LLAMACPP,
             AIProvider.POLLINATIONS,
         }
         for provider in AIProvider:

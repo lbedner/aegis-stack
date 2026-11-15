@@ -10,6 +10,8 @@ value aegis derives from the component, never asked.
 
 from typing import Any
 
+import pytest
+
 from aegis.constants import AnswerKeys, ComponentNames
 from aegis.core.components import COMPONENTS, ComponentType
 from aegis.core.option_spec import compute_auto_requires, parse_options
@@ -20,7 +22,7 @@ from aegis.core.template_generator import TemplateGenerator
 def test_inference_is_an_infrastructure_component() -> None:
     spec = COMPONENTS[ComponentNames.INFERENCE]
     assert spec.type is ComponentType.INFRASTRUCTURE
-    assert spec.docker_services == ["ollama", "kokoro-fastapi"]
+    assert spec.docker_services == ["ollama", "llamacpp", "kokoro-fastapi"]
     assert spec.marker_path == "app/components/inference/ollama.py"
     assert "app/components/inference" in spec.files.primary
 
@@ -226,3 +228,108 @@ def test_ai_projects_keep_the_ollama_settings_where_they_were() -> None:
         "    OLLAMA_API_KEY: str | None = None  # Optional, usually not needed\n\n"
         "    # Conversation settings\n"
     ) in config
+
+
+def test_the_llamacpp_provider_pulls_in_its_engine() -> None:
+    ai = SERVICES["ai"]
+    brought = compute_auto_requires(ai, parse_options("ai[llamacpp,sqlite]", ai))
+    assert "inference[llamacpp]" in brought
+    assert "inference" not in brought
+
+
+def test_llamacpp_in_docker_runs_its_own_container() -> None:
+    def context(component: str) -> dict[str, Any]:
+        return TemplateGenerator("demo", [component]).get_template_context()
+
+    found = context("inference[llamacpp,docker,kokoro_fastapi]")
+    assert found[AnswerKeys.INFERENCE_ENGINE] == "llamacpp"
+    assert found["docker_services"][-2:] == ["llamacpp", "kokoro-fastapi"]
+    assert "ollama" not in found["docker_services"]
+    assert "llamacpp" not in context("inference[llamacpp]")["docker_services"]
+
+
+def test_the_llamacpp_service_is_llama_server_with_the_chat_flags() -> None:
+    import yaml
+
+    found = yaml.safe_load(
+        _render(
+            "docker-compose.yml.jinja",
+            include_inference=True,
+            ollama_mode="docker",
+            inference_engine="llamacpp",
+        )
+    )
+    assert "ollama" not in found["services"]
+    service = found["services"]["llamacpp"]
+    assert service["image"].startswith("ghcr.io/ggml-org/llama.cpp:server")
+    assert {"--jinja", "--metrics", "-np"} <= set(service["command"])
+    assert "llamacpp-data" in found["volumes"]
+    assert found["services"]["webserver"]["depends_on"]["llamacpp"]
+
+
+def test_the_settings_name_the_engine_and_where_llama_server_is() -> None:
+    """In the speech settings beside them, out of config.py's size budget."""
+
+    def config(**answers: object) -> str:
+        return _render(
+            "app/core/speech_settings.py.jinja",
+            include_inference=True,
+            inference_engine="llamacpp",
+            **answers,
+        )
+
+    assert 'INFERENCE_ENGINE: str = "llamacpp"' in config(ollama_mode="host")
+    assert '"http://host.docker.internal:8080"' in config(ollama_mode="host")
+    assert '"http://llamacpp:8080"' in config(
+        ollama_mode="docker", inference_placement="docker"
+    )
+
+
+@pytest.mark.parametrize(
+    ("services", "components"),
+    [
+        (["ai[llamacpp]"], ["inference[ollama]"]),
+        (["ai[ollama]"], ["inference[llamacpp]"]),
+    ],
+)
+def test_a_local_provider_needs_the_engine_of_its_name(
+    services: list[str], components: list[str]
+) -> None:
+    from aegis.core.selection import SelectionError, stack_components
+
+    with pytest.raises(SelectionError, match="engine"):
+        stack_components(components, services)
+
+
+def test_a_local_provider_with_its_engine_is_accepted() -> None:
+    from aegis.core.selection import stack_components
+
+    assert "inference[llamacpp,docker]" in stack_components(
+        ["inference[llamacpp,docker]"], ["ai[llamacpp]"]
+    )
+
+
+def test_an_unnamed_engine_follows_the_local_provider() -> None:
+    """The interactive flow asks only the placement: ``inference[docker]``
+    beside ``ai[llamacpp]`` is llama.cpp, not the default."""
+    from aegis.cli.interactive import clear_all_ai_selections, set_ai_service_config
+
+    set_ai_service_config("ai", providers=["llamacpp"])
+    try:
+        context = TemplateGenerator(
+            "demo",
+            ["inference[docker]"],
+            selected_services=["ai[pydantic-ai,sqlite,llamacpp]"],
+        ).get_template_context()
+    finally:
+        clear_all_ai_selections()
+    assert context[AnswerKeys.INFERENCE_ENGINE] == "llamacpp"
+    assert "llamacpp" in context["docker_services"]
+
+
+def test_adding_a_provider_keeps_the_installed_engine() -> None:
+    """``aegis add-service ai[llamacpp]`` on an Ollama project is refused."""
+    from aegis.core.services import local_engine_rule
+
+    assert local_engine_rule(["llamacpp"], "ollama")
+    assert local_engine_rule(["ollama", "openai"], "ollama") is None

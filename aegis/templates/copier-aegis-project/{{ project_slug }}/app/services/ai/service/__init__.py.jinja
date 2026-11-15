@@ -89,7 +89,7 @@ if TYPE_CHECKING:
     )
     from app.services.ai.domains.llm.etl.queries import (
         catalog_is_populated,
-        ollama_models_present,
+        local_models_present,
     )
     from app.services.ai.domains.llm.llm_service import (
         CurrentLLMConfig,
@@ -279,7 +279,7 @@ if TYPE_CHECKING:
     )
     from app.services.ai.models.evals import EvalCase, EvalRun, EvalScore
 {%- endif %}
-    from app.services.ai.models.provider_names import provider_label
+    from app.services.ai.models.provider_names import LOCAL_PROVIDERS, provider_label
     from app.services.ai.service.ai_service import AIService
     from app.services.ai.service.base import (
         AIServiceError,

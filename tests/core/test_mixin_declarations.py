@@ -22,7 +22,10 @@ A green gate over a wrong binding, which is the worst failure shape
 there is. This test is what actually checks it: for every class that
 assigns state in ``__init__``, every attribute declared anywhere in its
 inheritance chain must be assigned, or defined as a class attribute, or
-be a method, somewhere in that same chain.
+be a method, somewhere in that same chain. A class is checked where it
+is instantiated: an ABC that owns the ``__init__`` is checked through each
+subclass that inherits it, since class attributes it declares for them
+(an engine's ``NAME``) are theirs to assign.
 """
 
 from __future__ import annotations
@@ -149,11 +152,22 @@ def _chain(
     return out
 
 
+def _instantiated(name: str, classes: dict[str, _Class]) -> bool:
+    """Owns its ``__init__`` and is not an ABC, or inherits one from an ABC."""
+    abstract = "ABC" in classes[name].bases
+    if classes[name].concrete:
+        return not abstract
+    return any(
+        classes[c].concrete and "ABC" in classes[c].bases
+        for c in _chain(name, classes)[1:]
+    )
+
+
 def test_every_declared_attribute_is_really_there() -> None:
     classes = _scan()
     broken: dict[str, tuple[str, list[str]]] = {}
     for name, info in classes.items():
-        if not info.concrete:
+        if not _instantiated(name, classes):
             continue
         chain = _chain(name, classes)
         declared: set[str] = set()

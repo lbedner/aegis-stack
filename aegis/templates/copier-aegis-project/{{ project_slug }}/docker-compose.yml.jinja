@@ -71,7 +71,7 @@ services:
 {%- endif %}
 {%- endif %}
 {%- if ollama_mode == "docker" %}
-      ollama:
+      {{ inference_engine }}:
         condition: service_healthy
 {%- endif %}
 {%- endif %}
@@ -450,7 +450,7 @@ services:
 {%- endif %}
 {%- endif %}
 
-{%- if ollama_mode == "docker" %}
+{%- if ollama_mode == "docker" and inference_engine == "ollama" %}
   # OLLAMA SERVICE (Local LLM Inference)
 
   ollama:
@@ -464,6 +464,55 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '2.0'
+    profiles:
+      - dev
+      - prod
+{%- endif %}
+{%- if ollama_mode == "docker" and inference_engine == "llamacpp" %}
+  # LLAMA.CPP SERVICE (Local LLM Inference): llama-server, one model. It
+  # downloads LLAMACPP_MODEL (a Hugging Face repo[:quant]) once, into the
+  # volume. The flags chat needs: --jinja (tool calls), -c (the context,
+  # shared by the slots), -np 1 (one slot keeps the whole context and its
+  # prompt cache), --metrics.
+
+  llamacpp:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    hostname: llamacpp
+    environment:
+      - LLAMA_CACHE=/models
+    command:
+      - -hf
+      - ${LLAMACPP_MODEL:-ggml-org/Qwen3-1.7B-GGUF}
+      - --alias
+      - ${LLAMACPP_MODEL:-ggml-org/Qwen3-1.7B-GGUF}
+      - --jinja
+      - -c
+      - ${LLAMACPP_CONTEXT:-32768}
+      - -np
+      - "1"
+      - --metrics
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+    volumes:
+      - llamacpp-data:/models
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # The first start downloads the model before it answers.
+      start_period: 600s
     restart: unless-stopped
     deploy:
       resources:
@@ -598,7 +647,7 @@ volumes:
   postgres-data:
 {%- endif %}
 {%- if ollama_mode == "docker" %}
-  ollama-data:
+  {{ inference_engine }}-data:
 {%- endif %}
 {%- if include_ingress and ingress_tls %}
   traefik-letsencrypt:

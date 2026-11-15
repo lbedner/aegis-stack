@@ -14,7 +14,13 @@ from dataclasses import replace
 from types import SimpleNamespace
 from typing import ParamSpec, TypeVar
 
-from ..constants import ComponentNames, Messages, PostgresProviders, StorageBackends
+from ..constants import (
+    AnswerKeys,
+    ComponentNames,
+    Messages,
+    PostgresProviders,
+    StorageBackends,
+)
 from ..i18n import t
 from .component_utils import (
     clean_component_names,
@@ -188,6 +194,29 @@ def check_services(value: str) -> list[str]:
     return selected
 
 
+def _local_provider_rule(services: list[str], components: list[str]) -> str | None:
+    """The AI service's local provider and the inference engine it needs
+    (``services.local_engine_rule``)."""
+    from .services import SERVICES, inference_engine, local_engine_rule
+
+    ai = next(
+        (s for s in services if extract_base_service_name(s) == AnswerKeys.SERVICE_AI),
+        None,
+    )
+    inference = next(
+        (
+            c
+            for c in components
+            if extract_base_component_name(c) == ComponentNames.INFERENCE
+        ),
+        None,
+    )
+    if ai is None or inference is None:
+        return None
+    chosen = parse_options(ai, SERVICES[AnswerKeys.SERVICE_AI])["providers"]
+    return local_engine_rule(chosen, inference_engine(inference, chosen))
+
+
 def stack_components(components: list[str] | None, services: list[str]) -> list[str]:
     """The components ``init`` builds for checked services. With
     ``--components`` given, every component a service needs must be among
@@ -198,6 +227,8 @@ def stack_components(components: list[str] | None, services: list[str]) -> list[
         return needed
     present = merged(components, CORE_COMPONENTS)
     errors = ServiceResolver.validate_service_component_compatibility(services, present)
+    if rule := _local_provider_rule(services, present):
+        errors.append(rule)
     if errors:
         have = {extract_base_component_name(c) for c in present}
         missing = [c for c in needed if extract_base_component_name(c) not in have]

@@ -1,21 +1,47 @@
 # Inference
 
-Local model serving: the Ollama client, its health check, and a dashboard for the models loaded into memory.
+Local model serving: the engine's client, its health check, and a dashboard for the models loaded into memory.
 
 ```bash
-aegis add inference                  # Ollama on the host (the default)
-aegis add inference[docker]          # Ollama as a container in the compose stack
-aegis add inference[ollama,docker]   # the engine spelled out; ollama is the only one today
+aegis add inference                   # Ollama on the host (the default)
+aegis add inference[docker]           # Ollama as a container in the compose stack
+aegis add inference[llamacpp]         # llama.cpp's llama-server on the host
+aegis add inference[llamacpp,docker]  # llama-server as a container
 ```
 
-The AI service's `ollama` provider pulls the component in, so `aegis init --services "ai[ollama]"` gets it without asking. It also stands alone: a model server with no AI service still gets the client, the health check and the dashboard.
+The AI service's local provider of the same name pulls the component in, so `aegis init --services "ai[ollama]"` (or `ai[llamacpp]`) gets it without asking; a local provider needs the engine of its name. It also stands alone: a model server with no AI service still gets the client, the health check and the dashboard.
 
-## Where Ollama runs
+## Which engine
 
-| Placement | What ships | Reaches Ollama at |
+Both sit behind one interface (`get_inference_engine()`), so the health check, the dashboards, the CLI and the catalog read either the same way.
+
+| Engine | What it is | Pick it for |
 |---|---|---|
-| `host` (default) | No container. Ollama runs where it already lives, with the host's GPU. | `http://host.docker.internal:11434` from containers, `localhost:11434` from the host |
-| `docker` | An `ollama` service in the compose stack, models in a volume. | `http://ollama:11434` |
+| `ollama` (default) | Pulls, loads and frees many models on request. | Trying models; switching between several. |
+| `llamacpp` | `llama-server` serving the one model it was started with: no load or unload, so the dashboards offer none. | Chat that runs long tool loops. Its prompt cache rereads a shared prefix fast: a follow-up on a 12k-token prefix takes 0.6 s, where Ollama takes 4.6 s (measured on an M4 Max, the same GGUF). |
+
+### Running llama-server
+
+On the host, start it with the flags chat needs, and name the model with `--alias`, which is how the catalog shows it:
+
+```bash
+llama-server -hf ggml-org/Qwen3-1.7B-GGUF --alias qwen3:1.7b \
+  --jinja -c 32768 -np 1 --metrics --port 8080
+```
+
+- `--jinja`: the model's chat template, which tool calls need.
+- `-c`: the context. The catalog takes it from the server, and chat sizes its history to fit it.
+- `-np 1` (or a few): context and prompt cache are per slot, so `-c 32768 -np 2` gives each slot 16k.
+- `--metrics`: Prometheus counters at `/metrics`.
+
+In docker, the `llamacpp` service downloads `LLAMACPP_MODEL` (a Hugging Face `repo[:quant]`, default `ggml-org/Qwen3-1.7B-GGUF`) into a volume on its first start and serves it at `LLAMACPP_CONTEXT` (default 32768).
+
+## Where it runs
+
+| Placement | What ships | Reaches the engine at |
+|---|---|---|
+| `host` (default) | No container. The server runs where it already lives, with the host's GPU. | Ollama: `http://host.docker.internal:11434`; llama.cpp: `http://host.docker.internal:8080`. `localhost` from the host. |
+| `docker` | An `ollama` or `llamacpp` service in the compose stack, models in a volume. | `http://ollama:11434`, `http://llamacpp:8080` |
 
 Install Ollama from [ollama.com](https://ollama.com/) for host placement, then pull a model:
 
@@ -25,8 +51,8 @@ ollama pull llama3.1
 
 ## What you get
 
-- **`app/components/inference/`**: `ollama.py`, an async client for the server's model list, running models, load and unload; `activity.py`, an in-memory record of models moving in and out of memory.
-- **Settings:** `OLLAMA_BASE_URL` (defaulted from the placement), `OLLAMA_BASE_URL_LOCAL` for CLI commands run on the host, `OLLAMA_HOST_PORT` for the port `make serve` publishes, `OLLAMA_API_KEY` for a server behind auth.
+- **`app/components/inference/`**: `engine.py`, the one interface; `ollama.py` and `llamacpp.py`, async clients for each server's models, running models, and (Ollama) load and unload; `activity.py`, an in-memory record of models moving in and out of memory.
+- **Settings:** `INFERENCE_ENGINE`; `OLLAMA_BASE_URL` or `LLAMACPP_BASE_URL` (defaulted from the placement), `OLLAMA_BASE_URL_LOCAL` for CLI commands run on the host, `OLLAMA_HOST_PORT` / `LLAMACPP_HOST_PORT` for the port `make serve` publishes, `OLLAMA_API_KEY` for a server behind auth.
 - **A health check** on the system status: server reachable, installed and running models, VRAM in use.
 - **A dashboard card and modal**: installed models with load and unload, and an activity tab of recent loads and evictions.
 - **The LLM catalog** lists the installed models when the AI service is present (`my-app llm sync --source ollama`).

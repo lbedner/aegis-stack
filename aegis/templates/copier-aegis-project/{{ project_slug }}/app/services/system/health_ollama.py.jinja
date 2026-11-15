@@ -61,12 +61,16 @@ def ollama_status(
     server_status: InferenceServerStatus, ollama_url: str
 ) -> ComponentStatus:
     """A server reading as a health status: the check's, and the Flet
-    modal's from the inference sampler's last reading."""
+    modal's from the inference sampler's last reading. Named for the app's
+    engine, and saying whether it loads and frees models on request."""
+    from app.components.inference import inference_engine_class
+
+    engine = inference_engine_class()
     if not server_status.available:
         return ComponentStatus(
             name=ComponentName.OLLAMA,
             status=ComponentStatusType.UNHEALTHY,
-            message="Ollama server not reachable",
+            message=f"{engine.LABEL} server not reachable",
             response_time_ms=None,
             metadata={
                 "available": False,
@@ -100,13 +104,18 @@ def ollama_status(
     if server_status.running_models:
         status = ComponentStatusType.HEALTHY
         primary_model = server_status.running_models[0]
-        message = f"{primary_model.name} • {primary_model.size_vram_gb:.1f}GB VRAM • warm"
+        vram = primary_model.size_vram_gb
+        message = (
+            f"{primary_model.name} • {vram:.1f}GB VRAM • warm"
+            if vram
+            else f"{primary_model.name} • warm"
+        )
     elif server_status.installed_models_count > 0:
         status = ComponentStatusType.INFO
-        message = f"Ollama ready • {server_status.installed_models_count} models installed • none loaded"
+        message = f"{engine.LABEL} ready • {server_status.installed_models_count} models installed • none loaded"
     else:
         status = ComponentStatusType.WARNING
-        message = "Ollama running but no models installed"
+        message = f"{engine.LABEL} running but no models installed"
 
     return ComponentStatus(
         name=ComponentName.OLLAMA,
@@ -116,6 +125,7 @@ def ollama_status(
         metadata={
             "available": True,
             "base_url": ollama_url,
+            "can_load_unload": engine.can_load_unload,
             "version": server_status.version,
             "running_models": running_models_info,
             "running_models_count": len(server_status.running_models),

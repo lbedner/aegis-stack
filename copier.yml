@@ -145,7 +145,7 @@ include_observability:
 
 include_inference:
   type: bool
-  help: "Include local model serving (Ollama)?"
+  help: "Include local model serving (Ollama or llama.cpp)?"
   default: false
 
 inference_engine:
@@ -154,6 +154,7 @@ inference_engine:
   default: "ollama"
   choices:
     - "ollama"
+    - "llamacpp"
   when: "{{ include_inference }}"
 
 inference_placement:

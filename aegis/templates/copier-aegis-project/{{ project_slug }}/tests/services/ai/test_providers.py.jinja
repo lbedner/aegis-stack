@@ -216,7 +216,7 @@ class TestGetAgentOllama:
         mock_openai_class.assert_called_once()
         call_kwargs = mock_openai_class.call_args[1]
         assert call_kwargs["base_url"] == "http://localhost:11434/v1"
-        assert call_kwargs["api_key"] == "ollama"
+        assert call_kwargs["api_key"] == "local"
 
         # Verify agent was created
         assert result == mock_agent_instance
@@ -288,10 +288,10 @@ class TestOllamaMaxTokensWireFormat:
     num_predict), so the model profile must route the cap to the legacy
     field - measured live: a cap of 50 generated 11,186 tokens."""
 
-    def test_ollama_model_routes_the_cap_to_the_legacy_field(self) -> None:
+    def test_local_model_routes_the_cap_to_the_legacy_field(self) -> None:
         pytest.importorskip("openai")
         import app.services.ai.domains.llm.providers as providers_module
-        from app.services.ai.domains.llm.model_factory import _ollama_model
+        from app.services.ai.domains.llm.model_factory import _local_model
 
         if providers_module.AsyncOpenAI is None:
             pytest.skip("openai-backed providers not in this render")
@@ -301,7 +301,7 @@ class TestOllamaMaxTokensWireFormat:
         mock_config = MagicMock()
         mock_config.model = "llama3.2:latest"
 
-        model = _ollama_model(mock_config, mock_settings)
+        model = _local_model(mock_config, mock_settings)
 
         # The runtime reads the profile dict-style (models/openai.py), so
         # assert the same way; older versions expose an attribute.

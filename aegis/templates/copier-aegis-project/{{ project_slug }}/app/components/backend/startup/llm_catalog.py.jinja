@@ -18,7 +18,7 @@ from app.services.ai.service import (
     catalog_is_populated,
 {%- endif %}
 {%- if include_inference %}
-    ollama_models_present,
+    local_models_present,
 {%- endif %}
     sync_llm_catalog,
 )
@@ -43,7 +43,7 @@ async def seed_llm_catalog() -> None:
         # no API keys, Ollama alone. Without this a fresh Ollama stack
         # opened an empty picker until someone knew to run
         # ``llm sync --source ollama``.
-        if ollama_models_present(session):
+        if local_models_present(session):
             logger.info("Ollama tags already in the catalog")
             return
         result = await sync_llm_catalog(session, mode="chat", source="ollama")

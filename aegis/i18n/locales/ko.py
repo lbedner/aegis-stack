@@ -7,6 +7,7 @@ MESSAGES: dict[str, str] = {
         "밑줄만 사용할 수 있습니다."
     ),
     "validation.reserved_name": "'{name}'은(는) 예약된 이름입니다.",
+    "validation.local_provider_engine": "AI 제공자 {providers}에는 같은 이름의 inference 컴포넌트 엔진이 필요합니다. 여기의 엔진은 '{engine}'입니다.",
     "validation.name_too_long": (
         "프로젝트 이름이 너무 깁니다. 최대 50자까지 허용됩니다."
     ),
@@ -71,7 +72,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "SQLModel ORM 데이터베이스 (SQLite 또는 PostgreSQL)",
     "component.ingress": "Traefik 리버스 프록시 및 로드 밸런서",
     "component.observability": "Logfire 관측성, 트레이싱 및 메트릭",
-    "component.inference": "Local AI models via Ollama, speech via Kokoro",
+    "component.inference": "Local AI models via Ollama or llama.cpp, speech via Kokoro",
     "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.deploy": "배포 대상 (Docker Compose), Overseer가 읽음",
     "component.mcp": "MCP server: an outside assistant reads the app's tools",

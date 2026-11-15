@@ -1,5 +1,6 @@
 {# The Models table, rendered on the page and pushed again by its stream. A
-   button answers at once (``data-api-done``); the row shows the rest. #}
+   button answers at once (``data-api-done``); the row shows the rest. An
+   engine that serves the model it was started with has none (``can_move``). #}
 {% from "components/macros/layout.html" import card %}
 {% from "components/macros/table.html" import data_table %}
 {% from "components/macros/form.html" import action %}
@@ -24,6 +25,6 @@
       {"key": "size", "label": "Size", "align": "right"},
       {"key": "modified", "label": "Modified"},
       {"key": "state", "label": "State", "kind": "status"},
-    ], models, actions=row_actions, empty="No models installed. Pull one with ollama pull.") }}
+    ], models, actions=row_actions if can_move else none, empty="No models installed. Pull one with ollama pull.") }}
   {% endcall %}
 </div>

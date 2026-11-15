@@ -116,7 +116,7 @@ async def test_a_spoken_turn_is_the_typed_turn(
     monkeypatch.setattr(settings, "AI_PROVIDER", "ollama")
     for module in ("model_factory", "agents"):
         monkeypatch.setattr(
-            f"app.services.ai.domains.llm.{module}._ollama_model",
+            f"app.services.ai.domains.llm.{module}._local_model",
             lambda config, settings: FunctionModel(stream_function=_respond),
         )
 

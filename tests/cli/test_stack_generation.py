@@ -309,6 +309,21 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet"],
     ),
     StackCombination(
+        name="inference_llamacpp",
+        # The second engine in docker, with the AI provider that chats with
+        # it: llama-server's container in place of Ollama's.
+        components=["inference[llamacpp,docker]"],
+        services=["ai[pydantic-ai,sqlite,llamacpp]"],
+        description="llama.cpp in docker with the llamacpp provider",
+        expected_files=[
+            "app/components/inference/llamacpp.py",
+            "tests/_fake_llamacpp.py",
+            "app/services/system/health_ollama.py",
+        ],
+        expected_docker_services=["webserver", "llamacpp"],
+        expected_pyproject_deps=["fastapi", "flet", "pydantic-ai"],
+    ),
+    StackCombination(
         name="inference_speech",
         # A speech server beside Ollama, both in docker: its container, its
         # health under the inference check, and the Overseer's Speech section.

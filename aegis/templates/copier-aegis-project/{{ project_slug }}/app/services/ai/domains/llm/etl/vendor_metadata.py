@@ -83,4 +83,10 @@ VENDOR_METADATA: dict[str, dict[str, str]] = {
         "api_base": "http://localhost:11434/v1",
         "auth_method": "none",
     },
+    "llamacpp": {
+        "description": "llama.cpp - llama-server, one local model",
+        "color": "#FFFFFF",
+        "api_base": "http://localhost:8080/v1",
+        "auth_method": "none",
+    },
 }

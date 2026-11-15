@@ -70,7 +70,12 @@ class ModelsSection(ft.Container):
 
         # Build row data for DataTable (includes total VRAM row if applicable)
         rows = self._build_rows(
-            installed_models, running_model_map, page, dialog, total_vram_gb
+            installed_models,
+            running_model_map,
+            page,
+            dialog,
+            total_vram_gb,
+            can_move=metadata.get("can_load_unload", True),
         )
 
         if rows:
@@ -129,6 +134,7 @@ class ModelsSection(ft.Container):
         page: ft.Page,
         dialog: InferenceDetailDialog | None,
         total_vram_gb: float = 0.0,
+        can_move: bool = True,
     ) -> list[list[Any]]:
         """Build row data for DataTable.
 
@@ -138,6 +144,7 @@ class ModelsSection(ft.Container):
             page: Flet page instance
             dialog: Parent dialog for refresh
             total_vram_gb: Total VRAM usage to show in footer row
+            can_move: Whether the engine loads and unloads (a button per row)
 
         Returns:
             List of row data lists for DataTable
@@ -185,12 +192,17 @@ class ModelsSection(ft.Container):
             vram_display = f"{vram_gb:.1f}G" if is_warm and vram_gb is not None else "—"
             vram_text = model_cell(vram_display, numeric=True)
 
-            # Unload a warm model, load a cold one.
-            status_control: ft.Control = ModelActionButton(
-                model_name=model_name,
-                page=page,
-                dialog=dialog,
-                action="unload" if is_warm else "load",
+            # Unload a warm model, load a cold one; an engine that serves
+            # the model it was started with only says which it is.
+            status_control: ft.Control = (
+                ModelActionButton(
+                    model_name=model_name,
+                    page=page,
+                    dialog=dialog,
+                    action="unload" if is_warm else "load",
+                )
+                if can_move
+                else model_cell("Loaded" if is_warm else "—")
             )
 
             rows.append(

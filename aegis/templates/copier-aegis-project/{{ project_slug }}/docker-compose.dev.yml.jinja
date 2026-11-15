@@ -92,7 +92,14 @@ services:
       # container still listens on 5432 for in-network clients.
       - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
 {%- endif %}
-{%- if ollama_mode == "docker" %}
+{%- if ollama_mode == "docker" and inference_engine == "llamacpp" %}
+
+  llamacpp:
+    ports:
+      # Host port auto-selected by `make serve` (LLAMACPP_HOST_PORT). The
+      # container still listens on 8080 for in-network clients.
+      - "127.0.0.1:${LLAMACPP_HOST_PORT:-8080}:8080"
+{%- elif ollama_mode == "docker" %}
 
   ollama:
     ports:

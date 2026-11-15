@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from app.core.log import logger
+from app.services.ai.models.provider_names import LOCAL_PROVIDERS
 from app.services.ai.domains.llm.etl.clients.litellm_client import LiteLLMModel
 from app.services.ai.domains.llm.etl.clients.openrouter_client import (
     OpenRouterModel,
@@ -132,19 +133,16 @@ def extract_vendor(model_id: str, provider_hint: str | None = None) -> str:
     return "unknown"
 
 
-# Vendors the CLOUD catalog describes but this install cannot answer
-# from it. LiteLLM lists ``ollama/...`` as a RUNNER prefix - models you
+# The local vendors (``LOCAL_PROVIDERS``): the CLOUD catalog describes
+# them but this install cannot answer from it. LiteLLM lists ``ollama/...`` as a RUNNER prefix - models you
 # could pull - not as a callable vendor; the local sync owns that
 # vendor's rows, and only what the local server actually serves belongs
 # in a picker that promises callable models. (It also carries Ollama
 # Cloud's ``-cloud`` variants, which need a key this install has no
 # concept of.)
-_LOCAL_ONLY_VENDORS = frozenset({"ollama"})
-
-
 def is_cloud_syncable(model_id: str, provider_hint: str | None = None) -> bool:
     """Whether a cloud-catalog row belongs in the catalog at all."""
-    return extract_vendor(model_id, provider_hint) not in _LOCAL_ONLY_VENDORS
+    return extract_vendor(model_id, provider_hint) not in LOCAL_PROVIDERS
 
 
 def extract_family(model_id: str) -> str | None:

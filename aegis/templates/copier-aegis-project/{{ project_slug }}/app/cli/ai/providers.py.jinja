@@ -21,6 +21,7 @@ from app.services.ai.service import (
 from ...core import secrets
 from ...core.audit import cli_actor
 from ...core.config import settings
+from ...services.ai.service import LOCAL_PROVIDERS
 
 
 @app.command(help=lazy_t("ai.help_status"))
@@ -112,7 +113,7 @@ async def providers() -> None:
     # One readiness answer, shared with the Overseer's Providers page.
     for row in await provider_readiness(settings):
         capabilities = row.capabilities
-        local = row.provider == AIProvider.OLLAMA
+        local = row.provider in LOCAL_PROVIDERS
         api_key_display = (
             f"[dim]{t('ai.prov_na')}[/dim]"
             if row.keyless

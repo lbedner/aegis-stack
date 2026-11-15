@@ -17,6 +17,7 @@ from app.services.ai.domains.llm.base import (
 )
 from app.services.ai.domains.llm.config import AIServiceConfig
 from app.services.ai.models import PROVIDERS, AIProvider
+from app.services.ai.models.provider_names import LOCAL_PROVIDERS, local_base_url
 
 
 def _get_model_class(provider: AIProvider):
@@ -77,20 +78,22 @@ def _model_settings(config: Any) -> ModelSettings:
     return ModelSettings(**kwargs)
 
 
-def _ollama_model(config: AIServiceConfig, settings: Any) -> Any:
-    """The model for a local Ollama server, over its OpenAI-compatible API.
+def _local_model(config: AIServiceConfig, settings: Any) -> Any:
+    """The model for a local server (Ollama, llama.cpp's llama-server),
+    over its OpenAI-compatible API. Both stream reasoning in a field
+    pydantic-ai reads (``reasoning``, ``reasoning_content``).
 
     ``AsyncOpenAI``, ``OpenAIChatModel`` and ``OpenAIProvider`` are read off
     this module (not imported locally) so tests can patch them here.
     """
     openai_client = AsyncOpenAI(
-        api_key="ollama",  # Ollama needs no auth; the client demands something
-        base_url=f"{settings.ollama_base_url_effective}/v1",
+        api_key="local",  # neither needs auth; the client demands something
+        base_url=local_base_url(config.provider, settings),
     )
     # Ollama's OpenAI-compat endpoint silently DROPS the modern
     # ``max_completion_tokens`` field (only ``max_tokens`` maps to
     # num_predict), so route the cap to the legacy field or every
-    # generation runs uncapped.
+    # generation runs uncapped; llama-server takes it too.
     from pydantic_ai.profiles.openai import OpenAIModelProfile
 
     return OpenAIChatModel(
@@ -149,8 +152,8 @@ async def model_for(config: AIServiceConfig, settings: Any) -> tuple[Any, str]:
     model instance (the keyless public endpoints build their own clients); use
     ``get_agent`` for those.
     """
-    if config.provider == AIProvider.OLLAMA:
-        return _ollama_model(config, settings), config.model
+    if config.provider in LOCAL_PROVIDERS:
+        return _local_model(config, settings), config.model
     if config.provider in (AIProvider.PUBLIC, AIProvider.POLLINATIONS):
         raise ProviderError(
             f"model_for() does not support the {config.provider.value} provider; "

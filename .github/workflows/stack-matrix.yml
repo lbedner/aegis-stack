@@ -116,6 +116,7 @@ jobs:
           - ai_langchain
           - ai_ollama
           - inference_docker
+          - inference_llamacpp
           - inference_speech
           - deploy
           - deploy_backups

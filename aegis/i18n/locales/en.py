@@ -7,6 +7,7 @@ MESSAGES: dict[str, str] = {
         "and underscores are allowed."
     ),
     "validation.reserved_name": "'{name}' is a reserved name.",
+    "validation.local_provider_engine": "The {providers} AI provider needs the inference component's engine of the same name; the engine here is '{engine}'.",
     "validation.name_too_long": (
         "Project name too long. Maximum 50 characters allowed."
     ),
@@ -77,7 +78,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "Postgres (self-hosted or Neon serverless) or SQLite + SQLModel ORM",
     "component.ingress": "Traefik v3 reverse proxy with TLS",
     "component.observability": "Pydantic Logfire tracing + metrics + logging",
-    "component.inference": "Local AI models via Ollama, speech via Kokoro",
+    "component.inference": "Local AI models via Ollama or llama.cpp, speech via Kokoro",
     "component.secrets": "Encrypted credential store: keys set while the app runs, checked with the provider on paste, never shown again",
     "component.deploy": "Deployment target (Docker Compose), read by the Overseer",
     "component.mcp": "Serves the app's own tools to Claude Desktop, Claude Code or a local model over MCP: the tools you grant, never a write",

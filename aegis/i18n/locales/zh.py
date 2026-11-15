@@ -6,6 +6,7 @@ MESSAGES: dict[str, str] = {
         "项目名称不合法，仅支持英文字母、数字、连字符和下划线。"
     ),
     "validation.reserved_name": "「{name}」是系统保留名称，请换一个。",
+    "validation.local_provider_engine": "AI 提供方 {providers} 需要同名的 inference 组件引擎;此处的引擎是 '{engine}'。",
     "validation.name_too_long": "项目名称过长，最多 50 个字符。",
     "validation.invalid_python": (
         "Python 版本「{version}」不受支持，可选版本：{supported}"
@@ -62,7 +63,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "数据库，基于 SQLModel ORM（SQLite 或 PostgreSQL）",
     "component.ingress": "Traefik 反向代理与负载均衡",
     "component.observability": "Logfire 可观测性、链路追踪与指标监控",
-    "component.inference": "Local AI models via Ollama, speech via Kokoro",
+    "component.inference": "Local AI models via Ollama or llama.cpp, speech via Kokoro",
     "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.deploy": "部署目标（Docker Compose），供 Overseer 读取",
     "component.mcp": "MCP server: an outside assistant reads the app's tools",

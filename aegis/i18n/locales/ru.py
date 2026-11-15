@@ -7,6 +7,7 @@ MESSAGES: dict[str, str] = {
         "дефисы и символы подчёркивания."
     ),
     "validation.reserved_name": "«{name}» — зарезервированное имя.",
+    "validation.local_provider_engine": "ИИ-провайдеру {providers} нужен одноимённый движок компонента inference; здесь движок '{engine}'.",
     "validation.name_too_long": ("Имя проекта слишком длинное. Максимум 50 символов."),
     "validation.invalid_python": (
         "Недопустимая версия Python «{version}». Допустимые: {supported}"
@@ -75,7 +76,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "База данных с SQLModel ORM (SQLite или PostgreSQL)",
     "component.ingress": "Traefik — обратный прокси и балансировщик",
     "component.observability": "Logfire — наблюдаемость, трассировка и метрики",
-    "component.inference": "Local AI models via Ollama, speech via Kokoro",
+    "component.inference": "Local AI models via Ollama or llama.cpp, speech via Kokoro",
     "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.deploy": "Цель развёртывания (Docker Compose), читается Overseer",
     "component.mcp": "MCP server: an outside assistant reads the app's tools",

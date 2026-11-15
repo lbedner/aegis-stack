@@ -208,7 +208,7 @@ class Settings(
     # a JSON list.
 {%- set mcp_code = include_ai and ai_framework == "pydantic-ai" and ai_backend != "memory" %}
     MCP_TOOLS: list[str] = {{ (["health", "errors", "logs", "requests", "ontology", "aggregate"] + (["ledger", "accounts", "quote", "categories", "bills", "bill_candidates", "tags"] if include_finance else []) + (["knowledge"] if include_ai and ai_rag else []) + (["evals"] if include_ai and ai_evals and ai_backend != "memory" else []) + (["run_code"] if mcp_code else []) + ((_plugins | default([]) | map(attribute="wiring") | map(attribute="agent_tools", default=[]) | sum(start=[]) | map(attribute="name") | list))) | tojson }}
-    # Whose data an MCP call reads and whose cards it files; None reads
+    # Who stdio's calls (and, without auth, a token's) act for; None reads
     # every row (a single-tenant install). With auth, proposals need it.
     MCP_OWNER_USER_ID: int | None = None
 {%- endif %}

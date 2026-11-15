@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.core import runtime
-from tests._audit import ADMIN, Recorded, as_admin, recording
+from tests._audit import ADMIN, Recorded, as_admin{% if not include_auth %}, at_localhost{% endif %}, recording
 from tests._fake_runtime import REDIS, SERVER, FakeRuntime, use_runtime
 
 URL = "/api/v1/runtime/containers/{name}/restart"
@@ -106,7 +106,7 @@ def test_without_auth_the_local_dev_build_may(
     client: TestClient, audit: Recorded, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake = use_runtime(monkeypatch, FakeRuntime(REDIS))
-    local = TestClient(client.app, base_url="http://localhost:8000")
+    local = at_localhost(client.app)
     assert local.post(URL.format(name=REDIS.name)).status_code == 200
     assert fake.restarted == [REDIS.name]
     assert audit.events[0]["actor_email"] is None

@@ -1,6 +1,6 @@
-"""The MCP modal's tokens (with auth): the viewer's own, made, listed and
-revoked through the token API (``/api/v1/mcp/tokens``), which says whose
-they are. A new token's value is shown here once, until the list reloads;
+"""The MCP modal's tokens (with a database): the viewer's own, or the
+operator's without auth, made, listed and revoked through the token API
+(``/api/v1/mcp/tokens``), which says whose they are. A new token's value is shown here once, until the list reloads;
 the same table and wording as htmx's Tokens section (``ui_mcp``)."""
 
 from typing import Any
@@ -41,7 +41,7 @@ class McpTokensSection(ft.Column):
             width=200,
         )
         self._made: ft.Control | None = None
-        self._listed: ft.Control = SecondaryText("Reading your tokens.")
+        self._listed: ft.Control = SecondaryText("Reading the tokens.")
 
     @property
     def _api(self) -> Any:
@@ -75,7 +75,7 @@ class McpTokensSection(ft.Column):
             ],
             spacing=Theme.Spacing.SM,
         )
-        self.controls = [H3Text("Your tokens"), form]
+        self.controls = [H3Text("Tokens"), form]
         if self._made is not None:
             self.controls.append(self._made)
         self.controls.append(self._listed)

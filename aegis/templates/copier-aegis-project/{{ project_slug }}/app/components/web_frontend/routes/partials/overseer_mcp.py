@@ -4,7 +4,9 @@ once), and the revoke confirmation, whose button calls the token API.
 Mounted by ``routes/pages.py`` at ``overseer_mcp.PARTIALS`` behind
 Overseer's gate.
 
-Tokens belong to people, so every token route here is 404 without auth.
+Tokens are rows, so every token route here is 404 without a database.
+Without auth a token is the operator's (``actor.id`` is None), made only
+where Overseer's gate allows a change.
 """
 
 from types import ModuleType
@@ -39,7 +41,7 @@ async def call(call_id: int) -> HTMLResponse:
 
 
 def _tokens() -> ModuleType:
-    """``app.components.mcp.tokens``; 404 without auth, where it is not."""
+    """``app.components.mcp.tokens``; 404 without a database, where it is not."""
     if not ui_mcp.has_tokens():
         raise HTTPException(status_code=404)
     from app.components.mcp import tokens
@@ -76,7 +78,8 @@ async def make_token(
     actor: Actor = Depends(overseer_actor),
     db: Any = Depends(overseer_db),
 ) -> Response:
-    """Make a token for the viewer and show its value, this once."""
+    """Make a token for the viewer (the operator, without auth) and show its
+    value, this once."""
     tokens = _tokens()
     form = {"name": name, "scope": scope}
     if not name.strip():

@@ -181,18 +181,19 @@ class TestAddCommand:
         assert not record.exists()
         assert not (project_path / "tests/components/test_mcp_activity.py").exists()
 
-    def test_auth_added_later_brings_mcp_its_tokens(
+    def test_auth_added_later_gives_mcp_tokens_their_owner(
         self, project_factory: ProjectFactory
     ) -> None:
-        """mcp's tokens belong to people: adding auth later brings the token
-        files and a revision that creates their table."""
+        """mcp's tokens come with the database, the operator's without auth:
+        adding auth later keeps the token files, renders their auth variant,
+        and links the table's owner to ``user`` in a new revision."""
         project_path = project_factory(components=("database", "mcp"))
         token_files = [
             project_path / "app/components/mcp/tokens.py",
             project_path / "app/components/mcp/models/tokens.py",
             project_path / "app/cli/mcp_tokens_cli.py",
         ]
-        assert not any(path.exists() for path in token_files)
+        assert all(path.is_file() for path in token_files)
 
         added = run_aegis_command(
             "add-service", "auth", "--project-path", str(project_path), "--yes"
@@ -200,8 +201,9 @@ class TestAddCommand:
 
         assert added.success, f"Command failed: {added.stderr}"
         assert all(path.is_file() for path in token_files)
+        assert "--email" in (project_path / "app/cli/mcp_tokens_cli.py").read_text()
         revisions = (project_path / "alembic/versions").glob("*.py")
-        assert any("mcp_token" in path.read_text() for path in revisions)
+        assert any("fk_mcp_token_user_id" in path.read_text() for path in revisions)
 
     def test_add_mcp_lands_the_server_command_and_dependency(
         self, project_factory: ProjectFactory

@@ -875,6 +875,20 @@ async def owner_with_org(async_db_session: AsyncSession, user_factory, org_facto
     return user, org
 {% endif %}
 {%- endif %}
+{%- if include_mcp and include_database %}
+
+
+@pytest.fixture
+{%- if include_auth %}
+async def token_owner(user_factory) -> int | None:
+    """Whose MCP token a test makes: a person, made for it."""
+    return (await user_factory()).id
+{%- else %}
+def token_owner() -> int | None:
+    """Whose MCP token a test makes: nobody signs in, so the operator's."""
+    return None
+{%- endif %}
+{%- endif %}
 @pytest.fixture
 async def authenticated_client(
     async_client_with_db: TestClient,

@@ -130,6 +130,12 @@ def _text(result: ToolResult) -> str:
     )
 
 
+def operator() -> tuple[int | None, bool]:
+    """Who a call with no person behind it acts for, and its admin reach:
+    stdio's, and without auth a token's, the operator's shell."""
+    return settings.MCP_OWNER_USER_ID, True
+
+
 def _reach() -> tuple[int | None, frozenset[str] | None, bool]:
     """Who a call acts for, the effects it may reach, and whether it may
     reach the admin tools: over HTTP, the token's owner, scope (its scopes
@@ -137,7 +143,8 @@ def _reach() -> tuple[int | None, frozenset[str] | None, bool]:
     token, so MCP_OWNER_USER_ID, the grant, and the operator's shell."""
     token = get_access_token()
     if token is None:
-        return settings.MCP_OWNER_USER_ID, None, True
+        acts_for, admin = operator()
+        return acts_for, None, admin
     return (
         token.claims["user_id"],
         frozenset(token.scopes),

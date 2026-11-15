@@ -1,5 +1,5 @@
 """MCP component detail modal: the same served tools, connect commands,
-client activity and (with auth) tokens as the htmx page (``ui_mcp``), read
+client activity and (with a database) tokens as the htmx page (``ui_mcp``), read
 when it opens."""
 
 from typing import Any

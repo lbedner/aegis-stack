@@ -7,7 +7,7 @@ aegis add mcp
 aegis init my-app --components mcp --services finance
 ```
 
-The server is [FastMCP](https://gofastmcp.com). It runs over stdio as a CLI command, so it adds no container and needs no token: whoever can run the CLI already owns the database. With the auth service it is also served over HTTP at `/mcp`, for a client elsewhere, signed in with a [token](#tokens).
+The server is [FastMCP](https://gofastmcp.com). It runs over stdio as a CLI command, so it adds no container and needs no token: whoever can run the CLI already owns the database. With a database it is also served over HTTP at `/mcp`, for a client elsewhere, signed in with a [token](#tokens).
 
 ## What a client sees
 
@@ -65,7 +65,7 @@ stdout carries the protocol and nothing else; the command sends every log line t
 
 ### Over HTTP
 
-With the auth service, the webserver serves the same tools at `/mcp`. Every request carries an [MCP token](#tokens); without one the answer is 401 and no tools. The token's owner is who the calls act for (in place of `MCP_OWNER_USER_ID`), and its scope is what they reach.
+With a database, the webserver serves the same tools at `/mcp`. Every request carries an [MCP token](#tokens); without one the answer is 401 and no tools. With the auth service, the token's owner is who the calls act for (in place of `MCP_OWNER_USER_ID`); without it, a token is the operator's and its calls act for `MCP_OWNER_USER_ID`, as stdio's do. Its scope is what they reach.
 
 ```bash
 claude mcp add --transport http my-app http://localhost:8000/mcp/ \
@@ -118,7 +118,9 @@ A client's proposals are approved where every card is, and each one names the cl
 
 ## Tokens
 
-A client over HTTP needs a credential a person makes and can revoke. With the auth service, each person makes their own MCP tokens: on Overseer's MCP page (Tokens), from the CLI, or through the API.
+A client over HTTP needs a credential someone makes and can revoke, kept in the database: on Overseer's MCP page (Tokens), from the CLI, or through the API.
+
+With the auth service, each person makes their own, and the CLI names whose:
 
 ```bash
 my-app mcp-tokens create --email you@example.com --name laptop --scope read
@@ -126,13 +128,23 @@ my-app mcp-tokens list --email you@example.com
 my-app mcp-tokens revoke --email you@example.com 3
 ```
 
+Without it nobody signs in, so a token is the operator's. It is made where an operator's change is: from the CLI anywhere, and on Overseer or through the API only on the local dev build at localhost. Listing them is a read, open as Overseer's pages are.
+
+```bash
+my-app mcp-tokens create --name laptop --scope read
+my-app mcp-tokens list
+my-app mcp-tokens revoke 3
+```
+
+A token made before auth was added was the operator's; once auth is added it is refused, and each person makes their own.
+
 A token's scope is its grant: `read` reaches the read tools in `MCP_TOOLS`, `propose` the proposals too. A client sees only the tools its scope reaches, and a call outside it is refused. There is no second permission system, and a token never reaches a write. People start read-only and grant proposals later.
 
-`health`, `errors`, `logs`, `requests` and (with `ai[evals]`) `evals` are Overseer's reads, and Overseer shows them to admins only, so a token reaches them only when its owner is an admin (`ADMIN_USER_EMAILS`, or the admin role). Anyone else's token, and a script it runs with `run_code`, sees the other tools in its scope. `ontology` answers anyone with the app's tables and the changes to them, and only an admin with the rest. Chat holds an agent's admin tools to the same rule: granted to an agent everyone chats with, they answer only the admins.
+`health`, `errors`, `logs`, `requests` and (with `ai[evals]`) `evals` are Overseer's reads, and Overseer shows them to admins only, so with the auth service a token reaches them only when its owner is an admin (`ADMIN_USER_EMAILS`, or the admin role); without it, the operator's token reaches them. Anyone else's token, and a script it runs with `run_code`, sees the other tools in its scope. `ontology` answers anyone with the app's tables and the changes to them, and only an admin with the rest. Chat holds an agent's admin tools to the same rule: granted to an agent everyone chats with, they answer only the admins.
 
 Only a hash of the token is kept, so its value is shown once, when it is made. It works until it is revoked: each request checks it, so a revoked token fails on its next request, and each use is noted as its last use. Sessions in the browser are unaffected.
 
-The API is the signed-in person's own: `GET /api/v1/mcp/tokens` lists them (never their values), `POST` makes one (its value in that answer only), and `DELETE /api/v1/mcp/tokens/{id}` revokes one.
+The API is the signed-in person's own (without auth, the operator's): `GET /api/v1/mcp/tokens` lists them (never their values), `POST` makes one (its value in that answer only), and `DELETE /api/v1/mcp/tokens/{id}` revokes one.
 
 ## Tools without the AI service
 

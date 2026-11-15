@@ -1,5 +1,6 @@
-"""``mcp-tokens``: make, list and revoke a person's MCP tokens
-(``app.components.mcp.tokens``)."""
+"""``mcp-tokens``: make, list and revoke {% if include_auth %}a person's{% else %}the operator's{% endif %} MCP tokens
+(``app.components.mcp.tokens``).{% if not include_auth %} With no one to sign in, each is the
+operator's, whose calls act for ``MCP_OWNER_USER_ID``.{% endif %}"""
 
 from typing import Annotated
 
@@ -9,52 +10,58 @@ from app.cli import theme
 from app.components.mcp import tokens
 from app.core.db import get_async_session
 from app.core.formatting import format_relative_time
-from app.models.user import User
+{%- if include_auth %}
 from app.services.auth.service import UserService
+{%- endif %}
 
-app = typer.Typer(help="A person's MCP tokens, for clients beyond stdio.")
+app = typer.Typer(help="{% if include_auth %}A person's{% else %}The operator's{% endif %} MCP tokens, for clients beyond stdio.")
 console = theme.console()
+{%- if include_auth %}
 
 Email = Annotated[str, typer.Option("--email", help="Whose tokens.")]
 
 
-async def _person(email: str) -> User:
+async def _holder(email: str) -> int:
+    """The id of the person ``email`` names; exits 1 for nobody."""
     async with get_async_session() as db:
         user = await UserService(db).get_user_by_email(email)
-    if user is None:
+    if user is None or user.id is None:
         console.print(f"No user {email}.", style=theme.ERROR)
         raise typer.Exit(1)
-    return user
+    return user.id
+{%- endif %}
 
 
 @app.command()
 async def create(
+{%- if include_auth %}
     email: Email,
+{%- endif %}
     name: Annotated[str, typer.Option("--name", help="What the token is for.")],
     scope: Annotated[
         str, typer.Option("--scope", help="read, or propose (read and propose).")
     ] = "read",
 ) -> None:
     """Make a token. Its value is printed this once."""
-    user = await _person(email)
+    holder = {% if include_auth %}await _holder(email){% else %}None{% endif %}
     async with get_async_session() as db:
         try:
-            row, value = await tokens.create(db, user.id, name, scope)
+            row, value = await tokens.create(db, holder, name, scope)
         except ValueError as exc:
             console.print(str(exc), style=theme.ERROR)
             raise typer.Exit(1) from None
-    console.print(f"Token {row.id} ({row.scope}) for {email}. Shown once:")
+    console.print(f"Token {row.id} ({row.scope}). Shown once:")
     console.print(value, soft_wrap=True)
 
 
 @app.command("list")
-async def list_tokens(email: Email) -> None:
-    """A person's live tokens, newest first; never their values."""
-    user = await _person(email)
+async def list_tokens({% if include_auth %}email: Email{% endif %}) -> None:
+    """The live tokens, newest first; never their values."""
+    holder = {% if include_auth %}await _holder(email){% else %}None{% endif %}
     async with get_async_session() as db:
-        rows = await tokens.live(db, user.id)
+        rows = await tokens.live(db, holder)
     if not rows:
-        console.print(f"{email} has no tokens.")
+        console.print("No tokens.")
         return
     for row in rows:
         used = format_relative_time(row.last_used_at) if row.last_used_at else "never"
@@ -63,14 +70,16 @@ async def list_tokens(email: Email) -> None:
 
 @app.command()
 async def revoke(
+{%- if include_auth %}
     email: Email,
+{%- endif %}
     token_id: Annotated[int, typer.Argument(help="The token's id (from list).")],
 ) -> None:
     """Revoke a token: it fails on its next use."""
-    user = await _person(email)
+    holder = {% if include_auth %}await _holder(email){% else %}None{% endif %}
     async with get_async_session() as db:
-        revoked = await tokens.revoke(db, token_id, user.id)
+        revoked = await tokens.revoke(db, token_id, holder)
     if not revoked:
-        console.print(f"{email} has no live token {token_id}.", style=theme.ERROR)
+        console.print(f"No live token {token_id}.", style=theme.ERROR)
         raise typer.Exit(1)
     console.print(f"Token {token_id} revoked.")

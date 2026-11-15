@@ -1,9 +1,10 @@
-"""MCP tokens: the credential a person makes for an outside assistant that
-reaches the app beyond stdio. One home for making, finding and revoking
-them; the API, the CLI and Overseer all come through here.
+"""MCP tokens: the credential made for an outside assistant that reaches
+the app beyond stdio. One home for making, finding and revoking them; the
+API, the CLI and Overseer all come through here.
 
-A token belongs to a person and carries a scope, and the scope is the
-grant: ``read`` reaches the granted read tools, ``propose`` the proposals
+A token is its holder's: a person's with auth, the operator's (``None``)
+without, whose calls act for ``MCP_OWNER_USER_ID`` (``http.py``). It
+carries a scope, and the scope is the grant: ``read`` reaches the granted read tools, ``propose`` the proposals
 too (``scoped``). No second permission system, and never a write. Only a
 hash is kept, so the value is shown once, when it is made. Writes are
 flushed, not committed: the caller's session (a request's, the CLI's)
@@ -12,6 +13,7 @@ commits them.
 
 from collections.abc import Iterable
 
+from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -34,10 +36,17 @@ def scoped(grant: Iterable[str], scope: str) -> list[str]:
     return mcp_servable(grant, SCOPES[scope])
 
 
+def _held_by(user_id: int | None) -> ColumnElement[bool]:
+    """A token is ``user_id``'s; None is the operator's."""
+    held = col(McpToken.user_id)
+    return held.is_(None) if user_id is None else held == user_id
+
+
 async def create(
-    db: AsyncSession, user_id: int, name: str, scope: str
+    db: AsyncSession, user_id: int | None, name: str, scope: str
 ) -> tuple[McpToken, str]:
-    """A new token for ``user_id``: its row, and its value (shown once)."""
+    """A new token for ``user_id`` (None: the operator): its row, and its
+    value (shown once)."""
     if scope not in SCOPES:
         raise ValueError(f"Unknown scope {scope!r}: one of {', '.join(SCOPES)}")
     minted = mint(PREFIX)
@@ -68,17 +77,17 @@ async def resolve(db: AsyncSession, value: str) -> McpToken | None:
     return row
 
 
-async def live(db: AsyncSession, user_id: int) -> list[McpToken]:
+async def live(db: AsyncSession, user_id: int | None) -> list[McpToken]:
     """``user_id``'s unrevoked tokens, newest first."""
     query = (
         select(McpToken)
-        .where(McpToken.user_id == user_id, col(McpToken.revoked_at).is_(None))
+        .where(_held_by(user_id), col(McpToken.revoked_at).is_(None))
         .order_by(col(McpToken.id).desc())
     )
     return list((await db.exec(query)).all())
 
 
-async def revoke(db: AsyncSession, token_id: int, user_id: int) -> bool:
+async def revoke(db: AsyncSession, token_id: int, user_id: int | None) -> bool:
     """Revoke ``user_id``'s token ``token_id``: it fails on its next use.
     False if they have no live token by that id."""
     row = await db.get(McpToken, token_id)

@@ -1,6 +1,6 @@
-{% if include_mcp and include_auth %}"""MCP over HTTP at /mcp: the stdio server's tools for a client elsewhere,
+{% if include_mcp and include_database %}"""MCP over HTTP at /mcp: the stdio server's tools for a client elsewhere,
 signed in with an MCP token. No token, no tools; the token's owner is who
-its calls act for, and its scope which tools it sees."""
+its calls act for{% if not include_auth %} (the operator's, ``MCP_OWNER_USER_ID``, with no one to sign in){% endif %}, and its scope which tools it sees."""
 
 import asyncio
 from collections.abc import AsyncIterator
@@ -124,10 +124,9 @@ async def serving() -> AsyncIterator[httpx.AsyncClient]:
             yield c
 
 
-async def _token(db: AsyncSession, user_factory: Any, scope: str) -> tuple[Any, str]:
-    user = await user_factory()
-    row, value = await tokens.create(db, user.id, "laptop", scope)
-    return user, value
+async def _token(db: AsyncSession, token_owner: int | None, scope: str) -> str:
+    _, value = await tokens.create(db, token_owner, "laptop", scope)
+    return value
 
 
 async def _tools(rpc: Rpc) -> list[str]:
@@ -143,38 +142,50 @@ async def test_no_token_is_refused_and_sees_no_tools(granted: None) -> None:
 
 
 async def test_a_revoked_token_is_refused(
-    granted: None, async_db_session: AsyncSession, user_factory: Any
+    granted: None, async_db_session: AsyncSession, token_owner: int | None
 ) -> None:
-    user, value = await _token(async_db_session, user_factory, "read")
-    (row,) = await tokens.live(async_db_session, user.id)
-    await tokens.revoke(async_db_session, row.id, user.id)
+    value = await _token(async_db_session, token_owner, "read")
+    (row,) = await tokens.live(async_db_session, token_owner)
+    await tokens.revoke(async_db_session, row.id, token_owner)
 
     async with serving() as served:
         assert (await Rpc(served, value).open()).status_code == 401
 
 
 async def test_a_read_token_sees_the_reads(
-    granted: None, async_db_session: AsyncSession, user_factory: Any
+    granted: None, async_db_session: AsyncSession, token_owner: int | None
 ) -> None:
-    _, value = await _token(async_db_session, user_factory, "read")
+    value = await _token(async_db_session, token_owner, "read")
     async with serving() as served:
         rpc = Rpc(served, value)
         await rpc.open()
         tools = await _tools(rpc)
 
-    assert tools == ["look"]
+    assert tools == ["look"{% if not include_auth %}, "peek"{% endif %}]
 
 
 async def test_a_propose_token_also_sees_the_proposals_never_a_write(
-    granted: None, async_db_session: AsyncSession, user_factory: Any
+    granted: None, async_db_session: AsyncSession, token_owner: int | None
 ) -> None:
-    _, value = await _token(async_db_session, user_factory, "propose")
+    value = await _token(async_db_session, token_owner, "propose")
     async with serving() as served:
         rpc = Rpc(served, value)
         await rpc.open()
         tools = await _tools(rpc)
 
-    assert tools == ["file_it", "look"]
+    assert tools == ["file_it", "look"{% if not include_auth %}, "peek"{% endif %}]
+{%- if include_auth %}
+
+
+async def test_a_token_with_no_owner_is_refused(
+    granted: None, async_db_session: AsyncSession
+) -> None:
+    """One made before auth was added was the operator's; with auth a token
+    is a person's, so it is refused and its holder makes their own."""
+    value = await _token(async_db_session, None, "read")
+
+    async with serving() as served:
+        assert (await Rpc(served, value).open()).status_code == 401
 
 
 async def test_an_admins_token_also_sees_the_admin_reads(
@@ -183,7 +194,8 @@ async def test_an_admins_token_also_sees_the_admin_reads(
     user_factory: Any,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    user, value = await _token(async_db_session, user_factory, "read")
+    user = await user_factory()
+    value = await _token(async_db_session, user.id, "read")
     monkeypatch.setattr(settings, "ADMIN_USER_EMAILS", [user.email])
     async with serving() as served:
         rpc = Rpc(served, value)
@@ -198,7 +210,7 @@ async def test_an_admin_read_is_refused_to_anyone_else(
 ) -> None:
     """Overseer shows its reads (health, errors, logs) to admins only, and
     any user may make a token: the token reaches no further."""
-    _, value = await _token(async_db_session, user_factory, "propose")
+    value = await _token(async_db_session, (await user_factory()).id, "propose")
     async with serving() as served:
         rpc = Rpc(served, value)
         await rpc.open()
@@ -210,7 +222,8 @@ async def test_an_admin_read_is_refused_to_anyone_else(
 async def test_a_call_acts_for_the_tokens_owner(
     granted: None, async_db_session: AsyncSession, user_factory: Any
 ) -> None:
-    user, value = await _token(async_db_session, user_factory, "read")
+    user = await user_factory()
+    value = await _token(async_db_session, user.id, "read")
     async with serving() as served:
         rpc = Rpc(served, value)
         await rpc.open()
@@ -219,30 +232,52 @@ async def test_a_call_acts_for_the_tokens_owner(
         )
 
     assert answer["result"]["structuredContent"]["owner"] == user.id
+{%- else %}
+
+
+async def test_the_operators_token_acts_for_the_mcp_owner_as_an_admin(
+    granted: None, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nobody signs in, so a token is the operator's: its calls act for
+    ``MCP_OWNER_USER_ID`` and reach the admin reads, as stdio's do."""
+    monkeypatch.setattr(settings, "MCP_OWNER_USER_ID", 42)
+    value = await _token(async_db_session, None, "read")
+    async with serving() as served:
+        rpc = Rpc(served, value)
+        await rpc.open()
+        answer = await rpc.call(
+            "tools/call", {"name": "look", "arguments": {"order_id": "A1"}}
+        )
+        peeked = await rpc.call("tools/call", {"name": "peek", "arguments": {}})
+
+    assert answer["result"]["structuredContent"]["owner"] == 42
+    assert not peeked["result"]["isError"]
+{%- endif %}
 
 
 async def test_a_call_is_recorded_with_its_transport_token_and_owner(
     granted: None,
     async_db_session: AsyncSession,
-    user_factory: Any,
+    token_owner: int | None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls = Recorder()
     monkeypatch.setattr(http, "record", calls)
-    user, value = await _token(async_db_session, user_factory, "read")
+    monkeypatch.setattr(settings, "MCP_OWNER_USER_ID", None)
+    value = await _token(async_db_session, token_owner, "read")
     async with serving() as served:
         rpc = Rpc(served, value)
         await rpc.open()
         await rpc.call("tools/call", {"name": "look", "arguments": {"order_id": "A1"}})
 
     [call] = calls
-    assert (call.transport, call.token, call.user_id) == ("http", "laptop", user.id)
+    assert (call.transport, call.token, call.user_id) == ("http", "laptop", token_owner)
 
 
 async def test_a_call_outside_the_scope_is_refused(
-    granted: None, async_db_session: AsyncSession, user_factory: Any
+    granted: None, async_db_session: AsyncSession, token_owner: int | None
 ) -> None:
-    _, value = await _token(async_db_session, user_factory, "read")
+    value = await _token(async_db_session, token_owner, "read")
     async with serving() as served:
         rpc = Rpc(served, value)
         await rpc.open()
@@ -256,7 +291,7 @@ async def test_a_call_outside_the_scope_is_refused(
 async def test_the_backend_hooks_run_the_mounted_apps_lifespan(
     granted: None,
     async_db_session: AsyncSession,
-    user_factory: Any,
+    token_owner: int | None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A mount's lifespan does not run on its own: the backend's startup
@@ -265,7 +300,7 @@ async def test_the_backend_hooks_run_the_mounted_apps_lifespan(
     from app.components.backend.shutdown import mcp_lifespan as stop
     from app.components.backend.startup import mcp_lifespan as start
 
-    _, value = await _token(async_db_session, user_factory, "read")
+    value = await _token(async_db_session, token_owner, "read")
     # The session's app keeps its own mount once this test is done.
     monkeypatch.setattr(http, "mounted", http.mounted)
     app = http.mount_app()

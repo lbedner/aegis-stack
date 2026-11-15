@@ -211,8 +211,8 @@ def _shown(key: str, text: str | None) -> dict[str, str | None]:
 
 
 def has_tokens() -> bool:
-    """Whether people can make tokens here: only with auth, since each
-    belongs to someone."""
+    """Whether tokens can be made here: only with a database to keep them
+    in. Each is a person's with auth, the operator's without."""
     try:
         from app.components.mcp import tokens  # noqa: F401
     except ImportError:

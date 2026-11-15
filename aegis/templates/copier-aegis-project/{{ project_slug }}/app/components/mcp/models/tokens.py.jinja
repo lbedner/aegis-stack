@@ -1,6 +1,6 @@
-"""The tokens people make for outside assistants (``app.components.mcp.tokens``
-makes, finds and revokes them). Only the token's hash is kept: the value is
-shown once, when it is made.
+"""The tokens made for outside assistants (``app.components.mcp.tokens``
+makes, finds and revokes them): {% if include_auth %}each a person's{% else %}the operator's, with no one to sign in{% endif %}. Only the token's hash is
+kept: the value is shown once, when it is made.
 {%- if database_engine == "postgres" %}
 
 Lives in the ``mcp`` Postgres schema, with the call record.
@@ -20,8 +20,8 @@ Scope = Literal["read", "propose"]
 
 
 class McpToken(SQLModel, table=True):
-    """One token: whose it is, what its scope reaches, when it was last
-    used, and when (if ever) it was revoked."""
+    """One token: whose it is (None: the operator's), what its scope
+    reaches, when it was last used, and when (if ever) it was revoked."""
 
     __tablename__ = "mcp_token"
 {%- if database_engine == "postgres" %}
@@ -29,7 +29,7 @@ class McpToken(SQLModel, table=True):
 {%- endif %}
 
     id: int | None = Field(default=None, primary_key=True)
-    user_id: int = Field(foreign_key="user.id", index=True)
+    user_id: int | None = Field(default=None,{% if include_auth %} foreign_key="user.id",{% endif %} index=True)
     name: str = Field(sa_column=Column(String(128), nullable=False))
     scope: str = Field(sa_column=Column(String(16), nullable=False))
     token_hash: str = Field(
@@ -48,14 +48,14 @@ class McpToken(SQLModel, table=True):
 
 
 class McpTokenCreate(BaseModel):
-    """What a person names a new token, and what it may reach."""
+    """What a new token is called, and what it may reach."""
 
     name: str = PydanticField(min_length=1, max_length=128)
     scope: Scope = "read"
 
 
 class McpTokenResponse(BaseModel):
-    """A token as its owner sees it: never its value."""
+    """A token as its holder sees it: never its value."""
 
     id: int
     name: str

@@ -82,7 +82,7 @@ def test_a_plain_file_importing_a_service_module_is_owned_by_that_service() -> N
             for group in (spec.files.extras or {}).values():
                 entries += list(group)
         # Another plugin's files keyed on this service go with it too
-        # (mcp's tokens, keyed on auth).
+        # (mcp's activity and tokens, keyed on the database).
         key = AnswerKeys.include_key(service_name)
         for other in {**SERVICES, **COMPONENTS}.values():
             if other.files is not None:

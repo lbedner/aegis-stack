@@ -25,6 +25,7 @@ import httpx
 import psutil
 
 from app.core.runtime import (
+    ContainerEvent,
     DiskUsage,
     Host,
     Instance,
@@ -37,7 +38,7 @@ from app.core.time import utcnow
 
 from . import socket_race
 from .docker_logs import follow as follow_logs
-from .docker_logs import history
+from .docker_logs import history, streaming
 
 PROXY_SOCKET = "/var/run/docker-proxy/docker.sock"
 PROJECT_LABEL = "com.docker.compose.project"
@@ -118,6 +119,18 @@ def _instance(summary: dict[str, Any]) -> Instance:
         or str(summary.get("ImageID", "")).removeprefix("sha256:")[:12]
         or None,
         exit_code=exit_code(summary.get("Status") or ""),
+    )
+
+
+def _event(data: dict[str, Any]) -> ContainerEvent:
+    """One container event, from Docker's events stream."""
+    actor = data.get("Actor") or {}
+    labels = actor.get("Attributes") or {}
+    return ContainerEvent(
+        id=str(actor.get("ID") or "")[:12],
+        name=labels.get("name", ""),
+        service=labels.get(SERVICE_LABEL, ""),
+        at=datetime.fromtimestamp(int(data.get("timeNano") or 0) / 1e9, UTC),
     )
 
 
@@ -340,6 +353,28 @@ class DockerRuntime:
         params = {**self._log_params("all" if since else "0", since), "follow": "1"}
         async for line in follow_logs(self._client(), instance, params, self._socket):
             yield line
+
+    async def out_of_memory(
+        self, since: datetime | None
+    ) -> AsyncIterator[ContainerEvent]:
+        """This project's containers running out of memory (Docker's
+        ``oom`` events), from ``since`` on and as they happen, until the
+        caller stops: whether a container did is inspect's to say, which
+        the proxy refuses."""
+        client = self._client()
+        project = await self._project_name(client)
+        filters = {
+            "type": ["container"],
+            "event": ["oom"],
+            "label": [f"{PROJECT_LABEL}={project}"],
+        }
+        params: dict[str, str] = {"filters": json.dumps(filters)}
+        if since is not None:
+            params["since"] = _unix_seconds(since)
+        async with streaming(client, "/events", params, self._socket) as response:
+            async for line in response.aiter_lines():
+                if line.strip():
+                    yield _event(json.loads(line))
 
     async def restart(self, instance: str) -> None:
         """Restart one container: the one write the proxy allows."""

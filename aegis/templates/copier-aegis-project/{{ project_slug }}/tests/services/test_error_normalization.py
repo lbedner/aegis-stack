@@ -8,9 +8,9 @@ from typing import Any
 import pytest
 
 from app.core.log_records import LogAssembler, LogRecord
-from app.core.runtime import parse_log_line
+from app.core.runtime import ContainerEvent, parse_log_line
 from app.services.system.errors.models import ErrorOccurrence
-from app.services.system.errors.normalize import normalize
+from app.services.system.errors.normalize import memory_error, normalize
 
 
 def event(message: str, trace: str | None = None, **fields: Any) -> LogRecord:
@@ -280,3 +280,20 @@ def test_a_process_told_to_stop_is_not_an_error() -> None:
     assert normalized(event("1 change detected", STOPPED, level="info")) is None
     failed = normalized(event("job failed", STOPPED, level="error"))
     assert failed is not None and failed.exception_type == "KeyboardInterrupt"
+
+
+def test_a_container_out_of_memory_is_an_error() -> None:
+    """Docker's ``oom``: the kernel killed a process in the container, which
+    no log line says. One per event (a replay gives the same id), grouped
+    by its container."""
+    at = datetime(2026, 11, 16, 2, 6, tzinfo=UTC)
+    oom = ContainerEvent("abc123", "app-webserver-1", "webserver", at)
+
+    found = memory_error(oom, page="server")
+
+    assert (found.level, found.page, found.service) == ("error", "server", "webserver")
+    assert (found.container_id, found.container_name) == ("abc123", "app-webserver-1")
+    assert "out of memory" in found.message and found.timestamp == at
+    assert memory_error(oom, page="server").id == found.id
+    later = memory_error(replace(oom, at=at.replace(minute=7)), page="server")
+    assert later.id != found.id and later.fingerprint == found.fingerprint

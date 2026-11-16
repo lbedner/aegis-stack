@@ -1,0 +1,34 @@
+{# The stage: a call, full screen (``chat_router``'s /stage). Her figure
+   is the phone, on the chat's own socket, and draws what the call is
+   doing (voice.js sets data-state); a card she draws lands at the front,
+   newest first, the oldest of the row moving down to the strip; any one
+   opens larger (its frame's own click). The call saves into the
+   conversation the chat had open: the thread stays the record.
+   Needs: ``chat_surface.stage_context``. #}
+{% extends "base.html" %}
+{% from "components/macros/chat.html" import button_classes, conversation_field %}
+{% from "partials/chat/_call.html" import call_bar, mic_states, phone, phone_states with context %}
+{% block title %}{{ assistant }}{% endblock %}
+{% block navbar %}{% endblock %}
+{% block page_body %}
+<main id="chat-stage" class="h-screen flex flex-col px-6 py-4 gap-4">
+  {{ conversation_field(conversation_id) }}
+  <div class="flex items-center justify-between">
+    <button type="button" onclick="history.back()" class="{{ button_classes('default') }}">Back to the chat</button>
+    {{ call_bar(attach=False, box="w-full max-w-md") }}
+  </div>
+  <div class="flex-1 min-h-0 flex flex-col items-center justify-center gap-6">
+    {% call phone("shrink-0 flex flex-col items-center gap-3 text-aegis-teal") %}
+      <img src="{{ static('illiana.png') }}" alt="{{ assistant }}" width="160" height="160"
+           class="w-40 h-40 rounded-full ring-4 ring-aegis-border transition duration-300 group-aria-pressed:ring-aegis-teal/40 group-data-[state=speaking]:ring-aegis-teal group-data-[state=speaking]:scale-105 group-data-[state=working]:animate-pulse">
+      <span class="relative h-6 flex items-center">{{ phone_states("w-6 h-6") }}</span>
+    {% endcall %}
+    <p id="chat-mic-status" class="text-sm text-aegis-muted empty:hidden" aria-live="polite"></p>
+    <div id="chat-stage-front" class="w-full flex-1 min-h-0 flex justify-center items-start gap-4 overflow-hidden"></div>
+  </div>
+  <div id="chat-stage-strip" class="shrink-0 flex gap-3 overflow-x-auto empty:hidden [&>*]:flex-none [&>*]:w-64"></div>
+</main>
+{# A drawn card's place here, as the thread has its own (voice.js). #}
+<template id="chat-live-card"><div class="min-w-0 flex-1 max-w-xl" data-live-card></div></template>
+{{ mic_states() }}
+{% endblock %}

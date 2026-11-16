@@ -4,7 +4,8 @@ cut into whole lines per stream, history and live alike."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager
 
 import httpx
 
@@ -86,28 +87,36 @@ def history(body: bytes) -> list[LogLine]:
     return [line for line in decoder.feed(body) + decoder.flush() if line.text.strip()]
 
 
-async def follow(
-    client: httpx.AsyncClient, instance: str, params: dict[str, str], socket: str
-) -> AsyncIterator[LogLine]:
-    """History and live lines on one request (no tail/follow race)."""
+@asynccontextmanager
+async def streaming(
+    client: httpx.AsyncClient, path: str, params: dict[str, str], socket: str
+) -> AsyncGenerator[httpx.Response]:
+    """A GET read as it arrives, for as long as the caller reads: a refusal
+    or a proxy gone is ``RuntimeUnavailableError``."""
     try:
         async with client.stream(
-            "GET",
-            f"/containers/{instance}/logs",
-            params=params,
-            timeout=httpx.Timeout(10.0, read=None),
+            "GET", path, params=params, timeout=httpx.Timeout(10.0, read=None)
         ) as response:
             if response.status_code != 200:
                 raise RuntimeUnavailableError(
-                    f"Docker refused logs for {instance}: {response.status_code}"
+                    f"Docker refused {path}: {response.status_code}"
                 )
-            decoder = LogDecoder()
-            async for chunk in response.aiter_bytes():
-                for line in decoder.feed(chunk):
-                    yield line
-            for line in decoder.flush():
-                yield line
+            yield response
     except httpx.TransportError as error:
         raise RuntimeUnavailableError(
             f"Docker socket proxy unreachable at {socket}: {error}"
         ) from error
+
+
+async def follow(
+    client: httpx.AsyncClient, instance: str, params: dict[str, str], socket: str
+) -> AsyncIterator[LogLine]:
+    """History and live lines on one request (no tail/follow race)."""
+    path = f"/containers/{instance}/logs"
+    async with streaming(client, path, params, socket) as response:
+        decoder = LogDecoder()
+        async for chunk in response.aiter_bytes():
+            for line in decoder.feed(chunk):
+                yield line
+        for line in decoder.flush():
+            yield line

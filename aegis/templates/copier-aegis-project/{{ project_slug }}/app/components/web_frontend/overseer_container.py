@@ -291,7 +291,7 @@ async def _drawn(
     if zoom == HOST:
         stack, shape = overseer_zoom.opened(stack, model)
         await overseer_zoom.name_unkeyed(stack)
-        keys = await asyncio.to_thread(overseer_zoom.openable, stack, model)
+        keys = await asyncio.to_thread(overseer_zoom.openable, stack)
         for item in stack:
             if item["key"] in keys:
                 item["zoom"] = zoom_url(item["key"])

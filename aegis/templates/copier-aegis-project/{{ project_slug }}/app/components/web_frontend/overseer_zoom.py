@@ -138,12 +138,14 @@ def _pieces(subject: str, ids: set[str]) -> tuple[list[Piece], Lines]:
     return found, service_pieces.links(folder, found, ids)
 
 
-def openable(stack: list[dict[str, Any]], model: SystemModel) -> set[str]:
-    """The services in ``stack`` that open up, by map key."""
+def openable(stack: list[dict[str, Any]]) -> set[str]:
+    """The services in ``stack`` that open up, by map key: their pieces
+    alone, not the lines out of each (``pieces_of``), which read every
+    import from source and wait for one to be opened."""
     return {
         key
         for item in stack
-        if is_service(key := item["registry"]) and pieces_of(subject_of(key), model)[0]
+        if is_service(key := item["registry"]) and service_pieces.held(subject_of(key))
     }
 
 

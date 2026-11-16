@@ -19,9 +19,11 @@ from aegis.core.component_files import get_copier_defaults, get_template_path
 
 PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
 ENTRYPOINT = "scripts/entrypoint.sh.jinja"
-# The reloaders each backend can be run under: watchfiles wraps a command,
-# arq and dramatiq watch a directory themselves.
-RELOADERS = ("watchfiles", "--watch")
+# The reloaders each backend can be run under: the app's own supervisor
+# (``app.entrypoints.reloading``) wraps a command, dramatiq watches a
+# directory itself.
+RELOADER = "python -m app.entrypoints.reloading /code/app"
+RELOADERS = (RELOADER, "--watch")
 
 
 def _render(context: dict[str, Any]) -> str:
@@ -88,7 +90,26 @@ def test_the_scheduler_reloads_in_dev() -> None:
     start = rendered.index('"$run_command" = "scheduler"')
     end = rendered.index('elif [ "$run_command"', start + 1)
 
-    assert "watchfiles" in rendered[start:end]
+    assert RELOADER in rendered[start:end]
+
+
+@pytest.mark.parametrize(
+    "ctx",
+    [
+        {"include_scheduler": True},
+        {"worker_backend": "arq"},
+        {"worker_backend": "taskiq"},
+    ],
+)
+def test_a_killed_process_comes_back_in_dev(ctx: dict[str, Any]) -> None:
+    """watchfiles' CLI restarts its command only on a change: one killed
+    (out of memory) left the CLI as the container's main process with
+    nothing under it, never restarted. The app's supervisor starts a new
+    one."""
+    rendered = _render(_ctx(**ctx))
+
+    assert "watchfiles --filter" not in rendered
+    assert RELOADER in rendered
 
 
 class TestTheArqWorkerOwnsItsLoop:
@@ -119,7 +140,7 @@ class TestTheArqWorkerOwnsItsLoop:
             "arq's watch flag re-runs the worker in the same process and "
             "re-imports nothing"
         )
-        assert "watchfiles --filter python" in branch
+        assert RELOADER in branch
 
 
 class TestTheEntrypointKnowsItIsInAContainer:

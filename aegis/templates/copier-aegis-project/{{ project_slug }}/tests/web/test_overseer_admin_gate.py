@@ -12,7 +12,9 @@ partial added later is gated without remembering to be.
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
+from starlette.requests import Request
 
+from app.components.web_frontend import overseer_access
 from app.components.web_frontend.overseer_access import PUBLIC
 from app.core.config import settings
 from app.models.user import User
@@ -70,6 +72,26 @@ def test_signed_out_pages_go_to_login_and_the_rest_is_401(app: FastAPI) -> None:
         page.headers["location"] == "/overseer/login?next=/overseer/components/backend"
     )
     assert client.get("/overseer/events").status_code == 401
+
+
+@pytest.mark.parametrize(
+    ("path", "dest", "page"),
+    [
+        ("/overseer/components/backend", None, True),
+        ("/overseer/events", "document", False),
+        ("/partials/overseer/ai/chat/drawer", "empty", False),
+        # A whole page served beside its fragments (the call's stage).
+        ("/partials/overseer/ai/chat/stage", "document", True),
+    ],
+)
+def test_a_page_is_what_the_browser_navigates_to(
+    path: str, dest: str | None, page: bool
+) -> None:
+    headers = [(b"sec-fetch-dest", dest.encode())] if dest else []
+    request = Request(
+        {"type": "http", "method": "GET", "path": path, "headers": headers}
+    )
+    assert overseer_access._is_page(request) is page
 
 
 @pytest.mark.parametrize(

@@ -11,11 +11,12 @@ the rules are findings."""
 import ast
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from functools import cache, cached_property
+from functools import cached_property
 from pathlib import Path
 from typing import Any
 
 from app.core import source_index
+from app.core.concurrency import once
 from app.core.ontology import Kind, current
 from app.core.ontology.model import node_id, parse_node_id
 from app.core.ontology.parts import node_of, service_folders
@@ -338,11 +339,10 @@ def folders(source: Any = None) -> list[tuple[str, Folder]]:
     return [(f.subject, f) for f in found]
 
 
-@cache
+@once
 def report() -> Report:
     """This project's parts report, built once a process (Overseer's page
-    and map share it): the code it reads changes only by a reload, which
-    starts a new one."""
+    and map share it): the code changes only by a reload, a new process."""
     return patterns.report(PARTS)
 
 

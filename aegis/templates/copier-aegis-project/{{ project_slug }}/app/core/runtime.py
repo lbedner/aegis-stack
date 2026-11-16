@@ -120,6 +120,17 @@ class LogLine:
 
 
 @dataclass(frozen=True)
+class ContainerEvent:
+    """A container that ran out of memory, as the runtime said: a process
+    in it killed, which no log line says."""
+
+    id: str
+    name: str
+    service: str
+    at: datetime
+
+
+@dataclass(frozen=True)
 class DiskUsage:
     """Bytes per container (writable layer) and per named volume."""
 
@@ -150,6 +161,10 @@ class Runtime(Protocol):
     def follow(
         self, instance: str, since: datetime | None = None
     ) -> AsyncIterator[LogLine]: ...
+
+    def out_of_memory(
+        self, since: datetime | None
+    ) -> AsyncIterator[ContainerEvent]: ...
 
     async def disk(self) -> DiskUsage: ...
 
@@ -336,6 +351,12 @@ class ProcessRuntime:
         return
         yield  # an async generator that ends at once
 
+    async def out_of_memory(
+        self, since: datetime | None
+    ) -> AsyncIterator[ContainerEvent]:
+        return
+        yield  # no containers: none ever runs out
+
     async def disk(self) -> DiskUsage:
         return DiskUsage()
 
@@ -416,6 +437,11 @@ async def logs(
 
 def follow(instance: str, since: datetime | None = None) -> AsyncIterator[LogLine]:
     return get_runtime().follow(instance, since=since)
+
+
+def out_of_memory(since: datetime | None = None) -> AsyncIterator[ContainerEvent]:
+    """This project's containers running out of memory, from ``since`` on."""
+    return get_runtime().out_of_memory(since=since)
 
 
 async def disk() -> DiskUsage:

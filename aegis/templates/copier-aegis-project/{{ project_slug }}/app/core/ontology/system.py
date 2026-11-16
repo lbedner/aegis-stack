@@ -81,8 +81,12 @@ async def warm() -> None:
 
 async def _build() -> None:
     from app.core.ontology.shared import keep  # it reads this module's
+    from app.services.system import service_parts
 
     await keep(await asyncio.to_thread(current))
+    # The parts report (a zoomed map, the ontology tool's findings) reads
+    # the same source, every module cold: next, from what is now parsed.
+    await asyncio.to_thread(service_parts.report)
 
 
 def _registered() -> bool:

@@ -85,13 +85,14 @@ class AdminOnlyError(Exception):
 
 
 def _is_page(request: Request) -> bool:
-    """A page the browser navigates to, as opposed to a fragment or stream."""
+    """A page the browser navigates to, as opposed to a fragment or stream:
+    one under /overseer, or any the browser says it is navigating to (a
+    whole page served beside its fragments: a call's stage)."""
     path = request.url.path
-    return (
-        request.method == "GET"
-        and path.startswith("/overseer")
-        and not path.startswith("/overseer/events")
-    )
+    if request.method != "GET" or path.startswith("/overseer/events"):
+        return False
+    navigating = request.headers.get("sec-fetch-dest") == "document"
+    return path.startswith("/overseer") or navigating
 
 
 async def overseer_gate(

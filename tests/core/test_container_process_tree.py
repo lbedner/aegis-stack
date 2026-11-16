@@ -119,7 +119,7 @@ def test_dev_syncs_once_then_execs_the_program(
     uv = [c for c in calls if c["cmd"] == "uv"]
     assert [c["args"].split()[0] for c in uv] == ["sync"], calls
     assert not uv[0]["exec"]
-    assert calls[-1]["cmd"] in (program, "watchfiles")
+    assert calls[-1]["cmd"] in (program, "python")  # python: the dev supervisor
     assert calls[-1]["exec"]
 
 

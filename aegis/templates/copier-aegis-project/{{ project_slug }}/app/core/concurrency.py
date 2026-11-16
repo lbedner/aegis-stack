@@ -140,6 +140,22 @@ async def cpu_bound(fn: Callable[..., R], *args: object) -> R:
         raise
 
 
+def once(build: Callable[[], R]) -> Callable[[], R]:
+    """``build``'s result, built once a process. ``functools.cache`` lets
+    two threads that ask before the first build ends each run it; here the
+    second waits on that build and takes its result."""
+    lock = threading.Lock()
+    built: list[R] = []
+
+    def result() -> R:
+        with lock:
+            if not built:
+                built.append(build())
+            return built[0]
+
+    return result
+
+
 # Work in flight that no one waits for, held so none is collected first.
 _background: set[asyncio.Task[None]] = set()
 

@@ -6,6 +6,7 @@ label: another project's containers on the same host are never listed.
 """
 
 import asyncio
+from datetime import UTC, datetime
 import json
 import os
 import re
@@ -51,6 +52,21 @@ def _container(cid: str, service: str, project: str = PROJECT) -> dict[str, Any]
 # Every path the backend asked for, so a test can prove inspect is never one.
 REQUESTED: list[str] = []
 STATS_ASKED: list[dict[str, str]] = []
+EVENTS_ASKED: list[dict[str, str]] = []
+# What Docker says when a container of this project runs out of memory.
+OOM = {
+    "Type": "container",
+    "Action": "oom",
+    "timeNano": 1_790_960_104_500_000_000,
+    "Actor": {
+        "ID": "a" * 64,
+        "Attributes": {
+            "name": f"{PROJECT}-webserver-1",
+            "com.docker.compose.service": "webserver",
+            "com.docker.compose.project": PROJECT,
+        },
+    },
+}
 # One-shot samples to answer with, in order (STATS once they run out).
 SAMPLES: list[dict[str, Any]] = []
 INSPECT = re.compile(r"^(/v[\d.]+)?/containers/(?!json$)[^/]+/json$")
@@ -128,6 +144,9 @@ def _handler(request: httpx.Request) -> httpx.Response:
                 ],
             },
         )
+    if path == "/events":
+        EVENTS_ASKED.append(dict(request.url.params))
+        return httpx.Response(200, content=(json.dumps(OOM) + "\n").encode())
     if path == "/info":
         return httpx.Response(
             200, json={"NCPU": 4, "MemTotal": 8_000_000_000, "ServerVersion": "28.3.0"}
@@ -310,6 +329,23 @@ async def test_tty_logs_are_raw_text() -> None:
 
     backend = DockerRuntime(project=PROJECT, transport=httpx.MockTransport(tty))
     assert [line.text for line in await backend.logs("a")] == ["one", "two"]
+
+
+async def test_out_of_memory_is_this_projects_containers_alone() -> None:
+    """Docker's events stream, asked for this project's ``oom`` alone: its
+    memory flag is inspect's, which the proxy refuses."""
+    found = [event async for event in _runtime().out_of_memory(since=None)]
+
+    assert [(e.id, e.name, e.service) for e in found] == [
+        ("a" * 12, f"{PROJECT}-webserver-1", "webserver")
+    ]
+    assert found[0].at == datetime(2026, 10, 2, 16, 55, 4, 500000, tzinfo=UTC)
+    asked = EVENTS_ASKED[-1]
+    assert json.loads(asked["filters"]) == {
+        "type": ["container"],
+        "event": ["oom"],
+        "label": [f"com.docker.compose.project={PROJECT}"],
+    }
 
 
 async def test_disk_is_scoped_to_the_project() -> None:

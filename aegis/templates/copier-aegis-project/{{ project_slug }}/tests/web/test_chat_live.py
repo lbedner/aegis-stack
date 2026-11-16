@@ -30,7 +30,7 @@ from pydantic_ai.messages import (
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
-from app.components.web_frontend import overseer_access
+from app.components.web_frontend import chat_surface, overseer_access
 from app.components.web_frontend.chat_surface import ChatSurface
 from app.components.web_frontend.overseer_ai_chat import OVERSEER
 from app.components.web_frontend.routes.partials import chat_live
@@ -45,6 +45,7 @@ from tests.web.overseer import AI, sign_in, status_with
 
 PAGE = "/overseer/services/ai/chat"
 SOCKET = f"{OVERSEER.path}/live/ws"
+STAGE = f"{OVERSEER.path}/stage"
 HX = {"HX-Request": "true"}
 # A screenshot as the page sends it: shrunk and base64'd by chat.js.
 SHOT = {"media_type": "image/png", "data_b64": "c2hvdA==", "name": "shot.png"}
@@ -222,7 +223,9 @@ class TestTheControls:
         one(page, "#chat-call button#chat-hang-up")
         for figure in ("timer", "cost", "engine"):
             one(page, f"#chat-call [data-call-{figure}]")
-        for state in ("live", "working", "muted"):
+        # ``dropped``: the socket closed with no word from the server (the
+        # webserver process killed), said rather than hung up in silence.
+        for state in ("live", "working", "muted", "dropped"):
             one(page, f"template#chat-mic-states [data-state={state}]")
         # The quiet, counted down to the hang-up on the status line.
         one(page, "template#chat-mic-states [data-state=hanging-up] [data-countdown]")
@@ -239,6 +242,58 @@ class TestTheControls:
         typed turn's do (2026-10-24: they showed only in the status line)."""
         turn = one(client.get(PAGE).text, "template#chat-live-turn")
         assert turn.xpath(".//*[@data-trail]")
+
+
+class TestTheStage:
+    """A call, full screen: her figure in the middle is the phone, on the
+    chat's own socket; what she draws lands in front of it."""
+
+    def test_her_figure_is_the_phone_on_the_chats_socket(
+        self, client: TestClient
+    ) -> None:
+        figure = one(client.get(STAGE).text, "button#chat-live")
+        assert figure.get("data-relay") == SOCKET
+        assert "mic-worklet" in (figure.get("data-worklet") or "")
+        assert "idle" in (figure.get("data-voice") or "")  # the quiet she counts
+        assert figure.cssselect("img")
+        drawn = {
+            e.get("data-mic-visual") for e in figure.cssselect("[data-mic-visual]")
+        }
+        assert drawn == {"recording", "thinking", "speaking", "working"}
+
+    def test_cards_land_on_the_stage_not_a_thread(self, client: TestClient) -> None:
+        page = client.get(STAGE).text
+        one(page, "#chat-stage #chat-stage-front")
+        one(page, "#chat-stage #chat-stage-strip")
+        one(page, "template#chat-live-card")
+        assert 'id="chat-thread"' not in page
+
+    def test_it_carries_on_the_conversation_the_chat_had_open(
+        self, client: TestClient
+    ) -> None:
+        page = client.get(STAGE, params={"conversation_id": "c1"}).text
+        assert one(page, "#chat-stage input#chat-conversation").get("value") == "c1"
+
+    def test_the_call_bar_and_its_status_line_come_along(
+        self, client: TestClient
+    ) -> None:
+        page = client.get(STAGE).text
+        one(page, "#chat-call button#chat-mute")
+        one(page, "#chat-call button#chat-hang-up")
+        one(page, "#chat-mic-status")
+        one(page, "template#chat-mic-states [data-state=live]")
+        # No composer on the stage, so no picture to pick from it.
+        assert not one(page, "#chat-call").cssselect("label[for=chat-attach]")
+
+    def test_the_chat_opens_the_stage(self, client: TestClient) -> None:
+        one(client.get(PAGE).text, f'#chat a[href="{STAGE}"]')
+
+    def test_a_mount_without_calls_has_no_stage(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(chat_surface, "HAS_VOICE", False)
+        assert client.get(STAGE).status_code == 404
+        assert f'href="{STAGE}"' not in client.get(PAGE).text
 
 
 class TestTheCall:

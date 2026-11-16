@@ -430,19 +430,41 @@ async def surface_context(chat: ChatSurface) -> dict[str, Any]:
     conversation, blank only when there is none."""
     latest = next(iter(await conversations(chat)), None)
     thread = await transcript(chat, latest)
-    return thread | {
-        "section_subtitle": f"Ask {thread['assistant']} anything",
+    return (
+        thread
+        | _call_context(chat)
+        | {
+            "section_subtitle": f"Ask {thread['assistant']} anything",
+            "picker": PERSISTED and chat.operator_controls,
+            # Voice profiles are rows: the voice chip needs a database.
+            "voices": HAS_VOICE and PERSISTED and chat.operator_controls,
+            "agent_url": agent_url(chat),
+            # The change queue lives with a persisted AI backend.
+            "approvals": CARDS.PATH if CARDS and chat.approvals else None,
+        }
+    )
+
+
+def _call_context(chat: ChatSurface) -> dict[str, Any]:
+    """What a call needs on any page it is held on (``partials/chat/_call.html``)."""
+    return {
         "chat_path": chat.path,
         "voice": _voice(chat) if HAS_VOICE else None,
-        "picker": PERSISTED and chat.operator_controls,
-        # Voice profiles are rows: the voice chip needs a database.
-        "voices": HAS_VOICE and PERSISTED and chat.operator_controls,
         "calls": offers_calls(chat),
         # A call's engine and running cost are the operator's figures.
         "operator": chat.operator_controls,
-        "agent_url": agent_url(chat),
-        # The change queue lives with a persisted AI backend.
-        "approvals": CARDS.PATH if CARDS and chat.approvals else None,
+    }
+
+
+async def stage_context(
+    chat: ChatSurface, conversation_id: str | None
+) -> dict[str, Any]:
+    """The stage: a call and nothing else (``partials/chat/stage.html``),
+    on the conversation the chat had open (the socket checks it is the
+    mount's), else a new one."""
+    return _call_context(chat) | {
+        "assistant": await assistant_name(chat),
+        "conversation_id": conversation_id,
     }
 
 

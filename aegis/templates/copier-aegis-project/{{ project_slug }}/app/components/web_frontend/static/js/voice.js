@@ -388,16 +388,27 @@
     call = null;
   };
   // --- The call bar: the composer row gives way to it for the call. The
-  // cost is the server's, priced as each turn is saved.
+  // cost is the server's: its voice (ticked here at the engine's rate a
+  // second where it bills by time, else priced as each turn is saved) and
+  // its thinking (the turns it handed off), the split on hover.
   const field = (name) => callBar()?.querySelector(`[data-call-${name}]`);
-  const showCost = (dollars) => {
-    call.cost = dollars;
-    if (field('cost')) field('cost').textContent = `$${dollars.toFixed(2)}`;
+  const showCost = () => {
+    if (!field('cost') || call.voice == null) return;
+    field('cost').textContent = formatValue(call.voice + call.thinking, 'money');
+    const split = clone('chat-call-split');
+    split.querySelector('[data-call-voice]').textContent = formatValue(call.voice, 'money');
+    split.querySelector('[data-call-thinking]').textContent = formatValue(call.thinking, 'money');
+    field('cost').title = split.textContent;
   };
   const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
   const tick = () => {
     if (!call || !field('timer')) return; // no chat on screen to show it in
-    field('timer').textContent = clock((Date.now() - call.started) / 1000);
+    const seconds = (Date.now() - call.started) / 1000;
+    field('timer').textContent = clock(seconds);
+    if (call.engine?.per_second) {
+      call.voice = seconds * call.engine.per_second;
+      showCost();
+    }
     if (call.state.nudged) sayState(); // the countdown
   };
   // The call bar in the composer's place, as the call stands: drawn as
@@ -408,14 +419,16 @@
     callBar().hidden = false;
     // The engine and cost are drawn for an operator only (``operator``).
     if (field('engine')) field('engine').textContent = call.engine?.label || '';
-    if (field('cost-later')) field('cost-later').hidden = call.cost != null;
-    if (call.cost != null) showCost(call.cost);
-    else if (field('cost')) field('cost').textContent = '';
+    if (field('cost-later')) field('cost-later').hidden = call.voice != null;
+    if (field('cost')) field('cost').textContent = '';
+    showCost();
     tick();
   };
   const startBar = (engine) => {
     call.started = Date.now();
     call.engine = engine;
+    call.voice = engine?.per_second ? 0 : null; // token-priced: from its first saved turn
+    call.thinking = 0;
     call.ticker = setInterval(tick, 1000);
     paintBar();
   };
@@ -664,7 +677,10 @@
       showTurns(call.conversation);
     } else if (event.type === 'saved') {
       showTurns(call.conversation);
-      if (event.cost != null) showCost(event.cost); // an operator's call only
+      if (event.cost == null) return; // an operator's call only
+      if (!call.engine?.per_second) call.voice = event.cost; // else ticked
+      call.thinking = event.thinking;
+      showCost();
       if (field('cost-later')) field('cost-later').hidden = true;
     }
   };

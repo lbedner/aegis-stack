@@ -49,6 +49,11 @@ class OllamaEngine(BaseInferenceEngine):
         async with self._client() as client:
             return _Tags.model_validate(await self._get(client, "/api/tags")).models
 
+    async def _holds(self, client: httpx.AsyncClient, model: str) -> bool:
+        """``/api/ps`` alone: the models in memory."""
+        running = _Ps.model_validate(await self._get(client, "/api/ps")).models
+        return any(model in (m.name, m.model) for m in running)
+
     async def _move(self, action: str, model_name: str) -> bool:
         """An empty ``/api/generate``: loads the model and keeps it 30
         minutes, or (``keep_alive`` 0) frees it now; generates nothing."""

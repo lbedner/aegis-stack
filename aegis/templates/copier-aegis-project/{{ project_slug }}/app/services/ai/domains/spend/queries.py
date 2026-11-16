@@ -1,9 +1,10 @@
-"""The money reads over the usage ledgers: spend per day and per action, the
-users it was spent on, the span of the ledger, and what voice calls cost.
+"""The money reads over the usage ledgers: spend per day, per action and per
+model, the users it was spent on, the span of the ledger, what voice cost,
+and each live call with the turns it handed off.
 Set-shaped inputs (a half-open ``[start, end)`` window), map-shaped outputs,
 no business logic; the Overseer's Costs section shapes them."""
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import date, datetime
 from typing import Any
 
@@ -11,6 +12,7 @@ from sqlalchemy import case, func
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.models.conversation import ConversationMessage
 from app.services.ai.domains.llm.queries import VENDOR, with_vendor
 from app.services.ai.domains.spend.recording import VOICE_ACTIONS
 from app.services.ai.models.llm import LLMUsage
@@ -103,6 +105,60 @@ async def voice_spend(
     )
     spent = {action: float(cost or 0) for action, cost in rows.all()}
     return {label: spent.get(action, 0.0) for action, label in VOICE_ACTIONS.items()}
+
+
+async def spend_by_action_model(
+    session: AsyncSession, start: datetime, end: datetime
+) -> list[tuple[str, str, int, float, int, float]]:
+    """``(action, model, uses, audio seconds, tokens, cost)`` in the window,
+    one row per action and model."""
+    rows = await session.exec(
+        select(
+            LLMUsage.action,
+            LLMUsage.model_id,
+            func.count(),
+            func.coalesce(func.sum(LLMUsage.audio_seconds), 0.0),
+            func.coalesce(func.sum(LLMUsage.input_tokens + LLMUsage.output_tokens), 0),
+            func.coalesce(func.sum(LLMUsage.total_cost), 0.0),
+        )
+        .where(*within(LLMUsage.timestamp, start, end))
+        .group_by(col(LLMUsage.action), col(LLMUsage.model_id))
+    )
+    return [
+        (action, model, int(n), float(seconds), int(tokens), float(cost))
+        for action, model, n, seconds, tokens, cost in rows.all()
+    ]
+
+
+async def rows_of(
+    session: AsyncSession, action: str, start: datetime, end: datetime, limit: int
+) -> list[LLMUsage]:
+    """The window's rows of one action, newest first, at most ``limit``."""
+    rows = await session.exec(
+        select(LLMUsage)
+        .where(*within(LLMUsage.timestamp, start, end), LLMUsage.action == action)
+        .order_by(col(LLMUsage.timestamp).desc())
+        .limit(limit)
+    )
+    return list(rows.all())
+
+
+async def handed_off_spend(
+    session: AsyncSession, call_ids: Collection[int]
+) -> dict[int, float]:
+    """What the turns each live call handed off cost, by the call's ledger
+    row: the replies that name it (``calls.handed_off_call``), summed
+    in one read."""
+    if not call_ids:
+        return {}
+    meta = col(ConversationMessage.meta_data)
+    call = meta["call"].as_integer()
+    rows = await session.exec(
+        select(call, func.sum(meta["cost"].as_float()))
+        .where(call.in_(call_ids))
+        .group_by(call)
+    )
+    return {int(c): float(cost or 0) for c, cost in rows.all()}
 
 
 async def usage_windows(

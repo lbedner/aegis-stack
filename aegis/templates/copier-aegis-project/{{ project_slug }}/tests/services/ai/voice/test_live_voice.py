@@ -46,7 +46,7 @@ def _her(
 
     async def realtime_for(*args: Any, **kwargs: Any) -> Any:
         (built if built is not None else {}).update(kwargs)
-        return realtime
+        return realtime, "assistant"
 
     async def play(chunk: bytes, rate: int) -> None:
         played.append((chunk, rate))
@@ -54,6 +54,7 @@ def _her(
     monkeypatch.setattr(realtime_calls, "realtime_for", realtime_for)
     return live_voice(
         ai_service,
+        ledger=session,
         engine=ENGINE,
         play=play,
         surface="meetings",
@@ -102,7 +103,7 @@ async def test_gpt_live_spoken_to_in_text_is_never_opened(
 
     async def realtime_for(*args: Any, **kwargs: Any) -> Any:
         built.update(kwargs)
-        return FakeRealtime([], after_text=True)
+        return FakeRealtime([], after_text=True), "assistant"
 
     monkeypatch.setattr(realtime_calls, "realtime_for", realtime_for)
 
@@ -110,7 +111,11 @@ async def test_gpt_live_spoken_to_in_text_is_never_opened(
         pass
 
     async with live_voice(
-        ai_service, engine=gpt_live, play=play, surface="meetings"
+        ai_service,
+        ledger=async_db_session,
+        engine=gpt_live,
+        play=play,
+        surface="meetings",
     ) as voice:
         assert voice is None
     assert built == {}

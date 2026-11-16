@@ -9,12 +9,10 @@ purpose - nothing here knows what a consumer does with the image.
 from fastapi import APIRouter, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
+from app.core.chat_transcript import IMAGE_TYPES, MAX_ATTACHMENT_BYTES
 from app.core.pastebox import pastebox
 
 router = APIRouter(prefix="/pastebox", tags=["pastebox"])
-
-_IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
-_MAX_BYTES = 10 * 1024 * 1024
 
 
 class PasteStageResponse(BaseModel):
@@ -30,16 +28,16 @@ class PasteDrainResponse(BaseModel):
 @router.post("", response_model=PasteStageResponse)
 async def stage_paste(file: UploadFile) -> PasteStageResponse:
     """Stage one pasted image for whichever surface drains next."""
-    if (file.content_type or "") not in _IMAGE_TYPES:
+    if (file.content_type or "") not in IMAGE_TYPES:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail=f"Only images can be pasted, not {file.content_type!r}.",
         )
     data = await file.read()
-    if len(data) > _MAX_BYTES:
+    if len(data) > MAX_ATTACHMENT_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Pasted image is larger than 10MB.",
+            detail=f"Pasted image is larger than {MAX_ATTACHMENT_BYTES // 2**20}MB.",
         )
     pastebox.stage(
         media_type=file.content_type or "image/png",

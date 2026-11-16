@@ -414,17 +414,17 @@ class Settings(
     AI_EFFORT: str | None = None
     AI_TIMEOUT_SECONDS: Annotated[float, Field(gt=0), Configurable("service_ai", "Seconds the model has to answer")] = 120.0
     AI_CHAT_SHOW_CALLS: Annotated[bool, Configurable("service_ai", "Show each step's call in chat, not only what it is doing")] = True
+    AI_CODE_MODE_MAX_SECONDS: float = 10.0  # run_code's sandbox (code-mode.md)
+    AI_CODE_MODE_MAX_MEMORY_BYTES: int = 64 * 1024 * 1024
 {% if ai_backend != "memory" %}
-    # Batch sentiment scoring of conversations. OFF by default: the job
-    # spends model tokens on every unscored conversation.
+    # Batch sentiment scoring, OFF by default: it spends model tokens.
     AI_SENTIMENT_ENABLED: Annotated[bool, Configurable("service_ai", "Score conversations' sentiment in batches (spends model tokens)")] = False
     AI_SENTIMENT_BATCH_LIMIT: Annotated[int, Configurable("service_ai", "Conversations scored per batch")] = 20
 {% endif %}
 
     # Provider API Keys (optional - many providers offer free tiers)
-    # Optional for the public provider (LLM7.io): keyless requests use
-    # the free anonymous tier (open-weight models); an account key from
-    # https://dash.llm7.io unlocks premium models and higher limits.
+    # Optional for the public provider (LLM7.io): keyless runs the free
+    # open-weight tier; a https://dash.llm7.io key unlocks premium models.
     LLM7_API_KEY: str | None = None
     # Optional for pollinations: keyless requests use the free anonymous
     # tier (open-weight models, no streaming); a key selects an account tier.

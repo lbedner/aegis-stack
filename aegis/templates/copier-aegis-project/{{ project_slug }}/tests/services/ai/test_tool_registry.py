@@ -14,6 +14,7 @@ import inspect
 from typing import Any
 from unittest.mock import MagicMock
 
+from pydantic import BaseModel
 import pytest
 
 from app.core.tools import ADMIN_ONLY, Refused, acting_as, register_tool
@@ -119,3 +120,30 @@ async def test_each_call_is_a_step_for_whoever_is_watching() -> None:
         sync_tool(component="x")
 
     assert steps == ["Checking the part", "Strict sync"]
+
+
+class Spend(BaseModel):
+    spent_cents: int
+
+
+async def spend_model() -> Spend:
+    """A tool handing back a model."""
+    return Spend(spent_cents=88_202)
+
+
+def spend_dict() -> dict[str, int]:
+    """A tool handing back a dict, not async."""
+    return {"spent_cents": 88_202}
+
+
+@pytest.mark.usefixtures("clean_registry")
+async def test_a_tools_money_reaches_the_model_in_dollars_too() -> None:
+    """Every tool's return passes this seam, natively or inside a script:
+    its cents get their dollars, model or dict alike."""
+    register_tool("spend_model", spend_model, effect="read")
+    register_tool("spend_dict", spend_dict, effect="read")
+    model_tool, dict_tool = resolve_tools(["spend_model", "spend_dict"])
+
+    dollared = {"spent_cents": 88_202, "spent_usd": "$882.02"}
+    assert await model_tool() == dollared
+    assert dict_tool() == dollared

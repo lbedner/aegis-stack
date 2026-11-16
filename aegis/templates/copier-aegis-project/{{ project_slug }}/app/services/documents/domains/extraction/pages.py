@@ -16,10 +16,13 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from typing import Any, TypeVar
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.chat_transcript import IMAGE_TYPES
 from app.core.concurrency import fanout
 from app.core.db import release_lock
 from app.core.log import logger
@@ -34,8 +37,18 @@ from app.services.documents.queries import document_by_id, pages_for
 # stack has no vision model to offer.
 VisionReader = Callable[[bytes, str], Awaitable[tuple[str, str]]]
 Progress = Callable[[int, int], None]
+Answer = TypeVar("Answer")
 
-IMAGE_TYPES = frozenset({"image/png", "image/jpeg", "image/webp", "image/gif"})
+# PDFium is not thread-safe, and rendering a page is real CPU: every call
+# into it runs on this one thread, so none holds up the event loop and no
+# two overlap.
+_PDFIUM = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pdfium")
+
+
+async def _pdfium(call: Callable[..., Answer], *args: Any) -> Answer:
+    """``call(*args)`` on PDFium's thread."""
+    return await asyncio.get_running_loop().run_in_executor(_PDFIUM, call, *args)
+
 
 # ponytail: a scanned PDF often carries a junk text layer of a few glyphs
 # per page, so "has text" is a threshold, not a boolean. Raise it if
@@ -126,9 +139,9 @@ async def _extract_pdf(
     force: bool,
     progress: Progress | None,
 ) -> None:
-    pdf = PdfPages(data)
+    pdf = await _pdfium(PdfPages, data)
     try:
-        total = len(pdf)
+        total = await _pdfium(len, pdf)
         if document.page_count != total:
             document.page_count = total
             db.add(document)
@@ -150,11 +163,10 @@ async def _extract_pdf(
             would bring that back, and would also throw away an entire
             scan's model spend if the process died on the last page.
 
-            PDFium is not thread-safe and the two ``pdf`` calls are
-            deliberately not in a thread. The event loop runs one
-            coroutine at a time and each call is self-contained - open
-            the page, use it, close it - so interleaving whole calls is
-            safe. Moving either into ``asyncio.to_thread`` would not be.
+            PDFium is not thread-safe: the two ``pdf`` calls run on its
+            one thread (``_pdfium``), each self-contained - open the
+            page, use it, close it - so whole calls queue there, never
+            overlap, and never block the loop.
             """
             nonlocal done
             page = existing.get(number)
@@ -164,11 +176,11 @@ async def _extract_pdf(
             png: bytes | None = None
             try:
                 if not page.image_key:
-                    png = pdf.render_png(number)
+                    png = await _pdfium(pdf.render_png, number)
                     page.image_key = await get_storage().put(
                         png, content_type=PNG_MEDIA_TYPE
                     )
-                text = pdf.text(number)
+                text = await _pdfium(pdf.text, number)
                 if len(text) >= MIN_TEXT_CHARS:
                     _mark_read(page, text, method="text_layer", model=None)
                 elif not await _read_with_ocr(
@@ -203,7 +215,7 @@ async def _extract_pdf(
             elif outcome.value is None:
                 result.skipped += 1
     finally:
-        pdf.close()
+        await _pdfium(pdf.close)
 
 
 async def _extract_image(

@@ -131,7 +131,8 @@ async def test_pending_hands_the_model_a_line_per_row_not_a_table(
     assert "display" not in entry
     assert "State Farm Auto" in entry["summary"]
     assert "Transportation" in entry["summary"]
-    assert "redrawn" in result["note"]
+    # Reading draws nothing: only a listing asked to (``draw``) redraws.
+    assert result["draw"] == []
 
 
 @pytest.mark.asyncio

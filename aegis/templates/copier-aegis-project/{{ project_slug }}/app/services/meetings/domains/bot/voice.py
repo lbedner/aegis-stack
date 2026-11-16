@@ -72,19 +72,24 @@ async def live_engine_of(session: AsyncSession, voice: Any | None) -> Any | None
 
 @asynccontextmanager
 async def live(
-    call: Any, voice: Any | None, engine: Any | None, owner_user_id: int | None
+    call: Any,
+    voice: Any | None,
+    engine: Any | None,
+    owner_user_id: int | None,
+    ledger: AsyncSession,
 ) -> AsyncGenerator[Any | None]:
     """Her live voice in this call (the AI service's ``live_voice``, on
     ``engine``: ``live_engine_of``), bound to ``LIVE`` for its length: a
     question put to her is answered aloud as she makes the answer, streamed
-    into the call (``call.stream``). None without a voice, a live engine,
-    or a call that comes up."""
+    into the call (``call.stream``), what it costs kept on ``ledger``. None
+    without a voice, a live engine, or a call that comes up."""
     ai = optional(AI)
     if voice is None or engine is None or getattr(ai, "live_voice", None) is None:
         yield None
         return
     async with ai.live_voice(
         ai.AIService(settings),
+        ledger=ledger,
         engine=engine,
         play=call.stream,
         surface=SURFACE,

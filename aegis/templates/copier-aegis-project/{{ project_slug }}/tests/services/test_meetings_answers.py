@@ -763,7 +763,7 @@ async def test_her_live_engine_is_her_voice_profiles_where_she_answers(
 
 
 async def test_her_live_call_is_told_she_is_in_the_meeting(
-    monkeypatch: pytest.MonkeyPatch,
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Her live call's manners are a meeting's (``IN_A_MEETING``), not a
     call with one person's: one of several, heard through the captions,
@@ -784,15 +784,20 @@ async def test_her_live_call_is_told_she_is_in_the_meeting(
     call = SimpleNamespace(stream=None, hush=hush)
     her = SimpleNamespace(TTS_VOICE="marin")
 
-    async with voice.live(call, her, SimpleNamespace(key="gpt-realtime-2.1"), 5):
+    engine = SimpleNamespace(key="gpt-realtime-2.1")
+    async with voice.live(call, her, engine, 5, async_db_session):
         pass
 
     assert told["instructions"] == IN_A_MEETING
+    assert told["ledger"] is async_db_session  # the run's, for what it costs
     assert (told["user_id"], told["owner_user_id"]) == ("5", 5)  # the owner's
 
 
-async def test_without_a_voice_there_is_no_live_voice() -> None:
-    async with voice.live(FakeCall([CallState.IN_CALL]), None, None, None) as live:
+async def test_without_a_voice_there_is_no_live_voice(
+    async_db_session: AsyncSession,
+) -> None:
+    call = FakeCall([CallState.IN_CALL])
+    async with voice.live(call, None, None, None, async_db_session) as live:
         assert live is None and voice.LIVE.get() is None
 
 

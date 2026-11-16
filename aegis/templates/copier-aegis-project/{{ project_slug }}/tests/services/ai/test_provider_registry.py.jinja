@@ -117,7 +117,7 @@ class TestOneClientForEveryOpenAICompatibleProvider:
         model, name = await model_for(config, settings)
 
         assert name == "a-model"
-        assert type(model).__name__ == "OpenAIChatModel"
+        assert type(model.wrapped).__name__ == "OpenAIChatModel"
 
     async def test_the_key_rides_the_client_not_the_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A stack can hold a real OpenAI key AND an OpenRouter one;

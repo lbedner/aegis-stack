@@ -5,6 +5,7 @@ voice.js only drive the live seconds, through data hooks the markup
 carries."""
 
 import asyncio
+import json
 from pathlib import Path
 import re
 from types import SimpleNamespace
@@ -14,9 +15,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from app.components.web_frontend import chat_surface
+from app.components.web_frontend import chat_attachments, chat_surface
 from app.components.web_frontend.chat_surface import ChatSurface
 from app.components.web_frontend.overseer_ai_chat import OVERSEER
+from app.services.ai.domains.chat.attachments import composer
 from app.services.ai.models import (
     AIProvider,
     Conversation,
@@ -39,6 +41,14 @@ SCRIPTS = Path(chat_surface.__file__).parent / "static/js"
 
 TRACE = [{"tool": "search_docs", "args": '{"q": "aegis"}', "result": "3 hits"}]
 SHOT = {"key": "ab/cd.png", "media_type": "image/png", "name": "shot.png"}
+# A page pasted into an earlier question: a marker in the message, its
+# line on the message's metadata.
+NOTES = {"id": "ab12cd34", "title": "Release notes", "chars": 2400}
+NOTES_MARKER = (
+    '[pasted text #ab12cd34: Release notes - 2,400 characters. Read it with pasted("ab12cd34")]'
+)
+# A page pasted now: past the threshold, its first line its name.
+PASTED = "Your Orders\n" + "\n".join(f"Order {n}: one item" for n in range(200))
 
 
 def _conversation() -> Conversation:
@@ -52,8 +62,8 @@ def _conversation() -> Conversation:
             ConversationMessage(
                 id="m1",
                 role=MessageRole.USER,
-                content="What is Aegis?",
-                metadata={"attachments": [SHOT]},
+                content=f"What is Aegis?\n\n{NOTES_MARKER}",
+                metadata={"attachments": [SHOT], "pastes": [NOTES]},
             ),
             ConversationMessage(
                 id="m2",
@@ -108,10 +118,17 @@ def test_cards_waiting_for_approval_sit_beside_the_thread(
     client: TestClient,
 ) -> None:
     """On the stacks that ship the change queue, the surface carries the
-    review list, fetched when it is first opened."""
+    review list, fetched each time it is opened, and while open, again on
+    every decision (``changes.RESOLVED``)."""
     found = select(_chat_page(client), "[data-approvals] [hx-get]")
     expected = ["/partials/changes"] if chat_surface.CARDS else []
     assert [e.get("hx-get") for e in found] == expected
+    if chat_surface.CARDS:
+        triggers = [t.strip() for t in found[0].get("hx-trigger").split(", ")]
+        assert triggers == [
+            "toggle[target.open] from:closest details",
+            f"{chat_surface.CARDS.RESOLVED}[this.closest('details').open] from:body",
+        ]
 
 
 def test_the_assistant_is_the_agent_by_name(client: TestClient) -> None:
@@ -165,6 +182,62 @@ def test_a_turn_appends_the_question_and_a_bubble_to_stream_into(
     stream = one(response.text, "[data-stream]")
     assert stream.get("data-text") == "hi there"
     assert stream.get("data-conversation-id") == "c1"
+    # Where a quiet stretch is named (the stream's ``waiting`` frames),
+    # hidden until there is one.
+    assert one(stream, "[data-busy] [data-waiting]").get("hidden") is not None
+
+
+def test_the_composer_takes_what_the_server_says(client: TestClient) -> None:
+    """Its types and limits are the server's (``attachments.composer``),
+    the same the request holds."""
+    html = _chat_page(client)
+    told = json.loads(one(html, "[data-chat]").get("data-chat"))["composer"]
+    assert told == composer()
+    assert one(html, "#chat-attach").get("accept") == ",".join(told["types"])
+
+
+@persisted
+@pytest.mark.parametrize("path", [f"{PAGE}/chat", f"{CHAT}/conversations/c1"])
+def test_a_pasted_page_in_a_question_is_a_chip(client: TestClient, path: str) -> None:
+    """The reader sees the question and a chip; the marker is the model's."""
+    user = one(client.get(path).text, "[data-role=user]")
+    assert text(one(user, "[data-text]")) == "What is Aegis?"
+    # Send again sends what was sent: the marker too.
+    assert user.get("data-sent") == f"What is Aegis?\n\n{NOTES_MARKER}"
+    chip = one(user, "[data-pastes] [data-paste]")
+    assert chip.get("data-paste") == "ab12cd34"
+    assert chip.get("hx-get") == f"{CHAT}/pastes/ab12cd34"
+    assert "Release notes" in text(chip) and "2,400" in text(chip)
+
+
+@persisted
+def test_a_page_pasted_now_is_lifted_and_opens_whole(
+    client: TestClient, files: object
+) -> None:
+    response = client.post(f"{CHAT}/turns", data={"message": f"late?\n\n{PASTED}"})
+
+    user = one(response.text, "[data-role=user]")
+    assert text(one(user, "[data-text]")) == "late?"
+    chip = one(user, "[data-paste]")
+    sent = one(response.text, "[data-stream]").get("data-text")
+    assert PASTED not in sent
+    assert user.get("data-sent") == sent
+    assert sent.startswith(f"late?\n\n[pasted text #{chip.get('data-paste')}: Your Orders")
+    opened = client.get(chip.get("hx-get")).text
+    # Shown as it was pasted, line for line.
+    assert one(opened, "[data-paste-text]").text_content() == PASTED
+    assert client.get(f"{CHAT}/pastes/nope").status_code == 404
+
+
+@persisted
+def test_the_composer_keeps_a_paste_and_gets_its_marker(
+    client: TestClient, files: object
+) -> None:
+    """Only the browser knows a paste was a paste: it hands it over as it
+    lands and puts the marker in the box."""
+    answer = client.post(f"{CHAT}/pastes", data={"text": PASTED})
+    assert answer.json()["marker"].startswith("[pasted text #")
+    assert client.post(f"{CHAT}/pastes", data={"text": " "}).status_code == 422
 
 
 def test_images_alone_are_a_turn_and_nothing_is_refused(client: TestClient) -> None:
@@ -301,7 +374,7 @@ def test_a_stored_image_shows_in_its_question(
     async def read(key: str) -> bytes | None:
         return b"PNG" if key == "ab/cd.png" else None
 
-    monkeypatch.setattr(chat_surface, "read_attachment", read)
+    monkeypatch.setattr(chat_attachments, "read_attachment", read)
     image = client.get(thumb.get("src"))
     assert image.content == b"PNG" and image.headers["content-type"] == "image/png"
     assert client.get(f"{CHAT}/attachments/zz/none.png").status_code == 404
@@ -364,6 +437,8 @@ def test_the_hooks_the_scripts_read_are_the_ones_the_markup_emits(
             "chat-stage-front",
             "chat-stage-strip",
             "data-countdown",
+            "data-call-voice",
+            "data-call-thinking",
         }
     for element_id in ids - optional:
         assert any(select(h, f"#{element_id}") for h in pages), element_id
@@ -541,8 +616,6 @@ def test_an_app_mounts_the_surface_again_for_its_own_agent(
     """The same routes at an app's own path: its user's conversations, its
     agent answering, its own guard, and every link on the surface pointing
     back at that mount rather than the Overseer's."""
-    import json
-
     from app.components.web_frontend.routes.partials.chat_surface import chat_router
 
     mine = ChatSurface(path="/chat", user="7", surface="app", agent_slug="helper")
@@ -567,9 +640,10 @@ def test_an_app_mounts_the_surface_again_for_its_own_agent(
     html = TestClient(app).get("/chat/drawer").text
 
     assert asked == [mine]
-    # The page names only its path: who a turn is for is the mount's.
+    # The page names only its path, and what a turn may carry: who a turn
+    # is for is the mount's.
     surface = json.loads(one(html, "[data-chat]").get("data-chat"))
-    assert surface == {"path": "/chat"}
+    assert surface == {"path": "/chat", "composer": composer()}
     assert one(html, "form[hx-post]").get("hx-post") == "/chat/turns"
     # The agent drawer is the Overseer's editor; this mount has none.
     response = TestClient(app).get("/chat/messages/c1/m2/agent")

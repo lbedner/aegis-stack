@@ -250,6 +250,8 @@ The `ollama` provider brings in the [Inference component](../../components/infer
 
 `llama-server` serving one model, behind the same [Inference component](../../components/inference.md) as Ollama: `ai[llamacpp]` brings in `inference[llamacpp]`. It is the faster of the two for long multi-turn tool loops, because its prompt cache rereads a shared prefix quickly. See the component page for how to start it.
 
+The cache holds while a turn's prompt starts the way the last one did: the persona, the tools and the history stay byte-for-byte the same from turn to turn, and only the end grows. Two things move the start: the history's cut, which moves a slab at a time, and a long conversation's running summary, which the worker writes as turns leave the history. On a single-slot server (`-np 1`) that summarizer's request also replaces the chat's cached prompt, once per cut; pin the `summarizer` agent row to another model to spare it.
+
 ```bash
 AI_PROVIDER=llamacpp
 AI_MODEL=qwen3:1.7b   # the server's --alias

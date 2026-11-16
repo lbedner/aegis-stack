@@ -9,49 +9,87 @@
 
 {# The frame both cards share: a title line, its right-hand side as the
    caller's body, then ``rows``. A batch is a form so its "skip" boxes ride
-   along: htmx sends the enclosing form's fields with a button's POST. #}
-{% macro _card(tag, id, data, title, side, by=none) %}
-<{{ tag }} id="{{ id }}" {{ data }} class="my-2 border border-aegis-border rounded-lg p-3 text-sm bg-aegis-card">
-  <div class="flex items-center justify-between gap-3">
+   along: htmx sends the enclosing form's fields with a button's POST. A
+   decided card (``decided``) folds to that line: history, not homework. #}
+{% macro _card(tag, id, data, title, side, by=none, decided=False) %}
+{% set head %}
     <span class="font-medium text-aegis-text">{{ title }}</span>
     <span class="text-xxs">{{ side }}</span>
-  </div>
+{% endset %}
+<{{ tag }} id="{{ id }}" {{ data }} class="my-2 border border-aegis-border rounded-lg p-3 text-sm bg-aegis-card">
+  {% if decided %}<details><summary class="list-none cursor-pointer flex items-center justify-between gap-3">{{ head }}</summary>
+  {% else %}<div class="flex items-center justify-between gap-3">{{ head }}</div>{% endif %}
   {% if by %}<div class="text-xs text-aegis-muted">{{ by }}</div>{% endif %}
   {{ caller() }}
+  {% if decided %}</details>{% endif %}
 </{{ tag }}>
 {% endmacro %}
 
-{% macro _actions(url, target, reject) %}
-{% set swap = 'hx-target="#' ~ target ~ '" hx-swap="outerHTML"' %}
+{# Approve and Reject swap the card they sit on, found by its ``data``
+   mark: the same card can be up twice (the thread and the waiting list),
+   so an id would find the first copy, not this one. #}
+{% macro _actions(url, mark, reject) %}
+{% set swap = 'hx-target="closest [' ~ mark ~ ']" hx-swap="outerHTML"' %}
 <div class="mt-3 flex gap-2">
   {{ action("Approve", 'hx-post="' ~ url ~ '/approve" ' ~ swap, tone="primary") }}
   {{ action(reject, 'hx-post="' ~ url ~ '/reject" ' ~ swap, tone="danger") }}
 </div>
 {% endmacro %}
 
+{# Why a decided row went the way it did: a withdrawal's reason, a veto. #}
+{% macro _note(row) %}{% if row.note and row.status != "pending" %}<p class="mt-2 text-xs text-aegis-muted" data-note>{{ row.note }}</p>{% endif %}{% endmacro %}
+
 {% macro change_card(change) %}
-{% call _card("div", "change-" ~ change.id, "data-change", change.title, badge(change.label, change.tone), change.by) %}
+{% call _card("div", "change-" ~ change.id, "data-change", change.title, badge(change.label, change.tone), change.by, decided=change.status != "pending") %}
+  {{ _note(change) }}
   <div class="mt-2">{{ facts(change.display) }}</div>
   {% if change.error %}<div class="mt-2">{{ error_banner([change.error]) }}</div>{% endif %}
-  {% if change.status == "pending" %}{{ _actions(change.url, "change-" ~ change.id, "Reject") }}{% endif %}
+  {% if change.status == "pending" %}{{ _actions(change.url, "data-change", "Reject") }}{% endif %}
 {% endcall %}
 {% endmacro %}
 
+{# One row of a batch: its skip while it waits, its outcome after. #}
+{% macro _batch_row(row) %}
+<li class="border-t border-aegis-border/50 pt-2 first:border-0 first:pt-0">
+  <div class="flex items-center justify-between gap-3">
+    {% if row.status == "pending" %}{{ checkbox("exclude_ids", label="Skip this one", value=row.id) }}{% endif %}
+    <span class="text-xxs ml-auto">{{ badge(row.label, row.tone) }}</span>
+  </div>
+  {{ _note(row) }}
+  <div class="mt-2">{{ facts(row.display) }}</div>
+  {% if row.error %}<div class="mt-2">{{ error_banner([row.error]) }}</div>{% endif %}
+</li>
+{% endmacro %}
+
+{# A batch: every row with its own skip, rows that say the same thing
+   (``groups``) read once - what they share, how many - with one skip for
+   all of them (app.js ticks the rows' own boxes, which are all the form
+   reads) and the rows behind a fold: what folds is the reading, never the
+   control. #}
 {% macro batch_card(batch) %}
 {% set count = batch.rows|length %}
-{% call _card("form", "batch-" ~ batch.batch_id, "data-change-batch", batch.title, count ~ (" change" if count == 1 else " changes"), batch.by) %}
+{% set side = count ~ (" change" if count == 1 else " changes") if batch.pending else batch.outcome %}
+{% call _card("form", "batch-" ~ batch.batch_id, "data-change-batch", batch.title, side, batch.by, decided=not batch.pending) %}
   <ul class="mt-2 space-y-2">
-    {% for row in batch.rows %}
-    <li class="border-t border-aegis-border/50 pt-2 first:border-0 first:pt-0">
+    {% for group in batch.groups %}
+    {% if group.rows|length == 1 %}{{ _batch_row(group.rows[0]) }}{% else %}
+    <li class="border-t border-aegis-border/50 pt-2 first:border-0 first:pt-0" data-change-group>
       <div class="flex items-center justify-between gap-3">
-        {% if row.status == "pending" %}{{ checkbox("exclude_ids", label="Skip this one", value=row.id) }}{% endif %}
-        <span class="text-xxs ml-auto">{{ badge(row.label, row.tone) }}</span>
+        {% if batch.pending %}{{ checkbox("", label="Skip all " ~ group.rows|length, attrs="data-skip-group") }}{% endif %}
+        <span class="text-xxs ml-auto text-aegis-muted">× {{ group.rows|length }}</span>
       </div>
-      <div class="mt-2">{{ facts(row.display) }}</div>
-      {% if row.error %}<div class="mt-2">{{ error_banner([row.error]) }}</div>{% endif %}
+      <div class="mt-2">{{ facts(group.shared) }}</div>
+      <details class="group/rows mt-2">
+        <summary class="list-none cursor-pointer inline-flex items-center gap-1 text-xxs text-aegis-muted hover:text-aegis-text transition-colors">
+          <span class="group-open/rows:hidden">Show all {{ group.rows|length }}</span>
+          <span class="hidden group-open/rows:inline">Hide</span>
+        </summary>
+        <ul class="mt-2 space-y-2">{% for row in group.rows %}{{ _batch_row(row) }}{% endfor %}</ul>
+      </details>
     </li>
+    {% endif %}
     {% endfor %}
   </ul>
-  {% if batch.pending %}{{ _actions(batch.url, "batch-" ~ batch.batch_id, "Reject all") }}{% endif %}
+  {% if batch.pending %}{{ _actions(batch.url, "data-change-batch", "Reject all") }}{% endif %}
 {% endcall %}
 {% endmacro %}

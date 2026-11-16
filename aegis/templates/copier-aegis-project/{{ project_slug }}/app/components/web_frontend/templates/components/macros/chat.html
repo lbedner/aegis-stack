@@ -76,8 +76,10 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
 </button>
 {% endmacro %}
 
-{% macro user_bubble(text, attachments=None, attachment_names=None) %}
-<li class="flex justify-end pl-24" data-role="user">
+{# ``text`` is what the reader sees, ``sent`` what Send again sends (its
+   paste markers kept). #}
+{% macro user_bubble(text, sent, attachments=None, attachment_names=None, pastes=None) %}
+<li class="flex justify-end pl-24" data-role="user" data-sent="{{ sent }}">
   <div class="max-w-full rounded-lg bg-aegis-teal/15 px-5 py-4 text-base text-aegis-text">
     <div class="flex items-center gap-2 mb-1.5">
       <span class="text-sm font-semibold text-aegis-text">You</span>
@@ -88,6 +90,22 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
       {{ copy_icon(text, "text-aegis-muted/70 hover:text-aegis-text transition-colors") }}
     </div>
     <span class="whitespace-pre-wrap" data-text>{{ text }}</span>
+    {# A pasted page or an attached document is not a sentence: it sits as a
+       chip that opens it whole in the modal, so the question stays readable. #}
+    {% if pastes %}
+    <div class="mt-2 flex flex-wrap gap-2" data-pastes>
+      {% for paste in pastes %}
+      <button type="button" {{ hx_dialog(paste.url) }} data-paste="{{ paste.id }}" title="{{ paste.title }}"
+              class="inline-flex items-center gap-2 rounded border border-aegis-border bg-aegis-bg/60 px-2.5 py-1.5 text-left hover:border-aegis-teal transition-colors">
+        {{ icon("document-text", "w-4 h-4 shrink-0 text-aegis-muted") }}
+        <span class="min-w-0">
+          <span class="block truncate max-w-[14rem] text-xs text-aegis-text">{{ paste.title }}</span>
+          <span class="block text-xxs text-aegis-muted">{{ paste.size }}</span>
+        </span>
+      </button>
+      {% endfor %}
+    </div>
+    {% endif %}
     {% if attachments %}
     <div class="mt-2 flex flex-wrap gap-2" data-attachments>
       {% for image in attachments %}
@@ -190,6 +208,9 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
       <span class="w-1.5 h-1.5 rounded-full bg-aegis-muted/60 animate-pulse [animation-delay:.15s]"></span>
       <span class="w-1.5 h-1.5 rounded-full bg-aegis-muted/60 animate-pulse [animation-delay:.3s]"></span>
     </span>
+    {# How long this pause has lasted, and why, from the stream's ``waiting``
+       frames; hidden until there is a pause to name. #}
+    <span class="text-xs text-aegis-muted" data-waiting hidden></span>
   </div>
 </li>
 {% endmacro %}
@@ -253,7 +274,7 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
 {# One stored message as its bubble: the transcript and the settle swap
    draw messages through this, so the role switch has one home. #}
 {% macro bubble(message, assistant) %}
-{% if message.role == "user" %}{{ user_bubble(message.content, attachments=message.attachments) }}{% else %}{{ assistant_bubble(message, assistant) }}{% endif %}
+{% if message.role == "user" %}{{ user_bubble(message.content, message.sent, attachments=message.attachments, pastes=message.pastes) }}{% else %}{{ assistant_bubble(message, assistant) }}{% endif %}
 {% endmacro %}
 
 {# The composer's conversation id: in the composer itself, and out of band

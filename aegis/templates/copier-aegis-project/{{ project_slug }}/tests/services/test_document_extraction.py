@@ -313,12 +313,21 @@ class TestPagesAreReadTogether:
         )
         live = 0
         peak = 0
+        # Each call waits (a while, at most) for a second one to arrive:
+        # a page renders off the loop, so a fixed short call could end
+        # before the next page reaches the model.
+        overlapped = asyncio.Event()
 
         async def vision(image: bytes, media_type: str) -> tuple[str, str]:
             nonlocal live, peak
             live += 1
             peak = max(peak, live)
-            await asyncio.sleep(0.02)
+            if live > 1:
+                overlapped.set()
+            try:
+                await asyncio.wait_for(overlapped.wait(), 1)
+            except TimeoutError:
+                pass
             live -= 1
             return "read", "fake-model"
 

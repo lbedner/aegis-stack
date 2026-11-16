@@ -699,6 +699,57 @@ class TestLLMSyncServiceQueryBatching:
         assert len(deployments) == 3
 
 
+class TestAttachLabsBatching:
+    """Naming each model's maker reads the catalog once, not once per
+    model: the models, the orgs and their roles are a read each, however
+    many models a sync brought."""
+
+    @staticmethod
+    async def _attach(
+        session: Session, engine: Engine, monkeypatch: pytest.MonkeyPatch, lab: str, count: int
+    ) -> int:
+        from app.services.ai.domains.llm.etl import lab_resolver
+
+        async def resolve(model_id: str, orgs: object = None) -> lab_resolver.LabInfo:
+            return lab_resolver.LabInfo(
+                slug=lab, name=lab, homepage=f"https://huggingface.co/{lab}"
+            )
+
+        monkeypatch.setattr(lab_resolver, "resolve_lab", resolve)
+        ids = [f"{lab}/model-{i}" for i in range(count)]
+        session.add_all([LargeLanguageModel(model_id=i, title=i) for i in ids])
+        session.flush()
+        with _StatementCounter(engine) as counter:
+            await lab_resolver.attach_labs(session, ids)
+        return counter.count
+
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # two attaches, compared
+    async def test_the_cost_is_independent_of_how_many_models(
+        self, sync_db_engine: Engine, sync_db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        small = await self._attach(sync_db_session, sync_db_engine, monkeypatch, "lab-a", 2)
+        big = await self._attach(sync_db_session, sync_db_engine, monkeypatch, "lab-b", 6)
+
+        assert big == small
+
+    async def test_every_model_gets_its_maker_once(
+        self, sync_db_engine: Engine, sync_db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.services.ai.models.llm import ROLE_MAKER, LLMOrgRole
+
+        await self._attach(sync_db_session, sync_db_engine, monkeypatch, "lab-a", 3)
+
+        org = sync_db_session.exec(select(LLMOrg).where(LLMOrg.slug == "lab-a")).one()
+        models = sync_db_session.exec(
+            select(LargeLanguageModel).where(LargeLanguageModel.made_by_org_id == org.id)
+        ).all()
+        roles = sync_db_session.exec(
+            select(LLMOrgRole).where(LLMOrgRole.org_id == org.id)
+        ).all()
+        assert len(models) == 3
+        assert [role.role for role in roles] == [ROLE_MAKER]
+
+
 class TestCatalogPopulated:
     """The startup hook's guard: sync only into an empty catalog."""
 

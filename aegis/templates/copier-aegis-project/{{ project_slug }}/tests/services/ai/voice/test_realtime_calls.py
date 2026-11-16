@@ -25,6 +25,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.backend.api.ai.service import ai_service
+from app.services.ai.domains.spend import calls
 from app.services.ai.domains.spend import recording as usage_recording
 from app.services.ai.domains.voice.realtime_calls import (
     CALL_TOOLS,
@@ -212,8 +213,21 @@ class TestACallKnowsWhoSheIs:
             "subject": "42",
             "admin": True,
             "slug": slug,
+            "held": None,
         }
         assert realtime["toolsets"] == [CALL_TOOLS]  # she can hang up
+
+    @pytest.mark.asyncio
+    async def test_a_call_naming_no_agent_answers_as_the_one_held(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A conversation is held with one agent, and a call into it that
+        names none answered as the default; it answers as the held one,
+        and says which so ``drive`` binds the same."""
+        built, realtime = await _built(monkeypatch, held="support")
+
+        assert built["slug"] == realtime["slug"] == "support"
+        assert built["held"] == "support"  # a call does not take the thread
 
     @pytest.mark.asyncio
     async def test_a_call_she_must_not_end_gives_her_no_way_to(
@@ -247,21 +261,30 @@ class TestACallKnowsWhoSheIs:
 
 
 async def _built(
-    monkeypatch: pytest.MonkeyPatch, **asked: Any
+    monkeypatch: pytest.MonkeyPatch, held: str | None = None, **asked: Any
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """What ``realtime_for`` built her with (``_build_turn``'s keywords) and
     what it asked her realtime agent for, with the prompt she was built on
-    (``system_prompt``); the agent row the default, on Gemini Live unless
-    ``model`` says."""
+    (``system_prompt``) and the agent it named (``slug``); the agent row
+    the default, or the one the conversation is ``held`` with, on Gemini
+    Live unless ``model`` says."""
+    from dataclasses import replace
+
     from app.services.ai.domains.chat import agent_loader
     from app.services.ai.domains.voice import realtime_calls
+    from app.services.ai.models import Conversation
+    from app.services.ai.service import chat
 
     config = agent_loader.default_agent_config()
+    conversation = Conversation(id="c", provider=AIProvider.GOOGLE, model="m")
+    if held:
+        conversation.metadata[chat.AGENT_KEY] = held
     built: dict[str, Any] = {}
     prompts: list[str] = []
 
     async def build_turn(conversation: Any, agent_config: Any, **kwargs: Any) -> Any:
         built.update(kwargs, slug=agent_config.slug)
+        built["held"] = conversation.metadata.get(chat.AGENT_KEY)
         prompts.append(agent_config.system_prompt)
         agent = SimpleNamespace(
             system_prompt_parts=_no_parts, realtime=lambda model, **kw: kw
@@ -271,19 +294,19 @@ async def _built(
     async def _no_parts() -> list[Any]:
         return []
 
-    async def resolve(*_: Any) -> Any:
-        return config
+    async def resolve(slug: str | None = None, **_: Any) -> Any:
+        return replace(config, slug=slug) if slug else config
 
-    monkeypatch.setattr(agent_loader, "resolve_agent", resolve)
-    realtime = await realtime_calls.realtime_for(
+    monkeypatch.setattr(chat, "resolve_agent", resolve)
+    realtime, slug = await realtime_calls.realtime_for(
         SimpleNamespace(_build_turn=build_turn),
-        conversation=None,
+        conversation=conversation,
         agent_slug=None,
         voice=None,
         user_id=USER,
         **{"model": "google:gemini-3.8-live", **asked},
     )
-    return built, realtime | {"system_prompt": prompts[0]}
+    return built, realtime | {"system_prompt": prompts[0], "slug": slug}
 
 
 class TestACallRemembers:
@@ -359,6 +382,7 @@ class TestACutCall:
         await drive(
             ai_service,
             realtime,
+            ledger=async_db_session,
             conversation_id=conversation.id,
             model="google:gemini-3.8-live",
             agent_slug="voice",
@@ -413,6 +437,9 @@ class TestACutCall:
 
 
 class TestTheLedger:
+    """A call's row is opened with it and billed as it runs: a call cut off
+    by a killed process still has what it cost to its last turn."""
+
     @pytest.mark.asyncio
     async def test_the_call_is_priced_from_its_usage(
         self, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
@@ -431,12 +458,15 @@ class TestTheLedger:
             tool_calls=2,
         )
 
-        await usage_recording.record_realtime(
-            "gpt-realtime-2.1",
+        row_id = await calls.open_realtime(
+            async_db_session, "gpt-realtime-2.1", conversation_id="c-1"
+        )
+        cost = await calls.bill_realtime(
+            async_db_session,
+            row_id,
             usage,
             seconds=49.9,
-            conversation_id="c-1",
-            rates=await usage_recording.realtime_price("gpt-realtime-2.1"),
+            rates=await calls.realtime_price("gpt-realtime-2.1"),
         )
 
         (row,) = (await async_db_session.exec(select(LLMUsage))).all()
@@ -450,8 +480,31 @@ class TestTheLedger:
         assert row.total_cost == pytest.approx(
             text_in + audio_in + cached + text_out + audio_out
         )
+        assert cost == pytest.approx(row.total_cost)
         assert (row.input_tokens, row.output_tokens, row.tool_calls) == (15_299, 887, 2)
         assert row.audio_seconds == pytest.approx(49.9)
+
+    @pytest.mark.asyncio
+    async def test_an_engine_priced_by_the_minute_is_billed_by_the_second(
+        self, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """GPT-Live lists a per-minute rate and no token price: its call
+        costs its length, whatever tokens it reports."""
+        await _priced(async_db_session, monkeypatch)
+        rates = await calls.realtime_price("gpt-live-1")
+        assert calls.per_second(rates) == pytest.approx(0.05 / 60)
+        by_tokens = await calls.realtime_price("gpt-realtime-2.1")
+        assert calls.per_second(by_tokens) is None
+        usage = SimpleNamespace(input_tokens=9_000, output_tokens=700)
+
+        db = async_db_session
+        row_id = await calls.open_realtime(db, "gpt-live-1", conversation_id="c")
+        await calls.bill_realtime(db, row_id, usage, seconds=90, rates=rates)
+        await calls.bill_realtime(db, row_id, usage, seconds=120, rates=rates)
+
+        (row,) = (await async_db_session.exec(select(LLMUsage))).all()
+        assert row.total_cost == pytest.approx(0.10)  # two minutes at $0.05
+        assert row.audio_seconds == pytest.approx(120)
 
 
 class TestTheSettings:
@@ -579,6 +632,7 @@ class TestDrivingACall:
         await drive(
             ai_service,
             realtime,
+            ledger=async_db_session,
             conversation_id=conversation.id,
             model="google:gemini-3.8-live",
             agent_slug="voice",
@@ -608,6 +662,83 @@ class TestDrivingACall:
         (row,) = (await async_db_session.exec(select(LLMUsage))).all()
         assert (row.action, row.model_id) == ("realtime", "gemini-3.8-live")
         assert row.total_cost > 0  # priced at the catalog's Gemini rates
+
+    @pytest.mark.asyncio
+    async def test_a_turn_it_hands_off_names_its_row(
+        self, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A turn run beside the call (a picture looked at) names the call's
+        ledger row, written as the audio starts rather than ahead of it."""
+        from app.services.ai.domains.voice.realtime_calls import drive
+        from tests._realtime import FakeRealtime
+
+        await _priced(async_db_session, monkeypatch)
+        conversation = await _conversation()
+        named: list[int | None] = []
+
+        async def alongside(session: object) -> None:
+            named.append(await calls.handed_off_call())
+            await session.close()  # type: ignore[attr-defined]
+
+        await drive(
+            ai_service,
+            FakeRealtime(_turn()),
+            ledger=async_db_session,
+            conversation_id=conversation.id,
+            model="google:gemini-3.8-live",
+            agent_slug="voice",
+            user_id=USER,
+            alongside=alongside,
+        )
+
+        (row,) = (await async_db_session.exec(select(LLMUsage))).all()
+        assert named == [row.id]
+        assert await calls.handed_off_call() is None  # the call's only
+
+    @pytest.mark.asyncio
+    async def test_the_row_is_billed_as_each_turn_is_saved(
+        self, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The call's row is in the ledger while it runs, at what it has
+        cost so far: by the second on an engine priced by time."""
+        import asyncio
+
+        from app.services.ai.domains.voice.realtime_calls import drive
+        from tests._realtime import FakeRealtime
+
+        await _priced(async_db_session, monkeypatch)
+        conversation = await _conversation(AIProvider.OPENAI, "gpt-live-1")
+        ticks = iter([60.0, 90.0])  # the turn saved, then hung up
+        monkeypatch.setattr(
+            "app.services.ai.domains.voice.realtime_calls._elapsed",
+            lambda started: next(ticks),
+        )
+        during: list[tuple[float, float]] = []
+
+        async def on_saved(cost: float) -> None:
+            (row,) = (await async_db_session.exec(select(LLMUsage))).all()
+            during.append((cost, row.total_cost))
+
+        async def alongside(session: object) -> None:
+            await asyncio.sleep(0)
+            await session.close()  # type: ignore[attr-defined]
+
+        await drive(
+            ai_service,
+            FakeRealtime(_turn()),
+            ledger=async_db_session,
+            conversation_id=conversation.id,
+            model="openai:gpt-live-1",
+            agent_slug="voice",
+            user_id=USER,
+            alongside=alongside,
+            on_saved=on_saved,
+        )
+
+        assert during == [(pytest.approx(0.05), pytest.approx(0.05))]
+        (row,) = (await async_db_session.exec(select(LLMUsage))).all()
+        assert row.total_cost == pytest.approx(0.075)  # 90 seconds
+        assert row.conversation_id == conversation.id
 
     @pytest.mark.asyncio
     async def test_a_card_shows_as_she_draws_it(
@@ -644,6 +775,7 @@ class TestDrivingACall:
         await drive(
             ai_service,
             FakeRealtime(_turn()),
+            ledger=async_db_session,
             conversation_id=conversation.id,
             model="google:gemini-3.8-live",
             agent_slug="voice",
@@ -691,6 +823,7 @@ class TestDrivingACall:
         await drive(
             ai_service,
             FakeRealtime([RealtimeTurnCompleteEvent(), *_turn()]),
+            ledger=async_db_session,
             conversation_id=conversation.id,
             model="google:gemini-3.8-live",
             agent_slug="voice",
@@ -733,6 +866,7 @@ class TestDrivingACall:
         ended = await drive(
             ai_service,
             FakeRealtime(_turn(), ends=ends),
+            ledger=async_db_session,
             conversation_id=conversation.id,
             model="google:gemini-3.8-live",
             agent_slug="voice",

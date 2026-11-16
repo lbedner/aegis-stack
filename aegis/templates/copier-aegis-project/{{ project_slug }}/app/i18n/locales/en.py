@@ -755,9 +755,13 @@ MESSAGES: dict[str, str] = {
     "ai.model_usage": "Model Usage",
     "ai.no_recent_activity": "No recent activity.",
     "ai.recent_activity": "Recent Activity",
+    "ai.help_costs": "Show what models and voice cost by kind and model, and each live call with the answers given during it.",
+    "ai.opt_costs_days": "How many days back to read (default 30).",
+    "ai.costs_by_model": "By model, last {days} days",
+    "ai.costs_calls": "Live calls",
+    "ai.costs_empty": "Nothing spent in that window.",
     "ai.connection_error": "Connection Error: {error}",
     "ai.timeout_label": "Timeout Error: {error}",
-    # RAG hints (in chat)
     # Sentiment stats (CLI)
     "ai.help_sentiment": "Show conversation sentiment statistics from the analysis job.",
     "ai.sentiment_title": "Conversation Sentiment",

@@ -4,7 +4,7 @@ A drawn card rides its answer's trace as a ``chat_card`` marker; the
 settled message places a loader for it (``card_loader``), and this draws
 the kind's template from the card's frozen payload. A card that is gone,
 whose kind is gone, or that belongs to another user's conversation says so
-quietly: 200, never 404, because a transcript is a record.
+(``changes.card_missing``, an approval card's own "gone").
 
 ``add_card_routes(router, mount)`` adds it to a mount's router; the chat
 router does, where there is a database to keep cards in.
@@ -20,9 +20,8 @@ from app.components.web_frontend import chat_surface as chat
 from app.components.web_frontend import overseer_replay
 from app.components.web_frontend.chat_surface import ChatSurface
 from app.components.web_frontend.rendering import dialog, fragment, templates
+from app.components.web_frontend.routes.partials.changes import card_missing
 from app.services.ai.service import PathCard, cards
-
-MISSING = "partials/chat/card_missing.html"
 
 
 def add_card_routes(router: APIRouter, mount: ChatSurface) -> None:
@@ -40,11 +39,11 @@ def add_card_routes(router: APIRouter, mount: ChatSurface) -> None:
             row is None
             or await chat.find_conversation(bound, row.conversation_id) is None
         ):
-            return templates.TemplateResponse(request=request, name=MISSING)
+            return card_missing(request)
         large = size == "large"
         found = await drawn(row, f"{mount.path}/cards/{row.id}", large)
         if found is None:
-            return templates.TemplateResponse(request=request, name=MISSING)
+            return card_missing(request)
         template, context = found
         if large:
             return dialog(request, template, **context)

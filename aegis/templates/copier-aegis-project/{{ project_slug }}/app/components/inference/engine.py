@@ -188,6 +188,24 @@ class BaseInferenceEngine(ABC):
     async def _move(self, action: str, model_name: str) -> bool:
         """Load or unload ``model_name`` on the server; False when it did not."""
 
+    @abstractmethod
+    async def _holds(self, client: httpx.AsyncClient, model: str) -> bool:
+        """Whether ``model`` is in memory, in one cheap read; raises the
+        HTTP error when the server does not answer."""
+
+    async def waiting_reason(self, model: str) -> str | None:
+        """Why a turn on ``model`` has not answered yet, said as its state
+        (the composer's chip already names the model): "loading" while it
+        is not in memory, a wait that ends on its own; "thinking" once it is.
+        None when the server does not answer. Asked while a turn is quiet,
+        so one read (``_holds``), never the whole status."""
+        try:
+            async with self._client() as client:
+                warm = await self._holds(client, model)
+        except (httpx.HTTPError, ValueError):
+            return None
+        return "thinking" if warm else "loading"
+
     async def move(self, action: str, model_name: str) -> bool:
         """Load or unload ``model_name`` by name (``MODEL_ACTIONS``), so a
         button or a route can pass the action it was given straight through;

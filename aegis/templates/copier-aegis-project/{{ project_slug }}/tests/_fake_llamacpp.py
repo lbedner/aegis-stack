@@ -10,6 +10,7 @@ from typing import Any
 MODEL = "qwen2.5:7b"  # what ``--alias`` names it; the GGUF's path otherwise
 
 ROUTES: dict[str, Any] = {
+    "/health": {"status": "ok"},
     "/props": {
         "modalities": {"vision": False, "audio": False},
         "chat_template_caps": {"supports_tool_calls": True, "supports_tools": True},

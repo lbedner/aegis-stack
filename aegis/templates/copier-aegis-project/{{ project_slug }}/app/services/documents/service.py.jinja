@@ -33,13 +33,15 @@ if TYPE_CHECKING:
         document_id_of,
     )
     from app.services.documents.domains.extraction.dispatch import (  # noqa: F401
+        extract_and_wait,
         start_extraction,
     )
-{%- if include_worker %}
     from app.services.documents.domains.extraction.jobs import (  # noqa: F401
+        run_extraction,
+{%- if include_worker %}
         run_extraction_job,
-    )
 {%- endif %}
+    )
     from app.services.documents.domains.extraction.pages import (  # noqa: F401
         DocumentContentMissingError,
         DocumentNotFoundError,

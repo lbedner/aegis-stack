@@ -18,32 +18,17 @@ from app.services.ai.domains.chat.self_context import (
     record_turn_context,
 )
 from app.services.ai.models import (
-    AIProvider,
     Conversation,
+{%- if ai_framework == "pydantic-ai" %}
     MessageRole,
+{%- endif %}
 )
-{% if ai_framework == "pydantic-ai" %}
-from app.services.ai.service.prompt import PromptMixin
-{% endif %}
+from tests.services.ai._threads import {% if ai_framework == "pydantic-ai" %}built as _build, {% endif %}thread
 
 
 def _conversation(*sizes: int) -> Conversation:
     """A thread whose messages are the given lengths, oldest first."""
-    conversation = Conversation(id="c1", provider=AIProvider.OLLAMA, model="test-model")
-    for index, size in enumerate(sizes):
-        role = MessageRole.USER if index % 2 == 0 else MessageRole.ASSISTANT
-        conversation.add_message(role, "x" * size)
-    conversation.add_message(MessageRole.USER, "and now?")
-    return conversation
-
-
-{% if ai_framework == "pydantic-ai" %}
-def _build(conversation: Conversation, budget: int) -> str:
-    """The history builder, which reads nothing off ``self``."""
-    return PromptMixin._build_conversation_context(  # type: ignore[arg-type]
-        None, conversation, history_budget=budget
-    )
-{% endif %}
+    return thread(["x" * size for size in sizes], "and now?")
 
 
 {% if ai_framework == "pydantic-ai" %}
@@ -81,6 +66,121 @@ class TestWhatFellOutIsCounted:
 
         assert "NEWEST" in built
         assert "OLDEST" not in built
+
+
+# A reply that filed a card and ran a script: the trace entries
+# ``record_tool_call`` / ``record_tool_result`` keep on the message.
+_TRACE = [
+    {
+        "tool": "propose",
+        "args": '{"change_type": "rename", "title": "Rename it"}',
+        "result": '{"pending_change_id": "pc-7"}',
+        "component": {"kind": "pending_change", "pending_change_id": "pc-7"},
+    },
+    {
+        "tool": "run_code",
+        "code": "# what is left\nrows = await ledger(months=3)\nprint(len(rows))",
+        "nested": [{"tool": "ledger", "args": '{"months": 3}'}],
+        "result": "42",
+    },
+]
+
+
+def _replied(conversation: Conversation, text: str, trace: object) -> None:
+    conversation.add_message(
+        MessageRole.ASSISTANT, text, metadata={"tool_trace": trace}
+    )
+
+
+class TestWhatAReplyDid:
+    """History carried only a reply's words, and the sandbox resets every
+    turn: "try again" re-queried for the ids the last turn had in hand.
+    Each reply's steps ride ahead of its words."""
+
+    def test_a_replys_steps_ride_ahead_of_its_words(self) -> None:
+        conversation = _conversation(10)
+        _replied(conversation, "Filed it.", _TRACE)
+        conversation.add_message(MessageRole.USER, "try again")
+
+        built = _build(conversation, budget=10_000)
+
+        steps = (
+            'Assistant steps: propose({"change_type": "rename", "title": '
+            '"Rename it"}) -> card pc-7; run_code[ledger({"months": 3})] -> 42'
+        )
+        assert f"{steps}\nAssistant: Filed it." in built
+
+    def test_a_script_with_no_dispatches_reads_as_its_first_line(self) -> None:
+        from app.core.chat_transcript import steps_line
+
+        assert steps_line([{"tool": "run_code", "code": "# x\nprint(1)"}]) == (
+            "run_code[print(1)]"
+        )
+
+    def test_the_line_is_capped(self) -> None:
+        from app.core.chat_transcript import steps_line
+
+        huge = [{"tool": "lookup", "args": "y" * 5_000}] * 10
+
+        assert len(steps_line(huge)) <= 1_200
+
+    def test_a_reply_without_steps_is_its_words(self) -> None:
+        conversation = _conversation(10)
+        _replied(conversation, "Just words.", [])
+        conversation.add_message(MessageRole.USER, "ok")
+
+        assert "Assistant steps" not in _build(conversation, budget=10_000)
+
+    def test_an_older_replys_steps_hold_from_turn_to_turn(self) -> None:
+        """A prompt cache reuses what the last turn sent up to its first
+        changed byte: a steps line kept only for the newest replies would
+        change an older reply's line every turn."""
+        conversation = _conversation()
+        for turn in range(5):
+            conversation.messages[-1].content = f"question {turn}"
+            _replied(conversation, f"answer {turn}", _TRACE)
+            conversation.add_message(MessageRole.USER, "and now?")
+        before = _build(conversation, budget=50_000)
+
+        _replied(conversation, "answer 5", _TRACE)
+        conversation.add_message(MessageRole.USER, "and then?")
+        after = _build(conversation, budget=50_000)
+
+        history = before.rsplit("\n\nUser: and now?", 1)[0]
+        assert "Assistant steps" in history
+        assert after.startswith(history)
+
+
+class TestTheDays:
+    def test_a_line_reads_the_same_after_midnight(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A reply from an earlier day was dated against today: at midnight
+        every reply of the day gained a date, and the first turn after it
+        read the whole history afresh. A day is marked once, ahead of its
+        first message, from the messages alone."""
+        from datetime import UTC, datetime, timedelta
+
+        from app.core import time
+        from app.services.ai.service.prompt import history_lines
+
+        earlier = _conversation(10, 10, 10, 10).messages[:-1]
+        evening = datetime(2026, 11, 15, 22, tzinfo=UTC)
+        for hours, message in enumerate(earlier):  # 22:00 to 01:00
+            message.timestamp = evening + timedelta(hours=hours)
+
+        monkeypatch.setattr(time, "utcnow", lambda: datetime(2026, 11, 15, 23))
+        before = history_lines(earlier)
+        monkeypatch.setattr(time, "utcnow", lambda: datetime(2026, 11, 16, 9))
+        after = history_lines(earlier)
+
+        assert before == after
+        assert [("2026-11-15" in line, "2026-11-16" in line) for line in after] == [
+            (True, False),
+            (False, False),
+            (False, True),
+            (False, False),
+        ]
 
 
 {% endif %}

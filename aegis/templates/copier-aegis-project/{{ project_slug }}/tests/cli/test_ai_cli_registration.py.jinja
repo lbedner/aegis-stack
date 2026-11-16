@@ -40,8 +40,8 @@ EXPECTED_COMMANDS = {
     "voice",
 }
 {%- if ai_backend != "memory" %}
-# Usage and sentiment read tables, so they ship only with a database.
-EXPECTED_COMMANDS |= {"usage", "sentiment"}
+# Usage, costs and sentiment read tables, so they ship only with a database.
+EXPECTED_COMMANDS |= {"usage", "costs", "sentiment"}
 {%- endif %}
 
 

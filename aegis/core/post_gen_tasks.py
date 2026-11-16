@@ -447,6 +447,10 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/services/ai/domains/llm/model_factory.py")
         remove_file(project_path, "app/services/ai/domains/llm/agents.py")
         remove_file(project_path, "app/services/ai/domains/llm/writer.py")
+        # A conversation's running summary rides the pydantic-ai history
+        # builder and is written by ``writer``.
+        remove_file(project_path, "app/services/ai/domains/chat/summary.py")
+        remove_file(project_path, "tests/services/ai/test_conversation_summary.py")
 
     # (comms / payment / insights / auth-dashboard primary cleanups handled
     # by the Pattern A loop above.)

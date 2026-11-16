@@ -324,6 +324,34 @@ async def test_an_agent_reads_each_contract_from_its_model(
     assert refused["change_types"][NOTE]["title"] == "Write a note"
 
 
+# Lists ``pending`` three ways on purpose, so its read repeats by
+# construction rather than by a loop.
+@pytest.mark.queryspy(allow_n_plus_one=True)
+@pytest.mark.asyncio
+async def test_pending_draws_only_when_asked(
+    chat_tools: Any, acting_owner_user_id: int | None
+) -> None:
+    """A check before filing a replacement must stay invisible: it draws
+    nothing. Asked to (the user wants to see a card), it nominates what is
+    still waiting, or with ``about`` whatever matched, decided included."""
+    from app.services.ai.domains.chat.user_memory import memory_user
+
+    with memory_user("1", owner_user_id=acting_owner_user_id, agent_slug="helper"):
+        waiting = result_data(await chat_tools.propose(NOTE, {"text": "waiting"}))
+        withdrawn = result_data(await chat_tools.propose(NOTE, {"text": "taken back"}))
+        await chat_tools.withdraw(withdrawn["pending_change_id"])
+        quiet = result_data(await chat_tools.pending())
+        shown = result_data(await chat_tools.pending(draw=True))
+        asked = result_data(await chat_tools.pending(about="taken", draw=True))
+
+    def ids(cards: list[dict[str, Any]]) -> list[list[int]]:
+        return [card["pending_change_ids"] for card in cards]
+
+    assert quiet["draw"] == [] and len(quiet["pending"]) == 1
+    assert ids(shown["draw"]) == [[waiting["pending_change_id"]]]
+    assert ids(asked["draw"]) == [[withdrawn["pending_change_id"]]]
+
+
 # Lists ``pending`` for two users on purpose, so its read repeats by
 # construction rather than by a loop.
 @pytest.mark.queryspy(allow_n_plus_one=True)

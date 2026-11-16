@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -253,6 +253,24 @@ async def agent_by_slug(session: AsyncSession, slug: str) -> Agent | None:
     ).first()
 
 
+async def agent_and_parent(
+    session: AsyncSession, slug: str
+) -> tuple[Agent | None, Agent | None]:
+    """The agent row and the row it extends, tools loaded, in one query."""
+    parent_slug = select(Agent.extends).where(Agent.slug == slug).scalar_subquery()
+    rows = (
+        await session.exec(
+            select(Agent)
+            .where(or_(Agent.slug == slug, Agent.slug == parent_slug))
+            .options(selectinload(Agent.tools))  # type: ignore[arg-type]
+        )
+    ).all()
+    by_slug = {row.slug: row for row in rows}
+    row = by_slug.get(slug)
+    parent = by_slug.get(row.extends) if row is not None and row.extends else None
+    return row, parent
+
+
 async def prompt_changes(
     session: AsyncSession, agent_id: int
 ) -> Sequence[AgentPromptChange]:
@@ -358,3 +376,16 @@ async def user_memory_for(
             select(AgentUserMemory).where(AgentUserMemory.user_id == user_id)
         )
     ).first()
+
+
+async def user_memories_for(
+    session: AsyncSession, user_ids: Iterable[str]
+) -> Sequence[AgentUserMemory]:
+    """Each of ``user_ids``' memory rows that exists, in one query."""
+    return (
+        await session.exec(
+            select(AgentUserMemory).where(
+                col(AgentUserMemory.user_id).in_(list(user_ids))
+            )
+        )
+    ).all()

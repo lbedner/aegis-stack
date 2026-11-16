@@ -23,10 +23,11 @@ import json
 from typing import Any
 from urllib.parse import urlencode
 
-from app.components.backend.api.ai.service import ai_service
+from app.components.backend.api.ai.service import ai_service, lifted_turn
 from app.core.chat_transcript import (
     card_markers,
     footer_line,
+    readable,
     strip_attachment_marker,
     trace_failed,
     trace_label,
@@ -34,6 +35,7 @@ from app.core.chat_transcript import (
 )
 from app.core.pages import Page
 
+from .chat_attachments import attachment_url, paste_chips
 from .main import CHANGES
 
 # What this stack has: voice (``ai[voice]``), and a database for the
@@ -225,23 +227,12 @@ async def provider_icons(providers: list[str]) -> dict[str, str]:
     return await marks({p: (p,) for p in providers})
 
 
-async def read_attachment(key: str) -> bytes | None:
-    """A stored image's bytes by its content key, or None."""
-    from app.core.storage import get_storage, validate_key
-
-    try:
-        validate_key(key)
-    except ValueError:
-        return None
-    return await get_storage().get(key)
-
-
 def spoken(text: str) -> str:
     """A message as it is said: its attachment note and the marks that only
     mean something on the page come off (``to_spoken``)."""
     from app.services.ai.service import to_spoken
 
-    return to_spoken(strip_attachment_marker(text))
+    return to_spoken(readable(text))
 
 
 async def synthesize(text: str, tts: Any = None) -> Any:
@@ -296,12 +287,6 @@ def _message_url(chat: ChatSurface, conversation_id: str, message_id: str) -> st
     return f"{chat.path}/messages/{conversation_id}/{message_id}"
 
 
-def attachment_url(chat: ChatSurface, stored: dict[str, Any]) -> str:
-    """Where a stored image is served from."""
-    media_type = stored.get("media_type") or "image/png"
-    return f"{chat.path}/attachments/{stored['key']}?" + urlencode({"type": media_type})
-
-
 # What Continue sends after a reply the token limit cut off.
 CONTINUE = "Continue exactly where you stopped."
 
@@ -352,12 +337,16 @@ def settled(
     return {
         "id": message.id,
         "role": message.role.value,
-        "content": strip_attachment_marker(message.content),
+        "content": readable(message.content),
+        # What a replay sends again: its markers, not its attachment note
+        # (those bytes rode one turn).
+        "sent": strip_attachment_marker(message.content),
         "attachments": [
             {"url": attachment_url(chat, a), "name": a.get("name") or "image"}
             for a in meta.get("attachments") or []
             if a.get("key")
         ],
+        "pastes": paste_chips(chat, meta.get("pastes") or []),
         "trail": [
             {
                 "label": trace_label(e),
@@ -428,6 +417,8 @@ async def message_context(
 async def surface_context(chat: ChatSurface) -> dict[str, Any]:
     """The surface, wherever it is mounted: it opens on the most recent
     conversation, blank only when there is none."""
+    from app.services.ai.service import composer
+
     latest = next(iter(await conversations(chat)), None)
     thread = await transcript(chat, latest)
     return (
@@ -435,12 +426,16 @@ async def surface_context(chat: ChatSurface) -> dict[str, Any]:
         | _call_context(chat)
         | {
             "section_subtitle": f"Ask {thread['assistant']} anything",
+            # What a turn may carry (``attachments.composer``).
+            "composer": composer(),
             "picker": PERSISTED and chat.operator_controls,
             # Voice profiles are rows: the voice chip needs a database.
             "voices": HAS_VOICE and PERSISTED and chat.operator_controls,
             "agent_url": agent_url(chat),
             # The change queue lives with a persisted AI backend.
             "approvals": CARDS.PATH if CARDS and chat.approvals else None,
+            # What a decision anywhere on the page sends (``changes.RESOLVED``).
+            "resolved_event": CARDS.RESOLVED if CARDS else None,
         }
     )
 
@@ -472,15 +467,24 @@ async def turn_context(
     chat: ChatSurface, message: str, conversation_id: str, attachment_names: list[str]
 ) -> dict[str, Any] | None:
     """The question and the bubble its answer streams into, or None when
-    there is nothing to send. The images ride the stream request from the
-    browser; only their names come here, for the note under the bubble."""
+    there is nothing to send. The files ride the stream request from the
+    browser; only their names come here, for the note under the bubble.
+    A wall of pasted text is lifted here too, so it never lands on screen:
+    the reader sees ``text`` and a chip, the model is ``sent`` its marker.
+    The stream lifting it again lands on the same paste. Only where the
+    paste index has a database to live in (``lifted_turn``)."""
     names = [n for n in attachment_names if n]
-    text = message.strip() or (IMAGES_ONLY if names else "")
-    if not text:
+    sent = message.strip() or (IMAGES_ONLY if names else "")
+    if not sent:
         return None
+    pastes: list[dict[str, Any]] = []
+    if lifted := await lifted_turn(sent, None, chat.user):
+        sent, pastes = lifted.text, lifted.pastes
     return {
         "assistant": await assistant_name(chat),
-        "text": text,
+        "text": readable(sent),
+        "sent": sent,
+        "pastes": paste_chips(chat, pastes),
         "conversation_id": conversation_id or None,
         "attachment_names": names,
     }

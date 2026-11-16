@@ -17,8 +17,8 @@ import app.services.ai.domains.chat.self_context  # noqa: F401
 import app.services.ai.domains.chat.web_tools  # noqa: F401
 {%- if ai_backend != "memory" %}
 import app.services.ai.domains.chat.cards  # noqa: F401
+import app.services.ai.domains.chat.memory_tools  # noqa: F401
 import app.services.ai.domains.chat.pastes  # noqa: F401
-import app.services.ai.domains.chat.user_memory  # noqa: F401
 import app.services.ai.domains.llm.catalog  # noqa: F401
 {%- endif %}
 {%- if ai_evals and ai_backend != "memory" %}

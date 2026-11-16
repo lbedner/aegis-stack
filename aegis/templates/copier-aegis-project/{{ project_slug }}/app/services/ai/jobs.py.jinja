@@ -66,24 +66,39 @@ async def read_photo_job(user_id: str, key: str, media_type: str, title: str) ->
     before, its bytes gone, or no model that can see is in force."""
     from app.core.db import get_async_session
     from app.core.storage import get_storage
-    from app.services.ai.service import (
-        Picture,
-        keep_picture,
-        paste_id,
-        read_picture,
-    )
+    from app.services.ai.service import Paste, keep_paste, paste_id, read_picture
 
-    picture = Picture(id=paste_id(key), key=key, media_type=media_type, title=title)
+    picture = Paste(id=paste_id(key), key=key, media_type=media_type, title=title)
     async with get_async_session() as session:
-        picture = await keep_picture(session, user_id, picture)
+        picture = await keep_paste(session, user_id, picture)
     image = None if picture.reading_key else await get_storage().get(key)
     text = image and await read_picture(image, media_type)
     if not text:
         return False
     reading_key = await get_storage().put(text.encode(), content_type="text/plain")
     async with get_async_session() as session:
-        await keep_picture(
+        await keep_paste(
             session, user_id, picture.model_copy(update={"reading_key": reading_key})
         )
     return True
+
+
+{%- if ai_framework == "pydantic-ai" %}
+
+
+async def fold_conversation_job(conversation_id: str, upto: int) -> bool:
+    """A conversation's turns that left its history window, folded into its
+    running summary (``fold_conversation_task``, on every worker engine): a
+    model call, so never on the request path. The condensing holds no
+    session; only the write opens one. False when nothing was folded."""
+    from app.core.db import get_async_session
+    from app.services.ai.service import fold_conversation, write_summary
+
+    folded = await fold_conversation(conversation_id, upto)
+    written = False
+    if folded is not None:
+        async with get_async_session() as session:
+            written = await write_summary(session, conversation_id, folded)
+    return written
+{%- endif %}
 {% endif %}

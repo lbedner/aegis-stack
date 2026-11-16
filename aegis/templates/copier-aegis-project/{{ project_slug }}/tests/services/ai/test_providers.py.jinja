@@ -3,12 +3,21 @@
 
 from unittest.mock import MagicMock, patch
 
+from pydantic_ai.models.test import TestModel
 import pytest
 
 from app.services.ai.models import AIProvider
-from app.services.ai.domains.llm.model_factory import _get_model_class
+from app.services.ai.models.provider_names import LOCAL_PROVIDERS
+from app.services.ai.domains.llm.config import AIServiceConfig
+from app.services.ai.domains.llm.model_factory import (
+    LOCAL_TIMEOUT_SECONDS,
+    _get_model_class,
+    _local_model,
+    _model_settings,
+)
 from app.services.ai.domains.llm.providers import (
     ProviderError,
+    ProviderNotInstalledError,
     get_agent,
     get_supported_providers,
     validate_provider_support,
@@ -185,7 +194,11 @@ class TestGetAgentOllama:
 
     @patch("app.services.ai.domains.llm.model_factory.AsyncOpenAI")
     @patch("app.services.ai.domains.llm.model_factory.OpenAIProvider")
-    @patch("app.services.ai.domains.llm.model_factory.OpenAIChatModel")
+    # A real model: the wrapper every agent's model gets takes no mock.
+    @patch(
+        "app.services.ai.domains.llm.model_factory.OpenAIChatModel",
+        return_value=TestModel(),
+    )
     @patch("app.services.ai.domains.llm.agents.Agent")
     async def test_get_agent_ollama_creates_agent(
         self,
@@ -223,7 +236,11 @@ class TestGetAgentOllama:
 
     @patch("app.services.ai.domains.llm.model_factory.AsyncOpenAI")
     @patch("app.services.ai.domains.llm.model_factory.OpenAIProvider")
-    @patch("app.services.ai.domains.llm.model_factory.OpenAIChatModel")
+    # A real model: the wrapper every agent's model gets takes no mock.
+    @patch(
+        "app.services.ai.domains.llm.model_factory.OpenAIChatModel",
+        return_value=TestModel(),
+    )
     @patch("app.services.ai.domains.llm.agents.Agent")
     async def test_get_agent_ollama_uses_model_name(
         self,
@@ -319,7 +336,11 @@ class TestOllamaBaseUrlConfiguration:
 
     @patch("app.services.ai.domains.llm.model_factory.AsyncOpenAI")
     @patch("app.services.ai.domains.llm.model_factory.OpenAIProvider")
-    @patch("app.services.ai.domains.llm.model_factory.OpenAIChatModel")
+    # A real model: the wrapper every agent's model gets takes no mock.
+    @patch(
+        "app.services.ai.domains.llm.model_factory.OpenAIChatModel",
+        return_value=TestModel(),
+    )
     @patch("app.services.ai.domains.llm.agents.Agent")
     async def test_ollama_uses_effective_base_url(
         self,
@@ -346,4 +367,84 @@ class TestOllamaBaseUrlConfiguration:
         mock_openai_class.assert_called_once()
         call_kwargs = mock_openai_class.call_args[1]
         assert call_kwargs["base_url"] == "http://ollama-server:11434/v1"
+
+
+@pytest.mark.parametrize("provider", sorted(LOCAL_PROVIDERS))
+class TestLocalModelPatience:
+    """A local model reads the whole prompt before it answers a byte: a
+    27B model at ~200 tokens a second spends over two minutes on a full
+    32k context, so the hosted models' timeout cut a turn mid-read. A
+    retry then sent the same prompt to a server still reading the
+    abandoned one, to wait behind it."""
+
+    def test_it_waits_out_the_read(self, provider: AIProvider) -> None:
+        local = AIServiceConfig(provider=provider, model="qwen", timeout_seconds=120)
+        hosted = AIServiceConfig(
+            provider=AIProvider.OPENAI, model="gpt-4o", timeout_seconds=120
+        )
+
+        assert _model_settings(local)["timeout"] == LOCAL_TIMEOUT_SECONDS
+        assert _model_settings(hosted)["timeout"] == 120
+
+    def test_it_is_never_asked_twice(self, provider: AIProvider) -> None:
+        config = AIServiceConfig(provider=provider, model="qwen")
+
+        with (
+            patch("app.services.ai.domains.llm.model_factory.AsyncOpenAI") as client,
+            patch("app.services.ai.domains.llm.model_factory.OpenAIChatModel"),
+            patch("app.services.ai.domains.llm.model_factory.OpenAIProvider"),
+        ):
+            _local_model(config, MagicMock())
+
+        assert client.call_args.kwargs["max_retries"] == 0
+
+
+class TestCliHints:
+    """A hint names the command a person types: the project's own CLI."""
+
+    async def test_a_missing_provider_names_the_install_command(self) -> None:
+        from app.core.config import settings
+
+        config = AIServiceConfig(provider=AIProvider.OPENAI, model="gpt-4o")
+        missing = ImportError("Please install `openai` to use the OpenAI model")
+
+        with (
+            patch(
+                "app.services.ai.domains.llm.agents._provider_model",
+                side_effect=missing,
+            ),
+            pytest.raises(ProviderNotInstalledError) as excinfo,
+        ):
+            await get_agent(config, settings)
+
+        assert excinfo.value.cli_command == (
+            f"{settings.PROJECT_NAME} ai add-provider openai"
+        )
+
+    @pytest.mark.parametrize(
+        ("provider", "key"),
+        [
+            (AIProvider.PUBLIC, "public_provider.public_api_key"),
+            (AIProvider.POLLINATIONS, "pollinations_provider.pollinations_api_key"),
+        ],
+    )
+    async def test_a_failed_public_endpoint_names_the_switch(
+        self, provider: AIProvider, key: str
+    ) -> None:
+        from app.core.config import settings
+
+        config = AIServiceConfig(provider=provider, model="auto")
+
+        with (
+            patch(
+                f"app.services.ai.domains.llm.{key}",
+                side_effect=RuntimeError("down"),
+            ),
+            pytest.raises(ProviderError) as excinfo,
+        ):
+            await get_agent(config, settings)
+
+        message = str(excinfo.value)
+        assert f"{settings.PROJECT_NAME} ai config set-provider" in message
+        assert "{" not in message
 {%- endif %}

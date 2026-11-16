@@ -58,15 +58,18 @@ async def _describe(
     for p in payloads:
         if p.text.startswith(GONE):
             raise ValueError(p.text.removeprefix(GONE))
+    # "first | rest" is a note with a detail line: two notes sharing their
+    # detail differ only in which note they are, as a batch's rows do.
     return [
         [
             ChangeDisplayRow(
                 label="Note",
-                value=p.text,
-                url=p.text if p.text.startswith(("/", "https://")) else None,
-            )
+                value=note,
+                url=note if note.startswith(("/", "https://")) else None,
+            ),
+            *([ChangeDisplayRow(label="Detail", value=detail)] if detail else []),
         ]
-        for p in payloads
+        for note, _, detail in (p.text.partition(" | ") for p in payloads)
     ]
 
 

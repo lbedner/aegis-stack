@@ -21,8 +21,9 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from app.components.backend.api.ai.chat import ChatTurn
-from app.components.backend.api.ai.service import ai_service
+from app.components.backend.api.ai.service import ai_service, lifted_turn
 from app.components.backend.api.ai.sse import refused, turn_stream
+from app.components.web_frontend import chat_attachments
 from app.components.web_frontend import chat_surface as chat
 from app.components.web_frontend.chat_surface import ChatSurface
 from app.components.web_frontend.rendering import (
@@ -144,11 +145,15 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
         """The turn, answered as SSE (``sse.turn_stream``). The client sends
         only the turn and the page it is on; whose it is and what it is
         about are the mount's, as is what that page declares, and a
-        conversation it continues must be the mount's own."""
+        conversation it continues must be the mount's own. Its documents
+        and pastes are lifted first (``lifted_turn``)."""
         if refusal:
             return refused(refusal)
         if turn.conversation_id:
             await owned(bound, turn.conversation_id)
+        lifted = await lifted_turn(
+            turn.message, turn.attachments, bound.user, owner_user_id
+        )
         return turn_stream(
             ai_service.stream_chat(
                 message=turn.message,
@@ -160,6 +165,7 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
                 surface=bound.surface,
                 attachments=turn.attachments,
                 subject=bound.subject,
+                lifted=lifted,
             ),
             page=bound.page_at(turn.page),
         )
@@ -213,7 +219,8 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
     async def attachment(key: str, type: str = "image/png") -> Response:
         """A stored image by its content key. Content-addressed, so the
         browser may cache it for good."""
-        data = await chat.read_attachment(key) if type.startswith("image/") else None
+        image = type.startswith("image/")
+        data = await chat_attachments.read_attachment(key) if image else None
         if data is None:
             raise HTTPException(status_code=404)
         return Response(
@@ -312,11 +319,13 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
             found = await stored(bound, conversation_id, message_id)
             return _audio(await chat.synthesize(chat.spoken(found.content)))
 
-    # A drawn card is a row: no card route without a database.
+    # A drawn card and the paste index are rows: neither without a database.
     if chat.PERSISTED:
         from .chat_cards import add_card_routes
+        from .chat_pastes import add_paste_routes
 
         add_card_routes(router, mount)
+        add_paste_routes(router, mount)
     # Voice profiles are rows: the chip and its dialog need a database too.
     if chat.HAS_VOICE and chat.PERSISTED and mount.operator_controls:
         from .chat_voices import add_voice_routes

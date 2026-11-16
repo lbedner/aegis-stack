@@ -93,6 +93,7 @@ async def agent_context(db: Any, slug: str) -> dict[str, Any] | None:
                 ", ".join(map(str, agent.get("knowledge_base_ids") or [])) or None,
             ),
             ("Code mode", "On" if agent.get("code_mode") else None),
+            ("Extends", agent.get("extends")),
         ],
     }
 

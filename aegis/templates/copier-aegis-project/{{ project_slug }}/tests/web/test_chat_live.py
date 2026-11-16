@@ -49,6 +49,8 @@ STAGE = f"{OVERSEER.path}/stage"
 HX = {"HX-Request": "true"}
 # A screenshot as the page sends it: shrunk and base64'd by chat.js.
 SHOT = {"media_type": "image/png", "data_b64": "c2hvdA==", "name": "shot.png"}
+# What a look at a picture costs: a turn of the call's agent.
+LOOK_COST = 0.02
 
 
 @pytest.fixture
@@ -96,7 +98,7 @@ def gemini(monkeypatch: pytest.MonkeyPatch) -> FakeRealtime:
 
     async def built(*args: Any, **kwargs: Any) -> Any:
         fake.built = kwargs  # who she was built for
-        return fake
+        return fake, kwargs["agent_slug"] or "assistant"
 
     monkeypatch.setattr(chat_live, "_engine_now", engine_now)
     monkeypatch.setattr(realtime_calls, "realtime_for", built)
@@ -183,7 +185,7 @@ def _looks(
         turns.append({"message": message, **kwargs})
         if fail:
             raise RuntimeError("the model is down")
-        return SimpleNamespace(content=answer)
+        return SimpleNamespace(content=answer, metadata={"cost": LOOK_COST})
 
     monkeypatch.setattr(chat_live.ai_service, "chat", chat)
     return turns
@@ -229,6 +231,17 @@ class TestTheControls:
             one(page, f"template#chat-mic-states [data-state={state}]")
         # The quiet, counted down to the hang-up on the status line.
         one(page, "template#chat-mic-states [data-state=hanging-up] [data-countdown]")
+
+    @pytest.mark.parametrize("headers", [{}, HX], ids=["page", "hx"])
+    def test_the_calls_cost_splits_on_hover(
+        self, client: TestClient, headers: dict[str, str]
+    ) -> None:
+        """What the call cost, as its voice and its thinking: the wording
+        is the page's, voice.js fills in the figures."""
+        page = client.get(PAGE, headers=headers).text
+        split = one(page, "#chat-call template#chat-call-split")
+        for figure in ("voice", "thinking"):
+            one(split, f"[data-call-{figure}]")
 
     def test_a_card_drawn_mid_call_has_a_place_in_the_thread(
         self, client: TestClient
@@ -361,6 +374,7 @@ class TestTheCall:
 
         (turn,) = turns
         assert turn["message"] == chat_live.SHOWN
+        assert turn["hand_over"] is False  # a look does not take the thread
         assert turn["conversation_id"] == ready["conversation_id"]
         assert [(a.media_type, a.decoded()) for a in turn["attachments"]] == [
             ("image/png", b"shot")
@@ -404,6 +418,29 @@ class TestTheCall:
         assert told[-1] == {"type": "looked"}
         assert gemini.live.sent[-1] == chat_live.NOT_SEEN
 
+    def test_the_call_bar_has_the_calls_cost_and_its_thinking(
+        self,
+        client: TestClient,
+        gemini: FakeRealtime,
+        ended: threading.Event,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Each saved turn tells an operator what the call has cost so far
+        - its voice and its thinking (the turns it handed off: a picture
+        looked at) - for the call bar and its split on hover."""
+        _looks(monkeypatch, "A chart.")
+        with client.websocket_connect(SOCKET) as ws:
+            ws.receive_json()
+            ws.send_json({"type": "shown", "image": SHOT})
+            _hear(ws, "looked")
+            ws.send_bytes(b"\x10\x20")  # the fake plays once it hears you
+            _, told = _hear(ws, "saved")
+            ws.close()
+            assert ended.wait(5)
+        saved = told[-1]
+        assert saved["thinking"] == pytest.approx(LOOK_COST)
+        assert saved["cost"] >= 0  # the call's own, priced as the turn was saved
+
     def test_a_dropped_call_picks_up_where_it_stopped(
         self,
         client: TestClient,
@@ -432,6 +469,39 @@ class TestTheCall:
         ):
             ws.receive_json()
         assert refused.value.code == 1008
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("key", "per_second"), [("gpt-live", 0.05 / 60), ("gemini-live", None)]
+)
+async def test_the_engine_comes_with_its_rate_where_it_bills_by_time(
+    async_db_session: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    key: str,
+    per_second: float | None,
+) -> None:
+    """The call bar ticks a call priced by the minute at the server's
+    per-second rate; one priced by its tokens has none, and is priced as
+    each turn is saved."""
+    from app.core.config import settings
+    from app.services.ai.domains.voice import live_engines
+    from tests._session import opens
+    from tests._voice_catalog import seed_voice_catalog
+
+    monkeypatch.setattr(chat_live, "get_async_session", opens(async_db_session))
+    monkeypatch.setattr(settings, "VOICE_LIVE_ENGINE", key)
+    await seed_voice_catalog(async_db_session)
+    await live_engines.seed_missing(async_db_session)
+
+    engine, info = await chat_live._engine_now()
+
+    assert engine is not None and engine.key == key
+    assert info is not None and info["label"] == engine.llm.title
+    if per_second is None:
+        assert info["per_second"] is None
+    else:
+        assert info["per_second"] == pytest.approx(per_second)
 
 
 class TestABoundCall:

@@ -40,6 +40,7 @@ AGENT: dict[str, Any] = {
     "system_prompt": "You are careful with money.",
     "is_active": True,
     "code_mode": False,
+    "extends": "assistant",
     "tools": ["save_memory", "search_transactions"],
     "context_modules": ["user_facts"],
     "knowledge_base_ids": [],
@@ -99,7 +100,9 @@ def test_the_drawer_edits_the_definition(
     assert one(form, "input[name=name]").get("value") == "Illiana"
     assert "careful with money" in text(one(form, "textarea[name=system_prompt]"))
     assert one(form, "input[name=is_active]").get("checked") is not None
-    assert "search_transactions" in text(one(html, "#ai-agent-grants"))
+    grants = text(one(html, "#ai-agent-grants"))
+    assert "search_transactions" in grants
+    assert "Extends" in grants and "assistant" in grants
     assert client.get(f"{PARTIALS}/agents/nobody/drawer").status_code == 404
 
 

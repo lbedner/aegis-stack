@@ -151,10 +151,12 @@ register_tool("save_note", save_note, effect="writes")
 
 ## Per-User Memory
 
-Agents can remember durable facts about a user across conversations. Two built-in tools are registered on every persistence-backed project:
+Agents can remember durable facts about a user across conversations. Four built-in tools are registered on every persistence-backed project, and each one files an approval card on the change queue: nothing is remembered or forgotten until the user approves it in the app, because untrusted text (a document, a fetched page) reaches the assistant and a fact saved on its say-so is a standing instruction in every later prompt.
 
-- `save_memory(new_fact, category)`: remember one fact (categories: family, food, lifestyle, health, personal, program, general). Duplicate facts within a category are deduplicated by substring match.
+- `save_memory(new_fact, category)`: remember one fact (categories: family, food, lifestyle, health, personal, program, finance, general). Duplicate facts within a category are deduplicated by substring match.
 - `replace_memory(memory_text)`: replace everything known about the user, one fact per line.
+- `update_memory(old_fact, new_fact)`: rewrite one saved fact in place; `old_fact` is a quote of it.
+- `forget_memory(fact)`: drop one saved fact, named by a quote of it.
 
 Saved facts are injected into later chats inside a `<user_memory>` guard block that explicitly frames them as data, not instructions. Facts are stored one JSON document per user in the `agent_user_memory` table.
 

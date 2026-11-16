@@ -85,6 +85,22 @@ if present("app.services.ai.domains.chat.pastes") and present("app.services.docu
     )
 
 
+async def fold_conversation_task(conversation_id: str, upto: int) -> bool:
+    """Fold the turns that left a conversation's history window into its
+    running summary. The AI service is imported lazily, as the documents
+    one is."""
+    from app.services.ai.service import fold_conversation_job
+
+    return await fold_conversation_job(conversation_id, upto)
+
+
+# Registered only where conversations keep a summary.
+if present("app.services.ai.domains.chat.summary"):
+    fold_conversation_task = dramatiq.actor(
+        queue_name=QueueName.SYSTEM, store_results=True
+    )(fold_conversation_task)
+
+
 async def embed_files_task(key: str, n: int, files: list[str]) -> None:
     """Read, chunk and embed a batch of files for the knowledge base; the
     vectors go back through Redis to the one process that writes the index.

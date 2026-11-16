@@ -207,6 +207,32 @@ def clean_registry() -> Generator[None, None, None]:
         unregister_tool(name)
 
 
+@pytest.fixture
+def card_tools() -> Generator[None, None, None]:
+    """The approval-card tools a stored trace names, stood in where this
+    stack lacks them (no change queue, no memory), so a renderer's test
+    reads the same on every stack. The registry is loaded first, so a
+    stack's own tools stay, and only the stand-ins are taken out after."""
+    from app.core.tools import (
+        card_tool_names,
+        get_tool,
+        register_tool,
+        unregister_tool,
+    )
+
+    async def stand_in() -> None:
+        """A card tool this stack does not have."""
+
+    card_tool_names()
+    names = ("propose", "propose_many", "pending", "save_memory")
+    added = [name for name in names if get_tool(name) is None]
+    for name in added:
+        register_tool(name, stand_in, effect="proposes", cards=True)
+    yield
+    for name in added:
+        unregister_tool(name)
+
+
 @pytest.fixture(autouse=True)
 def _fresh_system_status_cache():
     """No test sees another test's cached system-status walk."""

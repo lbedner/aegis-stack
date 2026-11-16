@@ -43,9 +43,10 @@
 </template>
 {% endmacro %}
 
-{# What the call is doing, the engine, a timer and the running cost, mute
-   and hang up; voice.js shows it and fills the figures. ``attach``: the
-   composer's picture picker is on the page to reach. #}
+{# What the call is doing, the engine, a timer and the running cost (its
+   split on hover: the call's voice and its thinking, the turns it handed
+   off), mute and hang up; voice.js shows it and fills the figures.
+   ``attach``: the composer's picture picker is on the page to reach. #}
 {% macro call_bar(attach=True, box="border-t border-aegis-border pt-3") %}
 <div id="chat-call" hidden data-state="idle"
      class="group shrink-0 {{ box }} flex items-center gap-3">
@@ -54,7 +55,8 @@
   </span>
   <span class="min-w-0 flex-1 truncate text-sm text-aegis-text tabular-nums">
     Live{% if operator %} · <span data-call-engine></span>{% endif %} · <span data-call-timer>0:00</span>
-    {% if operator %}<span class="text-aegis-muted"> · <span data-call-cost></span><span data-call-cost-later>priced as it goes</span></span>{% endif %}
+    {% if operator %}<span class="text-aegis-muted"> · <span data-call-cost></span><span data-call-cost-later>priced as it goes</span></span>
+    <template id="chat-call-split"><span>voice <span data-call-voice></span> · thinking <span data-call-thinking></span></span></template>{% endif %}
   </span>
   {% if attach %}
   {# Show the assistant a picture without leaving the call: the composer's

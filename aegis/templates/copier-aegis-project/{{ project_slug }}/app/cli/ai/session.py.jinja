@@ -17,6 +17,7 @@ from app.cli.ai.streaming import _stream_chat_response
 from app.cli.chat_completer import ChatCompleter
 from app.cli.slash_commands import SlashCommandHandler
 from app.cli.status_line import ChatSessionState, create_toolbar_callback
+from app.components.backend.api.ai.service import lifted_turn
 from app.i18n import t
 from app.services.ai.service import ProviderNotInstalledError, get_ai_config
 
@@ -265,6 +266,7 @@ async def _interactive_chat_session(
                             conversation_id=current_conversation_id,
                             user_id="cli-user",
                             admin=True,  # the operator's own shell, as MCP's stdio
+                            lifted=await lifted_turn(user_message, None, "cli-user"),
                         )
                     finally:
                         spinner_live.stop()

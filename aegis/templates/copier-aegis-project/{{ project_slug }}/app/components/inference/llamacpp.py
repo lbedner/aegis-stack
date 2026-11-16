@@ -85,6 +85,12 @@ class LlamaCppEngine(BaseInferenceEngine):
         """Nothing to move: it serves the model it was started with."""
         return False
 
+    async def _holds(self, client: httpx.AsyncClient, model: str) -> bool:
+        """Up is in memory: it serves the one model it was started with,
+        whatever the turn calls it (``/health`` fails while it loads)."""
+        await self._get(client, "/health")
+        return True
+
     async def get_server_status(self) -> InferenceServerStatus:
         """A failed read (down, or still loading its model: 503) is
         "unavailable". Its one model is loaded, at the context it serves

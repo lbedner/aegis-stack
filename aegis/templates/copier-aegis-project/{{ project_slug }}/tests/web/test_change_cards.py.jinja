@@ -113,13 +113,8 @@ def test_rejecting_runs_nothing(hx_user: TestClient) -> None:
 {%- if include_auth %}
 
 
-@pytest.mark.parametrize(("method", "path"), [("get", ""), ("post", "/approve")])
-async def test_another_users_card_is_not_found(
-    hx_user: TestClient,
-    async_db_session: AsyncSession,
-    user_factory: Any,
-    method: str,
-    path: str,
+async def test_another_users_card_cannot_be_approved(
+    hx_user: TestClient, async_db_session: AsyncSession, user_factory: Any
 ) -> None:
     other = await user_factory()
     row = await change_queue.propose(
@@ -127,11 +122,87 @@ async def test_another_users_card_is_not_found(
     )
     await async_db_session.commit()
 
-    response = getattr(hx_user, method)(f"/partials/changes/{row.id}{path}")
+    response = hx_user.post(f"/partials/changes/{row.id}/approve")
 
     assert response.status_code == 404
     assert executed == []
+
+
+async def test_another_users_card_reads_as_gone(
+    hx_user: TestClient, async_db_session: AsyncSession, user_factory: Any
+) -> None:
+    """Shown as a card no longer there, the answer a missing one gets: it
+    never confirms the other user's card exists."""
+    other = await user_factory()
+    row = await change_queue.propose(
+        async_db_session, NOTE, {"text": "theirs"}, owner_user_id=other.id
+    )
+    await async_db_session.commit()
+
+    response = hx_user.get(f"/partials/changes/{row.id}")
+
+    assert response.status_code == 200
+    one(response.text, "[data-card-missing]")
+    assert "theirs" not in response.text
 {%- endif %}
+
+
+@pytest.mark.parametrize("path", ["/999999", "/batch/no-such-batch"])
+def test_a_card_no_longer_in_the_queue_says_so(hx_user: TestClient, path: str) -> None:
+    """A transcript is a record: a card whose row is gone loads as gone
+    (200), never an error toast on every visit."""
+    response = hx_user.get(f"/partials/changes{path}")
+
+    assert response.status_code == 200
+    one(response.text, "[data-card-missing]")
+
+
+def test_a_cards_actions_swap_the_card_they_are_on(hx_user: TestClient) -> None:
+    """The same card can be up twice (the thread and the waiting list): its
+    actions swap the copy they sit on, never the first one with its id."""
+    change_id = _propose(hx_user, "hi")
+
+    card = hx_user.get(f"/partials/changes/{change_id}").text
+
+    approve = one(card, f'[hx-post="/partials/changes/{change_id}/approve"]')
+    assert approve.get("hx-target") == "closest [data-change]"
+
+
+def test_a_decided_card_folds_to_its_line_and_says_why(hx_user: TestClient) -> None:
+    """History, not homework: a decided card is its title and outcome, the
+    rows and the note behind a fold."""
+    change_id = _propose(hx_user, "hi")
+    rejected = hx_user.post(f"/partials/changes/{change_id}/reject").text
+
+    fold = one(rejected, "[data-change] details")
+
+    assert "Rejected" in text(one(fold, "summary"))
+    assert "hi" in text(fold)
+
+
+async def test_a_batch_folds_rows_that_differ_only_in_their_first_line(
+    hx_user: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    """Identical changes read once, with a skip for all of them that ticks
+    each row's own (the form reads only those); the rows stay behind it."""
+    rows = await _propose_batch(
+        async_db_session,
+        acting_owner_user_id,
+        "first | same",
+        "second | same",
+        "third | other",
+    )
+
+    card = hx_user.get(f"/partials/changes/batch/{rows[0].batch_id}").text
+
+    (group,) = select(card, "[data-change-group]")
+    one(group, "input[data-skip-group]")
+    assert len(select(group, "input[name=exclude_ids]")) == 2
+    assert "first" in text(group) and "second" in text(group)
+    assert "third" not in text(group)
+    assert len(select(card, "input[name=exclude_ids]")) == 3
 
 
 async def test_a_batch_card_offers_a_skip_per_waiting_row(
@@ -223,6 +294,38 @@ def test_a_chat_reply_carries_the_cards_its_tools_proposed() -> None:
     assert shaped["changes"] == [
         "/partials/changes/7",
         "/partials/changes/batch/b1",
+    ]
+
+
+def test_a_card_is_found_in_a_result_clipped_before_markers() -> None:
+    """A trace kept before results carried their card's identity (the
+    ``component`` marker) holds only the clipped result: the identity leads
+    it, so it survives the clip that cut the rest to invalid JSON."""
+    from app.components.web_frontend import chat_surface
+    from app.components.web_frontend.chat_surface import ChatSurface
+
+    trace = [
+        {
+            "tool": "propose",
+            "result": '{"pending_change_id": 12, "display": [{"label": "No',
+        },
+        {"tool": "propose_many", "result": '{"batch_id": "b9", "items": [{"id'},
+        {"tool": "save_memory", "result": '{"pending_change_id": 13}'},
+    ]
+    message = SimpleNamespace(
+        id="m1",
+        role=SimpleNamespace(value="assistant"),
+        content="Filed it.",
+        metadata={"tool_trace": trace},
+    )
+
+    mount = ChatSurface(path="/chat", user="0", surface="app")
+    shaped = chat_surface.settled(mount, message, "c1")
+
+    assert shaped["changes"] == [
+        "/partials/changes/12",
+        "/partials/changes/batch/b9",
+        "/partials/changes/13",
     ]
 {%- endif %}
 {% endif %}

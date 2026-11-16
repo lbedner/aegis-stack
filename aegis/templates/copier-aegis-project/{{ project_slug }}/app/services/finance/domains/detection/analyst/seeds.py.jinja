@@ -123,6 +123,10 @@ FINANCE_CHAT_TOOL_NAMES = (
     # money (a property value, a bill no connection reports) outlive
     # the conversation.
     "save_memory",
+    # A fact that changed is rewritten, and one a tool can now read is
+    # dropped - memory is for what nothing else can re-read.
+    "update_memory",
+    "forget_memory",
     # The one LEDGER write, and it does not write: it files a pending
     # change the user approves in the app (FW-05). Registered
     # effect="proposes", so it surfaces as its own visible call.

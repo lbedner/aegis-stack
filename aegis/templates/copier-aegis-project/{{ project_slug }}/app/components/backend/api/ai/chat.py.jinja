@@ -3,6 +3,7 @@
 from typing import Any
 from app.core.log import logger
 from app.services.ai.service import (
+    MAX_ATTACHMENTS,
     AIServiceError,
     ChatAttachment,
     ConversationError,
@@ -16,7 +17,7 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.components.backend.api.ai.service import ai_service
+from app.components.backend.api.ai.service import ai_service, lifted_turn
 from app.components.backend.api.ai.sse import turn_stream
 from app.services.shared.deps import get_optional_owner_user_id
 
@@ -30,9 +31,12 @@ class ChatTurn(BaseModel):
 
     message: str
     conversation_id: str | None = None
-    # Image parts riding this turn (screenshots, receipts) - generic
-    # across every agent and surface; see domains/chat/attachments.py.
-    attachments: list[ChatAttachment] = Field(default_factory=list)
+    # Files riding this turn (screenshots, receipts, a PDF where one is
+    # read) - generic across every agent and surface, as many as one turn
+    # takes; see domains/chat/attachments.py.
+    attachments: list[ChatAttachment] = Field(
+        default_factory=list, max_length=MAX_ATTACHMENTS
+    )
 
 
 class ChatRequest(ChatTurn):
@@ -89,6 +93,9 @@ async def chat(
             agent_slug=request.agent_slug,
             surface=request.surface,
             attachments=request.attachments,
+            lifted=await lifted_turn(
+                request.message, request.attachments, request.user_id, owner_user_id
+            ),
         )
 
         # Get updated conversation for metadata
@@ -133,6 +140,9 @@ async def chat_stream(
     owner_user_id: int | None = Depends(get_optional_owner_user_id),
 ) -> StreamingResponse:
     """Stream a chat message as Server-Sent Events (``sse.turn_stream``)."""
+    lifted = await lifted_turn(
+        request.message, request.attachments, request.user_id, owner_user_id
+    )
     return turn_stream(
         ai_service.stream_chat(
             message=request.message,
@@ -143,6 +153,7 @@ async def chat_stream(
             agent_slug=request.agent_slug,
             surface=request.surface,
             attachments=request.attachments,
+            lifted=lifted,
         )
     )
 

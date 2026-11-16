@@ -18,6 +18,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.log import logger
 from app.core.voice_settings import setting_default
+from app.services.ai.domains.llm.queries import price_for_model
+from app.services.ai.domains.spend import calls
 from app.services.ai.domains.voice import queries
 from app.services.ai.models.voice import LiveEngine
 
@@ -139,6 +141,12 @@ def realtime_model(engine: LiveEngine) -> str:
     # ponytail: the catalog org slug doubles as Pydantic AI's provider
     # prefix ("openai"); a provider whose names differ needs a mapping.
     return f"{engine.llm.served_by.slug}:{engine.llm.model_id}"
+
+
+async def per_second(session: AsyncSession, engine: LiveEngine) -> float | None:
+    """USD a second when the engine's model bills its call by time (the
+    catalog's per-minute price); None when its tokens price it."""
+    return calls.per_second(await price_for_model(session, engine.llm.model_id))
 
 
 async def choose(session: AsyncSession, model_id: str) -> LiveEngine | None:

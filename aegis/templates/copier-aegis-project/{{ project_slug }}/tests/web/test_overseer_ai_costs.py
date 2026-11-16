@@ -1,7 +1,9 @@
-"""The Overseer AI page's Costs section: the money view beside Usage, in four
+"""The Overseer AI page's Costs section: the money view beside Usage, in
 tabs. Overview (a month in figures and charts), Users (who it was spent
-on), Projections (where the last 90 days say it is heading) and Breakdown
-(every action, grouped by the feature it pays for)."""
+on), Projections (where the last 90 days say it is heading), Breakdown
+(every action, grouped by the feature it pays for), Models (each model
+under the kind it was used for) and, with voice, Calls (each live call
+with the answers given during it)."""
 
 from datetime import date, datetime
 import json
@@ -16,8 +18,11 @@ pytest.importorskip(
 )
 
 from app.components.web_frontend import overseer_ai_costs  # noqa: E402
+from app.components.web_frontend.chat_surface import HAS_VOICE  # noqa: E402
 from app.services.ai.domains.spend.schemas import (  # noqa: E402
     ActionSpend,
+    CallSpend,
+    KindModelSpend,
     ModelSpend,
     SpendLedger,
 )
@@ -42,6 +47,39 @@ LEDGER = SpendLedger(
     ],
     voice={"Transcription": 0.25, "Speech": 0.75},
 )
+
+MODELS = [
+    KindModelSpend(
+        kind="Live calls",
+        model_id="gpt-live-1",
+        uses=2,
+        seconds=750,
+        tokens=0,
+        cost=0.63,
+    ),
+    KindModelSpend(
+        kind="Model calls", model_id="gpt-x", uses=6, seconds=0, tokens=4_200, cost=0.5
+    ),
+]
+
+CALLS = [
+    CallSpend(
+        started=datetime(2026, 9, 9, 17),
+        model_id="gpt-live-1",
+        seconds=600,
+        call_cost=0.5,
+        answers_cost=0.07,
+        success=True,
+    ),
+    CallSpend(
+        started=datetime(2026, 9, 8, 9),
+        model_id="gpt-live-1",
+        seconds=150,
+        call_cost=0.125,
+        answers_cost=0.0,
+        success=False,
+    ),
+]
 
 USERS: dict[str | None, dict[str, ActionSpend]] = {
     "7": {
@@ -76,6 +114,17 @@ def client(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(overseer_ai_costs, "first_call", first_call)
     monkeypatch.setattr(overseer_ai_costs, "user_spend", user_spend)
     monkeypatch.setattr(overseer_ai_costs, "user_names", user_names)
+
+    async def kind_models(db: Any, start: datetime, end: datetime) -> list[Any]:
+        asked.append((start, end))
+        return MODELS
+
+    async def calls(db: Any, start: datetime, end: datetime) -> list[Any]:
+        asked.append((start, end))
+        return CALLS
+
+    monkeypatch.setattr(overseer_ai_costs, "kind_models", kind_models)
+    monkeypatch.setattr(overseer_ai_costs, "calls", calls)
     monkeypatch.setattr(overseer_ai_costs, "today", lambda: date(2026, 9, 10))
     sign_in(app, monkeypatch, status_with(services=[AI]))
     test_client = TestClient(app)
@@ -106,10 +155,11 @@ def _rows(html: str, table: str) -> list[list[str]]:
 # --- Tabs -------------------------------------------------------------------
 
 
-def test_four_tabs_and_the_month_rides_along(client: TestClient) -> None:
+def test_the_tabs_and_the_month_rides_along(client: TestClient) -> None:
     html = _costs(client, "month=2026-08")
     tabs = {text(a): a for a in select(html, "#ai-cost-tabs a")}
-    assert list(tabs) == ["Overview", "Users", "Projections", "Breakdown"]
+    shown = ["Overview", "Users", "Projections", "Breakdown", "Models"]
+    assert list(tabs) == shown + (["Calls"] if HAS_VOICE else [])
     assert tabs["Overview"].get("aria-current") == "page"
     assert "month=2026-08" in tabs["Users"].get("href")
     assert "tab=users" in tabs["Users"].get("href")
@@ -221,3 +271,25 @@ def test_every_action_under_its_feature(client: TestClient) -> None:
     assert rows[2][:3] == ["Finance Assistant", "$1.50", "4"]
     assert rows[3][0] == "stream_chat:finance-assistant" and rows[3][1] == "$1.00"
     assert rows[4][0] == "chat:finance-assistant"
+
+
+# --- Models -------------------------------------------------------------------
+
+
+def test_each_model_under_the_kind_it_was_used_for(client: TestClient) -> None:
+    html = _costs(client, "tab=models&month=2026-08")
+    start, end = client.asked[-1]  # type: ignore[attr-defined]
+    assert (start, end) == (datetime(2026, 8, 1), datetime(2026, 9, 1))
+    rows = _rows(html, "ai-cost-models")
+    assert rows[0] == ["Live calls", "gpt-live-1", "2", "12.5", "-", "$0.63"]
+    assert rows[1] == ["Model calls", "gpt-x", "6", "-", "4,200", "$0.50"]
+
+
+# --- Calls --------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not HAS_VOICE, reason="live calls need voice")
+def test_a_call_costs_itself_plus_its_answers(client: TestClient) -> None:
+    rows = _rows(_costs(client, "tab=calls"), "ai-cost-calls")
+    assert rows[0][1:6] == ["gpt-live-1", "10.0", "$0.50", "$0.07", "$0.57"]
+    assert rows[0][6] == "Ended" and rows[1][6] == "Failed"

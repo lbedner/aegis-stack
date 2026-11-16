@@ -52,9 +52,18 @@ and the agent's tool attachments decide what those scripts can call.
 - The per-turn tool-call budget is raised for code-mode agents (16 rather
   than chat's 4) because the working loop is script, observe, script. Pass
   `tool_calls_limit` to `build_chat_agent` to override either default.
+- Each script is held to `AI_CODE_MODE_MAX_SECONDS` (10 s) and
+  `AI_CODE_MODE_MAX_MEMORY_BYTES` (64 MiB), tighter than Monty's own 30 s
+  and 256 MiB because the sandbox shares the webserver process. A user runs
+  one script at a time; a second waits for the first.
+- A write tool (`effect` other than `read`) is never inside the sandbox. A
+  script that calls one fails, and the failure tells the model to call it
+  directly as its own tool call.
 - Tool results must be JSON-safe values (dicts, lists, strings, numbers)
   to traverse the sandbox cleanly. Prefer cents-integer money fields and
-  ISO date strings over model objects.
+  ISO date strings over model objects. Every `*_cents` integer a tool or a
+  script returns reaches the model with its `*_usd` beside it
+  (`with_dollars`), so the model never converts cents itself.
 
 ## When to prefer plain tool calls
 

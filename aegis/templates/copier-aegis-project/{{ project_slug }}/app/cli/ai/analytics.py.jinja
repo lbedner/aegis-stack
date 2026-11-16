@@ -231,6 +231,95 @@ async def usage(
         sys.exit(1)
 
 
+@app.command(help=lazy_t("ai.help_costs"))
+async def costs(
+    days: int = typer.Option(
+        30,
+        "--days",
+        "-d",
+        help=lazy_t("ai.opt_costs_days"),
+        min=1,
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help=lazy_t("ai.opt_json"),
+    ),
+) -> None:
+    """The Costs section's Models and Calls (``spend.report``), read from
+    the ledger itself."""
+    from datetime import timedelta
+    import json
+
+    from app.core.db import get_async_session
+    from app.core.formatting import format_cost, format_minutes, format_number
+    from app.core.time import utcnow
+    from app.services.ai.service import spend_report
+
+    end = utcnow()
+    start = end - timedelta(days=days)
+    async with get_async_session() as session:
+        models = await spend_report.models_by_kind(session, start, end)
+        calls = await spend_report.live_calls(session, start, end)
+    if json_output:
+        print(
+            json.dumps(
+                {
+                    "models": [m.model_dump() for m in models],
+                    "calls": [c.model_dump(mode="json") for c in calls],
+                },
+                indent=2,
+            )
+        )
+        return
+
+    if not models:
+        console.print(f"[dim]{t('ai.costs_empty')}[/dim]")
+        return
+    console.print(f"\n[bold]{t('ai.costs_by_model', days=days)}[/bold]")
+    table = Table(show_header=True, header_style="bold", box=None)
+    table.add_column("Kind")
+    table.add_column("Model", style=theme.ACCENT, no_wrap=True)
+    table.add_column("Uses", justify="right")
+    table.add_column("Minutes", justify="right")
+    table.add_column("Tokens", justify="right")
+    table.add_column("Cost", justify="right")
+    for m in models:
+        table.add_row(
+            m.kind,
+            m.model_id,
+            format_number(m.uses),
+            format_minutes(m.seconds) or "-",
+            format_number(m.tokens) if m.tokens else "-",
+            format_cost(m.cost),
+        )
+    console.print(table)
+    if not calls:
+        return
+    console.print(f"\n[bold]{t('ai.costs_calls')}[/bold]")
+    table = Table(show_header=True, header_style="bold", box=None)
+    table.add_column("When", style="dim")
+    table.add_column("Model", style=theme.ACCENT, no_wrap=True)
+    table.add_column("Minutes", justify="right")
+    table.add_column("Call", justify="right")
+    table.add_column("Answers", justify="right")
+    table.add_column("Total", justify="right")
+    table.add_column("Ended")
+    for c in calls:
+        ended = spend_report.ENDED[c.success]
+        table.add_row(
+            c.started.strftime("%Y-%m-%d %H:%M"),
+            c.model_id,
+            format_minutes(c.seconds) or "-",
+            format_cost(c.call_cost),
+            format_cost(c.answers_cost),
+            format_cost(c.total),
+            ended if c.success else f"[{theme.ERROR}]{ended}[/{theme.ERROR}]",
+        )
+    console.print(table)
+
+
 @app.command(help=lazy_t("ai.help_sentiment"))
 async def sentiment(
     url: str = typer.Option(

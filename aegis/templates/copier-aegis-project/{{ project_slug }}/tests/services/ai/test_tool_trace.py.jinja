@@ -11,6 +11,10 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
+
+pytestmark = pytest.mark.usefixtures("card_tools")
 
 def _result_event(tool_name: str, content: Any) -> Any:
     return SimpleNamespace(
@@ -76,6 +80,17 @@ class TestProposalComponentMarker:
         record_tool_result(trace, _result_event("propose", json.dumps(result)))
 
         assert "component" not in trace[0]
+
+    def test_a_memory_write_is_a_card_too(self) -> None:
+        """A memory tool files a pending change, drawn like any other."""
+        from app.services.ai.service.trace import record_tool_result
+
+        result = {"pending_change_id": 9, "change_type": "memory.save"}
+        trace: list[dict[str, Any]] = [{"tool": "save_memory", "args": ""}]
+
+        record_tool_result(trace, _result_event("save_memory", json.dumps(result)))
+
+        assert trace[0]["component"]["pending_change_id"] == 9
 
     def test_other_tools_are_untouched(self) -> None:
         from app.services.ai.service.trace import record_tool_result
@@ -143,6 +158,27 @@ class TestPendingListingMarker:
         (batch,) = trace[0]["component"]
         assert batch["kind"] == "pending_change_batch"
         assert batch["count"] == 3
+
+    def test_a_listing_draws_only_the_cards_it_nominates(self) -> None:
+        """A listing read before filing a replacement draws nothing; only
+        the cards under ``draw`` (the user asked to see them) come back."""
+        from app.services.ai.service.trace import record_tool_result
+
+        listing = self._listing() | {"draw": self._listing()["pending"][1:]}
+        trace: list[dict[str, Any]] = [{"tool": "pending", "args": ""}]
+        record_tool_result(trace, _result_event("pending", json.dumps(listing)))
+
+        (single,) = trace[0]["component"]
+        assert single["pending_change_id"] == 7
+
+    def test_a_listing_that_draws_nothing_carries_no_marker(self) -> None:
+        from app.services.ai.service.trace import record_tool_result
+
+        listing = self._listing() | {"draw": []}
+        trace: list[dict[str, Any]] = [{"tool": "pending", "args": ""}]
+        record_tool_result(trace, _result_event("pending", json.dumps(listing)))
+
+        assert "component" not in trace[0]
 
     def test_an_empty_listing_carries_no_marker(self) -> None:
         from app.services.ai.service.trace import record_tool_result

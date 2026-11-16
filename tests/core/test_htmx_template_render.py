@@ -1220,6 +1220,7 @@ def test_the_chat_surface_ships_with_ai_not_with_the_overseer() -> None:
         "app/components/web_frontend/chat_models.py",
         "app/components/web_frontend/routes/partials/chat_surface.py",
         "app/components/web_frontend/routes/partials/chat_cards.py",
+        "app/components/web_frontend/routes/partials/chat_pastes.py",
         "app/components/web_frontend/static/js/chat.js",
         "app/components/web_frontend/static/js/voice.js",
         "app/components/web_frontend/templates/components/macros/chat.html",

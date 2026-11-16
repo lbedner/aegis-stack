@@ -15,8 +15,6 @@ register here; nothing else changes.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-import json
-import re
 from typing import Any
 
 import flet as ft
@@ -30,7 +28,7 @@ from app.components.frontend.theme import TONE_COLORS
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.chat_transcript import (
     CARD_STATUS,
-    CARD_TOOLS,
+    batch_outcome,
     card_markers,
     card_outcome,
     proposer_line,
@@ -126,12 +124,8 @@ class PendingChangeBatchCard(ft.Container):
 
     @staticmethod
     def _outcome_summary(items: list[dict[str, Any]]) -> str:
-        """ "1 approved, 1 rejected" - the resolved batch's one-line story."""
-        counts: dict[str, int] = {}
-        for item in items:
-            status, _note = _status_of(item)
-            counts[status] = counts.get(status, 0) + 1
-        return ", ".join(f"{n} {status}" for status, n in sorted(counts.items()))
+        """The resolved batch's one-line story (``batch_outcome``)."""
+        return batch_outcome(_status_of(item)[0] for item in items)
 
     def render(self, items: list[dict[str, Any]]) -> None:
         self._items = items
@@ -374,23 +368,6 @@ def render_component(
     return None
 
 
-def _salvage_identity(clipped: str) -> dict[str, Any] | None:
-    """Identity fields from a truncated proposal result, or None."""
-    fields: dict[str, Any] = {}
-    for key in ("batch_id", "change_type", "title", "status"):
-        m = re.search(rf'"{key}":\s*"([^"]*)"', clipped)
-        if m:
-            fields[key] = m.group(1)
-    m = re.search(r'"pending_change_id":\s*(\d+)', clipped)
-    if m:
-        fields["pending_change_id"] = int(m.group(1))
-    if fields.get("batch_id"):
-        return {**fields, "items": []}
-    if fields.get("pending_change_id"):
-        return {"status": "pending", "display": [], **fields}
-    return None
-
-
 def components_from_trace(
     trace: list[dict[str, Any]],
     *,
@@ -398,68 +375,24 @@ def components_from_trace(
     on_batch_action: BatchAction | None = None,
     fetch_items: Callable[[str], Awaitable[list[dict[str, Any]] | None]] | None = None,
 ) -> list[ft.Control]:
-    """Cards for the trace's propose results and pending listings.
-
-    The tool trail is the transport: a ``propose`` (or ``propose_many``)
-    call's result IS the pending-change data, and a ``pending`` listing
-    redraws every card the assistant still has open. Anything that does
-    not parse as one is left to the trail's ordinary rendering.
+    """Cards for the trace's approval cards (``card_markers``: a marker,
+    else an old trace's result parsed or salvaged). A marker is identity
+    only, so a card starts with no rows, pending, and reads its rows from
+    the queue (the panel's ``_track_cards``). A kind this registry does not
+    draw is left to the trail's ordinary rendering.
     """
-    cards: list[ft.Control] = []
-    for entry in trace:
-        if entry.get("tool") not in CARD_TOOLS:
-            continue
-        for data in _card_data(entry):
-            card = _card_for(
-                data,
+    return [
+        card
+        for entry in trace
+        for marker in card_markers(entry)
+        if (
+            card := render_component(
+                marker["kind"],
+                marker,
                 on_action=on_action,
                 on_batch_action=on_batch_action,
                 fetch_items=fetch_items,
             )
-            if card is not None:
-                cards.append(card)
-    return cards
-
-
-def _card_data(entry: dict[str, Any]) -> list[dict[str, Any]]:
-    """The identities an entry renders: its compact markers (one per
-    card), else the parsed result for traces recorded before markers.
-
-    The compact marker is the contract: the result blob is display-
-    clipped and a big batch truncates to invalid JSON. Cards built from
-    the marker refresh their rows from the queue; parsing the result is
-    the legacy fallback. Pre-marker traces clipped big results to invalid
-    JSON - the identity fields lead the blob, so they survive the clip
-    and are salvaged; the card fetches its rows like any marker card.
-    """
-    found = [{**m, "items": []} for m in card_markers(entry)]
-    if found or entry.get("tool") == "pending":
-        return found
-    result = entry.get("result")
-    if not isinstance(result, str):
-        return []
-    try:
-        parsed = json.loads(result)
-    except (TypeError, ValueError):
-        parsed = _salvage_identity(result)
-    return [parsed] if isinstance(parsed, dict) else []
-
-
-def _card_for(
-    data: dict[str, Any],
-    *,
-    on_action: ChangeAction,
-    on_batch_action: BatchAction | None,
-    fetch_items: Callable[[str], Awaitable[list[dict[str, Any]] | None]] | None,
-) -> ft.Control | None:
-    if "batch_id" in data and isinstance(data.get("items"), list):
-        return render_component(
-            "pending_change_batch",
-            data,
-            on_action=on_action,
-            on_batch_action=on_batch_action,
-            fetch_items=fetch_items,
         )
-    if "pending_change_id" in data:
-        return render_component("pending_change", data, on_action=on_action)
-    return None
+        is not None
+    ]

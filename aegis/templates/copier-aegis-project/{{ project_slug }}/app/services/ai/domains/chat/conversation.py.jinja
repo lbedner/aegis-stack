@@ -29,6 +29,9 @@ from app.core.time import as_stored, utcnow
 from app.models.conversation import Conversation as ConversationModel
 from app.models.conversation import ConversationMessage as MessageModel
 from app.services.ai.domains.chat import queries
+{% if ai_framework == "pydantic-ai" -%}
+from app.services.ai.domains.chat.summary import SUMMARY_KEY, merged_summary
+{% endif -%}
 {% endif %}
 
 from app.services.ai.models import (
@@ -421,6 +424,14 @@ class ConversationManager:
 
             conv_db = await session.get(ConversationModel, conversation.id)
             if conv_db:
+{%- if ai_framework == "pydantic-ai" %}
+                # A fold may have landed since this copy was read.
+                if summary := merged_summary(
+                    (conv_db.meta_data or {}).get(SUMMARY_KEY),
+                    meta_data.get(SUMMARY_KEY),
+                ):
+                    meta_data[SUMMARY_KEY] = summary
+{%- endif %}
                 conv_db.title = conversation.title
                 conv_db.updated_at = as_stored(conversation.updated_at)
                 conv_db.meta_data = meta_data

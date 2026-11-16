@@ -45,6 +45,10 @@ class TurnContext:
     history_budget: int = 0
     messages_kept: int = 0
     messages_dropped: int = 0
+    # The running summary of the dropped turns that rode (``summary``), and
+    # how far a fold is due to take it (0: none due).
+    summary_chars: int = 0
+    fold_to: int = 0
     tools: list[str] = field(default_factory=list)
     code_mode: bool = False
 
@@ -73,6 +77,12 @@ def begin_turn_context() -> TurnContext:
     stamp = TurnContext()
     _turn.set(stamp)
     return stamp
+
+
+def current_turn() -> TurnContext | None:
+    """This turn's stamp, if one is open: what is read back after the turn
+    (a fold due, ``_finalize_conversation``)."""
+    return _turn.get()
 
 
 def record_turn_context(**fields: object) -> None:
@@ -128,7 +138,12 @@ async def context() -> str:
     if stamp.messages_dropped:
         lines.append(
             f"{stamp.messages_dropped} older message(s) did NOT fit and are "
-            "not in front of me - anything only stated there is gone."
+            "not in front of me - "
+            + (
+                "only a running summary of them is, so a detail may need repeating."
+                if stamp.summary_chars
+                else "anything only stated there is gone."
+            )
         )
     else:
         lines.append("Nothing was dropped; the whole conversation is in front of me.")

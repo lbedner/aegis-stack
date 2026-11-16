@@ -137,10 +137,14 @@ def opening(conversation: Any) -> str:
 
 async def _engine_now() -> tuple[LiveEngine | None, dict[str, Any] | None]:
     """The engine the voice profile names, and what the call bar shows of
-    it. Its own short session: a call writes in others."""
+    it: its name, and its rate a second where it bills by time (the bar
+    ticks it). Its own short session: a call writes in others."""
     async with get_async_session() as db:
         engine = await live_engines.resolve(db, settings.VOICE_LIVE_ENGINE)
-        info = engine and {"label": engine.llm.title}
+        info = engine and {
+            "label": engine.llm.title,
+            "per_second": await live_engines.per_second(db, engine),
+        }
     return engine, info
 
 
@@ -377,7 +381,7 @@ def live_router(
                     await ws.close(code=1008, reason="No live engine is enabled.")
                     return
                 try:
-                    conversation, realtime = await call_for(
+                    conversation, realtime, answers = await call_for(
                         bound, owner_user_id, conversation_id, engine
                     )
                 except Exception:
@@ -389,6 +393,9 @@ def live_router(
                 # The engine and what the call costs are the operator's figures:
                 # a caller without the controls (a visitor) is shown neither.
                 operator = bound.operator_controls
+                # What the turns the call handed off cost (a picture looked
+                # at): its thinking, beside what its voice costs.
+                thinking = 0.0
 
                 async def end(by: CallEnded, reason: str) -> None:
                     """The server ends the call, and tells the page why: an event,
@@ -414,53 +421,65 @@ def live_router(
                 async def see(picture: ChatAttachment) -> str:
                     """The call's agent looks at a picture, as a turn of
                     the call's conversation; what it saw, to say."""
+                    nonlocal thinking
                     reply = await ai_service.chat(
                         SHOWN,
                         conversation_id=conversation.id,
                         user_id=bound.user,
                         owner_user_id=owner_user_id,
                         admin=admin,
-                        agent_slug=_answers(bound),
+                        agent_slug=answers,
+                        # The call's agent looks; the thread stays held
+                        # with the agent its typed turns answer as.
+                        hand_over=False,
                         surface=bound.surface,
                         attachments=[picture],
                         subject=bound.subject,
                     )
+                    thinking += float((reply.metadata or {}).get("cost") or 0)
                     return to_spoken(reply.content, SEEN_CHARS)
 
                 async def saved(cost: float) -> None:
-                    """A turn is kept; the mount's check may end the call there."""
-                    await _send(
-                        ws, {"type": "saved"} | ({"cost": cost} if operator else {})
-                    )
+                    """A turn is kept, with what the call has cost so far
+                    (its voice, and its thinking); the mount's check may
+                    end the call there."""
+                    spent = {"cost": cost, "thinking": thinking}
+                    await _send(ws, {"type": "saved"} | (spent if operator else {}))
                     if server_end or not bound.call_check:
                         return
                     if reason := await bound.call_check(bound):
                         await end("refused", reason)
 
                 longest = bound.longest_call
-                how = await realtime_calls.drive(
-                    ai_service,
-                    realtime,
-                    alongside=lambda session: _carry(
-                        ws,
-                        session,
-                        conversation,
-                        info if operator else None,
-                        stopped,
-                        functools.partial(clock, longest=longest) if longest else None,
-                        see,
-                    ),
-                    on_event=lambda event: _tell(ws, event),
-                    on_saved=saved,
-                    on_drawn=lambda card_ids: show_cards(ws, card_ids),
-                    conversation_id=conversation.id,
-                    model=live_engines.realtime_model(engine),
-                    agent_slug=_answers(bound),
-                    user_id=bound.user,
-                    owner_user_id=owner_user_id,
-                    subject=bound.subject,
-                    admin=admin,
-                )
+                # The call's ledger row is kept on its own session, each
+                # write committed as it lands (``drive``).
+                async with get_async_session() as ledger:
+                    how = await realtime_calls.drive(
+                        ai_service,
+                        realtime,
+                        ledger=ledger,
+                        alongside=lambda session: _carry(
+                            ws,
+                            session,
+                            conversation,
+                            info if operator else None,
+                            stopped,
+                            functools.partial(clock, longest=longest)
+                            if longest
+                            else None,
+                            see,
+                        ),
+                        on_event=lambda event: _tell(ws, event),
+                        on_saved=saved,
+                        on_drawn=lambda card_ids: show_cards(ws, card_ids),
+                        conversation_id=conversation.id,
+                        model=live_engines.realtime_model(engine),
+                        agent_slug=answers,
+                        user_id=bound.user,
+                        owner_user_id=owner_user_id,
+                        subject=bound.subject,
+                        admin=admin,
+                    )
                 how = server_end or how
                 try:
                     await ws.close()

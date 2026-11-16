@@ -15,12 +15,15 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.core.config import settings
 from app.core.log import logger
 from app.services.ai.domains.voice import live_engines
 from app.services.ai.domains.voice.realtime_calls import drive, open_call
+
+if TYPE_CHECKING:
+    from sqlmodel.ext.asyncio.session import AsyncSession
 
 # Where a piece of her voice goes, at its sample rate (PCM16, mono): back
 # once it is about to be heard (paced to what plays), since ``stop`` cuts
@@ -115,6 +118,7 @@ class LiveVoice:
 async def live_voice(
     ai: Any,
     *,
+    ledger: AsyncSession,
     engine: Any,
     play: Play,
     surface: str,
@@ -132,12 +136,13 @@ async def live_voice(
     the call would not come up, for the caller to answer the way it did,
     and on GPT-Live, which listens and talks at once: asked a question as
     text, it says nothing until its session expires. She cannot hang it up
-    (asked one question after another, a "thanks" must not end it)."""
+    (asked one question after another, a "thanks" must not end it). The
+    call's cost is kept on ``ledger`` (``drive``)."""
     if live_engines.is_gpt_live(live_engines.realtime_model(engine)):
         yield None
         return
     try:
-        conversation, realtime = await open_call(
+        conversation, realtime, answers = await open_call(
             ai,
             engine,
             user_id=user_id,
@@ -157,9 +162,10 @@ async def live_voice(
         drive(
             ai,
             realtime,
+            ledger=ledger,
             conversation_id=conversation.id,
             model=live_engines.realtime_model(engine),
-            agent_slug=agent_slug,
+            agent_slug=answers,
             user_id=user_id,
             owner_user_id=owner_user_id,
             alongside=spoken.carry,

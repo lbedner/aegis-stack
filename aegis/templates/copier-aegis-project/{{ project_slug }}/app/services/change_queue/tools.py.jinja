@@ -156,7 +156,7 @@ async def propose(change_type: str, payload: dict[str, Any]) -> Proposed | NotFi
     return await _committed(work, vocabulary=True)
 
 
-async def pending(about: str | None = None) -> Filed | NotFiled:
+async def pending(about: str | None = None, draw: bool = False) -> Filed | NotFiled:
     """YOUR OWN cards: {"pending": [...]} still awaiting the user and
     {"decided": [...]} the user acted on in the last two weeks. One entry
     per card, with exactly these keys: batch_id (null for a single
@@ -166,13 +166,17 @@ async def pending(about: str | None = None) -> Filed | NotFiled:
     card does, with one example row). Read this before filing a
     replacement so you can withdraw what it supersedes yourself -
     withdraw_batch(batch_id) for a whole card, withdraw(id) for one row -
-    instead of asking the user to reject them. In a chat, calling it also
-    redraws the listed cards, decided ones in their final state, so when
-    the user asks to see a card again or what became of it, call this and
-    point at the card. ``about`` narrows to cards mentioning it ("state
-    farm"): always pass it when the user asked about one card, or every
-    card you ever filed is redrawn. Other agents' cards and the user's own
-    are not listed and cannot be withdrawn."""
+    instead of asking the user to reject them. ``about`` narrows to cards
+    mentioning it ("state farm"). Other agents' cards and the user's own
+    are not listed and cannot be withdrawn.
+
+    Reading draws NOTHING. Set ``draw=True`` only when the user asked to
+    see a card - "show me that one", "what became of it?" - and then
+    {"draw": [...]} is what a chat redraws for them: the cards still
+    awaiting them, or with ``about`` whatever matched, decided ones in
+    their final state. A check before filing a replacement must stay
+    invisible: a settled card redrawn beside an answer reads as a fresh
+    offer."""
     try:
         owner = _owner()
     except ValueError as e:
@@ -209,15 +213,24 @@ async def pending(about: str | None = None) -> Filed | NotFiled:
     for card in cards.values():
         if card.matches:
             (waiting if "pending" in card.statuses else decided).append(card.filed())
+    # Decided here, the one place that knows whether the user asked about
+    # a card; capped, so even a drawing listing never papers the thread.
+    shown = (waiting + decided if needle else waiting)[:DRAW_CAP] if draw else []
     # Only a chat redraws them; an MCP client's user sees nothing unless
     # the client says it.
-    note = REDRAWN if current_conversation_id.get() else None
-    return Filed(pending=waiting, decided=decided, note=note)
+    chat = current_conversation_id.get() is not None
+    note = (REDRAWN if draw else DREW_NOTHING) if chat else None
+    return Filed(pending=waiting, decided=decided, draw=shown, note=note)
 
 
+DRAW_CAP = 5
 REDRAWN = (
-    "These cards are redrawn in the chat for the user, decided ones in "
-    "their final state. Point at them; never list their rows."
+    "The cards in `draw` are redrawn in the chat for the user, decided ones "
+    "in their final state. Point at them; never list their rows."
+)
+DREW_NOTHING = (
+    "This drew nothing, which is the norm. Call again with draw=True ONLY "
+    "when the user asked to see a card; then `draw` is what they see."
 )
 
 
@@ -310,6 +323,7 @@ register_tool(
     propose,
     description="Propose a change for the user's approval (the only write)",
     effect="proposes",
+    cards=True,
     replace=True,
 )
 register_tool(
@@ -317,6 +331,7 @@ register_tool(
     propose_many,
     description="Propose a batch of same-type changes for one bulk approval",
     effect="proposes",
+    cards=True,
     replace=True,
 )
 register_tool(
@@ -324,6 +339,7 @@ register_tool(
     pending,
     description="Your own still-pending proposals, so you can withdraw what you supersede",
     effect="proposes",
+    cards=True,
     replace=True,
 )
 register_tool(

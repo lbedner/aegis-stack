@@ -6,7 +6,7 @@ provider session (the key never leaves it) and the page carries the audio
 over the app's own WebSocket (``routes/partials/chat_live.py``). ``drive``
 runs the agent's tools in a turn's context, saves each finished turn into
 the conversation (what was heard, what was said, the steps - so the thread
-shows it like a typed turn), and ledgers the priced usage when it ends.
+shows it like a typed turn), and bills the call's ledger row as it runs.
 """
 
 from __future__ import annotations
@@ -24,14 +24,15 @@ from pydantic_ai.messages import (
     SpeechPart,
 )
 from pydantic_ai.toolsets import FunctionToolset
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.log import logger
 from app.services.ai.domains.chat.cards import attach_cards, card_stage
 from app.services.ai.domains.chat.readings import reading_stage
 from app.services.ai.domains.chat.user_memory import memory_user
-from app.services.ai.domains.spend import recording as usage_recording
-from app.services.ai.domains.voice.catalog import GEMINI_PREBUILT, get_voice
+from app.services.ai.domains.spend import calls
 from app.services.ai.domains.voice import live_engines
+from app.services.ai.domains.voice.catalog import GEMINI_PREBUILT, get_voice
 from app.services.ai.domains.voice.live_engines import is_gpt_live
 from app.services.ai.domains.voice.models import TTSProvider
 from app.services.ai.domains.voice.spoken import pronunciation_instructions
@@ -53,6 +54,11 @@ CallEnd = Literal["page", "provider", "error"]
 # How long a call whose events stopped waits for the page to have hung up
 # before it reads as the provider's end.
 HANG_UP_GRACE = 0.5
+
+
+def _elapsed(started: datetime) -> float:
+    """A call's length so far, in seconds: what a model priced by time bills."""
+    return (datetime.now(UTC) - started).total_seconds()
 
 
 def end_call() -> str:
@@ -254,21 +260,26 @@ async def realtime_for(
     instructions: str | None = None,
     max_output_tokens: int | None = None,
     hang_up: bool = True,
-) -> Any:
+) -> tuple[Any, str]:
     """The agent on ``model`` (a Pydantic AI realtime model string), built
     for the caller (``user_id``, ``owner_user_id``, ``admin``) about the
     call's ``subject`` by the function a typed turn builds her with
-    (``_build_turn``). The engine's ``instructions`` (how
+    (``_build_turn``), and the slug of the agent she is (``held_agent``:
+    ``agent_slug``, else the one the conversation is held with), for
+    ``drive`` to bind. The engine's ``instructions`` (how
     to talk on a call) lead its prompt, and ``max_output_tokens`` caps one
     reply. Without ``hang_up`` she has no ``end_call``: a call that answers
     one question after another ends when its caller ends it. The
     pronunciation list rides with the call manners, which reach whichever
     model speaks on each engine."""
-    from app.services.ai.domains.chat.agent_loader import resolve_agent
+    from app.services.ai.service.chat import held_agent
 
     manners = (instructions, pronunciation_instructions())
     instructions = "\n\n".join(filter(None, manners))
-    config = await (resolve_agent(agent_slug) if agent_slug else resolve_agent())
+    # A call answers as its agent without taking the thread: typed turns
+    # after it would answer as the voice model.
+    config = await held_agent(conversation, agent_slug, hand_over=False)
+    slug = config.slug
     # GPT-Live takes the call manners as its own (``_model_settings``).
     if not is_gpt_live(model):
         config = config.led_by(instructions)
@@ -281,12 +292,13 @@ async def realtime_for(
         admin=admin,
     )
     agent, history = setup.agent, setup.conversation_context
-    return agent.realtime(
+    realtime = agent.realtime(
         model,
         instructions=await call_instructions(agent, history),
         model_settings=_model_settings(model, voice, max_output_tokens, instructions),
         toolsets=[CALL_TOOLS] if hang_up else [],
     )
+    return realtime, slug
 
 
 async def open_call(
@@ -303,12 +315,13 @@ async def open_call(
     admin: bool | None = None,
     hang_up: bool = True,
     instructions: str | None = None,
-) -> tuple[Any, Any]:
+) -> tuple[Any, Any, str]:
     """A live call on ``engine`` (``live_engines``): the conversation it
     saves into (``conversation``, else a new one of ``surface``'s for
-    ``user_id`` about ``subject``) and her, built for it on the engine's
+    ``user_id`` about ``subject``), her, built for it on the engine's
     model with its call manners (``realtime_for``), or the caller's
-    (``instructions``: a call with others in it, such as a meeting)."""
+    (``instructions``: a call with others in it, such as a meeting), and
+    the agent she is, for ``drive``."""
     model = live_engines.realtime_model(engine)
     if conversation is None:
         conversation = await ai.conversation_manager.create_conversation(
@@ -318,7 +331,7 @@ async def open_call(
             surface=surface,
             subject=subject,
         )
-    realtime = await realtime_for(
+    realtime, slug = await realtime_for(
         ai,
         conversation=conversation,
         model=model,
@@ -332,13 +345,14 @@ async def open_call(
         max_output_tokens=engine.max_output_tokens,
         hang_up=hang_up,
     )
-    return conversation, realtime
+    return conversation, realtime, slug
 
 
 async def drive(
     ai: Any,
     realtime: Any,
     *,
+    ledger: AsyncSession,
     conversation_id: str,
     model: str,
     agent_slug: str | None,
@@ -355,13 +369,15 @@ async def drive(
 ) -> CallEnd:
     """Run one call to its end, and say who ended it (``CallEnd``): the
     agent's tools in a turn's context, each finished turn saved into the
-    conversation, the priced usage ledgered.
+    conversation, the call's ledger row billed as each is (by the second on
+    a model priced by time, else by its tokens: ``call_cost``).
     ``alongside`` runs beside the events for the length of the call (the
     audio both ways), ``on_event`` sees every event, ``on_saved`` hears of
-    each saved turn with the call's cost so far, and ``on_drawn`` of the
+    each saved turn with the call's own cost so far, and ``on_drawn`` of the
     cards a step drew as it finishes - so a chart is up while it is being
     talked about, not once the turn is saved. ``on_turn`` has each finished
-    turn (what was heard, what was said, its steps) before it is saved."""
+    turn (what was heard, what was said, its steps) before it is saved.
+    The call's row is written on ``ledger``, each write committed."""
     started = datetime.now(UTC)
     usage = None
     ended: CallEnd = "provider"
@@ -369,17 +385,31 @@ async def drive(
     provider, _, bare = model.rpartition(":")
     # The call so far, at the last saved turn: each turn keeps its share.
     so_far = {"input_tokens": 0, "output_tokens": 0, "cost": 0.0}
-    rates = await usage_recording.realtime_price(bare)
+    rates = await calls.realtime_price(bare)
+    # The call's ledger row, written beside the audio rather than ahead of
+    # it; each bill waits for it (``row``).
+    opening: asyncio.Task[int | None] | None = None
+
+    async def row() -> int | None:
+        """The call's ledger row once written; None when it was not."""
+        return await opening if opening is not None else None
 
     async def keep(
         session: Any, turn: tuple[str, str, list[dict[str, Any]]], interrupted: bool
     ) -> float:
-        """Save one turn with its share of the call; the call's cost so far."""
+        """Save one turn with its share of the call, billing the call's row;
+        the call's cost so far."""
         nonlocal so_far
         now = {
             "input_tokens": session.usage.input_tokens or 0,
             "output_tokens": session.usage.output_tokens or 0,
-            "cost": usage_recording.realtime_cost(rates, session.usage),
+            "cost": await calls.bill_realtime(
+                ledger,
+                await row(),
+                session.usage,
+                seconds=_elapsed(started),
+                rates=rates,
+            ),
         }
         await save_turn(
             ai,
@@ -408,6 +438,14 @@ async def drive(
         ):
             log.drawn = drawn
             async with realtime.session() as session:
+                opening = asyncio.create_task(
+                    calls.open_realtime(
+                        ledger, bare, conversation_id=conversation_id, user_id=user_id
+                    )
+                )
+                # A turn the call hands off (a picture looked at) names
+                # this row, so the call's thinking is read from its turns.
+                handing = calls.handing_off.set(opening)
                 beside = asyncio.create_task(alongside(session)) if alongside else None
                 try:
                     async for event in session:
@@ -436,23 +474,25 @@ async def drive(
                             logger.exception("Saving a cut-off turn failed")
                     if beside:
                         beside.cancel()
+                    calls.handing_off.reset(handing)
     except Exception:
         ended = "error"
         logger.exception("A live call ended with an error")
     finally:
+        seconds = _elapsed(started)
         if usage is not None:
-            await usage_recording.record_realtime(
-                bare,
+            await calls.bill_realtime(
+                ledger,
+                await row(),
                 usage,
-                seconds=(datetime.now(UTC) - started).total_seconds(),
-                conversation_id=conversation_id,
+                seconds=seconds,
                 rates=rates,
-                user_id=user_id,
+                success=ended != "error",
             )
         logger.info(
             "Live call ended",
             ended_by=ended,
-            seconds=round((datetime.now(UTC) - started).total_seconds(), 1),
+            seconds=round(seconds, 1),
             model=model,
             conversation_id=conversation_id,
         )

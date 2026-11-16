@@ -11,10 +11,12 @@ from typing import Any
 
 from fastmcp import Client
 from mcp.types import Implementation
+from pydantic import BaseModel
 import pytest
 
 from app.components.mcp.server import build_server, served_effects
 from app.core.config import settings
+from app.core.figures import FIGURES
 from app.core.tools import load_tools, register_tool
 from tests.components.mcp_calls import Recorder
 
@@ -24,6 +26,17 @@ PROJECT = Path(__file__).resolve().parents[2]
 async def lookup(order_id: str) -> dict[str, Any]:
     """Look up an order by id."""
     return {"order_id": order_id, "total_cents": 1250}
+
+
+class Spend(BaseModel):
+    model_config = FIGURES
+
+    net_cents: int
+
+
+async def spend() -> Spend:
+    """What was spent."""
+    return Spend(net_cents=-149_203)
 
 
 async def broken() -> str:
@@ -46,6 +59,7 @@ def loaded() -> None:
 @pytest.fixture
 def tools(loaded: None, clean_registry: None) -> None:
     register_tool("lookup", lookup, effect="read")
+    register_tool("spend", spend, effect="read")
     register_tool("broken", broken, effect="read")
     register_tool("save", save, effect="writes")
 
@@ -64,13 +78,29 @@ async def test_a_client_sees_exactly_the_granted_servable_tools() -> None:
 
 @pytest.mark.usefixtures("tools")
 async def test_a_call_returns_what_the_tool_returns() -> None:
-    """Same computation as a chat agent's call: the registered callable."""
+    """Same computation as a chat agent's call: the registered callable,
+    its money in dollars beside the cents as an agent reads it."""
     server = build_server(["lookup"])
 
     async with Client(server) as client:
         result = await client.call_tool("lookup", {"order_id": "A1"})
 
-    assert result.data == await lookup("A1")
+    assert result.data == {**await lookup("A1"), "total_usd": "$12.50"}
+
+
+@pytest.mark.usefixtures("tools")
+async def test_a_typed_answer_carries_its_dollars_past_its_schema() -> None:
+    """A model's schema forbids keys it does not name; the served schema
+    names each ``*_usd`` beside its cents, so the dollars are not refused."""
+    server = build_server(["spend"])
+
+    async with Client(server) as client:
+        result = await client.call_tool("spend", {})
+
+    assert result.structured_content == {
+        "net_cents": -149_203,
+        "net_usd": "-$1,492.03",
+    }
 
 
 @pytest.mark.usefixtures("tools")
@@ -108,7 +138,10 @@ async def test_a_record_carries_what_debugging_needs() -> None:
     assert looked.client_version == "1.0"
     assert looked.session and looked.session == broke.session
     assert looked.error is None
-    assert json.loads(looked.response or "") == await lookup("A1")
+    assert json.loads(looked.response or "") == {
+        **await lookup("A1"),
+        "total_usd": "$12.50",
+    }
     assert broke.response is None
     assert broke.error and "no such order" in broke.error
 

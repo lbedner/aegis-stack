@@ -25,7 +25,10 @@ client. A refusal the model can correct from is ``Refused``.
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
+import copy
 from dataclasses import dataclass
+import functools
+import inspect
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -33,6 +36,7 @@ from pydantic_core import to_json, to_jsonable_python
 
 from app.core.discovery import import_modules_named
 from app.core.figures import FIGURES
+from app.core.formatting import format_value
 from app.core.log import logger
 
 ToolFunc = Callable[..., Any]
@@ -120,6 +124,29 @@ class RegisteredTool:
     # What a call of it is, as a person watching reads it ("Looking up how
     # the parts connect"): ``steps.doing``.
     doing: str | None = None
+    # Its result names approval cards (``chat_transcript.card_component``).
+    cards: bool = False
+
+    @functools.cached_property
+    def served(self) -> ToolFunc:
+        """``func`` as every caller is served it (an agent, code mode's
+        script, an MCP client): its money in dollars beside its cents
+        (``with_dollars``). Its signature and docstring stay ``func``'s,
+        so the schema built from it is too."""
+        func = self.func
+        if inspect.iscoroutinefunction(func):
+
+            @functools.wraps(func)
+            async def served(*args: Any, **kwargs: Any) -> Any:
+                return with_dollars(await func(*args, **kwargs))
+
+            return served
+
+        @functools.wraps(func)
+        def served_sync(*args: Any, **kwargs: Any) -> Any:
+            return with_dollars(func(*args, **kwargs))
+
+        return served_sync
 
 
 # Code mode's one tool: a script run against the read tools, in the sandbox.
@@ -139,6 +166,75 @@ def result_data(result: Any) -> Any:
     """A tool's result as JSON data: its model dumped, dates and the like as
     their JSON strings, what is already data as it is."""
     return to_jsonable_python(result, fallback=str)
+
+
+def with_dollars(result: Any) -> Any:
+    """``result`` with every ``*_cents`` whole number joined by its dollars
+    as ``*_usd`` (``-149203`` -> ``"-$1,492.03"``), all the way down: what a
+    model reads of a tool. Tools keep cents (scripts and cards compute with
+    them, and a later script reuses the exact figure); a model left to
+    convert read an unlabelled 297614 as dollars. A model is read as its
+    JSON data; a result with no cents in it comes back as it is, so a model
+    without money stays the model its callers type."""
+    joined, changed = _joined(result_data(result))
+    return joined if changed else result
+
+
+def _usd_key(key: Any) -> str | None:
+    """Where ``with_dollars`` puts a ``*_cents`` key's dollars, or None."""
+    if isinstance(key, str) and key.endswith("_cents"):
+        return f"{key.removesuffix('_cents')}_usd"
+    return None
+
+
+def _joined(data: Any) -> tuple[Any, bool]:
+    """``data`` with its dollars joined, and whether any were: an unchanged
+    branch is handed back as it is. A dict already carrying a figure's
+    dollars (run_code's result, its reads already joined) keeps them."""
+    if isinstance(data, list):
+        items = [_joined(item) for item in data]
+        if not any(changed for _, changed in items):
+            return data, False
+        return [item for item, _ in items], True
+    if not isinstance(data, dict):
+        return data, False
+    out: dict[Any, Any] = {}
+    changed = False
+    for key, item in data.items():
+        out[key], inner = _joined(item)
+        changed = changed or inner
+        usd = _usd_key(key)
+        # ``type is int``: a bool is an int, and never money.
+        if usd is not None and type(item) is int and usd not in data:
+            out[usd] = format_value(item / 100, "money")
+            changed = True
+    return (out, True) if changed else (data, False)
+
+
+def with_dollars_schema(schema: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A tool's output schema naming the ``*_usd`` string ``with_dollars``
+    puts beside each ``*_cents`` property, so a validator holding a closed
+    model (``FIGURES`` forbids keys it does not name) admits the dollars."""
+    if schema is None:
+        return None
+    joined = copy.deepcopy(schema)
+    _schema_joined(joined)
+    return joined
+
+
+def _schema_joined(node: Any) -> None:
+    if isinstance(node, list):
+        for item in node:
+            _schema_joined(item)
+    if not isinstance(node, dict):
+        return
+    for item in node.values():
+        _schema_joined(item)
+    properties = node.get("properties")
+    if isinstance(properties, dict):
+        for key in list(properties):
+            if (usd := _usd_key(key)) is not None and usd not in properties:
+                properties[usd] = {"type": "string"}
 
 
 def result_text(result: Any) -> str:
@@ -161,8 +257,10 @@ def register_tool(
     admin: bool = False,
     replace: bool = False,
     doing: str | None = None,
+    cards: bool = False,
 ) -> None:
-    """Register a callable under a tool name.
+    """Register a callable under a tool name. ``cards``: its result names
+    approval cards, which every chat UI draws (``card_tool_names``).
 
     A tool that declares no ``effect`` is treated as ``writes``: default-deny,
     so a write that forgets to say so stays a visible native call and never
@@ -190,6 +288,8 @@ def register_tool(
         effect=effect,
         admin=admin,
         doing=doing,
+        # A rebind (a plugin, a test double) keeps drawing its cards.
+        cards=cards or (existing is not None and existing.cards),
     )
 
 
@@ -204,6 +304,19 @@ def unregister_tool(name: str) -> None:
 def get_tool(name: str) -> RegisteredTool | None:
     """Return the registry entry for a name, or None if unregistered."""
     return _registry.get(name)
+
+
+def card_tool_names() -> frozenset[str]:
+    """Every registered tool whose result names approval cards. A process
+    that only draws transcripts (a page, the Flet chat) never built an
+    agent, so the registry is loaded here first."""
+    _load_once()
+    return frozenset(t.name for t in _registry.values() if t.cards)
+
+
+@functools.cache
+def _load_once() -> None:
+    load_tools()
 
 
 def native_write_tool_names() -> frozenset[str]:

@@ -1,7 +1,9 @@
-"""The Costs section's four views, built from what the ledger read: pure
+"""The Costs section's views, built from what the ledger read: pure
 functions, no database. Overview (a month in figures and charts), Users (who
-it was spent on), Projections (where the last 90 days say it is heading) and
-Breakdown (every action under the feature it pays for).
+it was spent on), Projections (where the last 90 days say it is heading),
+Breakdown (every action under the feature it pays for), Models (each model
+under the kind it was used for) and Calls (each live call with the answers
+given during it).
 
 A feature is the ledger's action with its call style dropped:
 ``stream_chat:finance-assistant`` and ``chat:finance-assistant`` are one
@@ -16,10 +18,18 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.services.ai.service import ActionSpend, ModelSpend, SpendLedger
+from app.core.formatting import format_minutes
+from app.services.ai.service import (
+    ActionSpend,
+    CallSpend,
+    KindModelSpend,
+    ModelSpend,
+    SpendLedger,
+    spend_report,
+)
 
 from .overseer_ai_common import dollars
-from .rendering import chart, ranked
+from .rendering import chart, ranked, status_cell
 
 MODELS_CHARTED = 7
 # The window Projections averages over, and the horizons it can look ahead.
@@ -102,7 +112,7 @@ def overview(data: SpendLedger, first: date, now: date) -> dict[str, Any]:
     features = by_feature(data.actions)
     top = features[0] if features else None
     projected = total / days * _days_in(first) if current and days else None
-    split = {"Model calls": model_spend, **data.voice}
+    split = {spend_report.MODEL_CALLS: model_spend, **data.voice}
     return {
         "figures": [
             _figure(
@@ -253,3 +263,43 @@ def breakdown(actions: dict[str, ActionSpend]) -> dict[str, Any]:
         rows.append(row(f.name, f.calls, f.cost, group=True))
         rows += [row(a, s.calls, s.cost, child=True) for a, s in f.actions]
     return {"rows": rows}
+
+
+# --- Models and Calls -----------------------------------------------------------
+
+
+def models(rows: list[KindModelSpend]) -> dict[str, Any]:
+    """Each model under the kind it was used for, most spent first."""
+    return {
+        "rows": [
+            {
+                "kind": row.kind,
+                "model": row.model_id,
+                "uses": row.uses,
+                "minutes": format_minutes(row.seconds),
+                "tokens": row.tokens or None,
+                "cost": dollars(row.cost),
+            }
+            for row in rows
+        ]
+    }
+
+
+def calls(rows: list[CallSpend]) -> dict[str, Any]:
+    """Each live call, newest first: itself, its answers, and both."""
+    return {
+        "rows": [
+            {
+                "when": row.started,
+                "model": row.model_id,
+                "minutes": format_minutes(row.seconds),
+                "call": dollars(row.call_cost),
+                "answers": dollars(row.answers_cost),
+                "total": dollars(row.total),
+                "ended": status_cell(
+                    spend_report.ENDED[row.success], "ok" if row.success else "error"
+                ),
+            }
+            for row in rows
+        ]
+    }

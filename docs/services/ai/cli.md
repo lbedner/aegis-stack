@@ -15,6 +15,7 @@ my-app ai chat            # Interactive chat session (Illiana)
 my-app ai conversations   # List conversations
 my-app ai history <id>    # View conversation history
 my-app ai usage           # Token usage and cost statistics
+my-app ai costs           # Cost by kind and model, and each live call
 my-app ai sentiment       # Conversation sentiment statistics
 
 # Agent Registry
@@ -204,6 +205,18 @@ my-app ai usage --recent 20 # More recent-activity rows
 ```
 
 Requires a database backend (`ai[sqlite]` / `ai[postgres]`) and a running server.
+
+### ai costs
+
+What models and voice cost over the last days, read from the usage ledger: each model under the kind it was used for (model calls, live calls, transcription, speech), and each live call costed as itself plus the answers given during it. The Overseer AI page's Costs section shows the same as its Models and Calls tabs.
+
+```bash
+my-app ai costs             # The last 30 days
+my-app ai costs --days 7    # The last week
+my-app ai costs --json      # Raw JSON
+```
+
+Requires a database backend (`ai[sqlite]` / `ai[postgres]`).
 
 ### ai sentiment
 

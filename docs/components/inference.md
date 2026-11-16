@@ -32,6 +32,7 @@ llama-server -hf ggml-org/Qwen3-1.7B-GGUF --alias qwen3:1.7b \
 - `--jinja`: the model's chat template, which tool calls need.
 - `-c`: the context. The catalog takes it from the server, and chat sizes its history to fit it.
 - `-np 1` (or a few): context and prompt cache are per slot, so `-c 32768 -np 2` gives each slot 16k.
+  With one slot, a long conversation's fold (its running summary, written on the worker as old turns leave the history) is a request of its own and replaces the chat's cached prompt, so the chat's next turn reads its prompt afresh: once per cut, not per turn. Give the `summarizer` agent row another model, or run a second slot, to keep the chat's cache.
 - `--metrics`: Prometheus counters at `/metrics`.
 
 In docker, the `llamacpp` service downloads `LLAMACPP_MODEL` (a Hugging Face `repo[:quant]`, default `ggml-org/Qwen3-1.7B-GGUF`) into a volume on its first start and serves it at `LLAMACPP_CONTEXT` (default 32768).

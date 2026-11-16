@@ -1,8 +1,8 @@
 """Chat's work off the request path, as worker tasks (arq form).
 
-Registered in the system queue, only where the paste index and the
-documents service are. The body imports the AI service lazily, as
-``document_tasks`` imports documents.
+Registered in the system queue, each only where what it reaches is. The
+bodies import the AI service lazily, as ``document_tasks`` imports
+documents.
 """
 
 from typing import Any
@@ -17,3 +17,13 @@ async def read_photo_task(
     from app.services.ai.service import read_photo_job
 
     return {"key": key, "read": await read_photo_job(user_id, key, media_type, title)}
+
+
+async def fold_conversation_task(
+    ctx: dict[str, Any], conversation_id: str, upto: int
+) -> bool:
+    """Fold the turns that left a conversation's history window into its
+    running summary: a model call, so never on the request path."""
+    from app.services.ai.service import fold_conversation_job
+
+    return await fold_conversation_job(conversation_id, upto)

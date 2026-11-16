@@ -29,6 +29,11 @@ def format_cost(cost: float) -> str:
     return f"${cost:.4f}"
 
 
+def format_minutes(seconds: float) -> str | None:
+    """Seconds as minutes to a tenth (``12.5``); None for none."""
+    return f"{seconds / 60:,.1f}" if seconds else None
+
+
 def format_percentage(pct: float) -> str:
     """Format percentage with one decimal place (e.g., 90.5%)."""
     return f"{pct:.1f}%"

@@ -63,6 +63,36 @@ class TestTheContract:
     ) -> None:
         assert not (await _engine(name, down).get_server_status()).available
 
+    async def test_a_quiet_turn_says_whether_its_model_is_loading(
+        self, name: str, routes: dict[str, Any]
+    ) -> None:
+        """A turn's silence, explained: its model is in memory and working,
+        or still being loaded. A single-model server answers on the model it
+        serves, whatever the turn calls it."""
+        engine = _engine(name, serving(routes))
+        cold = "loading" if engine.can_load_unload else "thinking"
+
+        assert await engine.waiting_reason("qwen2.5:7b") == "thinking"
+        assert await engine.waiting_reason("llama3.1:8b") == cold
+        assert await _engine(name, down).waiting_reason("qwen2.5:7b") is None
+
+    async def test_a_quiet_turn_costs_one_read(
+        self, name: str, routes: dict[str, Any]
+    ) -> None:
+        """Asked every quiet stretch, it read the whole status (three reads
+        on Ollama, two on llama.cpp): it asks one thing, what is loaded, or
+        on a server that serves only its one model, whether it is up."""
+        asked: list[str] = []
+        answer = serving(routes)
+
+        def counted(request: httpx.Request) -> httpx.Response:
+            asked.append(request.url.path)
+            return answer(request)
+
+        await _engine(name, counted).waiting_reason("qwen2.5:7b")
+
+        assert len(asked) == 1
+
     async def test_a_move_lands_on_the_activity_tab(
         self, name: str, routes: dict[str, Any], monkeypatch: pytest.MonkeyPatch
     ) -> None:

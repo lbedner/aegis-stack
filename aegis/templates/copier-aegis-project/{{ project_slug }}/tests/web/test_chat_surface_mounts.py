@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import UTC, datetime
 import json
+from types import SimpleNamespace
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -26,6 +27,7 @@ from app.services.ai.models import (
     MessageRole,
     StreamingMessage,
 )
+from app.services.ai.domains.chat.attachments import MAX_ATTACHMENT_BYTES, composer
 from app.services.ai.domains.chat.page_actions import page_action
 from tests._pages import LANDING
 from tests.web.dom import none, one
@@ -133,7 +135,10 @@ def test_the_surface_opens_on_the_requests_own_conversations(
     assert one(html, "[name=conversation_id]").get("value") == "mine"
     # The page names only where it is: the turn's scope is not the
     # browser's to send.
-    assert json.loads(one(html, "[data-chat]").get("data-chat")) == {"path": "/chat"}
+    assert json.loads(one(html, "[data-chat]").get("data-chat")) == {
+        "path": "/chat",
+        "composer": composer(),
+    }
 
 
 def test_a_turn_runs_as_the_mount_says_whatever_the_body_claims(
@@ -167,6 +172,33 @@ def test_a_gated_turn_is_refused_before_the_model(
     )
     assert response.text == 'event: error\ndata: {"error": "Over today\'s limit."}\n\n'
     assert turns == []
+
+
+@pytest.mark.skipif(not chat_surface.PERSISTED, reason="no paste index without one")
+def test_a_paste_is_kept_only_past_the_gate_and_within_the_cap(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The composer's paste is a write like a turn: the mount's gate
+    refuses it first, and no paste is larger than a file a turn takes."""
+    from app.components.web_frontend.routes.partials import chat_pastes
+
+    kept: list[str] = []
+
+    async def store_paste(_db: object, user_id: str, text: str) -> object:
+        kept.append(text)
+        return SimpleNamespace(marker="[pasted text #ab12cd34]")
+
+    monkeypatch.setattr(chat_pastes, "store_paste", store_paste)
+    refused = client.post(
+        "/chat/pastes", data={"text": "a page"}, headers={"x-spent": "1"}
+    )
+    assert refused.status_code == 403
+    assert refused.json() == {"error": "Over today's limit."}
+    too_big = "x" * (MAX_ATTACHMENT_BYTES + 1)
+    assert client.post("/chat/pastes", data={"text": too_big}).status_code == 413
+    assert kept == []
+    assert client.post("/chat/pastes", data={"text": "a page"}).status_code == 200
+    assert kept == ["a page"]
 
 
 def test_another_users_or_projects_conversation_is_absent(client: TestClient) -> None:

@@ -31,6 +31,7 @@ from app.core.tools import RUN_CODE
 from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.builtin_fetchers import APP_MAP
 from app.services.ai.domains.chat.chat_kit import ContextProvider, ToolChatAgent
+from app.services.ai.domains.chat.chat_kit.run_code_guard import run_code_guard
 from app.services.ai.domains.chat.code_mode import with_sandbox_rules
 from app.services.ai.domains.chat.module_context import ContextModuleProvider
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
@@ -85,6 +86,8 @@ class AgentConfig:
     context_modules: tuple[str, ...] = ()
     knowledge_base_ids: tuple[str, ...] = ()
     code_mode: bool = False
+    # The agent this one extends (``_to_config``), None for most.
+    extends: str | None = None
 
     def led_by(self, instructions: str | None) -> "AgentConfig":
         """This agent with ``instructions`` (a caller's manners for the
@@ -175,25 +178,43 @@ def _expire_if_changed(version: int | None) -> None:
 
 
 def invalidate_agent_cache(slug: str | None = None) -> None:
-    """Drop cached config for one slug, or all when ``slug`` is None."""
+    """Drop cached config for one slug and the agents that extend it, or
+    all when ``slug`` is None."""
     if slug is None:
         _cache.clear()
-    else:
-        _cache.pop(slug, None)
+        return
+    for cached in [s for s, c in _cache.items() if slug in (s, c.extends)]:
+        del _cache[cached]
 
 
-def _to_config(row: Agent) -> AgentConfig:
+def _tool_names(row: Agent) -> tuple[str, ...]:
+    return tuple(t.name for t in row.tools if t.is_active)
+
+
+def _to_config(row: Agent, parent: Agent | None = None) -> AgentConfig:
+    """A row as a config; with ``parent`` (the row it ``extends``), the
+    row's section goes FIRST - an instruction at the end of a long prompt
+    is the one that gets ignored - and the grants the row leaves empty
+    (tools, context modules, knowledge bases) come from the parent. Model,
+    sampling and code mode are always the row's own. Only the parent's own
+    row is read, so inheritance is one level deep."""
+    base = parent or row
     return AgentConfig(
         slug=row.slug,
         name=row.name,
-        system_prompt=row.system_prompt,
+        system_prompt=(
+            f"{row.system_prompt}\n\n{parent.system_prompt}"
+            if parent
+            else row.system_prompt
+        ),
         model_id=row.model_id,
         temperature=row.temperature,
         max_tokens=row.max_tokens,
-        tool_names=tuple(t.name for t in row.tools if t.is_active),
-        context_modules=tuple(row.context_modules),
-        knowledge_base_ids=tuple(row.knowledge_base_ids),
+        tool_names=_tool_names(row) or _tool_names(base),
+        context_modules=tuple(row.context_modules or base.context_modules),
+        knowledge_base_ids=tuple(row.knowledge_base_ids or base.knowledge_base_ids),
         code_mode=row.code_mode,
+        extends=row.extends,
     )
 
 
@@ -218,7 +239,7 @@ async def resolve_agent(
     if cached is not None:
         return cached
 
-    row = await queries.agent_by_slug(session, slug)
+    row, parent = await queries.agent_and_parent(session, slug)
 
     if row is None or not row.is_active:
         logger.warning(
@@ -227,7 +248,14 @@ async def resolve_agent(
         )
         return default_agent_config()
 
-    config = _to_config(row)
+    if row.extends and (parent is None or not parent.is_active):
+        logger.warning(
+            "Agent's parent missing or inactive", agent_slug=slug, extends=row.extends
+        )
+        parent = None
+    elif parent is not None and parent.extends:
+        logger.warning("Agent inheritance is one level; not following", agent_slug=slug)
+    config = _to_config(row, parent)
     _cache[slug] = config
     return config
 {% else %}
@@ -290,8 +318,19 @@ def agent_capabilities(config: AgentConfig) -> list[Any]:
         # write tool just declares itself.
         native = native_write_tool_names()
         capabilities.append(
-            CodeMode(tools=[name for name in config.tool_names if name not in native])
+            CodeMode(
+                tools=[name for name in config.tool_names if name not in native],
+                # Explicit, not Monty's 30 s / 256 MiB: the sandbox shares
+                # the webserver process with every other request.
+                resource_limits={
+                    "max_duration_secs": settings.AI_CODE_MODE_MAX_SECONDS,
+                    "max_memory": settings.AI_CODE_MODE_MAX_MEMORY_BYTES,
+                },
+            )
         )
+        # Hint only at writes this agent holds: pointing a read-only agent
+        # at save_memory would send it after a tool it cannot call.
+        capabilities.append(run_code_guard(native & frozenset(config.tool_names)))
     if config.code_mode or config.tool_names:
         capabilities.append(_tool_output_limits(code_mode=config.code_mode))
     return capabilities
@@ -311,11 +350,23 @@ def _tool_output_limits(*, code_mode: bool = False) -> Any:
     measurement raises on such values, which would kill the whole turn.
     Those returns are coerced to their ``repr`` instead.
     """
+    from pydantic_ai.messages import ToolReturn
     from pydantic_ai_harness import ToolOutputLimits
     from pydantic_ai_harness.tool_output_limits import Band, Truncate
 
+    from app.core.tools import with_dollars
+
     class _SafeToolOutputLimits(ToolOutputLimits):  # type: ignore[misc]
         async def after_tool_execute(self, ctx: Any, **kwargs: Any) -> Any:
+            # Money in dollars too for run_code's result, the script's own
+            # data; every tool's return has them already (``resolve_tools``).
+            if kwargs["tool_def"].name == RUN_CODE:
+                result = kwargs["result"]
+                kwargs["result"] = (
+                    replace(result, return_value=with_dollars(result.return_value))
+                    if isinstance(result, ToolReturn)
+                    else with_dollars(result)
+                )
             try:
                 return await super().after_tool_execute(ctx, **kwargs)
             except Exception as exc:

@@ -45,6 +45,11 @@ class Agent(SQLModel, table=True):
     # runs it in the Monty interpreter. Off by default; flipping it is a
     # capability grant, deliberately DB-driven like tool attachments.
     code_mode: bool = Field(default=False)
+    # The agent this one extends, one level deep: its section goes in front
+    # of the parent's prompt, and tools, context modules and knowledge
+    # bases come from the parent unless this row names its own. Model,
+    # sampling and code mode are always this row's own.
+    extends: str | None = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
 

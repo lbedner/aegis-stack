@@ -1,16 +1,14 @@
 """Per-user agent memory: storage, dedup, and guarded prompt injection.
 
-The built-in ``save_memory`` tool lets the model persist durable facts
-about a user mid-conversation. Facts are stored one JSON document per
+The model asks to keep, rewrite or drop facts through the memory tools
+(``memory_tools``). Facts are stored one JSON document per
 user (``agent_user_memory``) as ``structured_facts`` entries of
 ``{category, fact, saved_at}``, deduplicated by substring within a
 category, and injected into later chats inside a ``<user_memory>`` guard
 block that frames the content as data, never instructions.
 
-User identity reaches the tool through ``current_user_id`` (a
-ContextVar): the chat runtime sets it for the duration of a turn, and
-the tool reads it when the model calls ``save_memory``. Without it the
-tool declines politely instead of guessing.
+The turn's user is ``current_user_id`` (a ContextVar), bound by
+``memory_user`` for the duration of a turn.
 """
 
 from collections.abc import Iterator
@@ -26,7 +24,7 @@ from app.core.db import get_async_session
 from app.core.figures import FIGURES
 from app.core.log import logger
 from app.core.time import utcnow
-from app.core.tools import acting_as, current_subject, register_tool
+from app.core.tools import acting_as, current_subject
 from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.readings import Reading, kept_readings
 from app.services.ai.domains.chat.tool_telemetry import tool_turn
@@ -131,10 +129,32 @@ def _stored(facts: list[UserFact]) -> list[dict[str, Any]]:
 
 
 def _is_duplicate(existing: str, candidate: str) -> bool:
-    """Substring match either direction, case-insensitive."""
+    """Substring match either direction, case-insensitive. A blank is a
+    duplicate of nothing (it is a substring of everything)."""
     a = existing.casefold().strip()
     b = candidate.casefold().strip()
-    return a in b or b in a
+    return bool(a and b) and (a in b or b in a)
+
+
+def fact_matching(facts: list[UserFact], quote: str) -> UserFact:
+    """The one saved fact ``quote`` picks out (a quote of it, either way,
+    case-insensitive); ValueError when none or several do - a question
+    back to the model, never a guess."""
+    hits = [fact for fact in facts if _is_duplicate(fact.fact, quote)]
+    if len(hits) != 1:
+        raise ValueError(f"No single saved fact matches {quote!r}; quote it more exactly.")
+    return hits[0]
+
+
+def _index_of(facts: list[UserFact], at: int | str, user_id: str) -> int:
+    """Where ``at`` points: an index (the dashboard's), or a quote of the
+    fact (the assistant's: positions move between a card and its
+    approval)."""
+    if isinstance(at, str):
+        return fact_matching(facts, at).index
+    if not 0 <= at < len(facts):
+        raise IndexError(f"No fact at index {at} for user {user_id}")
+    return at
 
 
 def _normalize_category(category: str) -> str:
@@ -171,7 +191,9 @@ async def save_user_fact(
     row.memory = {**row.memory, "structured_facts": facts}
     row.updated_at = utcnow()
     session.add(row)
-    await session.commit()
+    # Flush only: the caller's session commits (a route's, or the change
+    # queue's approval, with the card's own status).
+    await session.flush()
     logger.info("Saved user fact", user_id=user_id, category=category)
     return f"Saved ({category}): {fact.strip()}"
 
@@ -224,7 +246,7 @@ async def replace_user_memory(
     row.memory = {**row.memory, "structured_facts": facts}
     row.updated_at = utcnow()
     session.add(row)
-    await session.commit()
+    await session.flush()  # as in save_user_fact
     logger.info("Replaced user memory", user_id=user_id, fact_count=len(facts))
     return f"Memory replaced with {len(facts)} fact(s)."
 
@@ -239,7 +261,12 @@ async def list_user_facts(
     Facts live in one JSON list, so position IS the identity: the dashboard
     edits and deletes by it.
     """
-    row = await get_user_memory(session, user_id)
+    return facts_of(await get_user_memory(session, user_id))
+
+
+def facts_of(row: AgentUserMemory | None) -> list[UserFact]:
+    """A memory row's saved facts (``list_user_facts``), for a caller that
+    read the row itself."""
     if row is None:
         return []
     return [
@@ -265,21 +292,26 @@ async def _rewrite_facts(
     row.memory = {**row.memory, "structured_facts": facts}
     row.updated_at = utcnow()
     session.add(row)
-    await session.commit()
+    await session.flush()  # as in save_user_fact
+
+
+async def saved_fact(user_id: str, quote: str, *, session: AsyncSession) -> UserFact:
+    """The one saved fact ``quote`` picks out (``fact_matching``)."""
+    return fact_matching(await list_user_facts(user_id, session=session), quote)
 
 
 async def update_user_fact(
     user_id: str,
-    index: int,
+    at: int | str,
     *,
     fact: str | None = None,
     category: str | None = None,
     session: AsyncSession,
 ) -> UserFact:
-    """Rewrite one saved fact in place; returns the updated entry."""
+    """Rewrite one saved fact in place (``at`` as in ``_index_of``);
+    returns the updated entry."""
     facts = await list_user_facts(user_id, session=session)
-    if not 0 <= index < len(facts):
-        raise IndexError(f"No fact at index {index} for user {user_id}")
+    index = _index_of(facts, at, user_id)
     changes: dict[str, str] = {}
     if fact is not None and fact.strip():
         changes["fact"] = fact.strip()
@@ -293,17 +325,16 @@ async def update_user_fact(
 
 async def delete_user_fact(
     user_id: str,
-    index: int,
+    at: int | str,
     *,
     session: AsyncSession,
-) -> None:
-    """Forget one saved fact."""
+) -> UserFact:
+    """Forget one saved fact (``at`` as in ``_index_of``); returns it."""
     facts = await list_user_facts(user_id, session=session)
-    if not 0 <= index < len(facts):
-        raise IndexError(f"No fact at index {index} for user {user_id}")
-    facts.pop(index)
+    gone = facts.pop(_index_of(facts, at, user_id))
     await _rewrite_facts(user_id, _stored(facts), session=session)
-    logger.info("Deleted user fact", user_id=user_id, index=index)
+    logger.info("Deleted user fact", user_id=user_id, index=gone.index)
+    return gone
 
 
 def format_user_memory(row: AgentUserMemory | None) -> str | None:
@@ -356,47 +387,3 @@ async def build_user_memory_context(
         return _known(await get_user_memory(session, user_id))
     async with get_async_session() as owned_session:
         return _known(await get_user_memory(owned_session, user_id))
-
-
-async def save_memory(new_fact: str, category: str = "general") -> str:
-    """Remember one durable fact about the current user.
-
-    Category is one of: family, food, lifestyle, health, personal,
-    program, general.
-    """
-    user_id = current_user_id.get()
-    if not user_id:
-        logger.warning("save_memory called without user context; nothing saved")
-        return "No user context available; nothing was saved."
-    if not new_fact.strip():
-        return "Nothing to save; provide a fact."
-    async with get_async_session() as session:
-        return await save_user_fact(user_id, new_fact, category, session=session)
-
-
-async def replace_memory(memory_text: str) -> str:
-    """Replace everything known about the current user, one fact per line."""
-    user_id = current_user_id.get()
-    if not user_id:
-        logger.warning("replace_memory called without user context; nothing saved")
-        return "No user context available; nothing was saved."
-    async with get_async_session() as session:
-        return await replace_user_memory(user_id, memory_text, session=session)
-
-
-# Built-in registration: importing this module makes the tools grantable
-# via the agent registry. replace=True keeps re-imports idempotent.
-register_tool(
-    "save_memory",
-    save_memory,
-    description="Persist one durable fact about the current user",
-    effect="writes",
-    replace=True,
-)
-register_tool(
-    "replace_memory",
-    replace_memory,
-    description="Replace all saved facts about the current user",
-    effect="writes",
-    replace=True,
-)

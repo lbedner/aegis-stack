@@ -2,6 +2,9 @@
 {% if ai_backend != "memory" %}
 
 from collections.abc import Generator
+{%- if ai_framework == "pydantic-ai" %}
+from typing import Any
+{%- endif %}
 
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -267,4 +270,336 @@ class TestCache:
         invalidate_agent_cache()
         fresh = await resolve_agent("support", session=session)
         assert fresh.name == "Renamed"
+
+
+async def _grant(session: AsyncSession, agent: Agent, name: str) -> None:
+    tool = Tool(name=name)
+    session.add(tool)
+    # Flushed, not committed: the ids stay loaded, nothing to re-select.
+    await session.flush()
+    session.add(AgentTool(agent_id=agent.id, tool_id=tool.id))
+    await session.commit()
+
+
+class TestExtends:
+    """One level of inheritance: a child agent is its parent with its own
+    section in front and its own model and sampling, so an edit to the
+    parent's prompt, tools or modules reaches both."""
+
+    async def _family(self, session: AsyncSession, **child: object) -> Agent:
+        parent = await _add_agent(
+            session,
+            slug="writer",
+            system_prompt="You are the writer.",
+            context_modules=["notes"],
+            code_mode=True,
+        )
+        await _grant(session, parent, "lookup")
+        data: dict[str, object] = {
+            "slug": "writer-voice",
+            "system_prompt": "Answer aloud, briefly.",
+            "extends": "writer",
+            "model_id": "small-model",
+            "temperature": 0.3,
+            "max_tokens": 400,
+        }
+        data.update(child)
+        return await _add_agent(session, **data)
+
+    async def test_the_childs_section_comes_first(self, session: AsyncSession) -> None:
+        await self._family(session)
+        config = await resolve_agent("writer-voice", session=session)
+        # First, because an instruction at the end of a long prompt is the
+        # one that gets ignored.
+        assert config.system_prompt == "Answer aloud, briefly.\n\nYou are the writer."
+        assert config.extends == "writer"
+
+    async def test_tools_and_modules_are_inherited(self, session: AsyncSession) -> None:
+        await self._family(session)
+        config = await resolve_agent("writer-voice", session=session)
+        assert config.tool_names == ("lookup",)
+        assert config.context_modules == ("notes",)
+
+    async def test_model_and_sampling_are_the_childs_own(
+        self, session: AsyncSession
+    ) -> None:
+        await self._family(session, code_mode=False)
+        config = await resolve_agent("writer-voice", session=session)
+        assert config.model_id == "small-model"
+        assert (config.temperature, config.max_tokens) == (0.3, 400)
+        assert config.code_mode is False
+        assert config.slug == "writer-voice"
+
+    async def test_a_child_with_its_own_grants_keeps_them(
+        self, session: AsyncSession
+    ) -> None:
+        child = await self._family(session, context_modules=["voice_notes"])
+        await _grant(session, child, "speak")
+        config = await resolve_agent("writer-voice", session=session)
+        assert config.tool_names == ("speak",)
+        assert config.context_modules == ("voice_notes",)
+
+    async def test_only_one_level(self, session: AsyncSession) -> None:
+        await self._family(session)
+        await _add_agent(
+            session, slug="grandchild", system_prompt="Whisper.", extends="writer-voice"
+        )
+        config = await resolve_agent("grandchild", session=session)
+        # The chain is not followed: its parent's own section, not its
+        # parent's parent.
+        assert config.system_prompt == "Whisper.\n\nAnswer aloud, briefly."
+
+    async def test_a_missing_parent_leaves_the_child_alone(
+        self, session: AsyncSession
+    ) -> None:
+        await _add_agent(session, slug="orphan", system_prompt="Alone.", extends="nobody")
+        config = await resolve_agent("orphan", session=session)
+        assert config.system_prompt == "Alone."
+        assert config.tool_names == ()
+
+    @pytest.mark.queryspy(threshold=4)  # each resolve reads the prompt version
+    async def test_editing_the_parent_reaches_a_cached_child(
+        self, session: AsyncSession
+    ) -> None:
+        await self._family(session)
+        await resolve_agent("writer-voice", session=session)
+        parent = await resolve_agent("writer", session=session)
+        assert parent.system_prompt == "You are the writer."
+
+        from sqlmodel import select
+
+        row = (await session.exec(select(Agent).where(Agent.slug == "writer"))).one()
+        row.system_prompt = "You are the writer, revised."
+        session.add(row)
+        await session.commit()
+
+        invalidate_agent_cache("writer")
+        child = await resolve_agent("writer-voice", session=session)
+        assert child.system_prompt.endswith("You are the writer, revised.")
+{%- if ai_framework == "pydantic-ai" %}
+
+
+def _code_mode(*tool_names: str) -> AgentConfig:
+    """A code-mode agent: the tests that use it vary only its tools."""
+    return AgentConfig(
+        slug="coder",
+        name="Coder",
+        system_prompt="...",
+        model_id=None,
+        temperature=0.4,
+        max_tokens=900,
+        tool_names=tool_names,
+        code_mode=True,
+    )
+
+
+def _run_code_once(code: str) -> Any:
+    """A model that sends one ``run_code`` and then answers, keeping what
+    the sandbox told it."""
+    from pydantic_ai.messages import (
+        ModelMessage,
+        ModelResponse,
+        RetryPromptPart,
+        TextPart,
+        ToolCallPart,
+        ToolReturnPart,
+    )
+    from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        answered = [
+            part
+            for message in messages
+            for part in getattr(message, "parts", [])
+            if isinstance(part, ToolReturnPart | RetryPromptPart)
+        ]
+        if not answered:
+            return ModelResponse(parts=[ToolCallPart("run_code", {"code": code})])
+        return ModelResponse(parts=[TextPart(str(answered[-1].content))])
+
+    return FunctionModel(model)
+
+
+class TestAWriteCalledFromAScript:
+    """A write tool is not in the sandbox, so calling one from a script
+    fails "Unknown function". A model that only hears what went wrong
+    retries the identical script and stalls; the failure says how to
+    recover."""
+
+    def test_the_hint_names_the_tool_to_call_directly(self) -> None:
+        from app.services.ai.domains.chat.chat_kit.run_code_guard import (
+            native_write_hint,
+        )
+
+        failed = "Runtime error:\nNameError: Unknown function: propose"
+        hint = native_write_hint(failed, frozenset({"propose", "pending"}))
+        assert hint is not None and "`propose`" in hint and "directly" in hint
+        # The sandbox's checker can refuse it before it runs, too.
+        checked = "error[unresolved-reference]: Name `pending` used when not defined"
+        assert "`pending`" in (native_write_hint(checked, frozenset({"pending"})) or "")
+        assert (
+            native_write_hint(
+                "Runtime error:\nNameError: Unknown function: lookup_typo",
+                frozenset({"propose"}),
+            )
+            is None
+        )
+
+    @pytest.mark.parametrize(
+        ("tool_names", "hinted"),
+        [(("lookup", "save_memory"), True), (("lookup",), False)],
+        ids=["granted", "not-granted"],
+    )
+    async def test_the_model_is_told_to_call_it_directly(
+        self, tool_names: tuple[str, ...], hinted: bool
+    ) -> None:
+        """Only at a write this agent holds: a read-only agent pointed at
+        save_memory would go after a tool it cannot call."""
+        from pydantic_ai import Agent as PydanticAgent
+
+        from app.services.ai.domains.chat.tools import resolve_tools
+
+        # Registers save_memory, the native write this test calls.
+        import app.services.ai.domains.chat.user_memory  # noqa: F401
+
+        config = _code_mode(*tool_names)
+        agent = PydanticAgent(
+            _run_code_once('await save_memory(new_fact="x")'),
+            tools=resolve_tools(config.tool_names),
+            capabilities=agent_capabilities(config),
+        )
+        told = (await agent.run("remember x")).output
+
+        assert "save_memory" in told  # the sandbox's own error
+        assert ("`save_memory` is its own tool" in told) is hinted
+
+
+class TestCodeModeLimits:
+    """Scripts run inside the webserver process, and any chat can start
+    one: each is held to the configured time and memory, and a user runs
+    one at a time."""
+
+    def test_the_configured_limits_are_the_sandboxes(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "AI_CODE_MODE_MAX_SECONDS", 7.0)
+        monkeypatch.setattr(settings, "AI_CODE_MODE_MAX_MEMORY_BYTES", 12345678)
+        code_mode = next(
+            cap
+            for cap in agent_capabilities(_code_mode("lookup"))
+            if type(cap).__name__ == "CodeMode"
+        )
+
+        assert code_mode.resource_limits == {
+            "max_duration_secs": 7.0,
+            "max_memory": 12345678,
+        }
+
+    def test_the_defaults_are_tight(self) -> None:
+        from app.core.config import Settings
+
+        fields = Settings.model_fields
+        assert fields["AI_CODE_MODE_MAX_SECONDS"].default == 10.0
+        assert fields["AI_CODE_MODE_MAX_MEMORY_BYTES"].default == 64 * 1024 * 1024
+
+    async def test_a_script_over_the_memory_limit_is_stopped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The setting reaches Monty itself, not just the capability."""
+        from pydantic_ai import Agent as PydanticAgent
+
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "AI_CODE_MODE_MAX_MEMORY_BYTES", 1024 * 1024)
+        agent = PydanticAgent(
+            _run_code_once("x = [0] * 5_000_000\nlen(x)"),
+            capabilities=agent_capabilities(_code_mode()),
+        )
+
+        result = await agent.run("allocate")
+
+        assert "memory limit exceeded" in result.output
+
+    @pytest.mark.parametrize(
+        ("users", "overlapped"),
+        [(("u1", "u1"), False), (("u1", "u2"), True)],
+        ids=["same-user", "two-users"],
+    )
+    async def test_one_user_runs_one_script_at_a_time(
+        self, users: tuple[str, str], overlapped: bool
+    ) -> None:
+        import asyncio
+
+        from pydantic_ai import Agent as PydanticAgent
+
+        from app.services.ai.domains.chat.user_memory import current_user_id
+
+        running = 0
+        most = 0
+
+        async def probe() -> int:
+            """Counts how many scripts are inside it at once."""
+            nonlocal running, most
+            running += 1
+            most = max(most, running)
+            await asyncio.sleep(0.05)
+            running -= 1
+            return most
+
+        agent = PydanticAgent(
+            _run_code_once("await probe()"),
+            tools=[probe],
+            capabilities=agent_capabilities(_code_mode("probe")),
+        )
+
+        async def turn(user: str) -> None:
+            # Each task has its own context: the user its turn binds.
+            current_user_id.set(user)
+            await agent.run("go")
+
+        await asyncio.gather(*(turn(user) for user in users))
+
+        assert (most == 2) is overlapped
+
+
+async def _returned(tool: str, result: Any, *, code_mode: bool = True) -> Any:
+    """``result`` as an agent's output hook hands it on from ``tool``."""
+    from pydantic_ai.messages import ToolCallPart
+    from pydantic_ai.tools import ToolDefinition
+
+    from app.services.ai.domains.chat.agent_loader import _tool_output_limits
+
+    return await _tool_output_limits(code_mode=code_mode).after_tool_execute(
+        None,
+        call=ToolCallPart(tool_name=tool, args={}, tool_call_id="c1"),
+        tool_def=ToolDefinition(name=tool),
+        args={},
+        result=result,
+    )
+
+
+class TestRunCodeShowsDollars:
+    """A script's result is its own dict, past the tools' seam: its cents
+    get their dollars where it reaches the model."""
+
+    async def test_a_run_code_result_carries_dollars(self) -> None:
+        from pydantic_ai.messages import ToolReturn
+
+        returned = ToolReturn(return_value={"limits": [{"spent_cents": 88_202}]})
+
+        out = await _returned("run_code", returned)
+
+        value = out.return_value if isinstance(out, ToolReturn) else out
+        assert value["limits"][0]["spent_usd"] == "$882.02"
+
+    @pytest.mark.parametrize("code_mode", [True, False], ids=["code-mode", "native"])
+    async def test_a_tools_return_is_not_this_hooks(self, code_mode: bool) -> None:
+        """A tool's return carries its dollars from ``resolve_tools``
+        already; this hook dollars run_code's result alone."""
+        assert await _returned(
+            "lookup", {"spent_cents": 88_202}, code_mode=code_mode
+        ) == {"spent_cents": 88_202}
+{%- endif %}
 {% endif %}

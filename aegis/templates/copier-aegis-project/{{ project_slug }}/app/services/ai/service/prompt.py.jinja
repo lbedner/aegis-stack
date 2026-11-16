@@ -9,7 +9,9 @@ contexts + the agent row into something the framework can run.
 from datetime import date
 from typing import Any
 
-from app.core.time import today
+{% if ai_framework == "pydantic-ai" -%}
+from app.core.chat_transcript import steps_line
+{% endif -%}
 from app.services.ai.domains.llm.config import AIServiceConfig
 {% if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
 from app.services.ai.domains.chat.agent_loader import AgentConfig, agent_capabilities
@@ -24,6 +26,9 @@ from app.services.ai.domains.chat.prompts import (
 )
 {% if ai_framework == "pydantic-ai" %}
 from app.services.ai.domains.chat.readings import Reading, format_readings
+{% if ai_backend != "memory" -%}
+from app.services.ai.domains.chat.summary import window
+{% endif -%}
 from app.services.ai.domains.llm.providers import get_agent
 {% else %}
 from app.services.ai.domains.llm.providers import get_llm
@@ -36,7 +41,11 @@ from app.services.ai.domains.chat.self_context import (
     begin_turn_context,
     record_turn_context,
 )
+{% if ai_framework == "pydantic-ai" -%}
+from app.services.ai.models import Conversation, ConversationMessage, MessageRole
+{% else -%}
 from app.services.ai.models import Conversation, MessageRole
+{% endif -%}
 from app.services.ai.service.contexts import ContextsMixin
 {% if ai_rag %}
 from app.services.ai.domains.chat.prompts import codebase_context
@@ -69,15 +78,17 @@ def history_char_budget(context_window_tokens: int | None) -> int:
     return max(HISTORY_CHAR_BUDGET_MIN, min(HISTORY_CHAR_BUDGET_MAX, chars))
 
 
-def _dated(content: str, on: date) -> str:
-    """An answer from an earlier day, prefixed with the day it was given.
+def _day_line(on: date) -> str:
+    """The line ahead of a day's first message in the history.
 
     A stored answer is just text: a figure quoted weeks ago would reach the
     model beside today's with equal standing, and the only way to prefer the
-    fresh one is to notice the contradiction. Dated, the old numbers read as
-    true when written. Today's answers go undated; the date would be noise.
+    fresh one is to notice the contradiction. Under its day, the old numbers
+    read as true when written. Read from the messages alone, it never moves:
+    an answer dated against today changed every line of the day at midnight,
+    and the first turn after it read the whole history afresh.
     """
-    return content if on >= today() else f"[answered {on.isoformat()}] {content}"
+    return f"--- {on.isoformat()} ---"
 
 
 def _history_start(lengths: list[int], budget: int) -> int:
@@ -107,6 +118,32 @@ def _history_start(lengths: list[int], budget: int) -> int:
     return len(lengths)
 
 
+{% if ai_framework == "pydantic-ai" -%}
+def history_lines(messages: list[ConversationMessage]) -> list[str]:
+    """The thread as history replays it, one line per message: who said it
+    and what, what a reply's turn did ahead of its words (``steps_line``),
+    and a day's first message under its day (``_day_line``). A message's
+    line never changes as the thread grows or the clock moves, so neither
+    does replayed history."""
+    lines: list[str] = []
+    day: date | None = None
+    for msg in messages:
+        if msg.role == MessageRole.USER:
+            line = f"User: {msg.content}"
+        elif msg.role == MessageRole.ASSISTANT:
+            said = f"Assistant: {msg.content}"
+            steps = steps_line(msg.metadata.get("tool_trace") or [])
+            line = f"Assistant steps: {steps}\n{said}" if steps else said
+        else:
+            continue
+        if (on := msg.timestamp.date()) != day:
+            day = on
+            line = f"{_day_line(on)}\n{line}"
+        lines.append(line)
+    return lines
+
+
+{% endif -%}
 class PromptMixin(ContextsMixin):
     """Agent-config overlay and per-request prompt/runtime construction."""
 
@@ -296,15 +333,17 @@ class PromptMixin(ContextsMixin):
         latest_message = conversation.get_last_message()
         asking = latest_message is not None and latest_message.role == MessageRole.USER
         earlier = conversation.messages[:-1] if asking else conversation.messages
-        lines = [
-            f"User: {msg.content}"
-            if msg.role == MessageRole.USER
-            else f"Assistant: {_dated(msg.content, msg.timestamp.date())}"
-            for msg in earlier
-            if msg.role in (MessageRole.USER, MessageRole.ASSISTANT)
-        ]
+        lines = history_lines(earlier)
         lengths = [len(line) + 1 for line in lines]
         start = _history_start(lengths, budget)
+{%- if ai_backend != "memory" %}
+        # What fell out is not gone: its running summary rides ahead of the
+        # turns still in view, and moves only with the cut (``window``).
+        seen = window(conversation, lengths, start, budget)
+        start, earlier_summary = seen.start, seen.summary
+{%- else %}
+        earlier_summary = ""
+{%- endif %}
 
         # How much the agent LOST is the number worth being able to report.
         record_turn_context(
@@ -312,6 +351,10 @@ class PromptMixin(ContextsMixin):
             history_budget=budget,
             messages_kept=len(lines) - start,
             messages_dropped=start,
+            summary_chars=len(earlier_summary),
+{%- if ai_backend != "memory" %}
+            fold_to=seen.fold_to,
+{%- endif %}
         )
 
         history = "\n".join(lines[start:])
@@ -323,7 +366,16 @@ class PromptMixin(ContextsMixin):
             else None
         )
         return "\n\n".join(
-            filter(None, (format_readings(readings), history, right_now, question))
+            filter(
+                None,
+                (
+                    format_readings(readings),
+                    earlier_summary,
+                    history,
+                    right_now,
+                    question,
+                ),
+            )
         )
 {% else %}
     async def _prepare_llm_and_messages(

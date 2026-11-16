@@ -32,7 +32,14 @@ if TYPE_CHECKING:
         update_agent,
     )
 {%- endif %}
-    from app.services.ai.domains.chat.attachments import ChatAttachment
+    from app.services.ai.domains.chat.attachments import (
+        MAX_ATTACHMENTS,
+        ChatAttachment,
+        LiftedTurn,
+        composer,
+        keeps_pastes,
+        lift_turn,
+    )
     from app.services.ai.domains.chat.fetchers import FetchContext, register_fetcher
 {%- if ai_backend != "memory" %}
     from app.services.ai.domains.chat.context_modules import (
@@ -53,10 +60,12 @@ if TYPE_CHECKING:
     )
 {%- if ai_backend != "memory" %}
     from app.services.ai.domains.chat.pastes import (
-        Picture,
-        keep_picture,
+        Paste,
+        keep_paste,
         paste_id,
+        read_paste,
         read_picture,
+        store_paste,
     )
     from app.services.ai.domains.chat.queries import conversation_stats
     from app.services.ai.domains.chat.sentiment import (
@@ -137,10 +146,14 @@ if TYPE_CHECKING:
     )
 {%- endif %}
 {%- if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
+    from app.services.ai.jobs import fold_conversation_job
+    from app.services.ai.domains.chat.summary import fold_conversation, write_summary
     from app.services.ai.domains.llm.writer import write, writer
 {%- endif %}
+    from app.services.ai.domains.llm.waiting import waiting_reason
 {%- if ai_backend != "memory" %}
     from app.services.ai.domains.spend import queries as spend_queries
+    from app.services.ai.domains.spend import report as spend_report
     from app.services.ai.domains.spend.recording import (
         calculate_cost,
         chat_action,
@@ -149,6 +162,8 @@ if TYPE_CHECKING:
     )
     from app.services.ai.domains.spend.schemas import (
         ActionSpend,
+        CallSpend,
+        KindModelSpend,
         ModelSpend,
         SpendLedger,
     )

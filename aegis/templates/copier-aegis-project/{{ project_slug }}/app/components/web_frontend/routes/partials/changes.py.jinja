@@ -4,7 +4,8 @@ A card renders the stored queue row through ``change_queue.card`` (the same
 builder the JSON routes in ``api/changes.py`` use), so what the user
 approves is what runs. Approving or rejecting swaps the card for its new
 state. Everything is scoped to the signed-in user: another user's card is
-a 404 (``change_queue.deps``), never a card.
+a 404 to act on (``change_queue.deps``), never a card. Shown, a card that is
+gone (or not yours, which reads the same) says so (``card_missing``).
 """
 
 from collections.abc import Awaitable, Callable
@@ -15,17 +16,25 @@ from fastapi.responses import HTMLResponse, Response
 from markupsafe import Markup
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.components.web_frontend.rendering import templates
-from app.core.chat_transcript import CARD_STATUS, proposer_line
+from app.components.web_frontend.rendering import templates, trigger
+from app.core.chat_transcript import CARD_STATUS, batch_outcome, proposer_line
 from app.core.db import get_async_db
 from app.core.log import logger
 from app.services import change_queue
 from app.services.change_queue import ChangeDisplayRow, PendingChange
-from app.services.change_queue.deps import owned_batch, owned_change
+from app.services.change_queue.deps import (
+    found_batch,
+    found_change,
+    owned_batch,
+    owned_change,
+)
 from app.services.shared.deps import get_owner_user_id
 
 PATH = "/partials/changes"
 router = APIRouter(prefix=PATH)
+# Sent with every decision, so another copy of the queue on the page (the
+# chat's waiting list) redraws.
+RESOLVED = "change:resolved"
 
 
 def change_url(change_id: int | str) -> str:
@@ -45,6 +54,14 @@ def card_url(marker: dict[str, Any]) -> str | None:
     return None
 
 
+def card_missing(request: Request) -> Response:
+    """A card no longer there, an approval card or a drawn one (``chat_cards``):
+    the template says why it is a 200."""
+    return templates.TemplateResponse(
+        request=request, name="partials/changes/card_missing.html"
+    )
+
+
 def _linked(line: ChangeDisplayRow) -> str | Markup:
     """A row's value, as a link when the row says where it leads: a path in
     the app opens in place, anywhere else in a new tab."""
@@ -60,11 +77,13 @@ async def _views(db: AsyncSession, rows: list[PendingChange]) -> list[dict[str, 
     """Rows as their cards show them, described together."""
     views = []
     for row, card in zip(rows, await change_queue.cards(db, rows)):
-        label, tone = CARD_STATUS[change_queue.outcome_of(row)]
+        outcome = change_queue.outcome_of(row)
+        label, tone = CARD_STATUS[outcome]
         views.append(
             card.model_dump()
             | {
                 "display": [(line.label, _linked(line)) for line in card.display],
+                "outcome": outcome,
                 "label": label,
                 "tone": tone,
                 "url": change_url(card.id),
@@ -86,15 +105,32 @@ async def _batch_view(
 
 
 def _batch_shape(batch_id: str, views: list[dict[str, Any]]) -> dict[str, Any]:
-    """One batch as its card shows it: every row, one decision."""
+    """One batch as its card shows it: every row, one decision, rows that
+    say the same thing folded together (``_groups``), and once decided, its
+    outcome."""
+    pending = any(v["status"] == "pending" for v in views)
     return {
         "batch_id": batch_id,
         "url": batch_url(batch_id),
         "title": views[0]["title"],
         "by": views[0]["by"],
         "rows": views,
-        "pending": any(v["status"] == "pending" for v in views),
+        "groups": _groups(views),
+        "pending": pending,
+        "outcome": None if pending else batch_outcome(v["outcome"] for v in views),
     }
+
+
+def _groups(views: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A batch's rows folded into groups of the same change, in first-seen
+    order: rows whose lines match but for the first (which one it is about)
+    read once, with ``shared`` those lines. A group carries its rows, so
+    each one's skip survives behind the fold; one row is never a group."""
+    found: dict[Any, list[dict[str, Any]]] = {}
+    for view in views:
+        rest = tuple((label, str(value)) for label, value in view["display"][1:])
+        found.setdefault(rest or view["id"], []).append(view)
+    return [{"rows": rows, "shared": rows[0]["display"][1:]} for rows in found.values()]
 
 
 def _render(card: str, view: dict[str, Any]) -> HTMLResponse:
@@ -116,7 +152,7 @@ async def _resolve(
     except Exception:
         logger.exception(f"Resolving pending change {row.id} failed")
     await db.commit()
-    return _render("change_card", await _view(db, row))
+    return trigger(_render("change_card", await _view(db, row)), RESOLVED)
 
 
 @router.get("", response_class=HTMLResponse)
@@ -157,9 +193,12 @@ async def review(
 
 @router.get("/{change_id}", response_class=HTMLResponse)
 async def show(
-    row: PendingChange = Depends(owned_change),
+    request: Request,
+    row: PendingChange | None = Depends(found_change),
     db: AsyncSession = Depends(get_async_db),
 ) -> Response:
+    if row is None:
+        return card_missing(request)
     return _render("change_card", await _view(db, row))
 
 
@@ -181,10 +220,13 @@ async def reject(
 
 @router.get("/batch/{batch_id}", response_class=HTMLResponse)
 async def show_batch(
+    request: Request,
     batch_id: str,
-    rows: list[PendingChange] = Depends(owned_batch),
+    rows: list[PendingChange] | None = Depends(found_batch),
     db: AsyncSession = Depends(get_async_db),
 ) -> Response:
+    if rows is None:
+        return card_missing(request)
     return _render("batch_card", await _batch_view(db, batch_id, rows))
 
 
@@ -201,7 +243,8 @@ async def approve_batch(
     skipped = [int(v) for v in form.getlist("exclude_ids") if str(v).isdigit()]
     await change_queue.approve_rows(db, rows, exclude_ids=skipped)
     await db.commit()
-    return _render("batch_card", await _batch_view(db, batch_id, rows))
+    card = _render("batch_card", await _batch_view(db, batch_id, rows))
+    return trigger(card, RESOLVED)
 
 
 @router.post("/batch/{batch_id}/reject", response_class=HTMLResponse)
@@ -212,5 +255,6 @@ async def reject_batch(
 ) -> Response:
     await change_queue.reject_rows(db, rows)
     await db.commit()
-    return _render("batch_card", await _batch_view(db, batch_id, rows))
+    card = _render("batch_card", await _batch_view(db, batch_id, rows))
+    return trigger(card, RESOLVED)
 {% endif %}

@@ -152,7 +152,7 @@ async def providers() -> None:
 
     console.print(table)
     console.print()
-    console.print(f"[dim]{t('ai.providers_tip', app='aidb')}[/dim]")
+    console.print(f"[dim]{t('ai.providers_tip', app='{{ project_slug }}')}[/dim]")
 
 
 async def _save_to_store(name: str, value: str) -> None:
@@ -326,7 +326,7 @@ async def add_provider(
         f"[bold {theme.ACCENT}]{t('ai.provider_added')}[/bold {theme.ACCENT}]"
     )
     console.print()
-    console.print(f"[dim]{t('ai.test_with', app='aidb')}[/dim]")
+    console.print(f"[dim]{t('ai.test_with', app='{{ project_slug }}')}[/dim]")
 
 
 @app.command("use-provider", help=lazy_t("ai.help_use_provider"))
@@ -367,7 +367,7 @@ async def use_provider(
         console.print()
         console.print(f"[{theme.WARNING}]{t('ai.run_first')}[/{theme.WARNING}]")
         console.print(
-            f"  [{theme.ACCENT}]aidb ai add-provider {provider}[/{theme.ACCENT}]"
+            f"  [{theme.ACCENT}]{{ project_slug }} ai add-provider {provider}[/{theme.ACCENT}]"
         )
         raise typer.Exit(1)
 
@@ -387,7 +387,7 @@ async def use_provider(
                 f"[{theme.WARNING}]{t('ai.consider_running')}[/{theme.WARNING}]"
             )
             console.print(
-                f"  [{theme.ACCENT}]aidb ai add-provider {provider}[/{theme.ACCENT}]"
+                f"  [{theme.ACCENT}]{{ project_slug }} ai add-provider {provider}[/{theme.ACCENT}]"
             )
             console.print(f"[dim]{t('ai.to_configure_key')}[/dim]")
             console.print()

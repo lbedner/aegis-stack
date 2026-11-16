@@ -83,7 +83,7 @@ def bot_on(
 
     @asynccontextmanager
     async def her_live(
-        call: Any, voice: Any, engine: Any, owner: int | None
+        call: Any, voice: Any, engine: Any, owner: int | None, ledger: Any
     ) -> AsyncIterator[Any]:
         yield None
 

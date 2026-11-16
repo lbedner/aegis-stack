@@ -159,23 +159,28 @@ def _priced_input_cost(usage: dict[str, int], rates: llm_queries.Rates) -> float
     )
 
 
-async def _write(row: LLMUsage, what: str) -> None:
-    """One ledger row, its model named bare like every other, and its user
-    whoever it is done for where the caller names none; a failed
-    write is logged and swallowed - usage tracking must never fail the
-    calling request."""
+def stamped(row: LLMUsage) -> LLMUsage:
+    """A ledger row as every one is kept: its model named bare like every
+    other, its user whoever it is done for where the caller names none,
+    and its time now."""
     row.model_id = _bare_model_name(row.model_id)
     # Whose it is, where the caller names nobody: whoever it is being done
     # for (``acting_as``, bound once by a turn or a meeting's bot).
     owner = current_owner_user_id.get()
     row.user_id = row.user_id or (None if owner is None else str(owner))
     # Naive UTC: asyncpg rejects an aware value for a ``timestamp without
-    # time zone`` column, and the except below would swallow that as a
+    # time zone`` column, and a writer's except would swallow that as a
     # lost row.
     row.timestamp = utcnow()
+    return row
+
+
+async def _write(row: LLMUsage, what: str) -> None:
+    """One ledger row (``stamped``); a failed write is logged and swallowed
+    - usage tracking must never fail the calling request."""
     try:
         async with get_async_session() as session:
-            session.add(row)
+            session.add(stamped(row))
     except Exception as e:
         logger.error(f"Failed to record {what}", error=str(e))
 
@@ -247,14 +252,16 @@ async def record_usage(
 
 
 # --- voice -------------------------------------------------------------------
-# Voice bills by the second (a transcription), by the character or second
-# of speech, or by audio tokens (a realtime call). Every rate is the
+# Voice bills by the second (a transcription, a call on a model priced by
+# the minute), by the character or second of speech, or by audio tokens (a
+# realtime call). Every rate is the
 # catalog's (``llm_price``, synced with the model), so a voice cost is
 # priced exactly where a chat turn's is, and lands in the same ledger.
 
 STT_ACTION = "stt"
 TTS_ACTION = "tts"
 REALTIME_ACTION = "realtime"
+
 # The ledger's voice actions, as the spend report names them.
 VOICE_ACTIONS: dict[str, str] = {
     STT_ACTION: "Transcription",
@@ -325,12 +332,6 @@ async def record_speech(
     )
 
 
-async def realtime_price(model: str) -> llm_queries.Rates | None:
-    """A realtime model's rates, read once when its call opens; None when it
-    cannot be priced (the call goes on either way)."""
-    return await _rates(model)
-
-
 def realtime_cost(rates: llm_queries.Rates | None, usage: Any) -> float:
     """A realtime call's tokens at the catalog's text, audio and cached
     rates. The totals include the audio and the cached share, so each is
@@ -354,32 +355,4 @@ def realtime_cost(rates: llm_queries.Rates | None, usage: Any) -> float:
         + cached * _cached_read_rate(rates)
         + text_out * output_rate
         + audio_out * (rates.get("output_cost_per_audio_token") or output_rate)
-    )
-
-
-async def record_realtime(
-    model: str,
-    usage: Any,
-    *,
-    seconds: float,
-    conversation_id: str | None,
-    rates: llm_queries.Rates | None,
-    user_id: str | None = None,
-) -> None:
-    """A realtime call's row: its tokens, priced at the catalog's rates like
-    every other model call (``rates``, read once when the call opened)."""
-    await _write(
-        LLMUsage(
-            action=REALTIME_ACTION,
-            model_id=model,
-            user_id=user_id,
-            input_tokens=_token_count(usage, "input_tokens"),
-            output_tokens=_token_count(usage, "output_tokens"),
-            total_cost=realtime_cost(rates, usage),
-            audio_seconds=seconds,
-            duration_ms=seconds * 1000,
-            tool_calls=getattr(usage, "tool_calls", None),
-            conversation_id=conversation_id,
-        ),
-        "a realtime call's usage",
     )

@@ -330,18 +330,20 @@ async def _join(
     voice: Any | None,
     engine: Any | None,
     taken: list[Took],
+    ledger: AsyncSession,
 ) -> None:
     """Into the call signed in as the agent it was sent as (``login``),
     showing its card (``start``), speaking in ``voice`` (``voice_of``), her
-    answers made live on ``engine`` where there is one (``live_engine_of``).
-    What it did on the page and has not kept yet ends up in ``taken``."""
+    answers made live on ``engine`` where there is one (``live_engine_of``),
+    their cost kept on ``ledger``. What it did on the page and has not kept
+    yet ends up in ``taken``."""
     meeting_id: int = meeting.id  # type: ignore[assignment]
     pulse = _Pulse(meeting_id)
     keep_in = settings.MEETINGS_KEEP_AUDIO_DIR
     hearing = Hearing(Path(keep_in) / str(meeting_id) if keep_in else None)
     async with open_meet(meeting.url, hearing.heard, login=login, start=start) as call:
         try:
-            await _in_call(call, meeting, pulse, hearing, voice, engine)
+            await _in_call(call, meeting, pulse, hearing, voice, engine, ledger)
         finally:
             taken.extend(call.taken())
 
@@ -353,6 +355,7 @@ async def _in_call(
     hearing: Hearing,
     voice: Any | None,
     engine: Any | None,
+    ledger: AsyncSession,
 ) -> None:
     """The call, from asking to join to leaving."""
     meeting_id: int = meeting.id  # type: ignore[assignment]
@@ -393,7 +396,9 @@ async def _in_call(
 
     # What is started inside (her live call, her answers) carries them.
     with watching(heard), runs_watching(pulse.soon):
-        async with live(call, voice, engine, meeting.owner_user_id) as her_voice:
+        async with live(
+            call, voice, engine, meeting.owner_user_id, ledger
+        ) as her_voice:
             answering = Answers(call, voice, her_voice)
             transcript.her = answering.talk
             try:
@@ -441,7 +446,11 @@ async def run_meeting(meeting_id: int) -> None:
                     MeetingStatus.FAILED,
                     f"The bot joins Google Meet so far, not {meeting.platform.title()}",
                 )
-            await _join(meeting, account.login_secret, start, voice, engine, taken)
+            # Her live voice's cost: each write commits as it lands.
+            async with get_async_session() as ledger:
+                await _join(
+                    meeting, account.login_secret, start, voice, engine, taken, ledger
+                )
             await _move(meeting_id, MeetingStatus.LEFT, NOT_DONE)
         except _RunEnded as ended:
             await _move(meeting_id, ended.status, NOT_DONE, ended.reason)

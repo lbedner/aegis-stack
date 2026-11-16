@@ -1,9 +1,9 @@
 """The MCP server: the app's granted tools, for an outside assistant.
 
-Tools are the registry's own callables (``app.core.tools``), registered by
-name: FastMCP builds each schema from the type hints and docstring the
-chat agents already read, so a read over MCP and the same read by an agent
-are one computation. Never ``FastMCP.from_fastapi``: that would turn every
+Tools are the registry's own callables as it serves them (``served``: money
+in dollars beside its cents), registered by name: FastMCP builds each
+schema from the type hints and docstring the chat agents already read, so
+a read over MCP and the same read by an agent are one computation. Never ``FastMCP.from_fastapi``: that would turn every
 API route into a tool, writes included, and give one question two answers.
 """
 
@@ -25,7 +25,13 @@ from pydantic import BaseModel, ConfigDict
 
 from app.core.config import settings
 from app.core.log import logger
-from app.core.tools import RUN_CODE, acting_as, get_tool, mcp_servable
+from app.core.tools import (
+    RUN_CODE,
+    acting_as,
+    get_tool,
+    mcp_servable,
+    with_dollars_schema,
+)
 from mcp import types
 
 
@@ -280,7 +286,9 @@ def build_server(
     for name in effects:
         tool = get_tool(name)
         if tool is not None:
-            server.add_tool(Tool.from_function(tool.func, name=name))
+            served = Tool.from_function(tool.served, name=name)
+            served.output_schema = with_dollars_schema(served.output_schema)
+            server.add_tool(served)
     return server
 
 

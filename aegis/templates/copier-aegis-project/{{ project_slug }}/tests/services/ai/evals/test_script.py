@@ -37,7 +37,7 @@ async def test_an_override_model_answers_for_every_agent_built() -> None:
         agent = await get_agent(AIServiceConfig(), settings=None)
     finally:
         MODEL_OVERRIDE.reset(token)
-    assert agent.model is model
+    assert agent.model.wrapped is model  # type: ignore[union-attr]
 
 
 def test_a_real_turn_is_recorded_as_the_script_it_took() -> None:

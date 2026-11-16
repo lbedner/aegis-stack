@@ -10,9 +10,15 @@ import base64
 
 import pytest
 
+from pydantic import ValidationError
+
+from app.components.backend.api.ai.chat import ChatTurn
 from app.services.ai.domains.chat.attachments import (
+    MAX_ATTACHMENT_BYTES,
+    MAX_ATTACHMENTS,
     ChatAttachment,
     annotate_attachments,
+    composer,
 {%- if ai_framework == "pydantic-ai" %}
     build_user_content,
 {%- endif %}
@@ -47,7 +53,48 @@ class TestBuildUserContent:
 
         with pytest.raises(ValueError, match="attachment"):
             build_user_content("ctx", [bad])
+
+    def test_a_document_is_read_not_shown_to_the_model(self) -> None:
+        """A PDF reaches the turn as its text (``prepare_turn``), never as
+        bytes a model may not take."""
+        pdf = ChatAttachment.model_construct(
+            media_type="application/pdf", data_b64=_PNG, name="a.pdf"
+        )
+
+        assert build_user_content("ctx", [pdf]) == "ctx"
+        assert len(build_user_content("ctx", [pdf, _shot()])) == 2
 {%- endif %}
+
+
+class TestWhatATurnMayCarry:
+    """The composer's limits are the server's, sent to it, and the request
+    holds them whoever sends it."""
+
+    def test_the_composer_is_told_the_limits_the_request_holds(self) -> None:
+        told = composer()
+
+        assert told["max_files"] == MAX_ATTACHMENTS
+        assert told["max_bytes"] == MAX_ATTACHMENT_BYTES
+        assert set(told["images"]) <= set(told["types"])
+
+    def test_a_file_it_does_not_take_is_refused(self) -> None:
+        with pytest.raises(ValidationError, match="takes"):
+            ChatAttachment(media_type="text/html", data_b64=_PNG)
+
+    def test_a_file_past_the_size_is_refused(self) -> None:
+        big = base64.b64encode(b"x" * (MAX_ATTACHMENT_BYTES + 3)).decode()
+
+        with pytest.raises(ValidationError):
+            ChatAttachment(media_type="image/png", data_b64=big)
+        # At the limit itself it rides.
+        exact = base64.b64encode(b"x" * MAX_ATTACHMENT_BYTES).decode()
+        assert ChatAttachment(media_type="image/png", data_b64=exact)
+
+    def test_more_files_than_one_turn_takes_are_refused(self) -> None:
+        shots = [_shot()] * MAX_ATTACHMENTS
+        assert ChatTurn(message="hi", attachments=shots)
+        with pytest.raises(ValidationError):
+            ChatTurn(message="hi", attachments=[*shots, _shot()])
 
 
 class TestAnnotateAttachments:

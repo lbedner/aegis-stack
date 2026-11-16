@@ -199,15 +199,17 @@ async def tags_for(db: AsyncSession, document_id: int) -> list[str]:
     return [row.label for row in rows]
 
 
-async def pages_for(db: AsyncSession, document_id: int) -> list[DocumentPage]:
-    """Every extracted page of a document, in page order."""
-    rows = (
-        await db.exec(
-            select(DocumentPage)
-            .where(DocumentPage.document_id == document_id)
-            .order_by(DocumentPage.page_number)
+async def pages_for(
+    db: AsyncSession, document_id: int, *, owner_user_id: int | None = None
+) -> list[DocumentPage]:
+    """Every extracted page of a document, in page order; none when it is
+    not ``owner_user_id``'s."""
+    query = select(DocumentPage).where(DocumentPage.document_id == document_id)
+    if owner_user_id is not None:
+        query = query.join(Document).where(
+            *owner_filters(Document.owner_user_id, owner_user_id)
         )
-    ).all()
+    rows = (await db.exec(query.order_by(DocumentPage.page_number))).all()
     return list(rows)
 
 

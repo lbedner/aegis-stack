@@ -1,4 +1,7 @@
-{# A turn's two bubbles, appended to the thread when the composer posts. #}
+{# A turn's two bubbles, appended to the thread when the composer posts.
+   ``text`` is what the reader sees and ``sent`` what goes to the model:
+   they differ where a paste was lifted, the reader getting its chip and the
+   model the marker that names it. #}
 {% from "components/macros/chat.html" import user_bubble, streaming_bubble %}
-{{ user_bubble(text, attachment_names=attachment_names) }}
-{{ streaming_bubble(text, conversation_id, assistant) }}
+{{ user_bubble(text, sent, attachment_names=attachment_names, pastes=pastes) }}
+{{ streaming_bubble(sent, conversation_id, assistant) }}

@@ -1,0 +1,15 @@
+{# Costs > Calls: each live call, newest first, as itself (its voice, by
+   the second or by its tokens) plus the answers given during it. #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% call card("Live calls", month_label, id="ai-cost-calls") %}
+  {{ data_table([
+    {"key": "when", "label": "When", "kind": "date"},
+    {"key": "model", "label": "Model"},
+    {"key": "minutes", "label": "Minutes", "align": "right"},
+    {"key": "call", "label": "Call", "align": "right"},
+    {"key": "answers", "label": "Answers", "align": "right"},
+    {"key": "total", "label": "Total", "align": "right"},
+    {"key": "ended", "label": "Ended", "kind": "status"},
+  ], rows, empty="No calls this month") }}
+{% endcall %}

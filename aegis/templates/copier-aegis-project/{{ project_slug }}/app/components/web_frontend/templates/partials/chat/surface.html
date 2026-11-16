@@ -5,22 +5,26 @@
    Needs: assistant, chat_path, messages,
    conversation_id, picker (the catalog is there to pick from), voice (how
    a spoken turn is heard, or none), approvals (the change queue's
-   review list's URL, or none), voices (the voice chip: voice with a
+   review list's URL, or none) and resolved_event (what a decision on a
+   card sends), voices (the voice chip: voice with a
    database, for an operator), calls (live calls: ``offers_calls``),
    operator (a call's engine and cost are shown: the operator's controls),
-   agent_url (the answering agent's editor, where the mount has one). #}
+   agent_url (the answering agent's editor, where the mount has one),
+   composer (what a turn may carry: ``attachments.composer``). #}
 {% from "components/macros/icons.html" import icon %}
 {% from "components/macros/chat.html" import agent_chip, assistant_row, button_classes, conversation_field, turn_head, voice_states %}
 {% from "partials/chat/_call.html" import call_bar, mic_states, phone, phone_states with context %}
 <div id="chat" class="flex flex-col h-full"
-     data-chat='{{ {"path": chat_path}|tojson }}'>
+     data-chat='{{ {"path": chat_path, "composer": composer}|tojson }}'>
   {% if approvals %}
   {# Every card still waiting for the user, beside the thread, so a proposal
      is never lost with the conversation it was made in. #}
   <details class="mb-3 text-xs" data-approvals>
     <summary class="cursor-pointer text-aegis-muted hover:text-aegis-text">Waiting for your approval</summary>
-    {# Fetched when first opened: most visits never open it. #}
-    <div hx-get="{{ approvals }}" hx-trigger="toggle once from:closest details" hx-swap="innerHTML"></div>
+    {# Fetched each time it is opened: most visits never open it. Fetched
+       again, while open, when a card is decided anywhere on the page, so it
+       never offers one already settled in the thread. #}
+    <div hx-get="{{ approvals }}" hx-trigger="toggle[target.open] from:closest details, {{ resolved_event }}[this.closest('details').open] from:body" hx-swap="innerHTML"></div>
   </details>
   {% endif %}
   <div class="relative flex-1 min-h-0">
@@ -79,8 +83,8 @@
               @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); if (text.trim() || staged) $el.form.requestSubmit() }"
               @input="$el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 'px'"
               class="textarea textarea-bordered textarea-sm bg-aegis-bg flex-1 resize-none max-h-40 leading-relaxed min-h-0 py-3"></textarea>
-    <label class="{{ button_classes('default') }} cursor-pointer" title="Attach images">
-      <input type="file" id="chat-attach" accept="image/png,image/jpeg,image/webp,image/gif" multiple class="sr-only" aria-label="Attach images">
+    <label class="{{ button_classes('default') }} cursor-pointer" title="Attach {{ composer.kinds }}">
+      <input type="file" id="chat-attach" accept="{{ composer.types|join(',') }}" multiple class="sr-only" aria-label="Attach {{ composer.kinds }}">
       {{ icon("paperclip", "w-4 h-4") }}
     </label>
     {% if voice %}

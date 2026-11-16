@@ -753,9 +753,13 @@ MESSAGES: dict[str, str] = {
     "ai.model_usage": "模型用量",
     "ai.no_recent_activity": "暂无最近活动。",
     "ai.recent_activity": "最近活动",
+    "ai.help_costs": "按类型和模型显示模型与语音的费用，以及每次实时通话及其间回答的费用。",
+    "ai.opt_costs_days": "读取最近多少天（默认 30）。",
+    "ai.costs_by_model": "按模型，最近 {days} 天",
+    "ai.costs_calls": "实时通话",
+    "ai.costs_empty": "该时间段内没有花费。",
     "ai.connection_error": "连接错误：{error}",
     "ai.timeout_label": "超时错误：{error}",
-    # RAG 提示（聊天中）
     # Sentiment stats (CLI)
     "ai.help_sentiment": "显示分析任务生成的对话情感统计。",
     "ai.sentiment_title": "对话情感",

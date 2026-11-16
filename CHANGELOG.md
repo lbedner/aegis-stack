@@ -9,6 +9,41 @@
 
 ### Added
 
+- **Memory writes are approval cards.** `save_memory` and `replace_memory`,
+  and the new `update_memory` and `forget_memory` (a saved fact named by a
+  quote of it), file a card on the change queue; nothing is remembered or
+  forgotten until the user approves it. A batch card folds rows that say
+  the same thing under one "Skip all"; a decided card folds to its outcome
+  and says why; a card no longer in the queue says so instead of failing
+  its load; `pending` redraws cards only when asked (`draw=True`).
+- **Agents that extend another, and a guarded sandbox.** An agent row's
+  `extends` names its parent, one level deep: the child's prompt goes
+  first, then the parent's, and the tools, context modules and knowledge
+  bases it leaves empty come from the parent; model, sampling and code mode
+  stay its own. Code mode's scripts are held to `AI_CODE_MODE_MAX_SECONDS`
+  (10 s) and `AI_CODE_MODE_MAX_MEMORY_BYTES` (64 MiB), one per user at a
+  time, and a script that calls a write tool is told to call it directly.
+  Every `*_cents` integer a tool or a script returns reaches the model with
+  its `*_usd` beside it.
+- **A chat that keeps its place.** Turns that fall out of the history
+  window are folded on the worker into a running summary that rides ahead
+  of the history; it moves only when the window's cut does, so a local
+  engine's prompt cache holds between turns. Each replayed answer carries
+  its steps (tool calls, scripts, card ids), so "try again" does not
+  re-query; a day line marks where each day starts in place of a per-answer
+  date. A conversation keeps the agent it was talking to: a follow-up that
+  names none, or a call's look, answers as that agent.
+- **Pastes and PDFs out of the thread.** Text over 2,000 characters and an
+  attached PDF (read by the documents service, on the worker) become a
+  one-line marker with a chip that opens them; `pasted` reads them back,
+  for their owner only. The composer's accepted types, size and count come
+  from the server. While the model is quiet the answer shows why and for
+  how long ("loading - 12s"), read from the inference engine.
+- **What a call costs, as it runs.** An engine priced by the minute is
+  billed by the second; the call bar shows the running cost, voice and
+  thinking, to an operator. Overseer AI > Costs gains Models (each model by
+  what it was used for) and Calls (each call with the answers it handed
+  off), and `ai costs` prints both.
 - **A stage for a live call.** Beside the chat's phone, a full-screen page
   (`<chat mount>/stage`) holds the call on the same socket: the assistant's
   figure in the middle shows her listening, speaking and pulling data up,
@@ -45,6 +80,13 @@
   `speak` and `speech-model`, and `/api/v1/inference/speech`, do the same.
 
 ### Fixed
+
+- **Models.** A model that refuses `temperature` is retried once without it
+  and never sent one again, on every provider; a local engine gets a
+  600-second timeout and no retries (a retry re-reads the whole prompt);
+  lab icons are fetched through `safe_fetch`; the catalog's lab lookups are
+  batched. CLI hints name the project's own command, not `{{ project_slug }}`
+  or `aidb`.
 
 - **A map card in the chat no longer stalls the first open.** Drawing the
   Server opened up asked which services open up by reading every import

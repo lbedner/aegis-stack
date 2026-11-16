@@ -179,13 +179,15 @@ class FiledCard(BaseModel):
 
 
 class Filed(BaseModel):
-    """An agent's own cards: awaiting the user, and decided lately."""
+    """An agent's own cards: awaiting the user, and decided lately; and
+    the ones a chat redraws (``draw``), only when asked to."""
 
     model_config = FIGURES
 
     pending: list[FiledCard]
     decided: list[FiledCard]
-    note: str | None = absent()  # in a chat, which redraws them
+    draw: list[FiledCard] = []
+    note: str | None = absent()  # in a chat: what it redrew
 
 
 class Withdrawn(BaseModel):

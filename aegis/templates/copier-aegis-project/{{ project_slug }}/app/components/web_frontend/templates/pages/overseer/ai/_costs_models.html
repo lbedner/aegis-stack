@@ -1,0 +1,14 @@
+{# Costs > Models: each model under the kind it was used for (a model
+   call, a live call, a transcription, speech), most spent first. #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% call card("By model", month_label, id="ai-cost-models") %}
+  {{ data_table([
+    {"key": "kind", "label": "Kind"},
+    {"key": "model", "label": "Model"},
+    {"key": "uses", "label": "Uses", "kind": "int", "align": "right"},
+    {"key": "minutes", "label": "Minutes", "align": "right"},
+    {"key": "tokens", "label": "Tokens", "kind": "int", "align": "right"},
+    {"key": "cost", "label": "Cost", "align": "right"},
+  ], rows, empty="Nothing spent this month") }}
+{% endcall %}

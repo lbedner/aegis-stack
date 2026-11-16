@@ -157,6 +157,15 @@ document.addEventListener('click', (event) => {
   });
 });
 
+// An approval batch's "skip all" for a group of the same change ticks the
+// group's own rows (macros/changes.html): the form reads only their boxes,
+// so they stay the one record of what is skipped.
+document.addEventListener('change', (event) => {
+  const all = event.target.closest?.('[data-skip-group]');
+  if (!all) return;
+  all.closest('[data-change-group]').querySelectorAll('input[name=exclude_ids]').forEach((box) => { box.checked = all.checked; });
+});
+
 function toast(text, tone) {
   window.dispatchEvent(new CustomEvent('toast', { detail: { text, tone } }));
 }

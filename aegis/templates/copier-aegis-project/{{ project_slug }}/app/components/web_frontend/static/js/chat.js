@@ -4,7 +4,8 @@
    post appends a user bubble and a streaming bubble carrying the text to
    send; this reads that bubble, POSTs to the mount's SSE route and
    renders the frames into it: `chunk` text through a typewriter, `tool`
-   calls as trail rows, `page` actions on the page, `error` as a line. When the stream completes the
+   calls as trail rows, `page` actions on the page, `waiting` as the caption
+   of a quiet stretch, `error` as a line. When the stream completes the
    stored message is swapped in over the bubble (server-rendered), so the
    client never renders a settled message.
 
@@ -124,7 +125,8 @@ function pageAction({ action, target, value }) {
     if (event.target.closest('#chat-jump')) follow(true);
     const replay = event.target.closest('[data-replay]');
     if (replay) {
-      const text = replay.closest('[data-role=user]').querySelector('[data-text]').textContent;
+      // What it sent, its paste markers kept, not the words on screen.
+      const text = replay.closest('[data-role=user]').dataset.sent;
       const form = chatComposer();
       const box = form.querySelector('textarea');
       box.value = text;
@@ -238,13 +240,11 @@ function pageAction({ action, target, value }) {
   };
 
   // --- Attachments: staged in memory, sent with the next turn ----------
-  // A file input, a paste or a drop stages an image; the chips are drawn
-  // from the staged list, and the stream request carries the bytes as
-  // base64. They ride one turn only: cleared on success, kept on failure
-  // so a retry still has them.
-  const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
-  const MAX_BYTES = 10 * 1024 * 1024;
-  const MAX_FILES = 6;
+  // A file input, a paste or a drop stages an image (or a PDF, where the
+  // server reads one); the chips are drawn from the staged list, and the
+  // stream request carries the bytes as base64. They ride one turn only:
+  // cleared on success, kept on failure so a retry still has them. What
+  // the composer takes, and how much, is the server's (`config().composer`).
   let staged = []; // {name, media_type, data_b64, url}
   const drawChips = () => {
     const box = document.getElementById('chat-attachments');
@@ -254,10 +254,15 @@ function pageAction({ action, target, value }) {
       const chip = clone('chat-chip');
       chip.dataset.chip = file.name;
       const img = chip.querySelector('img');
-      img.src = file.url;
-      img.dataset.viewImage = file.url;
+      // A PDF has no thumbnail: its chip carries its name alone.
+      if (file.url) {
+        img.src = file.url;
+        img.dataset.viewImage = file.url;
+      } else {
+        img.remove();
+      }
       chip.querySelector('[data-name]').textContent = file.name;
-      chip.querySelector('[data-remove]').addEventListener('click', () => { URL.revokeObjectURL(file.url); staged.splice(i, 1); drawChips(); });
+      chip.querySelector('[data-remove]').addEventListener('click', () => { if (file.url) URL.revokeObjectURL(file.url); staged.splice(i, 1); drawChips(); });
       return chip;
     }));
     window.dispatchEvent(new CustomEvent('chat-staged', { detail: staged.length }));
@@ -285,22 +290,29 @@ function pageAction({ action, target, value }) {
   // While a call is up the composer is hidden: a picture pasted, dropped
   // or picked then is shown on the call (voice.js), not staged.
   const onCall = () => document.getElementById('chat-call')?.hidden === false;
+  // A PDF rides as itself and is read on the server; only an image is
+  // shrunk, has a thumbnail, or can be shown on a call.
   const stage = async (file) => {
-    if (!IMAGE_TYPES.includes(file.type)) { toast(`${file.name || 'That'} is not an image.`, 'error'); return; }
-    if (file.size > MAX_BYTES) { toast(`${file.name} is over 10 MB.`, 'error'); return; }
+    const { types, images, kinds, max_bytes: maxBytes, max_files: maxFiles } = config().composer;
+    const isImage = images.includes(file.type);
     const showing = onCall();
-    if (!showing && staged.length >= MAX_FILES) { toast(`Up to ${MAX_FILES} images per message.`, 'error'); return; }
+    if (showing && !isImage) { toast(`${file.name || 'That'} is not a picture: only a picture can be shown on a call.`, 'error'); return; }
+    if (!types.includes(file.type)) { toast(`${file.name || 'That'} is not one of the ${kinds} this chat takes.`, 'error'); return; }
+    if (file.size > maxBytes) { toast(`${file.name} is over ${formatValue(maxBytes, 'bytes')}.`, 'error'); return; }
+    if (!showing && staged.length >= maxFiles) { toast(`Up to ${maxFiles} files per message.`, 'error'); return; }
     let payload = file;
-    try { payload = await shrink(file); } catch (_) { /* undecodable: send as pasted, the model will say so */ }
+    if (isImage) {
+      try { payload = await shrink(file); } catch (_) { /* undecodable: send as pasted, the model will say so */ }
+    }
     const reader = new FileReader();
     reader.onload = () => {
       const part = {
-        name: file.name || 'image',
+        name: file.name || (isImage ? 'image' : 'document'),
         media_type: payload.type,
         data_b64: String(reader.result).split(',')[1],
       };
       if (showing) return announce('chat:show', part);
-      staged.push({ ...part, url: URL.createObjectURL(payload) });
+      staged.push({ ...part, url: isImage ? URL.createObjectURL(payload) : '' });
       drawChips();
     };
     reader.readAsDataURL(payload);
@@ -312,9 +324,35 @@ function pageAction({ action, target, value }) {
   });
   document.addEventListener('paste', (event) => {
     if (!chatComposer()) return;
-    const files = [...(event.clipboardData?.files || [])].filter((f) => f.type.startsWith('image/'));
-    if (files.length) { event.preventDefault(); files.forEach(stage); }
+    const { types, paste_threshold: threshold } = config().composer;
+    const files = [...(event.clipboardData?.files || [])].filter((f) => types.includes(f.type));
+    if (files.length) { event.preventDefault(); files.forEach(stage); return; }
+    // A wall of text is kept now and stands in the box as its marker: only
+    // the browser knows a paste was a paste.
+    const text = event.clipboardData?.getData('text') || '';
+    const box = chatComposer().querySelector('textarea');
+    if (threshold && text.length > threshold && event.target === box) {
+      event.preventDefault();
+      keepPaste(box, text);
+    }
   });
+  // The marker replaces the selection, so two pages pasted are two markers.
+  // A refusal puts the text in as text: the paste must land somewhere.
+  const keepPaste = async (box, text) => {
+    const at = box.selectionStart ?? box.value.length;
+    const to = box.selectionEnd ?? at;
+    const body = new FormData();
+    body.append('text', text);
+    let marker = text;
+    try {
+      const answer = await fetch(`${config().path}/pastes`, { method: 'POST', body });
+      if (answer.ok) marker = (await answer.json()).marker;
+    } catch (_) { /* offline: the text goes in as text */ }
+    box.value = box.value.slice(0, at) + marker + box.value.slice(to);
+    box.selectionStart = box.selectionEnd = at + marker.length;
+    // Alpine's copy of the box (x-model) hears only an input event.
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+  };
   document.addEventListener('drop', (event) => {
     if (!event.target.closest?.('#chat')) return;
     event.preventDefault();
@@ -343,6 +381,10 @@ function pageAction({ action, target, value }) {
     const body = bubble.querySelector('[data-body]');
     const trail = bubble.querySelector('[data-trail]');
     const busy = bubble.querySelector('[data-busy]');
+    // A quiet stretch names itself (the server's words); anything arriving
+    // clears it.
+    const waiting = bubble.querySelector('[data-waiting]');
+    const answered = () => { waiting.hidden = true; };
     const writer = typewriter(body);
     const ids = { conversation: bubble.dataset.conversationId || null, message: null };
     const addTrail = (label) => {
@@ -373,7 +415,11 @@ function pageAction({ action, target, value }) {
       });
       if (!resp.ok || !resp.body) throw new Error(`bad response ${resp.status}`);
       for await (const { event, data } of frames(resp.body)) {
-        if (event === 'chunk') {
+        if (event === 'waiting') {
+          waiting.textContent = data.label;
+          waiting.hidden = false;
+        } else if (event === 'chunk') {
+          answered();
           busy.hidden = true;
           if (data.conversation_id) ids.conversation = data.conversation_id;
           writer.add(data.content || '');
@@ -386,6 +432,7 @@ function pageAction({ action, target, value }) {
           if (said) addTrail(said);
           addTrail(data.label || 'working...');
           writer.reset();
+          answered();
           busy.hidden = false;
         } else if (event === 'page') {
           pageAction(data);

@@ -95,7 +95,7 @@ class UpsertMixin:
             self.session.flush()
             # Appearing in the catalog as a model's provider IS the
             # server hat; the maker hat is granted by lab resolution.
-            _grant_role(self.session, vendor, ROLE_SERVER)
+            _grant_role(self.session, vendor, ROLE_SERVER, held=set())
 
         self._vendor_cache[vendor_name] = vendor
         result.vendors_added += 1

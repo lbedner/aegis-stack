@@ -24,8 +24,10 @@ def resolve_tools(names: Iterable[str]) -> list[ToolFunc]:
     is the one seam an agent's tools all pass through, so a new tool is
     measured by existing rather than by remembering a decorator. Outside
     that, each call is heard as a step by whoever is watching the turn,
-    native or inside a code-mode script, and a refused argument is
-    answered (``_told``) rather than raised.
+    native or inside a code-mode script, and a refused argument is answered
+    (``_told``) rather than raised. Each is the registry's ``served``
+    callable, money in dollars beside its cents, as MCP serves it, so a
+    script reads what the model is shown.
     """
     resolved: list[ToolFunc] = []
     for name in names:
@@ -33,7 +35,7 @@ def resolve_tools(names: Iterable[str]) -> list[ToolFunc]:
         if entry is None:
             logger.warning("Tool has no registered callable; skipping", tool_name=name)
             continue
-        func = _admins_only(entry.func) if entry.admin else entry.func
+        func = _admins_only(entry.served) if entry.admin else entry.served
         resolved.append(_told(entry.name, instrument(entry.name, func)))
     return resolved
 

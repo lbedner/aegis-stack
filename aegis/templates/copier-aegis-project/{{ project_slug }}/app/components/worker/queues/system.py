@@ -8,7 +8,10 @@ from arq import func
 from arq.connections import RedisSettings
 
 from app.components.worker import arq_hooks
-from app.components.worker.tasks.chat_tasks import read_photo_task
+from app.components.worker.tasks.chat_tasks import (
+    fold_conversation_task,
+    read_photo_task,
+)
 from app.components.worker.tasks.document_tasks import extract_document_task
 from app.components.worker.tasks.eval_tasks import (
     generate_evals_task,
@@ -44,6 +47,9 @@ class WorkerSettings:
         # A picture shared in chat, read into its paste index.
         if present("app.services.ai.domains.chat.pastes"):
             functions.append(read_photo_task)
+    if present("app.services.ai.domains.chat.summary"):
+        # A long conversation's turns out of view, folded into its summary.
+        functions.append(fold_conversation_task)
     if present("app.services.rag"):
         # A batch waits for the one model this process embeds with.
         functions.append(func(embed_files_task, timeout=30 * 60))

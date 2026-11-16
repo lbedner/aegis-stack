@@ -1,0 +1,74 @@
+{%- if ai_backend != "memory" -%}
+"""``ai costs``: what models and voice cost over the last days, each model
+under the kind it was used for, and each live call with the answers given
+during it - the Costs section's Models and Calls, at the terminal."""
+
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from datetime import datetime
+import json
+from typing import Any
+from unittest.mock import AsyncMock
+
+import pytest
+
+from app.services.ai.domains.spend import report
+from app.services.ai.domains.spend.schemas import CallSpend, KindModelSpend
+from tests._cli import invoke
+
+MODELS = [
+    KindModelSpend(
+        kind="Live calls",
+        model_id="gpt-live-1",
+        uses=1,
+        seconds=600,
+        tokens=0,
+        cost=0.5,
+    )
+]
+CALLS = [
+    CallSpend(
+        started=datetime(2026, 9, 9, 17),
+        model_id="gpt-live-1",
+        seconds=600,
+        call_cost=0.5,
+        answers_cost=0.07,
+        success=True,
+    )
+]
+
+
+@pytest.fixture
+def ledger(monkeypatch: pytest.MonkeyPatch) -> dict[str, AsyncMock]:
+    @asynccontextmanager
+    async def session() -> AsyncIterator[Any]:
+        yield object()
+
+    reads = {
+        "models_by_kind": AsyncMock(return_value=MODELS),
+        "live_calls": AsyncMock(return_value=CALLS),
+    }
+    monkeypatch.setattr("app.core.db.get_async_session", session)
+    for name, read in reads.items():
+        monkeypatch.setattr(report, name, read)
+    return reads
+
+
+def test_the_models_and_calls_over_the_last_days(
+    ledger: dict[str, AsyncMock],
+) -> None:
+    result = invoke(["ai", "costs", "--days", "7"])
+    assert result.exit_code == 0, result.output
+    assert "gpt-live-1" in result.output
+    assert "$0.5700" in result.output  # the call and its answers
+    _, start, end = ledger["live_calls"].await_args.args
+    assert (end - start).days == 7
+
+
+def test_as_json(ledger: dict[str, AsyncMock]) -> None:
+    result = invoke(["ai", "costs", "--json"])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data["models"][0]["kind"] == "Live calls"
+    assert data["calls"][0]["total"] == pytest.approx(0.57)
+{%- endif %}

@@ -7,10 +7,18 @@ same endpoints.
 
 from __future__ import annotations
 
+import asyncio
+from typing import Any
+
 from app.core.log import logger
 from app.services.documents.domains.extraction.jobs import run_extraction
 from app.services.system.job_store import start_job
 from app.services.system.jobs import JobHandle, get_job_runner
+
+# How long a reader that needs the pages now waits on their job.
+# ponytail: one bound for every document; a long scan read with vision can
+# take longer, so raise it if real ones time out.
+WAIT_SECONDS = 300
 
 
 async def start_extraction_in_process(
@@ -46,3 +54,26 @@ async def start_extraction(
     )
     logger.info("documents.extract.started", job_id=job_id, document_id=document_id)
     return job_id
+
+
+async def extract_and_wait(
+    document_id: int, *, owner_user_id: int | None, force: bool
+) -> dict[str, Any]:
+    """``start_extraction``, waited on: for a reader that needs the pages
+    now (a chat turn), so the webserver still renders none where there is
+    a worker. The job's result; RuntimeError when it failed or cannot be
+    followed from here, TimeoutError past ``WAIT_SECONDS``."""
+    job_id = await start_extraction(
+        document_id, owner_user_id=owner_user_id, force=force
+    )
+    runner = get_job_runner()
+    queue = await runner.subscribe_any(job_id)
+    if queue is None:
+        raise RuntimeError(f"Extraction job {job_id} cannot be followed from here")
+    last: dict[str, Any] = {}
+    async with asyncio.timeout(WAIT_SECONDS):
+        async for snapshot in runner.follow(job_id, queue):
+            last = snapshot
+    if last.get("status") != "done":
+        raise RuntimeError(last.get("error") or "The extraction did not finish")
+    return last.get("result") or {}

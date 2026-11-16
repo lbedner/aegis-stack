@@ -26,13 +26,17 @@ from pydantic_ai.run import AgentRunResultEvent
 
 from app.core.log import logger
 {%- if ai_framework == "pydantic-ai" %}
-from app.services.ai.domains.chat.attachments import ChatAttachment, build_user_content
+from app.services.ai.domains.chat.attachments import (
+    ChatAttachment,
+    LiftedTurn,
+    build_user_content,
+)
 from app.services.ai.domains.chat.readings import (
     merge_staged_readings,
     reading_stage,
 )
 {%- else %}
-from app.services.ai.domains.chat.attachments import ChatAttachment
+from app.services.ai.domains.chat.attachments import ChatAttachment, LiftedTurn
 from app.services.ai.domains.chat.readings import Reading, merge_staged_readings
 {%- endif %}
 {%- if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
@@ -55,7 +59,7 @@ from app.services.ai.service.base import (
     ProviderError,
 {%- endif %}
 )
-from app.services.ai.service.chat import ChatMixin
+from app.services.ai.service.chat import ChatMixin, reply_metadata
 {%- if ai_framework == "pydantic-ai" %}
 from app.services.ai.service.trace import (
     nested_tool_calls,
@@ -84,6 +88,8 @@ class StreamingMixin(ChatMixin):
         attachments: list[ChatAttachment] | None = None,
         subject: str | None = None,
         instructions: str | None = None,
+        hand_over: bool = True,
+        lifted: LiftedTurn | None = None,
 {% if ai_rag %}
         use_rag: bool = False,
         rag_collection: str | None = None,
@@ -104,6 +110,8 @@ class StreamingMixin(ChatMixin):
             attachments=attachments,
             subject=subject,
             instructions=instructions,
+            hand_over=hand_over,
+            lifted=lifted,
 {% if ai_rag %}
             use_rag=use_rag,
             rag_collection=rag_collection,
@@ -134,6 +142,8 @@ class StreamingMixin(ChatMixin):
         attachments: list[ChatAttachment] | None = None,
         subject: str | None = None,
         instructions: str | None = None,
+        hand_over: bool = True,
+        lifted: LiftedTurn | None = None,
 {% if ai_rag %}
         use_rag: bool = False,
         rag_collection: str | None = None,
@@ -152,6 +162,10 @@ class StreamingMixin(ChatMixin):
                 conversations so each embedded chat lists only its own
                 history
             instructions: This turn's manners (a meeting's), over its prompt
+            hand_over: Whether naming ``agent_slug`` hands the conversation
+                to it (``held_agent``); a live call's look does not
+            lifted: The turn its way in lifted before it (``lift_turn``),
+                in a session of its own: none is held across the answer
 {% if ai_rag %}
             use_rag: Enable RAG context injection from indexed codebase
             rag_collection: Collection to search (uses config default if None)
@@ -181,6 +195,8 @@ class StreamingMixin(ChatMixin):
                 owner_user_id=owner_user_id,
                 admin=admin,
                 instructions=instructions,
+                hand_over=hand_over,
+                lifted=lifted,
 {% if ai_rag %}
                 use_rag=use_rag,
                 rag_collection=rag_collection,
@@ -230,7 +246,9 @@ class StreamingMixin(ChatMixin):
                 memory_user(
                     user_id,
                     owner_user_id=owner_user_id,
-                    agent_slug=agent_slug,
+                    # The agent the turn resolved to: a follow-up naming none
+                    # still acts as the one the conversation is held with.
+                    agent_slug=setup.agent_config.slug,
                     conversation_id=conversation.id,
                     subject=subject,
                     admin=admin,
@@ -331,7 +349,7 @@ class StreamingMixin(ChatMixin):
                 tools,
                 user_id=user_id,
                 owner_user_id=owner_user_id,
-                agent_slug=agent_slug,
+                agent_slug=setup.agent_config.slug,
                 conversation_id=conversation.id,
                 subject=subject,
                 admin=admin,
@@ -424,46 +442,21 @@ class StreamingMixin(ChatMixin):
             await merge_staged_readings(
                 user_id, staged_readings, legacy=conversation.metadata.get("readings")
             )
-{% if ai_backend != "memory" %}
-            input_tokens = stream_usage.get("input_tokens", 0)
-            output_tokens = stream_usage.get("output_tokens", 0)
-
-            # Calculate TPS (tokens per second) for performance metrics
-            # This is especially useful for Ollama but works for all providers
-            gen_tps: float | None = None
-            if output_tokens > 0 and response_time_ms > 0:
-                gen_tps = round(output_tokens * 1000 / response_time_ms, 1)
-{% endif %}
-            final_metadata: dict[str, Any] = {
-                "conversation_id": conversation.id,
-                "provider": current.provider,
-{% if ai_backend != "memory" %}                "model": answered_by,
-{% else %}                "model": current.model,
-{% endif %}
-                "response_time_ms": response_time_ms,
-                "stream_complete": True,
-{% if ai_backend != "memory" %}                # Token usage and cost for CLI status line
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "cost": cost,
-                # TPS for performance monitoring (especially useful for Ollama)
-                "gen_tps": gen_tps,
-{% endif %}            }
-{% if ai_rag %}
-            final_metadata.update(rag_metadata)
-{% endif %}
-            if tool_trace:
-                final_metadata["tool_trace"] = tool_trace
-            if finish_reason:
-                final_metadata["finish_reason"] = finish_reason
+            final_metadata = await reply_metadata(
+                conversation.id,
+                provider=current.provider,
+{% if ai_backend != "memory" %}                model=answered_by,
+{% else %}                model=current.model,
+{% endif %}                response_time_ms=response_time_ms,
+{% if ai_rag %}                rag=rag_metadata,
+{% endif %}                tool_trace=tool_trace,
+                finish_reason=finish_reason,
 {%- if ai_backend != "memory" %}
-            # The settings this reply ran under; the agent may change later.
-            final_metadata["agent"] = {
-                "slug": agent_config.slug,
-                "temperature": agent_config.temperature,
-                "max_tokens": agent_config.max_tokens,
-            }
+                usage=stream_usage,
+                cost=cost,
+                agent_config=agent_config,
 {%- endif %}
+            )
             # What the final frame reports is what the message keeps, so a
             # conversation reopened from history shows the same model and
             # cost the live turn did.

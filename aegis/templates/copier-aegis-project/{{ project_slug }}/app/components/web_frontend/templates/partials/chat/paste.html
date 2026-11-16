@@ -1,0 +1,6 @@
+{# A paste, opened from its chip in the modal (``chat_pastes``): shown as it
+   was pasted, monospaced and scrolling, since a page reflowed as prose
+   would change the thing the reader opened it to check. #}
+{% from "components/macros/layout.html" import dialog_title %}
+{{ dialog_title(paste.title, facts=paste.size ~ " · #" ~ paste.id) }}
+<pre data-paste-text class="max-h-[60vh] overflow-auto rounded-lg border border-aegis-border bg-aegis-bg p-3 text-xs font-mono whitespace-pre-wrap text-aegis-text">{{ text }}</pre>

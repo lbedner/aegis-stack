@@ -206,6 +206,7 @@ class TestSerializeAgent:
         assert payload["context_modules"] == ["diet"]
         assert payload["knowledge_base_ids"] == ["kb-food"]
         assert payload["system_prompt"] == "You are helpful."
+        assert payload["extends"] is None
 
 
 class TestCodeModeField:

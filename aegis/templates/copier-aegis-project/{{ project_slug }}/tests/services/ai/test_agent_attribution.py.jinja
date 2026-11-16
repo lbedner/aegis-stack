@@ -487,6 +487,92 @@ class TestAgentSlugSelection:
 
         assert seen == ["support"]
 
+    # Five turns of one thread, each reading it back, on purpose.
+    @pytest.mark.queryspy(allow_n_plus_one=True)
+    async def test_a_follow_up_naming_no_agent_resumes_as_the_last(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """A conversation is held with one agent: a follow-up that names
+        none (an approval coming back, a job's nudge) came back as the
+        default agent, without the tools the promised work needed. A turn
+        that names another agent hands the conversation to it."""
+        service, _recorder, _captured, monkeypatch = harness
+        seen: list[str] = []
+
+        async def resolve(slug: str = "assistant", **kwargs: object) -> AgentConfig:
+            seen.append(slug)
+            return _custom_config(slug=slug)
+
+        monkeypatch.setattr(chat_module, "resolve_agent", resolve)
+
+        first = await service.chat("hello", user_id="7", agent_slug="support")
+        thread = first.metadata["conversation_id"]
+        await service.chat("I approved it", user_id="7", conversation_id=thread)
+        await service.chat(
+            "over to you", user_id="7", conversation_id=thread, agent_slug="billing"
+        )
+        await service.chat("and?", user_id="7", conversation_id=thread)
+        await service.chat("new thread", user_id="7")
+
+        assert seen == ["support", "support", "billing", "billing", "assistant"]
+
+    # Three turns of one thread, each reading it back, on purpose.
+    @pytest.mark.queryspy(allow_n_plus_one=True)
+    async def test_a_turn_that_does_not_hand_over_leaves_the_agent_held(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """A call's look at a picture is its voice agent answering, not a
+        hand-over: the typed turns after it answered as the voice model."""
+        service, _recorder, _captured, monkeypatch = harness
+        seen: list[str] = []
+
+        async def resolve(slug: str = "assistant", **kwargs: object) -> AgentConfig:
+            seen.append(slug)
+            return _custom_config(slug=slug)
+
+        monkeypatch.setattr(chat_module, "resolve_agent", resolve)
+
+        first = await service.chat("hello", user_id="7", agent_slug="support")
+        thread = first.metadata["conversation_id"]
+        await service.chat(
+            "a look",
+            user_id="7",
+            conversation_id=thread,
+            agent_slug="voice",
+            hand_over=False,
+        )
+        await service.chat("and?", user_id="7", conversation_id=thread)
+
+        assert seen == ["support", "voice", "support"]
+
+    # Two turns, each pricing its model, on purpose.
+    @pytest.mark.queryspy(allow_n_plus_one=True)
+    async def test_a_turn_a_call_hands_off_names_the_call(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """What a call's thinking cost was summed two ways: the call bar
+        from its looks' replies, the report from any row in the conversation
+        while it ran. A handed-off turn's reply names the call's ledger row,
+        and both read those replies."""
+        import asyncio
+
+        from app.services.ai.domains.spend import calls
+
+        service, _recorder, _captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, _custom_config())
+
+        async def opened() -> int:
+            return 42
+
+        handing = calls.handing_off.set(asyncio.ensure_future(opened()))
+        try:
+            reply = await service.chat("a look")
+        finally:
+            calls.handing_off.reset(handing)
+
+        assert reply.metadata["call"] == 42
+        assert "call" not in (await service.chat("typed")).metadata
+
 
     async def test_a_callers_manners_lead_the_agents_prompt_not_the_message(
         self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
@@ -581,7 +667,7 @@ class TestWhatIsWrongRidesTheMessage:
             _short_thread(), right_now=COMMS.message
         )
 
-        assert context.startswith("User: hi")
+        assert context.split("\n")[1] == "User: hi"  # under its day
         assert (
             context.index("Assistant: hello")
             < context.index(COMMS.message)
@@ -622,12 +708,12 @@ class TestHistoryBudget:
         assert "answer 0" not in context
         assert context.endswith("User: the current question")
 
-    def test_an_answer_from_an_earlier_day_replays_dated(
+    def test_an_answer_from_an_earlier_day_replays_under_its_day(
         self, mock_ai_settings: MagicMock
     ) -> None:
         """A stored answer is just text, so a figure quoted weeks ago would
-        stand beside today's with equal weight; dated, it reads as history.
-        Today's answers and every question go undated."""
+        stand beside today's with equal weight; under its day, it reads as
+        history. Each day is marked once, ahead of its first message."""
         from datetime import UTC, datetime
 
         from app.services.ai.models import AIProvider, Conversation, MessageRole
@@ -643,9 +729,11 @@ class TestHistoryBudget:
 
         context = service._build_conversation_context(conversation)
 
-        assert "User: how many cloners?" in context
-        assert "Assistant: [answered 2026-07-21] 810 this month" in context
-        assert "Assistant: 1723 now" in context
+        assert context.startswith(
+            "--- 2026-07-21 ---\nUser: how many cloners?\nAssistant: 810 this month\n"
+        )
+        assert context.count("--- ") == 2  # and today's, ahead of its first
+        assert "---\nAssistant: 1723 now" in context
 
     def test_short_history_is_untouched(self, mock_ai_settings: MagicMock) -> None:
         context = AIService(mock_ai_settings)._build_conversation_context(

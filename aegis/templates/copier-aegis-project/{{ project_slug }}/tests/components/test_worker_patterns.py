@@ -41,6 +41,7 @@ def test_a_services_task_is_registered_only_where_the_service_is() -> None:
         ("embed_files_task", "app.services.rag"),
         ("run_evals_task", "app.services.ai.domains.evals.jobs"),
         ("generate_evals_task", "app.services.ai.domains.evals.jobs"),
+        ("fold_conversation_task", "app.services.ai.domains.chat.summary"),
     ):
         assert (task in registered) == present(service), task
     # A picture shared in chat, read into its paste index with documents'.

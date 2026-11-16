@@ -3,21 +3,24 @@
 Pure functions, shared by every surface that renders a conversation (the
 web chat page, the Flet panel): the fence balancer that keeps partial
 markdown from swallowing what follows an open code block, the trail
-labels for tool calls, the attachment gate and marker, and the footer
-line under a finished answer.
+labels for tool calls, the attachment gate and marker, a paste's marker,
+and the footer line under a finished answer.
 """
 
 from __future__ import annotations
 
 import ast
+from collections import Counter
+from collections.abc import Iterable
 import json
 import pprint
 import re
 from typing import Any
 
 from app.core.config import settings
+from app.core.formatting import counted
 from app.core.steps import doing
-from app.core.tools import result_data
+from app.core.tools import card_tool_names, result_data
 
 # Rendered while text is still arriving; dropped from the final render.
 STREAM_CURSOR = "▌"
@@ -30,6 +33,12 @@ _IMAGE_MEDIA_TYPES = {
     "webp": "image/webp",
     "gif": "image/gif",
 }
+# Every image a turn may carry: what a model is shown. The one list: a
+# chat turn's attachments, a pasted image and a document read as a picture
+# all take these.
+IMAGE_TYPES = frozenset(_IMAGE_MEDIA_TYPES.values())
+# The most one attached or pasted file may weigh.
+MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 
 
 def image_media_type(filename: str) -> str | None:
@@ -51,6 +60,39 @@ def strip_attachment_marker(text: str) -> str:
     bytes are gone (they ride one turn only), so re-sending the marker
     would claim images the model cannot see."""
     return _ATTACHMENT_MARKER.sub("", text)
+
+
+# What stands in a message for a paste kept apart from it
+# (``services/ai/domains/chat/pastes``): written by ``paste_marker``, read
+# back by ``paste_ids``, taken out of what a reader sees by ``readable``.
+_PASTE_MARKER = re.compile(r"\[pasted text #([0-9a-f]+)[^\]]*\]")
+
+
+def paste_marker(paste_id: str, title: str, chars: int) -> str:
+    """The line the model gets where a paste was: what it is and how to
+    read it, since a marker the agent cannot act on is a hole in the
+    conversation. A bracket in the name would end the marker early."""
+    name = title.replace("[", "(").replace("]", ")")
+    return (
+        f"[pasted text #{paste_id}: {name} - {paste_size(chars)}."
+        f' Read it with pasted("{paste_id}")]'
+    )
+
+
+def paste_size(chars: int) -> str:
+    """How big a paste is, as its marker and its chip say it."""
+    return counted(chars, "character")
+
+
+def paste_ids(text: str) -> list[str]:
+    """The pastes a message's markers name, in order."""
+    return _PASTE_MARKER.findall(text)
+
+
+def readable(content: str) -> str:
+    """A stored message as its reader gets it, on screen or aloud: no
+    attachment note, and no paste marker (the paste is a chip beside it)."""
+    return _PASTE_MARKER.sub("", strip_attachment_marker(content)).strip()
 
 
 def balance_fences(text: str) -> str:
@@ -249,8 +291,15 @@ def card_outcome(status: str, note: Any) -> str:
     return status
 
 
-CARD_TOOLS = frozenset({"propose", "propose_many", "pending"})
-"""The queue tools whose results name approval cards."""
+def batch_outcome(statuses: Iterable[str]) -> str:
+    """A decided batch's one line, from its rows' ``card_outcome``s:
+    "2 approved, 1 rejected", in ``CARD_STATUS`` order."""
+    counts = Counter(statuses)
+    return ", ".join(
+        f"{counts[status]} {label.lower()}"
+        for status, (label, _tone) in CARD_STATUS.items()
+        if counts[status]
+    )
 
 
 def card_component(
@@ -263,9 +312,10 @@ def card_component(
     A displayed result is clipped, and a large proposal batch truncates to
     invalid JSON, so a card built by parsing it silently vanished. The card
     needs only identity (the queue is read for the rows), so identity rides
-    here, under any cap. A ``pending`` listing carries one per card.
+    here, under any cap. A ``pending`` listing carries one per card. A
+    card tool says so at registration (``register_tool(cards=)``).
     """
-    if tool not in CARD_TOOLS:
+    if tool not in card_tool_names():
         return None
     if isinstance(content, str):
         try:
@@ -277,7 +327,12 @@ def card_component(
     if not isinstance(data, dict) or data.get("error"):
         return None
     if tool == "pending":
-        rows = (data.get("pending") or []) + (data.get("decided") or [])
+        # The listing nominates what to draw (``draw``): only it knows
+        # whether the user asked to see a card. A trace kept before it
+        # did draws every card it listed, as it did then.
+        rows = data.get("draw")
+        if rows is None:
+            rows = (data.get("pending") or []) + (data.get("decided") or [])
         return _pending_markers(rows) or None
     return _identity_marker(data)
 
@@ -323,5 +378,73 @@ def as_markers(component: Any) -> list[dict[str, Any]]:
 
 def card_markers(entry: dict[str, Any]) -> list[dict[str, Any]]:
     """The cards a stored trace entry carries: an approval card's marker
-    (``card_component``), and the cards a script drew beside it."""
-    return as_markers(entry.get("component"))
+    (``card_component``), and the cards a script drew beside it; for an
+    entry kept before markers, the card its clipped result names."""
+    found = as_markers(entry.get("component"))
+    tool, result = entry.get("tool"), entry.get("result")
+    if found or tool == "pending" or tool not in card_tool_names():
+        return found
+    if not isinstance(result, str):
+        return []
+    try:
+        data = json.loads(result)
+    except ValueError:
+        data = salvage_identity(result)
+    marker = _identity_marker(data) if isinstance(data, dict) else None
+    return [marker] if marker else []
+
+
+def salvage_identity(clipped: str) -> dict[str, Any] | None:
+    """A proposal's identity from its result clipped to invalid JSON: the
+    identity fields lead the result, so they survive the clip."""
+    fields: dict[str, Any] = {}
+    for key in ("batch_id", "change_type", "title", "status"):
+        if found := re.search(rf'"{key}":\s*"([^"]*)"', clipped):
+            fields[key] = found.group(1)
+    if found := re.search(r'"pending_change_id":\s*(\d+)', clipped):
+        fields["pending_change_id"] = int(found.group(1))
+    return fields if fields.get("batch_id") or fields.get("pending_change_id") else None
+
+
+# A reply's steps line (``steps_line``): what its turn DID, replayed with
+# the reply in later turns' history. The words alone do not carry the ids a
+# turn had in hand and the sandbox resets every turn, so "try again"
+# queried for them again. A call's arguments carry those ids, so they get
+# the most room; a script's whole entry is clipped, so lookups cannot crowd
+# a proposal after them out of the cap.
+_STEPS_CAP = 1_200
+_STEP_ARGS_CAP = 400
+_STEP_SCRIPT_CAP = 240
+_STEP_OUTPUT_CAP = 120
+_STEP_DISPATCH_CAP = 60
+
+
+def steps_line(trace: list[dict[str, Any]]) -> str:
+    """One capped line saying what each call of a turn did: a call with its
+    arguments, a script by the calls it dispatched (else its first line of
+    code) and what it printed, and the cards either one named."""
+    parts: list[str] = []
+    for entry in trace:
+        tool = str(entry.get("tool", "?"))
+        code = entry.get("code")
+        if isinstance(code, str):
+            called = ", ".join(
+                f"{n.get('tool')}({str(n.get('args') or '')[:_STEP_DISPATCH_CAP]})"
+                for n in entry.get("nested") or []
+            )
+            said = f"{tool}[{called or first_code_line(code)}]"
+            if printed := " ".join(trace_output(entry).split()):
+                said += f" -> {printed[:_STEP_OUTPUT_CAP]}"
+            said = said[:_STEP_SCRIPT_CAP]
+        else:
+            said = f"{tool}({str(entry.get('args') or '')[:_STEP_ARGS_CAP]})"
+        for marker in card_markers(entry):
+            card = (
+                marker.get("batch_id")
+                or marker.get("pending_change_id")
+                or marker.get("id")
+            )
+            if card:
+                said += f" -> card {card}"
+        parts.append(said)
+    return "; ".join(parts)[:_STEPS_CAP]

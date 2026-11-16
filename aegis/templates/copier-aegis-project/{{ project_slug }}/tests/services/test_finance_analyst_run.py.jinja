@@ -129,15 +129,18 @@ class TestModelFor:
 
         with (
             patch("app.services.ai.domains.llm.model_factory.AsyncOpenAI") as client,
+            # A real model: the wrapper ``model_for`` adds takes no mock.
             patch(
-                "app.services.ai.domains.llm.model_factory.OpenAIChatModel"
+                "app.services.ai.domains.llm.model_factory.OpenAIChatModel",
+                return_value=TestModel(),
             ) as chat_model,
             patch("app.services.ai.domains.llm.model_factory.OpenAIProvider"),
         ):
             model, model_name = await model_for(config, settings)
 
         assert model_name == "qwen2.5:7b"
-        assert model is chat_model.return_value
+        # wrapped so a refused temperature is retried (TemperatureTolerant)
+        assert model.wrapped is chat_model.return_value
         # Ollama speaks OpenAI at /v1 and wants no real key.
         assert client.call_args.kwargs["base_url"] == "http://localhost:11434/v1"
         assert client.call_args.kwargs["api_key"] == "local"

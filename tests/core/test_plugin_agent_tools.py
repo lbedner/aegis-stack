@@ -123,7 +123,7 @@ class TestExpectedEffects:
         rendered = render("tests/core/test_tools.py", _plugins=[])
 
         assert '"ontology": "read",' in rendered
-        assert '"save_memory": "writes",' in rendered
+        assert '"save_memory": "proposes",' in rendered
 
 
 class TestOlderAnswers:

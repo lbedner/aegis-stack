@@ -180,22 +180,14 @@ MESSAGES: dict[str, str] = {
     ),
     "interactive.ai_selected_providers": "선택된 제공자: {providers}",
     "interactive.ai_deps_optimized": ("선택에 맞게 의존성이 최적화됩니다"),
-    "interactive.ai_ollama_label": "Ollama 배포 모드:",
-    "interactive.ai_ollama_intro": "Ollama를 어떻게 실행하시겠습니까?",
-    "interactive.ai_ollama_host": ("호스트 - 로컬 머신의 Ollama에 연결 (Mac/Windows)"),
-    "interactive.ai_ollama_docker": (
-        "Docker - Docker 컨테이너에서 Ollama 실행 (Linux/배포)"
-    ),
-    "interactive.ai_ollama_host_prompt": (
-        "호스트 Ollama에 연결하시겠습니까? (Mac/Windows 권장)"
-    ),
-    "interactive.ai_ollama_host_ok": (
-        "Ollama가 host.docker.internal:11434에 연결됩니다"
-    ),
-    "interactive.ai_ollama_host_hint": "Ollama가 실행 중인지 확인하세요: ollama serve",
-    "interactive.ai_ollama_docker_ok": (
-        "Ollama 서비스가 docker-compose.yml에 추가됩니다"
-    ),
+    "interactive.ai_ollama_label": "로컬 모델 서버:",
+    "interactive.ai_ollama_intro": "로컬 모델 서버(Ollama 또는 llama.cpp)를 어디에서 실행하시겠습니까?",
+    "interactive.ai_ollama_host": "호스트 - 로컬 머신에서 실행 중인 서버에 연결 (Mac/Windows)",
+    "interactive.ai_ollama_docker": "Docker - Docker 컨테이너에서 실행 (Linux/배포)",
+    "interactive.ai_ollama_host_prompt": "호스트의 서버에 연결하시겠습니까? (Mac/Windows 권장)",
+    "interactive.ai_ollama_host_ok": "앱이 host.docker.internal을 통해 연결됩니다",
+    "interactive.ai_ollama_host_hint": "실행 중인지 확인하세요: ollama serve 또는 llama-server",
+    "interactive.ai_ollama_docker_ok": "해당 서비스가 docker-compose.yml에 추가됩니다",
     "interactive.ai_ollama_docker_hint": (
         "참고: 첫 시작 시 모델 다운로드에 시간이 걸릴 수 있습니다"
     ),
@@ -1140,7 +1132,7 @@ MESSAGES: dict[str, str] = {
     "guided.corestack.body": "모든 Aegis 프로젝트는 이 둘로 시작하며, 서로 연결되어 바로 실행할 수 있습니다.",
     "guided.sidebar.components": "컴포넌트",
     "guided.sidebar.services": "서비스",
-    "guided.prompt.inference_placement": "Where does Ollama run?",
+    "guided.prompt.inference_placement": "Where does the local model server run?",
     "guided.prompt.inference_speech": "Run a speech server beside it?",
     "guided.prompt.worker_backend": "워커 백엔드 선택",
     "guided.prompt.scheduler_backend": "스케줄러 영속성: 재시작 후에도 작업 기록을 유지할까요?",
@@ -1209,7 +1201,7 @@ MESSAGES: dict[str, str] = {
     "component.redis.long": "캐시와 메시지 브로커로 사용되는 인메모리 데이터 저장소. 백그라운드 작업 큐와 서비스 간 pub/sub 메시징을 구동하고, 요청 핸들러에 빠른 공유 캐시를 제공합니다.",
     "component.ingress.long": "Traefik를 이용한 리버스 프록시와 트래픽 라우팅: 자동 서비스 검색, 관리 엔드포인트 보호, Let's Encrypt를 통한 선택적 TLS. 배포의 정문입니다.",
     "component.observability.long": "Pydantic Logfire를 이용한 분산 추적, 메트릭, 로그 상관관계. 애플리케이션을 자동 계측하고 활성화한 컴포넌트에 맞게 적응하므로, 프로덕션이 실제로 무엇을 하는지 볼 수 있습니다.",
-    "component.inference.long": "Serves open-weight models from your own machine. Ollama runs on the host by default, where it already lives, and the app reaches it over host.docker.internal; pick docker to ship it as a container instead. The AI service's ollama provider pulls it in, and it stands alone for a model server with no AI service.",
+    "component.inference.long": "Serves open-weight models from your own machine. Its engine (Ollama, or llama.cpp's llama-server) runs on the host by default, where it already lives, and the app reaches it over host.docker.internal; pick docker to ship it as a container instead. The AI service's local provider of the same name pulls it in, and it stands alone for a model server with no AI service.",
     "component.secrets.long": "Makes credentials writable without a restart: keys are stored encrypted in the database, read live by the webserver, worker and scheduler, and never shown again after saving (only their last four characters). A key set in .env still wins. Swap the backend later (Vault, a cloud secrets manager) without touching the code that reads keys.",
     "component.deploy.long": "앱이 실행되는 위치를 컴포넌트로 다룹니다. 현재는 호스트의 Docker Compose입니다. Docker 소켓에 접근하는 유일한 컨테이너인 소켓 프록시를 추가해 읽기 전용 요청(컨테이너, 통계, 로그, 디스크)에만 응답하므로, 웹서버가 소켓을 갖지 않고도 Overseer가 실행 상태를 보여줄 수 있습니다.",
     "component.mcp.long": "Serves the app's own registered tools to an outside assistant (Claude Desktop, Claude Code, a local model) over MCP, through FastMCP. A client sees only the tools granted in MCP_TOOLS, and never a write; every call is recorded with the client that made it.",
@@ -1228,10 +1220,10 @@ MESSAGES: dict[str, str] = {
     "guided.choice.scheduler.memory": "영속성 없음. 재시작 시 작업이 초기화됩니다. 잘 모르겠다면 건너뛰세요.",
     "guided.choice.scheduler.sqlite": "작업 기록을 파일 데이터베이스에 보관합니다.",
     "guided.choice.scheduler.postgres": "작업 기록을 보관, 프로덕션급.",
-    "guided.choice.inference.docker": "Run Ollama as a container in the project's compose stack.",
-    "guided.choice.inference.host": "Use the Ollama already running on this machine. The default.",
+    "guided.choice.inference.docker": "Run it as a container in the project's compose stack.",
+    "guided.choice.inference.host": "Use the one already running on this machine. The default.",
     "guided.choice.inference_speech.none": "No speech server. The default.",
-    "guided.choice.inference_speech.kokoro_fastapi": "Text to speech for ai[voice], where Ollama runs.",
+    "guided.choice.inference_speech.kokoro_fastapi": "Text to speech for ai[voice], where the model server runs.",
     "guided.choice.worker.arq": "간단하고 충분히 검증된 비동기 워커로, 설정이 최소한입니다. I/O 바운드 작업에 가장 적합합니다. 기본값.",
     "guided.choice.worker.dramatiq": "멀티프로세스 액터 모델. 여러 OS 프로세스의 이점을 살리는 CPU 바운드 작업에 가장 적합합니다.",
     "guided.choice.worker.taskiq": "비동기 네이티브. 큐별 브로커와 확인 응답을 지원하는 Redis Streams 전송을 사용합니다.",

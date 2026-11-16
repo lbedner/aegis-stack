@@ -103,11 +103,10 @@ class InferenceCard:
         )
 
     def _get_subtitle(self) -> str:
-        """Get subtitle showing Ollama with version."""
-        version = metadata_text(self.metadata, "version")
-        if version:
-            return f"Ollama v{version}"
-        return "Ollama"
+        """The app's engine, with its version."""
+        from app.components.inference import inference_engine_class
+
+        return inference_engine_class().titled(metadata_text(self.metadata, "version"))
 
     def _create_card_content(self) -> ft.Container:
         """Create the full card content with header and metrics."""

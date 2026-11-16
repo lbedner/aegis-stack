@@ -117,3 +117,12 @@ async def test_llama_server_reports_what_the_ollama_shaped_list_leaves_empty() -
     assert model.details.parameter_size == "7.6B"
     assert "tools" in model.capabilities
     assert status.running_models[0].context_length == 32768
+
+
+def test_an_engine_is_titled_with_the_version_it_reports() -> None:
+    """A release number reads ``v0.5.7``; llama.cpp's build is its own."""
+    from app.components.inference import ENGINES
+
+    assert ENGINES["ollama"].titled("0.5.7") == "Ollama v0.5.7"
+    assert ENGINES["llamacpp"].titled("b6700-cd959bae9") == "llama.cpp b6700-cd959bae9"
+    assert ENGINES["ollama"].titled(None) == "Ollama"

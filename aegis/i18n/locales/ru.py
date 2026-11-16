@@ -187,24 +187,14 @@ MESSAGES: dict[str, str] = {
     ),
     "interactive.ai_selected_providers": "Выбранные провайдеры: {providers}",
     "interactive.ai_deps_optimized": ("Зависимости будут оптимизированы под ваш выбор"),
-    "interactive.ai_ollama_label": "Режим развёртывания Ollama:",
-    "interactive.ai_ollama_intro": "Как запускать Ollama?",
-    "interactive.ai_ollama_host": (
-        "Host — подключение к Ollama на вашей машине (Mac/Windows)"
-    ),
-    "interactive.ai_ollama_docker": (
-        "Docker — запуск Ollama в контейнере (Linux/Deploy)"
-    ),
-    "interactive.ai_ollama_host_prompt": (
-        "Подключиться к Ollama на хосте? (рекомендуется для Mac/Windows)"
-    ),
-    "interactive.ai_ollama_host_ok": (
-        "Ollama будет подключаться к host.docker.internal:11434"
-    ),
-    "interactive.ai_ollama_host_hint": "Убедитесь, что Ollama запущен: ollama serve",
-    "interactive.ai_ollama_docker_ok": (
-        "Сервис Ollama будет добавлен в docker-compose.yml"
-    ),
+    "interactive.ai_ollama_label": "Локальный сервер моделей:",
+    "interactive.ai_ollama_intro": "Где работает локальный сервер моделей (Ollama или llama.cpp)?",
+    "interactive.ai_ollama_host": "Host — подключение к серверу на вашей машине (Mac/Windows)",
+    "interactive.ai_ollama_docker": "Docker — запуск в контейнере (Linux/Deploy)",
+    "interactive.ai_ollama_host_prompt": "Подключиться к серверу на хосте? (рекомендуется для Mac/Windows)",
+    "interactive.ai_ollama_host_ok": "Приложение будет подключаться через host.docker.internal",
+    "interactive.ai_ollama_host_hint": "Убедитесь, что он запущен: ollama serve или llama-server",
+    "interactive.ai_ollama_docker_ok": "Его сервис будет добавлен в docker-compose.yml",
     "interactive.ai_ollama_docker_hint": (
         "Примечание: первый запуск может занять время для загрузки моделей"
     ),
@@ -1156,7 +1146,7 @@ MESSAGES: dict[str, str] = {
     "guided.corestack.body": "Каждый проект Aegis начинается с этих двух — связанных вместе и готовых к запуску.",
     "guided.sidebar.components": "КОМПОНЕНТЫ",
     "guided.sidebar.services": "СЕРВИСЫ",
-    "guided.prompt.inference_placement": "Where does Ollama run?",
+    "guided.prompt.inference_placement": "Where does the local model server run?",
     "guided.prompt.inference_speech": "Run a speech server beside it?",
     "guided.prompt.worker_backend": "Выберите бэкенд воркера",
     "guided.prompt.scheduler_backend": "Постоянство планировщика: сохранять историю задач между перезапусками?",
@@ -1225,7 +1215,7 @@ MESSAGES: dict[str, str] = {
     "component.redis.long": "Хранилище данных в памяти, используемое как кэш и брокер сообщений. Обеспечивает работу очередей фоновых задач и pub/sub-обмена между сервисами и даёт обработчикам запросов быстрый общий кэш.",
     "component.ingress.long": "Обратный прокси и маршрутизация трафика с Traefik: автоматическое обнаружение сервисов, защита админ-эндпоинтов и необязательный TLS через Let's Encrypt. Точка входа для развёртываний.",
     "component.observability.long": "Распределённая трассировка, метрики и корреляция логов с Pydantic Logfire. Автоматически инструментирует ваше приложение и подстраивается под включённые компоненты, чтобы вы видели, что на самом деле происходит в продакшене.",
-    "component.inference.long": "Serves open-weight models from your own machine. Ollama runs on the host by default, where it already lives, and the app reaches it over host.docker.internal; pick docker to ship it as a container instead. The AI service's ollama provider pulls it in, and it stands alone for a model server with no AI service.",
+    "component.inference.long": "Serves open-weight models from your own machine. Its engine (Ollama, or llama.cpp's llama-server) runs on the host by default, where it already lives, and the app reaches it over host.docker.internal; pick docker to ship it as a container instead. The AI service's local provider of the same name pulls it in, and it stands alone for a model server with no AI service.",
     "component.secrets.long": "Makes credentials writable without a restart: keys are stored encrypted in the database, read live by the webserver, worker and scheduler, and never shown again after saving (only their last four characters). A key set in .env still wins. Swap the backend later (Vault, a cloud secrets manager) without touching the code that reads keys.",
     "component.deploy.long": "Где работает приложение, в виде компонента: сегодня это Docker Compose на хосте. Добавляет прокси сокета, единственный контейнер с доступом к сокету Docker, который отвечает только на запросы чтения (контейнеры, статистика, логи, диск), чтобы Overseer показывал, что запущено, а веб-сервер никогда не держал сокет.",
     "component.mcp.long": "Serves the app's own registered tools to an outside assistant (Claude Desktop, Claude Code, a local model) over MCP, through FastMCP. A client sees only the tools granted in MCP_TOOLS, and never a write; every call is recorded with the client that made it.",
@@ -1244,10 +1234,10 @@ MESSAGES: dict[str, str] = {
     "guided.choice.scheduler.memory": "Без сохранения. Задачи сбрасываются при перезапуске — пропустите, если не уверены.",
     "guided.choice.scheduler.sqlite": "Хранить историю задач в файловой базе данных.",
     "guided.choice.scheduler.postgres": "Хранить историю задач, уровень продакшена.",
-    "guided.choice.inference.docker": "Run Ollama as a container in the project's compose stack.",
-    "guided.choice.inference.host": "Use the Ollama already running on this machine. The default.",
+    "guided.choice.inference.docker": "Run it as a container in the project's compose stack.",
+    "guided.choice.inference.host": "Use the one already running on this machine. The default.",
     "guided.choice.inference_speech.none": "No speech server. The default.",
-    "guided.choice.inference_speech.kokoro_fastapi": "Text to speech for ai[voice], where Ollama runs.",
+    "guided.choice.inference_speech.kokoro_fastapi": "Text to speech for ai[voice], where the model server runs.",
     "guided.choice.worker.arq": "Простой, хорошо протестированный асинхронный воркер с минимальной настройкой. Лучше всего для I/O-задач. По умолчанию.",
     "guided.choice.worker.dramatiq": "Многопроцессная модель акторов. Лучше всего для CPU-задач, выигрывающих от нескольких процессов ОС.",
     "guided.choice.worker.taskiq": "Асинхронный по природе, с брокерами на каждую очередь и транспортом Redis Streams с подтверждениями.",

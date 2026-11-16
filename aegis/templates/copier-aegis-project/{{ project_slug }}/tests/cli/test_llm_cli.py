@@ -137,7 +137,7 @@ class TestLLMSyncCommand:
         plain = _plain(result.output)
         assert "--source" in plain
         assert "cloud" in plain
-        assert "ollama" in plain
+        assert "local" in plain
 
     @patch("app.cli.llm.sync_llm_catalog", new_callable=AsyncMock)
     @patch("app.cli.llm.Session")
@@ -160,13 +160,14 @@ class TestLLMSyncCommand:
             models_added=2,
         )
 
-        result = invoke(["llm", "sync", "--source=ollama"])
+        # "local" is the engine's; "ollama", its name before llama.cpp.
+        for spelled in ("local", "ollama"):
+            mock_sync.reset_mock()
+            result = invoke(["llm", "sync", f"--source={spelled}"])
 
-        assert result.exit_code == 0
-        # Verify sync was called with source="ollama"
-        mock_sync.assert_called_once()
-        call_kwargs = mock_sync.call_args
-        assert call_kwargs[1].get("source") == "ollama"
+            assert result.exit_code == 0
+            mock_sync.assert_called_once()
+            assert mock_sync.call_args[1].get("source") == "local"
 
     @patch("app.cli.llm.sync_llm_catalog", new_callable=AsyncMock)
     @patch("app.cli.llm.Session")
@@ -271,12 +272,12 @@ class TestLLMSyncCommand:
             models_added=2,
         )
 
-        result = invoke(["llm", "sync", "-s", "ollama"])
+        result = invoke(["llm", "sync", "-s", "local"])
 
         assert result.exit_code == 0
         mock_sync.assert_called_once()
         call_kwargs = mock_sync.call_args
-        assert call_kwargs[1].get("source") == "ollama"
+        assert call_kwargs[1].get("source") == "local"
 
 
 class TestLLMListCommand:

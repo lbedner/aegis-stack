@@ -206,7 +206,6 @@ async def models_view() -> dict[str, Any]:
     return _reach(server, base_url) | {
         "partials": PARTIALS,
         "models": model_rows(server),
-        "can_move": inference_engine_class().can_load_unload,
         "models_events": MODELS_EVENTS,
         "models_event": MODELS_EVENT,
     }

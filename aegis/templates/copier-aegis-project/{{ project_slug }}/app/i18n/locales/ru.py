@@ -126,8 +126,8 @@ MESSAGES: dict[str, str] = {
     "health.msg.comms_none": "Провайдеры коммуникаций не настроены",
     "health.msg.comms_partial": "Сервис коммуникаций настроен частично",
     "health.msg.comms_ok": "Сервис коммуникаций полностью настроен",
-    "health.msg.ollama_not_reachable": "Сервер Ollama недоступен",
-    "health.msg.ollama_no_models": "Ollama запущен, но модели не установлены",
+    "health.msg.engine_not_reachable": "Сервер {engine} недоступен",
+    "health.msg.engine_no_models": "{engine} запущен, но модели не установлены",
     "health.msg.worker_offline": "worker офлайн — нет данных проверки",
     "health.msg.failed": "{count} сбоев ({pct}%)",
     # Описания очередей
@@ -271,7 +271,7 @@ MESSAGES: dict[str, str] = {
     # Синхронизация
     "llm.dry_run_mode": "Режим dry run — изменения не сохраняются",
     "llm.refresh_dry_run": "Запрошено обновление — будут очищены все таблицы LLM",
-    "llm.syncing_ollama": "Синхронизация моделей Ollama",
+    "llm.syncing_local": "Синхронизация моделей {engine}",
     "llm.syncing_catalog_all": "Синхронизация каталога LLM (mode={mode}, source=all)",
     "llm.syncing_catalog": "Синхронизация каталога LLM (mode={mode})",
     "llm.sync_results": "Результаты синхронизации",
@@ -340,7 +340,7 @@ MESSAGES: dict[str, str] = {
     "llm.top_vendors": "Топ вендоров по числу моделей",
     # Справка
     "llm.help": "Каталог LLM и команды управления моделями",
-    "llm.help_sync": "Синхронизировать каталог LLM из облачных API или локального Ollama в БД.",
+    "llm.help_sync": "Синхронизировать каталог LLM из облачных API или локального движка инференса в БД.",
     "llm.help_status": "Показать статистику каталога LLM (вендоры, модели, развёртывания, цены).",
     "llm.help_vendors": "Показать всех вендоров LLM с количеством моделей.",
     "llm.help_modalities": "Показать все модальности каталога с количеством моделей.",
@@ -349,7 +349,7 @@ MESSAGES: dict[str, str] = {
     "llm.help_use": "Переключиться на другую модель LLM. Обновляет AI_MODEL в .env.",
     "llm.help_info": "Подробная информация о модели LLM.",
     "llm.opt_mode": "Фильтр режима: 'chat', 'embedding' или 'all'",
-    "llm.opt_source": "Источник: 'cloud' (OpenRouter/LiteLLM), 'ollama' или 'all'",
+    "llm.opt_source": "Источник: 'cloud' (OpenRouter/LiteLLM), 'local' или 'all'",
     "llm.opt_dry_run": "Предпросмотр изменений без записи в БД",
     "llm.opt_refresh": "Очистить все таблицы LLM перед синхронизацией (полное обновление)",
     "llm.arg_pattern": "Шаблон поиска по ID или названию модели (без учёта регистра)",

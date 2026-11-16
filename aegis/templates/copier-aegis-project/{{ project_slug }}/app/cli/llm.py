@@ -128,9 +128,19 @@ async def sync(
     start_time = time.time()
     shown_mode = mode or "chat + voice"
 
+    # "local" reads the inference engine; "ollama" is its name from before
+    # llama.cpp, still taken.
+    source = "local" if source == "ollama" else source
+
     # Build status message based on source
-    if source == "ollama":
-        status_msg = f"[bold {theme.ACCENT}]{t('llm.syncing_ollama')}..."
+    if source == "local":
+        try:
+            from app.components.inference import inference_engine_class
+
+            label = inference_engine_class().LABEL
+        except ImportError:  # no inference component: the sync says so
+            label = "local"
+        status_msg = f"[bold {theme.ACCENT}]{t('llm.syncing_local', engine=label)}..."
     elif source == "all":
         status_msg = (
             f"[bold {theme.ACCENT}]{t('llm.syncing_catalog_all', mode=shown_mode)}..."

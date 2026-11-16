@@ -189,24 +189,14 @@ MESSAGES: dict[str, str] = {
     ),
     "interactive.ai_selected_providers": "選択されたプロバイダー：{providers}",
     "interactive.ai_deps_optimized": ("選択内容に合わせて依存パッケージを最適化します"),
-    "interactive.ai_ollama_label": "Ollama デプロイモード：",
-    "interactive.ai_ollama_intro": "Ollama の実行方法を選んでください：",
-    "interactive.ai_ollama_host": (
-        "ホスト — ローカルの Ollama に接続（Mac/Windows 向け）"
-    ),
-    "interactive.ai_ollama_docker": (
-        "Docker — Docker コンテナで Ollama を実行（Linux/デプロイ向け）"
-    ),
-    "interactive.ai_ollama_host_prompt": (
-        "ホストの Ollama に接続しますか？（Mac/Windows 推奨）"
-    ),
-    "interactive.ai_ollama_host_ok": (
-        "Ollama は host.docker.internal:11434 に接続します"
-    ),
-    "interactive.ai_ollama_host_hint": "Ollama が起動していることを確認：ollama serve",
-    "interactive.ai_ollama_docker_ok": (
-        "Ollama サービスが docker-compose.yml に追加されます"
-    ),
+    "interactive.ai_ollama_label": "ローカルモデルサーバー：",
+    "interactive.ai_ollama_intro": "ローカルモデルサーバー（Ollama または llama.cpp）をどこで実行しますか？",
+    "interactive.ai_ollama_host": "ホスト — ローカルで動作中のサーバーに接続（Mac/Windows 向け）",
+    "interactive.ai_ollama_docker": "Docker — Docker コンテナで実行（Linux/デプロイ向け）",
+    "interactive.ai_ollama_host_prompt": "ホストのサーバーに接続しますか？（Mac/Windows 推奨）",
+    "interactive.ai_ollama_host_ok": "アプリは host.docker.internal 経由で接続します",
+    "interactive.ai_ollama_host_hint": "起動していることを確認：ollama serve または llama-server",
+    "interactive.ai_ollama_docker_ok": "そのサービスが docker-compose.yml に追加されます",
     "interactive.ai_ollama_docker_hint": (
         "注意：初回起動時はモデルのダウンロードに時間がかかります"
     ),
@@ -1174,7 +1164,7 @@ MESSAGES: dict[str, str] = {
     "guided.corestack.body": "すべての Aegis プロジェクトはこの 2 つから始まります。連携済みで、すぐに実行できます。",
     "guided.sidebar.components": "コンポーネント",
     "guided.sidebar.services": "サービス",
-    "guided.prompt.inference_placement": "Where does Ollama run?",
+    "guided.prompt.inference_placement": "Where does the local model server run?",
     "guided.prompt.inference_speech": "Run a speech server beside it?",
     "guided.prompt.worker_backend": "ワーカーバックエンドを選択",
     "guided.prompt.scheduler_backend": "スケジューラの永続化：再起動後もジョブ履歴を保持しますか？",
@@ -1243,7 +1233,7 @@ MESSAGES: dict[str, str] = {
     "component.redis.long": "キャッシュおよびメッセージブローカーとして使われるインメモリデータストア。バックグラウンドのジョブキューやサービス間の pub/sub メッセージングを支え、リクエストハンドラーに高速な共有キャッシュを提供します。",
     "component.ingress.long": "Traefik によるリバースプロキシとトラフィックルーティング。サービスの自動検出、管理エンドポイントの保護、Let's Encrypt による任意の TLS を提供します。デプロイの玄関口です。",
     "component.observability.long": "Pydantic Logfire による分散トレーシング、メトリクス、ログ相関。アプリケーションを自動計装し、有効にしたコンポーネントに合わせて適応するので、本番環境の実際の挙動を把握できます。",
-    "component.inference.long": "Serves open-weight models from your own machine. Ollama runs on the host by default, where it already lives, and the app reaches it over host.docker.internal; pick docker to ship it as a container instead. The AI service's ollama provider pulls it in, and it stands alone for a model server with no AI service.",
+    "component.inference.long": "Serves open-weight models from your own machine. Its engine (Ollama, or llama.cpp's llama-server) runs on the host by default, where it already lives, and the app reaches it over host.docker.internal; pick docker to ship it as a container instead. The AI service's local provider of the same name pulls it in, and it stands alone for a model server with no AI service.",
     "component.secrets.long": "Makes credentials writable without a restart: keys are stored encrypted in the database, read live by the webserver, worker and scheduler, and never shown again after saving (only their last four characters). A key set in .env still wins. Swap the backend later (Vault, a cloud secrets manager) without touching the code that reads keys.",
     "component.deploy.long": "アプリの実行場所をコンポーネントとして扱います。現在はホスト上の Docker Compose です。Docker ソケットに触れる唯一のコンテナとしてソケットプロキシを追加し、読み取り専用の問い合わせ (コンテナ、統計、ログ、ディスク) だけに応答します。Web サーバーがソケットを持たずに、Overseer が稼働状況を表示できます。",
     "component.mcp.long": "Serves the app's own registered tools to an outside assistant (Claude Desktop, Claude Code, a local model) over MCP, through FastMCP. A client sees only the tools granted in MCP_TOOLS, and never a write; every call is recorded with the client that made it.",
@@ -1262,10 +1252,10 @@ MESSAGES: dict[str, str] = {
     "guided.choice.scheduler.memory": "永続化なし。再起動でジョブはリセットされます。迷ったらスキップ。",
     "guided.choice.scheduler.sqlite": "ジョブ履歴をファイルデータベースに永続化します。",
     "guided.choice.scheduler.postgres": "ジョブ履歴を永続化、本番グレード。",
-    "guided.choice.inference.docker": "Run Ollama as a container in the project's compose stack.",
-    "guided.choice.inference.host": "Use the Ollama already running on this machine. The default.",
+    "guided.choice.inference.docker": "Run it as a container in the project's compose stack.",
+    "guided.choice.inference.host": "Use the one already running on this machine. The default.",
     "guided.choice.inference_speech.none": "No speech server. The default.",
-    "guided.choice.inference_speech.kokoro_fastapi": "Text to speech for ai[voice], where Ollama runs.",
+    "guided.choice.inference_speech.kokoro_fastapi": "Text to speech for ai[voice], where the model server runs.",
     "guided.choice.worker.arq": "シンプルでよくテストされた非同期ワーカー。設定は最小限。I/O バウンドのタスクに最適。デフォルト。",
     "guided.choice.worker.dramatiq": "マルチプロセスのアクターモデル。複数の OS プロセスが活きる CPU バウンドのタスクに最適。",
     "guided.choice.worker.taskiq": "非同期ネイティブ。キューごとのブローカーと、確認応答付きの Redis Streams トランスポートを使用します。",

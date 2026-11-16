@@ -8147,7 +8147,7 @@
 </span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync
 </span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
 </span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1"># Sync only Ollama models</span>
-</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync<span class="w"> </span>--source<span class="w"> </span>ollama
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync<span class="w"> </span>--source<span class="w"> </span><span class="nb">local</span>
 </span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>
 </span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="c1"># Sync everything (cloud + Ollama)</span>
 </span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync<span class="w"> </span>--source<span class="w"> </span>all<span class="w"> </span>--mode<span class="w"> </span>all
@@ -8177,7 +8177,7 @@
 </tr>
 <tr>
 <td><code>--source, -s</code></td>
-<td><code>cloud</code>, <code>ollama</code>, <code>all</code></td>
+<td><code>cloud</code>, <code>local</code> (the inference engine; <code>ollama</code> still works), <code>all</code></td>
 <td><code>cloud</code></td>
 <td>Data source</td>
 </tr>

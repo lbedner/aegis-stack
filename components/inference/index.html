@@ -2268,6 +2268,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#switching-engines" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Switching engines
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -7143,6 +7154,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#switching-engines" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Switching engines
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -7256,6 +7278,12 @@
 <li><code>--metrics</code>: Prometheus counters at <code>/metrics</code>.</li>
 </ul>
 <p>In docker, the <code>llamacpp</code> service downloads <code>LLAMACPP_MODEL</code> (a Hugging Face <code>repo[:quant]</code>, default <code>ggml-org/Qwen3-1.7B-GGUF</code>) into a volume on its first start and serves it at <code>LLAMACPP_CONTEXT</code> (default 32768).</p>
+<h3 id="switching-engines">Switching engines</h3>
+<p>The engine holds nothing of the project's (its models live where it keeps them), so an installed component switches in place. The AI service's local provider moves with it, the placement stays, and everything that branches on the engine re-renders:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>llamacpp<span class="o">]</span><span class="w">   </span><span class="c1"># an Ollama project, now on llama.cpp</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>ollama<span class="o">]</span><span class="w">     </span><span class="c1"># and back</span>
+</span></code></pre></div>
+<p>Point <code>LLAMACPP_BASE_URL</code> in <code>.env</code> at the server if it is not on the default port.</p>
 <h2 id="where-it-runs">Where it runs</h2>
 <table>
 <thead>
@@ -7279,7 +7307,7 @@
 </tbody>
 </table>
 <p>Install Ollama from <a href="https://ollama.com/">ollama.com</a> for host placement, then pull a model:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>ollama<span class="w"> </span>pull<span class="w"> </span>llama3.1
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>ollama<span class="w"> </span>pull<span class="w"> </span>llama3.1
 </span></code></pre></div>
 <h2 id="what-you-get">What you get</h2>
 <ul>
@@ -7287,12 +7315,12 @@
 <li><strong>Settings:</strong> <code>INFERENCE_ENGINE</code>; <code>OLLAMA_BASE_URL</code> or <code>LLAMACPP_BASE_URL</code> (defaulted from the placement), <code>OLLAMA_BASE_URL_LOCAL</code> for CLI commands run on the host, <code>OLLAMA_HOST_PORT</code> / <code>LLAMACPP_HOST_PORT</code> for the port <code>make serve</code> publishes, <code>OLLAMA_API_KEY</code> for a server behind auth.</li>
 <li><strong>A health check</strong> on the system status: server reachable, installed and running models, VRAM in use.</li>
 <li><strong>A dashboard card and modal</strong>: installed models with load and unload, and an activity tab of recent loads and evictions.</li>
-<li><strong>The LLM catalog</strong> lists the installed models when the AI service is present (<code>my-app llm sync --source ollama</code>).</li>
+<li><strong>The LLM catalog</strong> lists the installed models when the AI service is present (<code>my-app llm sync --source local</code>).</li>
 </ul>
 <h2 id="a-speech-server">A speech server</h2>
 <p>A speech server runs beside Ollama, where Ollama runs, and <code>ai[voice]</code> speaks through it. Kokoro-FastAPI is the one so far: Kokoro-82M, text to speech only.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>kokoro_fastapi<span class="o">]</span><span class="w">          </span><span class="c1"># Kokoro-FastAPI on the host</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker,kokoro_fastapi<span class="o">]</span><span class="w">   </span><span class="c1"># a kokoro-fastapi service in the compose stack</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>kokoro_fastapi<span class="o">]</span><span class="w">          </span><span class="c1"># Kokoro-FastAPI on the host</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker,kokoro_fastapi<span class="o">]</span><span class="w">   </span><span class="c1"># a kokoro-fastapi service in the compose stack</span>
 </span></code></pre></div>
 <table>
 <thead>
@@ -7329,7 +7357,7 @@
 <li><strong><code>ai[voice]</code></strong> offers it as the Kokoro-FastAPI provider, with every voice it lists (<a href="../../services/ai/voice/#a-speech-server">Voice</a>).</li>
 </ul>
 <p>A server with OpenAI's speech API alone shows its voices, its models and the app's own timings. Kokoro-FastAPI reports its version always, and the rest only with its flags on. A server you run yourself needs them set, or the page names the ones missing:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">ALLOW_DEV_UNLOAD</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="nv">ENABLE_DEBUG_ENDPOINTS</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>./start-gpu_mac.sh
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">ALLOW_DEV_UNLOAD</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="nv">ENABLE_DEBUG_ENDPOINTS</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>./start-gpu_mac.sh
 </span></code></pre></div>
 <table>
 <thead>
@@ -7351,8 +7379,8 @@
 </table>
 <h2 id="changing-placement">Changing placement</h2>
 <p>The placement is an answer in <code>.copier-answers.yml</code> (<code>inference_placement</code>), and the speech server another (<code>inference_speech</code>). Remove and re-add the component to switch:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>aegis<span class="w"> </span>remove<span class="w"> </span>inference
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker<span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>aegis<span class="w"> </span>remove<span class="w"> </span>inference
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker<span class="o">]</span>
 </span></code></pre></div>
 
 

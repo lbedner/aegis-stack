@@ -51,10 +51,15 @@ try:
     from app.components.inference import get_inference_engine
     from app.components.inference.engine import InferenceModel
 except (ModuleNotFoundError, ImportError):
-    # Ollama module not generated or empty (ollama_mode is "none"),
-    # or missing dependency — either way, gracefully degrade
+    # Inference component not generated, or a missing dependency — either way, gracefully degrade
     get_inference_engine = None  # type: ignore[assignment]
     InferenceModel = None  # type: ignore[assignment, misc]
+
+
+def sync_source(source: str) -> str:
+    """``source`` as the sync reads it: "local" is the inference engine,
+    and "ollama", its name from before llama.cpp, is still taken."""
+    return "local" if source == "ollama" else source
 
 
 class LLMSyncService(UpsertMixin):
@@ -97,19 +102,21 @@ class LLMSyncService(UpsertMixin):
         Returns:
             SyncResult with counts and any errors.
         """
+        source = sync_source(source)
+
         # The inference engine's models only
         if source == "local":
-            return await self.sync_ollama(dry_run=dry_run)
+            return await self.sync_local(dry_run=dry_run)
 
         # Handle "all" - sync both cloud and the engine
         if source == "all":
             cloud_result = await self._sync_cloud(mode_filter, dry_run)
-            ollama_result = await self.sync_ollama(dry_run=dry_run)
+            local_result = await self.sync_local(dry_run=dry_run)
             # Merge results
-            cloud_result.vendors_added += ollama_result.vendors_added
-            cloud_result.models_added += ollama_result.models_added
-            cloud_result.models_updated += ollama_result.models_updated
-            cloud_result.errors.extend(ollama_result.errors)
+            cloud_result.vendors_added += local_result.vendors_added
+            cloud_result.models_added += local_result.models_added
+            cloud_result.models_updated += local_result.models_updated
+            cloud_result.errors.extend(local_result.errors)
             return cloud_result
 
         # Default: cloud-only sync
@@ -253,7 +260,7 @@ class LLMSyncService(UpsertMixin):
         self._upsert_price(model, vendor, data, result, dry_run)
         self._sync_modalities(model, data, result, dry_run)
 
-    async def sync_ollama(self, dry_run: bool = False) -> SyncResult:
+    async def sync_local(self, dry_run: bool = False) -> SyncResult:
         """Sync the models the app's inference engine serves to the catalog
         (Ollama's, or llama.cpp's one), under the engine's name, each at the
         context it serves while loaded (unknown, 0, while it is not).
@@ -282,10 +289,10 @@ class LLMSyncService(UpsertMixin):
             logger.error(error_msg)
             result.errors.append(error_msg)
             return result
-        ollama_models = status.installed_models
+        models = status.installed_models
         served = {m.name: m.context_length for m in status.running_models}
 
-        if not ollama_models:
+        if not models:
             logger.info(f"No models found in {client.LABEL}")
             return result
 
@@ -296,13 +303,13 @@ class LLMSyncService(UpsertMixin):
         if not vendor:
             return result
 
-        for ollama_model in ollama_models:
+        for model in models:
             try:
-                self._sync_ollama_model(
-                    ollama_model, vendor, served.get(ollama_model.name, 0), result, dry_run
+                self._sync_local_model(
+                    model, vendor, served.get(model.name, 0), result, dry_run
                 )
             except Exception as e:
-                error_msg = f"Failed to sync {client.LABEL} model {ollama_model.name}: {e}"
+                error_msg = f"Failed to sync {client.LABEL} model {model.name}: {e}"
                 logger.warning(error_msg)
                 result.errors.append(error_msg)
                 continue
@@ -310,33 +317,33 @@ class LLMSyncService(UpsertMixin):
         if not dry_run:
             self.session.commit()
             await invalidate_price_cache()
-            await attach_labs(self.session, [m.model_id for m in ollama_models])
+            await attach_labs(self.session, [m.model_id for m in models])
 
         logger.info(
-            f"Ollama sync complete: {result.models_added} models added, "
+            f"{client.LABEL} sync complete: {result.models_added} models added, "
             f"{result.models_updated} updated, {len(result.errors)} errors"
         )
 
         return result
 
-    def _sync_ollama_model(
+    def _sync_local_model(
         self,
-        ollama_model: InferenceModel,
+        local_model: InferenceModel,
         vendor: LLMOrg,
         context_window: int,
         result: SyncResult,
         dry_run: bool,
     ) -> None:
-        """Sync a single Ollama model to the database.
+        """Sync one model the engine serves to the database.
 
         Args:
-            ollama_model: Ollama model data from API.
+            local_model: The model, as the engine reports it.
             vendor: The engine's vendor record.
             context_window: The context it serves, 0 when not loaded.
             result: SyncResult to update.
             dry_run: If True, don't persist changes.
         """
-        model_data = ollama_model
+        model_data = local_model
 
         model_id = model_data.model_id  # e.g., "llama3.2" without tag
         existing = self._model_cache.get(model_id)
@@ -393,7 +400,7 @@ class LLMSyncService(UpsertMixin):
 
             self._model_cache[model_id] = model
             result.models_added += 1
-            logger.debug(f"Added Ollama model: {model_id}")
+            logger.debug(f"Added local model: {model_id}")
 
 
 async def sync_llm_catalog(

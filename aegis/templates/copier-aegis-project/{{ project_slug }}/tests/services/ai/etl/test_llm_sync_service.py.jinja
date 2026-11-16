@@ -757,12 +757,8 @@ class TestCatalogStats:
 
 
 class TestLocalModelsPresent:
-    """The picker's ``usable`` filter shows only vendors the install can
-    call. With no API keys that is Ollama alone, and the remote catalog
-    never carries a local tag - so a fresh Ollama stack opened an empty
-    picker until someone knew to run ``llm sync --source local``. The
-    startup hook syncs local tags when none are present; this is the
-    check it asks."""
+    """The check the startup hook asks before syncing local tags (why:
+    ``local_models_present``)."""
 
     def test_false_on_an_empty_catalog(self, sync_db_session: Session) -> None:
         assert local_models_present(sync_db_session) is False
@@ -808,7 +804,7 @@ class TestLocalSync:
             """The maker lookup fetches from the registry (its own tests)."""
 
         monkeypatch.setattr(llm_sync_service, "attach_labs", no_labs)
-        result = await LLMSyncService(sync_db_session).sync_ollama()
+        result = await LLMSyncService(sync_db_session).sync_local()
 
         assert result.models_added == 1 and not result.errors
         model = sync_db_session.exec(

@@ -898,11 +898,15 @@ def list_available_components() -> list[str]:
     return list(COMPONENTS.keys())
 
 
-def component_option_answers(component: str) -> dict[str, str]:
+def component_option_answers(
+    component: str, providers: list[str] | None = None
+) -> dict[str, str]:
     """The answers a component's options record, from ``name[values]``
     (defaults for any option not given); empty for one without options.
-    The inference placement also decides ``ollama_mode``, which templates
-    read. Raises ``ValueError`` on a value the spec does not offer."""
+    The inference engine not named is the one a local AI provider among
+    ``providers`` needs, and the placement also decides ``ollama_mode``,
+    which templates read. Raises ``ValueError`` on a value the spec does
+    not offer."""
     spec = COMPONENTS.get(component.partition("[")[0])
     if spec is None or not spec.options:
         return {}
@@ -911,5 +915,10 @@ def component_option_answers(component: str) -> dict[str, str]:
         opt.answer_key: parsed[opt.name] for opt in spec.options if opt.answer_key
     }
     if spec.name == ComponentNames.INFERENCE:
+        from .services import inference_engine
+
+        answers[AnswerKeys.INFERENCE_ENGINE] = inference_engine(
+            component, providers or []
+        )
         answers[AnswerKeys.OLLAMA_MODE] = parsed["placement"]
     return answers

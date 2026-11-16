@@ -2,14 +2,14 @@
 
 ![LLM Catalog](../../images/llm_catalog.png)
 
-The LLM Catalog is a local database of ~2000 language models synced from cloud APIs and local Ollama. It provides model discovery, pricing, capabilities, and one-command model switching.
+The LLM Catalog is a local database of ~2000 language models synced from cloud APIs and the local inference engine (Ollama, llama.cpp). It provides model discovery, pricing, capabilities, and one-command model switching.
 
 !!! info "Requires Database Backend"
     The LLM Catalog requires a database backend (`ai[sqlite]` or `ai[postgres]`). With the in-memory backend, catalog features are not available.
 
 ## What You Get
 
-- **~2000 models** synced from OpenRouter, LiteLLM, and local Ollama
+- **~2000 models** synced from OpenRouter, LiteLLM, and the local inference engine
 - **32+ vendors** including OpenAI, Anthropic, Google, Groq, Mistral, DeepSeek, and more
 - **Pricing data** with per-token input/output costs and price versioning
 - **Capability tracking** - modalities (text, image, audio, video), function calling, streaming, structured output
@@ -40,13 +40,13 @@ my-app llm use gpt-4o
 
 ### llm sync
 
-Sync model data from cloud APIs or local Ollama into the local database.
+Sync model data from cloud APIs or the local inference engine (Ollama, llama.cpp) into the local database.
 
 ```bash
 # Default: sync chat models from cloud (OpenRouter + LiteLLM)
 my-app llm sync
 
-# Sync only Ollama models
+# Sync only the engine's models
 my-app llm sync --source local
 
 # Sync everything
@@ -73,8 +73,8 @@ my-app llm sync --refresh
 | Source | What It Syncs | Model Count |
 |--------|--------------|-------------|
 | `cloud` | OpenRouter + LiteLLM public APIs | ~2000 models |
-| `ollama` | Locally installed Ollama models | Varies |
-| `all` | Both cloud and Ollama | ~2000+ |
+| `local` | The inference engine's models (`ollama` still works) | Varies |
+| `all` | Both cloud and the engine | ~2000+ |
 
 ### llm status
 

@@ -37,11 +37,11 @@ async def read() -> Sample:
 
 SAMPLER = Sampler(series.INFERENCE, read)
 
-# The Inference page's Container section when Ollama runs on the host, not in
-# a container (``ui_runtime.host_of``): what it holds in memory, and how fast
-# it answers this app (each LLM call's ``series.record``).
+# The Inference page's Container section when the engine runs on the host,
+# not in a container (``ui_runtime.host_of``): what it holds in memory, and
+# how fast it answers this app (each LLM call's ``series.record``).
 HOST = Host(
-    "Ollama runs on this machine, outside Docker: what it holds in "
+    "The engine runs on this machine, outside Docker: what it holds in "
     "memory, and how fast it answers this app.",
     (
         Chart(

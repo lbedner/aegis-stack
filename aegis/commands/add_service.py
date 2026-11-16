@@ -45,8 +45,8 @@ from ..core.migration_generator import (
 )
 from ..core.option_spec import (
     VariantConflictError,
+    installed_delta,
     variant_answers,
-    variant_delta,
 )
 from ..core.overseer_url import local_url
 from ..core.post_gen_tasks import stack_holds_sqlite
@@ -219,18 +219,15 @@ def add_service_command(
     for service in selected_services:
         # Check if service is already enabled in answers (use base name for bracket syntax)
         base_service = service_base_map[service]
-        include_key = AnswerKeys.include_key(base_service)
-        if existing_answers.get(include_key) is True:
-            # A bracket request against an installed service is an upgrade
-            # when the project's answers fall short of it (auth basic ->
-            # org); the spec's options decide, not a per-service table.
-            try:
-                delta = variant_delta(service, SERVICES[base_service], existing_answers)
-            except VariantConflictError as exc:
-                brand.error(str(exc), err=True)
-                raise typer.Exit(1) from None
-            if delta:
-                continue
+        # A bracket request against an installed service is an upgrade when
+        # the project's answers fall short of it (auth basic -> org); the
+        # spec's options decide, not a per-service table.
+        try:
+            delta = installed_delta(service, SERVICES[base_service], existing_answers)
+        except VariantConflictError as exc:
+            brand.error(str(exc), err=True)
+            raise typer.Exit(1) from None
+        if delta == {}:
             already_enabled.append(service)
 
     if already_enabled:
@@ -460,7 +457,7 @@ def add_service_command(
 
             # Answers the bracket request names (auth level today); the
             # updater derives whatever a level implies. Upgrades of an
-            # installed service were filtered above through variant_delta.
+            # installed service were filtered above through installed_delta.
             service_data.update(variant_answers(service, SERVICES[base_service]))
 
             installed = (
@@ -491,10 +488,9 @@ def add_service_command(
             # still lacks: for a multi option that is the union with what it
             # has (``ai[openai]`` on an ollama project keeps ollama), for a
             # flag it is simply on.
-            if installed:
-                service_data.update(
-                    variant_delta(service, SERVICES[base_service], existing_answers)
-                )
+            service_data.update(
+                installed_delta(service, SERVICES[base_service], existing_answers) or {}
+            )
 
             # For insights service, pass source flags
             if base_service == AnswerKeys.SERVICE_INSIGHTS:

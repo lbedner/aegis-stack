@@ -484,24 +484,31 @@ class TestVariantDelta:
         with pytest.raises(VariantConflictError, match="ai_backend"):
             variant_delta("ai[postgres]", self._backend(), {"ai_backend": "sqlite"})
 
-    def test_a_switchable_choice_moves_to_any_other(self) -> None:
-        """An inference engine's models live outside the project: either
-        engine may move to the other, and the real spec says so."""
+    def test_a_switchable_choice_moves_when_asked_for(self) -> None:
+        """An inference engine's models live outside the project: a request
+        for the other engine moves it, and the real spec says so."""
         from aegis.core.components import COMPONENTS
 
         inference = COMPONENTS["inference"]
-        assert variant_delta(
-            "inference[llamacpp]", inference, {"inference_engine": "ollama"}
-        ) == {"inference_engine": "llamacpp"}
-        assert variant_delta(
-            "inference[ollama]", inference, {"inference_engine": "llamacpp"}
-        ) == {"inference_engine": "ollama"}
-        assert (
-            variant_delta(
-                "inference[ollama]", inference, {"inference_engine": "ollama"}
-            )
-            == {}
+        ollama = {"inference_engine": "ollama"}
+        llamacpp = {"inference_engine": "llamacpp"}
+        asked = {"deliberate": True}
+        assert variant_delta("inference[llamacpp]", inference, ollama, **asked) == (
+            llamacpp
         )
+        assert (
+            variant_delta("inference[ollama]", inference, llamacpp, **asked) == ollama
+        )
+        assert variant_delta("inference[ollama]", inference, ollama, **asked) == {}
+
+    def test_a_dependency_never_switches_it(self) -> None:
+        """A plugin needing ``inference[ollama]`` on a llama.cpp project is a
+        conflict, not a quiet move: the resolver does not ask deliberately."""
+        from aegis.core.components import COMPONENTS
+
+        llamacpp = {"inference_engine": "llamacpp"}
+        with pytest.raises(VariantConflictError, match="inference_engine"):
+            variant_delta("inference[ollama]", COMPONENTS["inference"], llamacpp)
 
     def test_fresh_install_ignores_recorded_defaults(self) -> None:
         """Copier records ``ai_backend: memory`` even when AI is not

@@ -32,6 +32,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from ..constants import AnswerKeys
+
 
 class OptionMode(Enum):
     """How an option's bracket-content values map to a parsed value."""
@@ -92,8 +94,8 @@ class OptionSpec:
 
     switchable: bool = False
     """No choice holds anything the project keeps (the inference engine:
-    its models live outside the project), so a request for another choice
-    moves the project to it instead of conflicting."""
+    its models live outside the project), so a deliberate request for
+    another choice moves the project to it; a dependency's still conflicts."""
 
     ordered: bool = False
     """``choices`` are ascending levels (auth: basic < rbac < org). A
@@ -260,7 +262,7 @@ def variant_answers(spec_str: str, plugin_spec: Any) -> dict[str, Any]:
     }
 
 
-def _multi_values(value: Any) -> list[str]:
+def multi_values(value: Any) -> list[str]:
     """A multi option's answer as a list, whether copier holds it as the
     comma-separated string the template renders (``ai_providers:
     "ollama,openai"``) or a list."""
@@ -270,16 +272,37 @@ def _multi_values(value: Any) -> list[str]:
 
 
 def variant_delta(
-    spec_str: str, plugin_spec: Any, answers: dict[str, Any]
+    spec_str: str,
+    plugin_spec: Any,
+    answers: dict[str, Any],
+    *,
+    deliberate: bool = False,
 ) -> dict[str, Any]:
     """Answers a request such as ``auth[org]`` would still change on a
     project that HAS the service: :func:`variant_answers` filtered through
     :func:`answers_delta`."""
-    return answers_delta(plugin_spec, variant_answers(spec_str, plugin_spec), answers)
+    requested = variant_answers(spec_str, plugin_spec)
+    return answers_delta(plugin_spec, requested, answers, deliberate=deliberate)
+
+
+def installed_delta(
+    spec_str: str, plugin_spec: Any, answers: dict[str, Any]
+) -> dict[str, Any] | None:
+    """What a user's ``aegis add`` of ``spec_str`` changes on a project that
+    has the part already (``{}``: nothing, it is "already enabled"), or
+    ``None`` when the project lacks it. Raises :class:`VariantConflictError`
+    on a choice that cannot move."""
+    if answers.get(AnswerKeys.include_key(plugin_spec.name)) is not True:
+        return None
+    return variant_delta(spec_str, plugin_spec, answers, deliberate=True)
 
 
 def answers_delta(
-    plugin_spec: Any, requested: dict[str, Any], answers: dict[str, Any]
+    plugin_spec: Any,
+    requested: dict[str, Any],
+    answers: dict[str, Any],
+    *,
+    deliberate: bool = False,
 ) -> dict[str, Any]:
     """The subset of ``requested`` (``{answer_key: value}``) the project's
     answers do not already satisfy.
@@ -288,7 +311,8 @@ def answers_delta(
     treated as unset. Ordered options are satisfied by any current value
     at or above the request; unordered ones raise
     :class:`VariantConflictError` on a mismatch, except to or from their
-    ``upgrades_from`` choice (moved off, or already past). A multi option (AI
+    ``upgrades_from`` choice (moved off, or already past), or a
+    ``switchable`` one on a ``deliberate`` (the user's own) request. A multi option (AI
     providers) is satisfied when the project already holds every
     requested value, else the delta is the union, current values first,
     as the comma-separated string copier stores; a flag (rag, voice) is
@@ -308,7 +332,7 @@ def answers_delta(
             continue
         current = answers.get(key)
         if opt.mode is OptionMode.MULTI:
-            have = [v for v in _multi_values(current) if v in opt.choices]
+            have = [v for v in multi_values(current) if v in opt.choices]
             missing = [v for v in wanted if v not in have]
             if missing:
                 delta[key] = ",".join(have + missing)
@@ -322,7 +346,7 @@ def answers_delta(
         elif opt.ordered:
             if opt.choices.index(wanted) > opt.choices.index(current):
                 delta[key] = wanted
-        elif opt.switchable:
+        elif opt.switchable and deliberate:
             if current != wanted:
                 delta[key] = wanted
         elif current != wanted != opt.upgrades_from:

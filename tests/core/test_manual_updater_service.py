@@ -309,12 +309,11 @@ class TestAddServiceVariantUpgrade:
         assert answers[AnswerKeys.AUTH_LEVEL] == "org"
 
     def test_an_engine_switch_takes_the_local_provider_with_it(
-        self, tmp_path: Path
+        self, fake_project: Path
     ) -> None:
         """A local provider chats with the engine of its name, so moving the
         engine moves it; the cloud providers stay."""
-        project = tmp_path / "demo"
-        project.mkdir()
+        project = fake_project
         (project / ".copier-answers.yml").write_text(
             COPIER_ANSWERS
             + "include_inference: true\ninference_engine: ollama\n"
@@ -335,6 +334,29 @@ class TestAddServiceVariantUpgrade:
         answers = _make_updater(project).answers
         assert answers[AnswerKeys.INFERENCE_ENGINE] == "llamacpp"
         assert answers[AnswerKeys.AI_PROVIDERS] == "llamacpp,openai"
+
+    def test_a_fresh_inference_add_leaves_the_providers(
+        self, fake_project: Path
+    ) -> None:
+        """Only a switch moves the local provider; adding the component
+        anew never rewrites what the AI service chose."""
+        (fake_project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS + "include_ai: true\nai_providers: llamacpp\n"
+        )
+        with (
+            patch.object(
+                ManualUpdater, "_regenerate_shared_files", return_value=([], [], [])
+            ),
+            patch("aegis.core.manual_updater.get_component_files", return_value=[]),
+        ):
+            result = _make_updater(fake_project).add_component(
+                "inference",
+                {AnswerKeys.INFERENCE_ENGINE: "ollama"},
+                run_post_gen=False,
+            )
+        assert result.success, result.error_message
+        answers = _make_updater(fake_project).answers
+        assert answers[AnswerKeys.AI_PROVIDERS] == "llamacpp"
 
     def test_same_variant_is_still_already_enabled(self, tmp_path: Path) -> None:
         project = self._project_with_basic_auth(tmp_path)

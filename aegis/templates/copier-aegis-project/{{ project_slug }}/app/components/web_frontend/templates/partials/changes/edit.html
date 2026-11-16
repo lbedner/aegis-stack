@@ -1,0 +1,19 @@
+{# The edit dialog's body: a waiting card's fields as a form, each filled
+   with what was proposed (on a 422, what was typed, with why). The fields
+   come from the change type's own contract (``editable_fields``), so this
+   one partial serves every editable type. Saved, the dialog closes and the
+   card redraws itself wherever it is up. #}
+{% from "components/macros/form.html" import field, form_footer, select, text_input %}
+{% from "components/macros/feedback.html" import error_banner %}
+{% from "components/macros/layout.html" import dialog_title %}
+{{ dialog_title(title, ((by ~ ". ") if by else "") ~ "Change what is wrong, then approve it on the card.") }}
+<form data-write {{ hx_dialog_post(post) }} hx-disabled-elt="find button[type=submit]" class="space-y-4">
+  {{ error_banner(errors) }}
+  {% for f in fields %}
+  {% call field(f.label) %}
+    {% if f.options %}{{ select(f.name, f.options, f.value, blank=none, block=True) }}
+    {% else %}{{ text_input(f.name, f.value, required=f.required, autofocus=loop.first) }}{% endif %}
+  {% endcall %}
+  {% endfor %}
+  {{ form_footer("Save") }}
+</form>

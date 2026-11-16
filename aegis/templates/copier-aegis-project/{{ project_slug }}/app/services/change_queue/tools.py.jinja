@@ -3,7 +3,8 @@
 A model's only write door, whoever runs it: a chat agent or an MCP
 client. ``propose`` and ``propose_many`` file pending changes of any
 registered type; ``pending``, ``withdraw`` and ``withdraw_batch`` let
-the author (``current_agent_slug``) see and retract its own cards.
+the author (``current_agent_slug``) see and retract its own cards, and
+``revise`` puts the user's correction on any card waiting for them.
 Execution happens only when the user approves in the app. The tools
 register ``effect="proposes"``, so code mode dispatches them as visible
 calls and MCP may serve them.
@@ -36,6 +37,7 @@ from app.services.change_queue.schemas import (
     Proposed,
     NotFiled,
     ProposedBatch,
+    Revised,
     Withdrawn,
 )
 from app.services.shared.deps import caller_is_admin
@@ -309,6 +311,49 @@ async def withdraw_batch(
     return await _committed(work)
 
 
+async def revise(
+    fields: dict[str, str],
+    pending_change_ids: list[int] | None = None,
+    about: str | None = None,
+) -> Revised | NotFiled:
+    """Put right what a waiting card got wrong, before the user approves it -
+    any card awaiting them whose type can be edited, not only your own. Use
+    it when the user corrects a reading: "it is Sweet shop, not Sweat shop"
+    is revise({"text": "Sweet shop"}, about="Sweat shop"), and every waiting
+    card that says Sweat shop is fixed. Name the cards by
+    ``pending_change_ids``, or by ``about`` (text the card's payload
+    contains). ``fields`` are only the ones to change; the rest of each card
+    stays. Returns the ids revised and, per card it could not change, why -
+    a card that cannot be edited says which fields can."""
+    needle = (about or "").strip().lower()
+    if not pending_change_ids and not needle:
+        return NotFiled(error="name the cards: pending_change_ids or about")
+
+    async def work(session: AsyncSession) -> Revised:
+        rows = await change_queue.list_changes(session, owner_user_id=_owner())
+        revised: list[int] = []
+        errors: dict[str, str] = {}
+        for row in rows:
+            if pending_change_ids and row.id not in pending_change_ids:
+                continue
+            if needle and needle not in str(row.payload).lower():
+                continue
+            # Found by what it says, a card that is answered rather than
+            # edited is not what the correction was about.
+            executor = change_queue.executor_for(row.change_type)
+            if not pending_change_ids and not change_queue.editable_fields(executor):
+                continue
+            try:
+                await change_queue.revise_row(session, row, fields)
+            except ValueError as e:
+                errors[str(row.id)] = str(e)
+                continue
+            revised.append(int(row.id or 0))
+        return Revised(revised=revised, errors=errors or None)
+
+    return await _committed(work)
+
+
 # Built-in registration: importing this module makes the tools grantable
 # via the agent registry. replace=True keeps re-imports idempotent.
 register_tool(
@@ -346,6 +391,13 @@ register_tool(
     "withdraw",
     withdraw,
     description="Retract one of your own still-pending proposals",
+    effect="proposes",
+    replace=True,
+)
+register_tool(
+    "revise",
+    revise,
+    description="Correct a waiting card the user can edit, before they approve it",
     effect="proposes",
     replace=True,
 )

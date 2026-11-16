@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -32,6 +32,21 @@ class NotePayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: str
+
+
+# What a letter's ``kind`` picks from (``ChangeExecutor.choices``).
+KINDS = ("note", "memo")
+
+
+class LetterPayload(BaseModel):
+    """A note with an addressee and a kind: the payload of a type whose card
+    the reader may edit before approving (``ChangeExecutor.editable``)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    to: str | None = Field(default=None, max_length=20)
+    kind: str = "note"
 
 
 class Noted(BaseModel):
@@ -74,17 +89,22 @@ async def _describe(
 
 
 @contextmanager
-def note_type(change_type: str) -> Iterator[None]:
-    """``change_type`` registered as "Write a note" for the block."""
+def note_type(change_type: str, **options: Any) -> Iterator[None]:
+    """``change_type`` registered as "Write a note" for the block; ``options``
+    are the rest of its ``ChangeExecutor`` (``editable``, ``after_commit``,
+    ``scan``, another ``payload_model`` or ``describe``)."""
     executed.clear()
     change_queue.register(
         ChangeExecutor(
-            change_type=change_type,
-            title="Write a note",
-            description="A note, for the tests.",
-            payload_model=NotePayload,
-            execute=_execute,
-            describe=_describe,
+            **{
+                "change_type": change_type,
+                "title": "Write a note",
+                "description": "A note, for the tests.",
+                "payload_model": NotePayload,
+                "execute": _execute,
+                "describe": _describe,
+            }
+            | options
         )
     )
     try:

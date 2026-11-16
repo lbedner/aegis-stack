@@ -209,7 +209,7 @@ const said = (text, buttons = []) => ({ cloneNode: () => ({
   get textContent() { return text; } }) });
 const lines = [
   { dataset: { copyLine: 'Ada [00:00]' }, querySelector: () => said('Hello. ') },
-  { dataset: { copyLine: 'Leonard [00:01]' },
+  { dataset: { copyLine: 'Grace [00:01]' },
     querySelector: () => said('Ship it scheduler', ['scheduler']) },
 ];
 document.querySelectorAll = (sel) =>
@@ -225,7 +225,7 @@ def test_a_copy_from_the_page_takes_each_line_without_its_buttons() -> None:
     """A transcript copied from the page reads one line each, its label then
     its words, with the buttons among the words left out."""
     assert run(COPY_FROM_HARNESS, APP_JS=APP_JS) == [
-        "Ada [00:00]: Hello.\nLeonard [00:01]: Ship it\n"
+        "Ada [00:00]: Hello.\nGrace [00:01]: Ship it\n"
     ]
 
 

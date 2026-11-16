@@ -2,7 +2,9 @@
    once and shown in the chat (a reply carries the cards its tools proposed)
    and in the review list. The rows are the queue's own description of the
    change, resolved from the database, never the model's words. Approve and
-   Reject swap the card for its new state. #}
+   Reject swap the card for its new state; Edit (a type that lets the reader
+   put their own words on it first) opens the one dialog, and a saved edit
+   redraws the card wherever it is up (``refresh``). #}
 {% from "components/macros/form.html" import action, checkbox %}
 {% from "components/macros/feedback.html" import error_banner %}
 {% from "components/macros/layout.html" import badge, facts %}
@@ -10,13 +12,14 @@
 {# The frame both cards share: a title line, its right-hand side as the
    caller's body, then ``rows``. A batch is a form so its "skip" boxes ride
    along: htmx sends the enclosing form's fields with a button's POST. A
-   decided card (``decided``) folds to that line: history, not homework. #}
-{% macro _card(tag, id, data, title, side, by=none, decided=False) %}
+   decided card (``decided``) folds to that line: history, not homework.
+   ``refresh`` is how a revised card fetches itself again. #}
+{% macro _card(tag, id, data, title, side, by=none, decided=False, refresh="") %}
 {% set head %}
     <span class="font-medium text-aegis-text">{{ title }}</span>
     <span class="text-xxs">{{ side }}</span>
 {% endset %}
-<{{ tag }} id="{{ id }}" {{ data }} class="my-2 border border-aegis-border rounded-lg p-3 text-sm bg-aegis-card">
+<{{ tag }} id="{{ id }}" {{ data }} {{ refresh }} class="my-2 border border-aegis-border rounded-lg p-3 text-sm bg-aegis-card">
   {% if decided %}<details><summary class="list-none cursor-pointer flex items-center justify-between gap-3">{{ head }}</summary>
   {% else %}<div class="flex items-center justify-between gap-3">{{ head }}</div>{% endif %}
   {% if by %}<div class="text-xs text-aegis-muted">{{ by }}</div>{% endif %}
@@ -28,23 +31,42 @@
 {# Approve and Reject swap the card they sit on, found by its ``data``
    mark: the same card can be up twice (the thread and the waiting list),
    so an id would find the first copy, not this one. #}
-{% macro _actions(url, mark, reject) %}
+{% macro _actions(url, mark, reject, edit=none) %}
 {% set swap = 'hx-target="closest [' ~ mark ~ ']" hx-swap="outerHTML"' %}
 <div class="mt-3 flex gap-2">
   {{ action("Approve", 'hx-post="' ~ url ~ '/approve" ' ~ swap, tone="primary") }}
   {{ action(reject, 'hx-post="' ~ url ~ '/reject" ' ~ swap, tone="danger") }}
+  {{ _edit(edit) }}
 </div>
+{% endmacro %}
+
+{# The reader's own words on a card first, where its type allows: the form
+   opens in the one dialog, so every surface's card opens the same one. #}
+{% macro _edit(url) %}{% if url %}{{ action("Edit", hx_dialog(url, "data-edit")) }}{% endif %}{% endmacro %}
+
+{# The pictures a card carries (a scanned page, a photo), drawn from where
+   its type says they are stored. #}
+{% macro _pictures(row) %}
+{% if row.pictures %}
+<div class="mt-2 flex flex-wrap gap-2">
+  {% for src in row.pictures %}
+  <img data-scan loading="lazy" width="144" height="160" src="{{ src }}" alt="Picture {{ loop.index }} of {{ loop.length }} on this card"
+       class="{{ 'w-full' if loop.length == 1 else 'w-36' }} max-h-40 object-contain object-left rounded border border-aegis-border bg-aegis-bg">
+  {% endfor %}
+</div>
+{% endif %}
 {% endmacro %}
 
 {# Why a decided row went the way it did: a withdrawal's reason, a veto. #}
 {% macro _note(row) %}{% if row.note and row.status != "pending" %}<p class="mt-2 text-xs text-aegis-muted" data-note>{{ row.note }}</p>{% endif %}{% endmacro %}
 
 {% macro change_card(change) %}
-{% call _card("div", "change-" ~ change.id, "data-change", change.title, badge(change.label, change.tone), change.by, decided=change.status != "pending") %}
+{% call _card("div", "change-" ~ change.id, "data-change", change.title, badge(change.label, change.tone), change.by, decided=change.status != "pending", refresh=change.refresh) %}
   {{ _note(change) }}
   <div class="mt-2">{{ facts(change.display) }}</div>
+  {{ _pictures(change) }}
   {% if change.error %}<div class="mt-2">{{ error_banner([change.error]) }}</div>{% endif %}
-  {% if change.status == "pending" %}{{ _actions(change.url, "data-change", "Reject") }}{% endif %}
+  {% if change.status == "pending" %}{{ _actions(change.url, "data-change", "Reject", change.edit) }}{% endif %}
 {% endcall %}
 {% endmacro %}
 
@@ -53,10 +75,11 @@
 <li class="border-t border-aegis-border/50 pt-2 first:border-0 first:pt-0">
   <div class="flex items-center justify-between gap-3">
     {% if row.status == "pending" %}{{ checkbox("exclude_ids", label="Skip this one", value=row.id) }}{% endif %}
-    <span class="text-xxs ml-auto">{{ badge(row.label, row.tone) }}</span>
+    <span class="ml-auto flex items-center gap-2 text-xxs">{{ _edit(row.edit) }}{{ badge(row.label, row.tone) }}</span>
   </div>
   {{ _note(row) }}
   <div class="mt-2">{{ facts(row.display) }}</div>
+  {{ _pictures(row) }}
   {% if row.error %}<div class="mt-2">{{ error_banner([row.error]) }}</div>{% endif %}
 </li>
 {% endmacro %}
@@ -69,7 +92,7 @@
 {% macro batch_card(batch) %}
 {% set count = batch.rows|length %}
 {% set side = count ~ (" change" if count == 1 else " changes") if batch.pending else batch.outcome %}
-{% call _card("form", "batch-" ~ batch.batch_id, "data-change-batch", batch.title, side, batch.by, decided=not batch.pending) %}
+{% call _card("form", "batch-" ~ batch.batch_id, "data-change-batch", batch.title, side, batch.by, decided=not batch.pending, refresh=batch.refresh) %}
   <ul class="mt-2 space-y-2">
     {% for group in batch.groups %}
     {% if group.rows|length == 1 %}{{ _batch_row(group.rows[0]) }}{% else %}

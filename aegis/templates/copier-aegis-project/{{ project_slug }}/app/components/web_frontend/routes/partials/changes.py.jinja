@@ -6,22 +6,37 @@ approves is what runs. Approving or rejecting swaps the card for its new
 state. Everything is scoped to the signed-in user: another user's card is
 a 404 to act on (``change_queue.deps``), never a card. Shown, a card that is
 gone (or not yours, which reads the same) says so (``card_missing``).
+A type that lets the reader edit a card first opens its form in the one
+dialog (``edit``); a card that carries pictures serves them (``scan``).
 """
 
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, Response
 from markupsafe import Markup
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.components.web_frontend.rendering import templates, trigger
+from app.components.web_frontend.rendering import (
+    close_dialog,
+    dialog,
+    form_fields,
+    templates,
+    toast_response,
+    trigger,
+)
 from app.core.chat_transcript import CARD_STATUS, batch_outcome, proposer_line
 from app.core.db import get_async_db
 from app.core.log import logger
+from app.core.storage import get_storage
+from app.core.untrusted import untrusted_response
 from app.services import change_queue
-from app.services.change_queue import ChangeDisplayRow, PendingChange
+from app.services.change_queue import (
+    ChangeDisplayRow,
+    ChangeExecutor,
+    PendingChange,
+)
 from app.services.change_queue.deps import (
     found_batch,
     found_change,
@@ -35,10 +50,26 @@ router = APIRouter(prefix=PATH)
 # Sent with every decision, so another copy of the queue on the page (the
 # chat's waiting list) redraws.
 RESOLVED = "change:resolved"
+# Sent when a card is revised in the dialog, with the card's URL: every copy
+# of that card on the page fetches itself again (``_refresh``).
+REVISED = "change:revised"
+# What a stored picture is, by its first bytes: the scan route serves it as
+# that, never as the type its bytes might pass for.
+# ponytail: four signatures; a type outside them is served as a download.
+PICTURES = {
+    b"\xff\xd8\xff": "image/jpeg",
+    b"\x89PNG": "image/png",
+    b"GIF8": "image/gif",
+    b"RIFF": "image/webp",
+}
 
 
 def change_url(change_id: int | str) -> str:
     return f"{PATH}/{change_id}"
+
+
+def edit_url(change_id: int | str) -> str:
+    return f"{change_url(change_id)}/edit"
 
 
 def batch_url(batch_id: str) -> str:
@@ -73,12 +104,22 @@ def _linked(line: ChangeDisplayRow) -> str | Markup:
     ).format(line.url, Markup(elsewhere), line.value)
 
 
+def _refresh(url: str) -> Markup:
+    """The attributes of a card that redraws itself when it is revised
+    (``REVISED`` naming ``url``): every copy on the page, wherever it is."""
+    return Markup(
+        'hx-get="{0}" hx-trigger="{1}[detail.card==\'{0}\'] from:body" '
+        'hx-swap="outerHTML"'
+    ).format(url, REVISED)
+
+
 async def _views(db: AsyncSession, rows: list[PendingChange]) -> list[dict[str, Any]]:
     """Rows as their cards show them, described together."""
     views = []
     for row, card in zip(rows, await change_queue.cards(db, rows)):
         outcome = change_queue.outcome_of(row)
         label, tone = CARD_STATUS[outcome]
+        url = change_url(card.id)
         views.append(
             card.model_dump()
             | {
@@ -86,8 +127,14 @@ async def _views(db: AsyncSession, rows: list[PendingChange]) -> list[dict[str, 
                 "outcome": outcome,
                 "label": label,
                 "tone": tone,
-                "url": change_url(card.id),
+                "url": url,
                 "by": proposer_line(card.proposed_by_agent),
+                "edit": edit_url(card.id) if card.editable else None,
+                "refresh": _refresh(url) if card.editable else "",
+                "pictures": [
+                    f"{url}/scan" + (f"?page={n}" if n else "")
+                    for n in range(card.scans)
+                ],
             }
         )
     return views
@@ -109,9 +156,11 @@ def _batch_shape(batch_id: str, views: list[dict[str, Any]]) -> dict[str, Any]:
     say the same thing folded together (``_groups``), and once decided, its
     outcome."""
     pending = any(v["status"] == "pending" for v in views)
+    url = batch_url(batch_id)
     return {
         "batch_id": batch_id,
-        "url": batch_url(batch_id),
+        "url": url,
+        "refresh": _refresh(url) if any(v["edit"] for v in views) else "",
         "title": views[0]["title"],
         "by": views[0]["by"],
         "rows": views,
@@ -152,6 +201,7 @@ async def _resolve(
     except Exception:
         logger.exception(f"Resolving pending change {row.id} failed")
     await db.commit()
+    await change_queue.after_commit(db)
     return trigger(_render("change_card", await _view(db, row)), RESOLVED)
 
 
@@ -243,6 +293,7 @@ async def approve_batch(
     skipped = [int(v) for v in form.getlist("exclude_ids") if str(v).isdigit()]
     await change_queue.approve_rows(db, rows, exclude_ids=skipped)
     await db.commit()
+    await change_queue.after_commit(db)
     card = _render("batch_card", await _batch_view(db, batch_id, rows))
     return trigger(card, RESOLVED)
 
@@ -257,4 +308,110 @@ async def reject_batch(
     await db.commit()
     card = _render("batch_card", await _batch_view(db, batch_id, rows))
     return trigger(card, RESOLVED)
+
+
+def _edit_fields(
+    executor: ChangeExecutor, values: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """The fields the reader may change, as the form draws them: free text,
+    or a select where the type names choices; filled from ``values`` (the
+    card's, or what was typed)."""
+    return [
+        {
+            "name": name,
+            "label": name.replace("_", " ").capitalize(),
+            "value": values.get(name) or "",
+            "required": executor.payload_model.model_fields[name].is_required(),
+            "options": [{"id": o, "name": o} for o in executor.choices.get(name, ())],
+        }
+        for name in change_queue.editable_fields(executor)
+    ]
+
+
+async def _editable(row: PendingChange = Depends(owned_change)) -> PendingChange:
+    """A waiting card whose type takes edits, or a 404: a decided card, or
+    one that is answered rather than edited, has no form."""
+    executor = change_queue.executor_for(row.change_type)
+    if row.status != "pending" or not change_queue.editable_fields(executor):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Nothing to edit")
+    return row
+
+
+def _edit_form(
+    request: Request,
+    row: PendingChange,
+    values: dict[str, Any],
+    status_code: int = 200,
+    errors: list[str] | None = None,
+) -> Response:
+    executor = change_queue.executor_for(row.change_type)
+    return dialog(
+        request,
+        "partials/changes/edit.html",
+        status_code,
+        title=executor.title,
+        by=proposer_line(row.proposed_by_agent),
+        post=edit_url(str(row.id)),
+        fields=_edit_fields(executor, values),
+        errors=errors or [],
+    )
+
+
+@router.get("/{change_id}/edit", response_class=HTMLResponse)
+async def edit(request: Request, row: PendingChange = Depends(_editable)) -> Response:
+    """The reader's own words on a card before approving it: its form,
+    every field prefilled with what was proposed."""
+    try:
+        values = change_queue.current_payload(
+            change_queue.executor_for(row.change_type), row
+        )
+    except ValueError:
+        values = row.payload
+    return _edit_form(request, row, values)
+
+
+@router.post("/{change_id}/edit", response_class=HTMLResponse)
+async def save_edit(
+    request: Request,
+    row: PendingChange = Depends(_editable),
+    db: AsyncSession = Depends(get_async_db),
+) -> Response:
+    """Saved: the dialog closes and the card redraws itself wherever it is
+    up; refused, the form comes back with why, as typed."""
+    typed = await form_fields(request)
+    editable = change_queue.editable_fields(change_queue.executor_for(row.change_type))
+    fields = {name: typed[name] for name in editable if name in typed}
+    try:
+        await change_queue.revise_row(db, row, fields)
+    except ValueError as exc:
+        return _edit_form(request, row, row.payload | fields, 422, [str(exc)])
+    await db.commit()
+    card = batch_url(row.batch_id) if row.batch_id else change_url(str(row.id))
+    return close_dialog(trigger(toast_response("Saved"), REVISED, {"card": card}))
+
+
+@router.get("/{change_id}/scan")
+async def scan(
+    page: int = 0,
+    row: PendingChange = Depends(owned_change),
+    db: AsyncSession = Depends(get_async_db),
+) -> Response:
+    """A picture a card carries (a scanned page, a photo), where its change
+    type says it is stored; ``page`` counts from 0."""
+    executor = change_queue.executor_for(row.change_type)
+    keys = (
+        await executor.scan(
+            db, executor.payload_model.model_validate(row.payload), row.owner_user_id
+        )
+        if executor.scan
+        else []
+    )
+    data = await get_storage().get(keys[page]) if 0 <= page < len(keys) else None
+    if data is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No such picture")
+    kind = next(
+        (kind for magic, kind in PICTURES.items() if data.startswith(magic)),
+        "application/octet-stream",
+    )
+    return untrusted_response(data, kind)
 {% endif %}

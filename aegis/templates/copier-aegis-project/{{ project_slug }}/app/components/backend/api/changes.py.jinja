@@ -15,6 +15,7 @@ from app.services.change_queue.schemas import (
     BatchResolveRequest,
     BatchResolveResponse,
     ChangeProposal,
+    ChangeRevision,
     PendingChangeCount,
     PendingChangeListResponse,
     PendingChangeResponse,
@@ -109,6 +110,26 @@ async def approve_change(
         ) from None
     response = await change_queue.card(db, row)
     await db.commit()
+    await change_queue.after_commit(db)
+    return response
+
+
+@router.post("/{change_id}/revise", response_model=PendingChangeResponse)
+async def revise_change(
+    body: ChangeRevision,
+    row: PendingChange = Depends(owned_change),
+    db: AsyncSession = Depends(get_async_db),
+) -> PendingChangeResponse:
+    """Put the reader's own words on a waiting card of a type that allows
+    it; the card stays pending, revalidated by its type's contract."""
+    try:
+        await change_queue.revise_row(db, row, body.fields)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+        ) from None
+    response = await change_queue.card(db, row)
+    await db.commit()
     return response
 
 
@@ -148,6 +169,7 @@ async def approve_batch(
     """Approve the batch's pending rows, rejecting any vetoed ids."""
     summary = await change_queue.approve_rows(db, rows, exclude_ids=body.exclude_ids)
     await db.commit()
+    await change_queue.after_commit(db)
     return summary
 
 

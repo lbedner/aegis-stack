@@ -6,22 +6,35 @@ chat card calls. That is the whole contract a new service relies on.
 """
 
 from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager
 from pathlib import Path
-{%- if include_ai and ai_backend != "memory" %}
 from typing import Any
-{%- endif %}
 
 from fastapi.testclient import TestClient
 import pytest
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+{% if include_ai and ai_backend != "memory" -%}
 from app.core.tools import result_data
+{% endif -%}
 from app.services import change_queue
 from app.services.change_queue import PendingChange
-from tests._change_queue import BREAKS_AT_FLUSH, GONE, executed, note_type
+from tests._change_queue import (
+    BREAKS_AT_FLUSH,
+    GONE,
+    LetterPayload,
+    executed,
+    note_type,
+)
 
 NOTE = "test.note"
+LETTER = "test.letter"
+
+
+def _letter(**options: Any) -> AbstractContextManager[None]:
+    """A type whose card the reader may edit, registered for the block."""
+    return note_type(LETTER, payload_model=LetterPayload, editable=True, **options)
 
 
 @pytest.fixture(autouse=True)
@@ -179,6 +192,162 @@ async def test_one_failing_approval_leaves_the_others_landed(
 
 
 @pytest.mark.asyncio
+async def test_a_reader_revises_an_editable_card_before_approving(
+    async_db_session: AsyncSession,
+) -> None:
+    """A card is a proposal: the reader may put their own words on it first
+    (``editable``). The fields named change, the rest stay, the card still
+    waits, and approving runs what it now says."""
+    with _letter():
+        row = await change_queue.propose(
+            async_db_session,
+            LETTER,
+            {"text": "Sweat shop", "to": "the shop"},
+            owner_user_id=None,
+        )
+        revised = await change_queue.revise(
+            async_db_session, row.id, {"text": "Sweet shop"}, owner_user_id=None
+        )
+        assert revised.status == "pending"
+        assert revised.payload == {"text": "Sweet shop", "to": "the shop", "kind": "note"}
+
+        await change_queue.approve_row(async_db_session, revised)
+
+    assert executed == ["Sweet shop"]
+
+
+@pytest.mark.asyncio
+async def test_a_bad_revision_is_refused_and_a_blank_field_cleared(
+    async_db_session: AsyncSession,
+) -> None:
+    """The contract ``propose`` validated against validates the revision, so
+    a revised card is as safe to approve as a fresh one; a bad one dies
+    and leaves the card as it was. A field given blank is cleared."""
+    with _letter():
+        row = await change_queue.propose(
+            async_db_session, LETTER, {"text": "hi", "to": "the shop"}, owner_user_id=None
+        )
+        with pytest.raises(ValueError, match="invalid test.letter payload"):
+            await change_queue.revise_row(async_db_session, row, {"to": "x" * 21})
+        assert row.payload["to"] == "the shop"
+
+        cleared = await change_queue.revise_row(async_db_session, row, {"to": " "})
+
+    assert cleared.payload["to"] is None
+
+
+@pytest.mark.asyncio
+async def test_only_a_waiting_card_of_an_editable_type_is_revised(
+    async_db_session: AsyncSession,
+) -> None:
+    note = await change_queue.propose(
+        async_db_session, NOTE, {"text": "hi"}, owner_user_id=None
+    )
+    with pytest.raises(ValueError, match="answered, not edited"):
+        await change_queue.revise_row(async_db_session, note, {"text": "bye"})
+    with _letter():
+        row = await change_queue.propose(
+            async_db_session, LETTER, {"text": "hi"}, owner_user_id=None
+        )
+        await change_queue.reject_row(async_db_session, row)
+        with pytest.raises(ValueError, match="already rejected"):
+            await change_queue.revise_row(async_db_session, row, {"text": "bye"})
+
+
+@pytest.mark.asyncio
+async def test_edits_names_the_only_fields_a_reader_may_change(
+    async_db_session: AsyncSession,
+) -> None:
+    """Every text field is the reader's by default; ``edits`` narrows it to
+    those, where the rest is the card's own."""
+    with _letter():
+        every = change_queue.editable_fields(change_queue.executor_for(LETTER))
+    with _letter(edits=("to",)):
+        only = change_queue.editable_fields(change_queue.executor_for(LETTER))
+        row = await change_queue.propose(
+            async_db_session, LETTER, {"text": "hi"}, owner_user_id=None
+        )
+        with pytest.raises(ValueError, match="text cannot be edited .* only to"):
+            await change_queue.revise_row(async_db_session, row, {"text": "bye"})
+
+    assert every == ["text", "to", "kind"]
+    assert only == ["to"]
+    assert change_queue.editable_fields(change_queue.executor_for(NOTE)) == []
+
+
+@pytest.mark.asyncio
+async def test_an_approvals_follow_up_runs_once_after_the_commit(
+    async_db_session: AsyncSession,
+) -> None:
+    """``after_commit``: work that needs the change committed first runs with
+    its result once the approval lands. It runs for the rows that action
+    landed (never a vetoed one), once, and a follow-up that fails never
+    fails the approval."""
+    followed: list[str] = []
+
+    async def follow(result: dict[str, Any]) -> None:
+        followed.append(result["noted"])
+        if result["noted"] == "loud":
+            raise RuntimeError("the follow-up broke")
+
+    with _letter(after_commit=follow):
+        rows = await change_queue.propose_many(
+            async_db_session,
+            LETTER,
+            [{"text": text} for text in ("keep", "veto", "loud")],
+            owner_user_id=None,
+        )
+        await change_queue.approve_rows(
+            async_db_session, rows, exclude_ids=[int(rows[1].id or 0)]
+        )
+        assert followed == []
+        await async_db_session.commit()
+
+        landed = await change_queue.after_commit(async_db_session)
+        again = await change_queue.after_commit(async_db_session)
+
+    assert followed == ["keep", "loud"]
+    assert [row.id for row in landed] == [rows[0].id, rows[2].id]
+    assert again == []
+
+
+@pytest.mark.asyncio
+async def test_cards_aimed_at_what_is_going_expire_saying_why(
+    async_db_session: AsyncSession,
+) -> None:
+    """``expire_naming``: a waiting card aimed at something about to be
+    removed would apply to nothing. It expires with the reason, its card
+    frozen while the thing is still there to describe; other cards, and
+    decided ones, stay as they are."""
+    with _letter():
+        going, staying, decided = [
+            await change_queue.propose(
+                async_db_session, LETTER, {"text": text, "to": to}, owner_user_id=None
+            )
+            for text, to in (("a", "box 1"), ("b", "box 2"), ("c", "box 1"))
+        ]
+        await change_queue.reject_row(async_db_session, decided)
+
+        expired = await change_queue.expire_naming(
+            async_db_session,
+            "to",
+            ["box 1"],
+            owner_user_id=None,
+            note="Box 1 was removed.",
+        )
+
+    assert expired == 1
+    assert [row.status for row in (going, staying, decided)] == [
+        "expired",
+        "pending",
+        "rejected",
+    ]
+    assert going.result["note"] == "Box 1 was removed."
+    assert going.result["display"] == [{"label": "Note", "value": "a"}]
+    assert change_queue.outcome_of(going) == "expired"
+
+
+@pytest.mark.asyncio
 async def test_approving_in_the_ui_executes_once(
     authenticated_client: TestClient, acting_owner_user_id: int | None
 ) -> None:
@@ -214,6 +383,47 @@ async def test_rejecting_in_the_ui_executes_nothing(
     assert [c["id"] for c in trail] == [change["id"]]
 
 
+@pytest.mark.asyncio
+async def test_the_api_revises_an_editable_card(
+    authenticated_client: TestClient, acting_owner_user_id: int | None
+) -> None:
+    """The JSON surface's edit: the card says it is editable while it waits,
+    and a revision that breaks its contract is a 400."""
+    with _letter():
+        change = authenticated_client.post(
+            "/api/v1/changes", json={"change_type": LETTER, "payload": {"text": "hi"}}
+        ).json()
+        revised = authenticated_client.post(
+            f"/api/v1/changes/{change['id']}/revise", json={"fields": {"text": "bye"}}
+        )
+        refused = authenticated_client.post(
+            f"/api/v1/changes/{change['id']}/revise", json={"fields": {"to": "x" * 21}}
+        )
+
+    assert change["editable"] is True
+    assert revised.status_code == 200
+    assert revised.json()["display"] == [{"label": "Note", "value": "bye"}]
+    assert refused.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_approving_in_the_api_runs_the_follow_up(
+    authenticated_client: TestClient, acting_owner_user_id: int | None
+) -> None:
+    followed: list[str] = []
+
+    async def follow(result: dict[str, Any]) -> None:
+        followed.append(result["noted"])
+
+    with _letter(after_commit=follow):
+        change = authenticated_client.post(
+            "/api/v1/changes", json={"change_type": LETTER, "payload": {"text": "hi"}}
+        ).json()
+        authenticated_client.post(f"/api/v1/changes/{change['id']}/approve")
+
+    assert followed == ["hi"]
+
+
 # Counts two statuses on purpose, so the count repeats by construction
 # rather than by a loop.
 @pytest.mark.queryspy(allow_n_plus_one=True)
@@ -245,6 +455,7 @@ async def test_the_count_reads_no_cards(
         ("get", "/api/v1/changes/999999"),
         ("post", "/api/v1/changes/999999/approve"),
         ("post", "/api/v1/changes/999999/reject"),
+        ("post", "/api/v1/changes/999999/revise"),
         ("get", "/api/v1/changes/batch/no-such-batch"),
         ("post", "/api/v1/changes/batch/no-such-batch/approve"),
         ("post", "/api/v1/changes/batch/no-such-batch/reject"),
@@ -254,7 +465,11 @@ def test_a_change_that_is_not_yours_is_not_found(
     authenticated_client: TestClient, method: str, path: str
 ) -> None:
     """Missing and another user's answer alike, on every route: 404."""
-    kwargs = {"json": {}} if path.endswith("batch/no-such-batch/approve") else {}
+    kwargs = (
+        {"json": {"fields": {}} if path.endswith("revise") else {}}
+        if path.endswith(("batch/no-such-batch/approve", "revise"))
+        else {}
+    )
     response = getattr(authenticated_client, method)(path, **kwargs)
 
     assert response.status_code == 404
@@ -304,6 +519,7 @@ async def test_the_chat_tool_proposes_a_registered_type(
         "pending",
         "withdraw",
         "withdraw_batch",
+        "revise",
     } <= native_write_tool_names()
 
 
@@ -322,6 +538,44 @@ async def test_an_agent_reads_each_contract_from_its_model(
     assert listed[NOTE]["payload_schema"]["required"] == ["text"]
     assert "unknown change type" in refused["error"]
     assert refused["change_types"][NOTE]["title"] == "Write a note"
+
+
+@pytest.mark.asyncio
+async def test_an_agent_revises_every_waiting_card_that_misread_a_phrase(
+    async_db_session: AsyncSession,
+    chat_tools: Any,
+    acting_owner_user_id: int | None,
+) -> None:
+    """"It is Sweet shop": ``revise`` puts the user's correction on every
+    waiting card that says the phrase and may be edited, whoever filed it;
+    a card that is answered rather than edited is left alone, and one named
+    by id that cannot take it says why."""
+    from app.services.ai.domains.chat.user_memory import memory_user
+
+    note = await change_queue.propose(
+        async_db_session, NOTE, {"text": "sweat shop"}, owner_user_id=acting_owner_user_id
+    )
+    with _letter():
+        rows = [
+            await change_queue.propose(
+                async_db_session, LETTER, {"text": text}, owner_user_id=acting_owner_user_id
+            )
+            for text in ("Sweat shop", "the sweat shop", "Bakery")
+        ]
+        await async_db_session.commit()
+        with memory_user("1", owner_user_id=acting_owner_user_id, agent_slug="helper"):
+            found = result_data(
+                await chat_tools.revise({"text": "Sweet shop"}, about="sweat shop")
+            )
+            named = result_data(
+                await chat_tools.revise({"text": "x"}, pending_change_ids=[note.id])
+            )
+
+    assert sorted(found["revised"]) == [rows[0].id, rows[1].id]
+    assert "errors" not in found
+    assert [row.payload["text"] for row in rows] == ["Sweet shop", "Sweet shop", "Bakery"]
+    assert named["revised"] == []
+    assert "answered, not edited" in named["errors"][str(note.id)]
 
 
 # Lists ``pending`` three ways on purpose, so its read repeats by
@@ -409,6 +663,8 @@ async def test_a_turn_without_an_owner_touches_no_cards(chat_tools: Any) -> None
         "propose_many",
         "approve",
         "reject",
+        "revise",
+        "expire_naming",
         "withdraw",
         "withdraw_batch",
         "get_change",

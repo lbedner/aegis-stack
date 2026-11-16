@@ -13,6 +13,7 @@ import base64
 from collections.abc import AsyncGenerator, Iterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+import time
 from typing import Any
 
 import pytest
@@ -184,6 +185,24 @@ class TestWhatItShowedIsReadBack:
 
         with memory_user("u4"):
             assert await pastes.pasted(handle) == pastes.PICTURE_UNREAD
+
+
+class TestAMarkerWithNoEnd:
+    def test_it_is_read_in_linear_time(self) -> None:
+        """A message is whoever typed it: an unclosed marker over a long run
+        of hex digits backtracked quadratically (CodeQL py/polynomial-redos)."""
+        text = "[pasted text #" + "0" * 100_000
+        started = time.perf_counter()
+        assert readable(text) == text
+        assert time.perf_counter() - started < 0.5
+
+    def test_many_of_them_are_read_in_linear_time(self) -> None:
+        """Each unclosed marker's tail stops at the next one's bracket, so
+        a message of them is not rescanned from every start."""
+        text = "[pasted text #0 x" * 20_000
+        started = time.perf_counter()
+        assert readable(text) == text
+        assert time.perf_counter() - started < 0.5
 
 
 class TestAWallOfText:

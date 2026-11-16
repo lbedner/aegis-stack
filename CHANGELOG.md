@@ -9,6 +9,17 @@
 
 ### Added
 
+- **Editable approval cards, and what an approval does after it lands.** A
+  change type can let the reader correct a card before approving it
+  (`ChangeExecutor.editable`, narrowed by `edits`, with `choices` drawing a
+  select): the card offers Edit, the one dialog prefilled with what was
+  proposed, and `change_queue.revise` revalidates the payload against the
+  type's contract (also `POST /changes/{id}/revise`, and the agents' `revise`
+  tool for "it is X, not Y" across every waiting card). `after_commit` runs a
+  type's follow-up once the approval's transaction commits, over exactly the
+  rows that action landed; `scan` names the stored pictures a card shows
+  (`/partials/changes/{id}/scan`); `expire_naming` sets aside the waiting
+  cards aimed at something about to be removed, saying why.
 - **Memory writes are approval cards.** `save_memory` and `replace_memory`,
   and the new `update_memory` and `forget_memory` (a saved fact named by a
   quote of it), file a card on the change queue; nothing is remembered or

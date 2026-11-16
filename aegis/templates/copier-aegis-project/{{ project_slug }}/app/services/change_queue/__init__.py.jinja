@@ -1,7 +1,7 @@
 {% if include_finance or (include_ai and ai_backend != "memory") %}"""The propose/approve queue: any service's writes as pending changes.
 
 Primitives, not policy. This package ships the table, the queue
-(propose, approve, reject, withdraw) and the change-type registry; what
+(propose, revise, approve, reject, withdraw, expire) and the change-type registry; what
 a model may propose stays in the service that owns the mutation. A
 service joins by registering its types at import:
 
@@ -16,6 +16,7 @@ every process that touches the queue knows them. A project registers its
 own types in its own service's ``change_types.py``, never in this file.
 """
 
+from app.services.change_queue.follow_ups import after_commit
 from app.services.change_queue.models import PendingChange
 from app.services.change_queue.queries import (
     batch_rows,
@@ -31,6 +32,7 @@ from app.services.change_queue.queue import (
     cards,
     describe_change,
     describe_changes,
+    expire_naming,
     outcome_of,
     propose,
     propose_many,
@@ -43,10 +45,16 @@ from app.services.change_queue.queue import (
 from app.services.change_queue.registry import (
     ChangeExecutor,
     change_type_contracts,
+    editable_fields,
     executor_for,
     load_change_types,
     register,
     registered_change_types,
+)
+from app.services.change_queue.revisions import (
+    current_payload,
+    revise,
+    revise_row,
 )
 from app.services.change_queue.schemas import ChangeDisplayRow
 
@@ -61,6 +69,7 @@ __all__ = [
     "ChangeDisplayRow",
     "ChangeExecutor",
     "PendingChange",
+    "after_commit",
     "approve",
     "approve_row",
     "approve_rows",
@@ -70,8 +79,11 @@ __all__ = [
     "change_type_contracts",
     "describe_change",
     "describe_changes",
+    "editable_fields",
     "executor_for",
+    "expire_naming",
     "count_changes",
+    "current_payload",
     "get_change",
     "list_changes",
     "outcome_of",
@@ -82,6 +94,8 @@ __all__ = [
     "reject",
     "reject_row",
     "reject_rows",
+    "revise",
+    "revise_row",
     "withdraw",
     "withdraw_batch",
 ]

@@ -5,10 +5,15 @@ no daemon is needed. Scoping is by the ``com.docker.compose.project``
 label: another project's containers on the same host are never listed.
 """
 
+import asyncio
 import json
+import os
 import re
+import socket
+import tempfile
 from typing import Any
 
+import anyio
 import httpx
 import pytest
 
@@ -392,3 +397,36 @@ def test_history_joins_a_line_split_across_frames() -> None:
         ("stdout", "ERROR: split message"),
         ("stderr", "tail"),
     ]
+
+
+def test_a_proxy_read_cancelled_as_data_arrives_leaves_no_loop_error() -> None:
+    """A proxy read cancelled as data arrives logs no ``InvalidStateError``
+    (``socket_race``): the runtime guards anyio as it makes its client."""
+    uvloop = pytest.importorskip("uvloop")
+    errors: list[BaseException | None] = []
+
+    async def race(path: str) -> None:
+        runtime = DockerRuntime(socket_path=path)
+        runtime._client()
+        loop = asyncio.get_running_loop()
+        loop.set_exception_handler(lambda _, ctx: errors.append(ctx.get("exception")))
+        with socket.socket(socket.AF_UNIX) as listener:
+            listener.bind(path)
+            listener.listen()
+            for _ in range(20):
+                stream = await anyio.connect_unix(path)
+                peer, _ = listener.accept()
+                read = asyncio.create_task(stream.receive())
+                await asyncio.sleep(0.001)
+                peer.send(b"x")
+                read.cancel()
+                await asyncio.sleep(0.001)
+                await stream.aclose()
+                peer.close()
+        await runtime.aclose()
+
+    # /tmp: a Unix socket's path is short, and macOS's tmp_path is not.
+    with tempfile.TemporaryDirectory(dir="/tmp") as folder:
+        uvloop.run(race(os.path.join(folder, "proxy.sock")))
+
+    assert errors == []

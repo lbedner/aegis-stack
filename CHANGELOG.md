@@ -39,6 +39,12 @@
 
 ### Fixed
 
+- **No `InvalidStateError` when the webserver stops.** A followed log (or
+  any Docker read through the socket proxy) cancelled as data arrived had
+  uvloop settle anyio's cancelled socket wait, and the loop logged
+  `InvalidStateError` on shutdown and hot reload. The deploy component
+  guards anyio's wait so it settles only a future still waiting. `aegis
+  update` brings it to an existing project.
 - **A TaskIQ queue no longer fills Redis with finished jobs.** TaskIQ acks a
   finished job and leaves it in its stream, which has no TTL, so every job
   ever run stayed until Redis refused the next enqueue. Each worker now

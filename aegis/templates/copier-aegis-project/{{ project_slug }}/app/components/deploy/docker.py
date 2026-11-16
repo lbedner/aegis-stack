@@ -35,6 +35,7 @@ from app.core.runtime import (
 )
 from app.core.time import utcnow
 
+from . import socket_race
 from .docker_logs import follow as follow_logs
 from .docker_logs import history
 
@@ -206,6 +207,7 @@ class DockerRuntime:
         """The one client every call shares: a connection pool to the proxy
         socket, made on first use and closed by ``aclose`` at shutdown."""
         if self._http is None:
+            socket_race.guard()
             transport = self._transport or httpx.AsyncHTTPTransport(uds=self._socket)
             self._http = httpx.AsyncClient(
                 transport=transport, base_url="http://docker", timeout=TIMEOUT

@@ -11,6 +11,7 @@ from app.services.ai.domains.llm.etl.llm_sync_service import (
     SyncResult,
     get_catalog_stats,
     sync_llm_catalog,
+    sync_source,
 )
 
 __all__ = [
@@ -19,4 +20,5 @@ __all__ = [
     "SyncResult",
     "get_catalog_stats",
     "sync_llm_catalog",
+    "sync_source",
 ]

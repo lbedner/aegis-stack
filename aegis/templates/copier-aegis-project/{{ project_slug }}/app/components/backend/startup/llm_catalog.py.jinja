@@ -38,11 +38,8 @@ async def seed_llm_catalog() -> None:
             logger.info(f"LLM catalog synced: {result.total_synced} models")
 {%- endif %}
 {%- if include_inference %}
-        # The remote catalog never carries a local tag, and the picker's
-        # ``usable`` filter shows only vendors the install can call - with
-        # no API keys, the local engine alone. Without this a fresh local stack
-        # opened an empty picker until someone knew to run
-        # ``llm sync --source local``.
+        # A fresh local stack's picker is empty without this (why:
+        # ``local_models_present``).
         if local_models_present(session):
             logger.info("Local models already in the catalog")
             return

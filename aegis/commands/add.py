@@ -35,9 +35,10 @@ from ..core.dependency_resolver import DependencyResolver
 from ..core.manual_updater import ManualUpdater
 from ..core.option_spec import (
     VariantConflictError,
+    installed_delta,
     is_spec_with_options,
+    multi_values,
     parse_options,
-    variant_delta,
 )
 from ..core.plugins.discovery import discover_plugins
 from ..core.plugins.naming import dist_name
@@ -465,18 +466,6 @@ def add_command(
             brand.error(t("add.invalid_format", error=e), err=True)
             raise typer.Exit(1)
 
-    # A component that declares options (``inference[docker]``) records each
-    # option's answer; a bare name records the defaults.
-    option_answers: dict[str, dict[str, str]] = {}
-    for comp in components_raw:
-        try:
-            option_answers[extract_base_component_name(comp)] = (
-                component_option_answers(comp)
-            )
-        except ValueError as e:
-            brand.error(t("add.invalid_format", error=e), err=True)
-            raise typer.Exit(1) from e
-
     # Extract base component names for validation (removes bracket syntax)
     base_components = []
     for comp in selected_components:
@@ -517,26 +506,35 @@ def add_command(
         brand.error(t("add.load_config_failed", error=e), err=True)
         raise typer.Exit(1)
 
+    # A component that declares options (``inference[docker]``) records each
+    # option's answer; a bare name records the defaults (the engine: the
+    # project's local AI provider's).
+    providers = multi_values(existing_answers.get(AnswerKeys.AI_PROVIDERS))
+    option_answers: dict[str, dict[str, str]] = {}
+    requested: dict[str, str] = {}
+    for comp in components_raw:
+        base = extract_base_component_name(comp)
+        requested[base] = comp
+        try:
+            option_answers[base] = component_option_answers(comp, providers)
+        except ValueError as e:
+            brand.error(t("add.invalid_format", error=e), err=True)
+            raise typer.Exit(1) from e
+
     # Check which components are already enabled. A bracket request on one
     # that changes an answer (``inference[llamacpp]`` on an Ollama project)
     # is a variant change instead, applying only what the brackets name.
     already_enabled = []
     for component in resolved_components:
-        include_key = AnswerKeys.include_key(component)
-        if existing_answers.get(include_key) is not True:
-            continue
-        named = next(
-            (c for c in components_raw if extract_base_component_name(c) == component),
-            component,
-        )
+        named = requested.get(component, component)
         try:
-            delta = variant_delta(named, COMPONENTS[component], existing_answers)
+            delta = installed_delta(named, COMPONENTS[component], existing_answers)
         except VariantConflictError as e:
             brand.error(str(e), err=True)
             raise typer.Exit(1) from None
         if delta:
             option_answers[component] = delta
-        else:
+        elif delta is not None:
             already_enabled.append(component)
 
     if already_enabled:

@@ -24,7 +24,7 @@ from app.services.ai.domains.llm.model_factory import (
     model_for,
 )
 from app.services.ai.models import AIProvider
-from app.services.ai.models.provider_names import LOCAL_PROVIDERS
+from app.services.ai.models.provider_names import LOCAL_PROVIDERS, provider_label
 
 _DEFAULT_PROMPT = (
     "You are a helpful AI assistant. Provide clear, accurate, "
@@ -371,14 +371,14 @@ def _create_local_agent(
         return agent
 
     except Exception as e:
+        # A local provider is its engine, by name (``OLLAMA_BASE_URL``).
+        label = provider_label(config.provider)
         error_msg = (
-            f"Ollama connection failed ({e}).\n\n"
-            "Make sure Ollama is running:\n"
-            "   1. Install Ollama: https://ollama.com/download\n"
-            "   2. Start Ollama: ollama serve\n"
-            "   3. Pull a model: ollama pull llama3.2\n"
-            "   4. Sync models: {{ project_slug }} llm sync --source=ollama\n\n"
-            "If Ollama is running on a different host/port, set OLLAMA_BASE_URL in .env"
+            f"{label} connection failed ({e}).\n\n"
+            "Make sure it is running and serves a model, then sync it: "
+            "llm sync --source=local\n\n"
+            "If it runs on another host or port, set "
+            f"{config.provider.value.upper()}_BASE_URL in .env"
         )
-        logger.error(f"Failed to create OLLAMA agent: {e}")
+        logger.error(f"Failed to create {label} agent: {e}")
         raise ProviderError(error_msg) from e

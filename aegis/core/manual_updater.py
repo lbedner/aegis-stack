@@ -451,9 +451,11 @@ class ManualUpdater:
                 )
 
             # A local AI provider chats with the engine of its name, so an
-            # engine switch moves it too.
-            if AnswerKeys.INFERENCE_ENGINE in update_data and self.answers.get(
-                AnswerKeys.AI_PROVIDERS
+            # engine switch moves it too (a fresh add never rewrites it).
+            if (
+                AnswerKeys.INFERENCE_ENGINE in update_data
+                and self.answers.get(AnswerKeys.include_key(component)) is True
+                and self.answers.get(AnswerKeys.AI_PROVIDERS)
             ):
                 from .services import local_providers_on
 
@@ -1882,7 +1884,7 @@ class ManualUpdater:
             for key in variant_answer_keys(spec)
             if key in additional_data
         }
-        return bool(answers_delta(spec, requested, self.answers))
+        return bool(answers_delta(spec, requested, self.answers, deliberate=True))
 
     def _save_answers(self, answers: dict[str, Any]) -> None:
         """

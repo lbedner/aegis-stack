@@ -85,7 +85,6 @@ class InferenceDetailDialog(BaseDetailPopup):
         version = metadata.get("version", "")
         running_count = metadata.get("running_models_count", 0)
 
-        # Build subtitle - show Ollama with version and model count
         subtitle = self._build_subtitle(version, running_count)
 
         # Build tabs - store references for refresh

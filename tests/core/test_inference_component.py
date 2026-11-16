@@ -327,6 +327,19 @@ def test_an_unnamed_engine_follows_the_local_provider() -> None:
     assert "llamacpp" in context["docker_services"]
 
 
+def test_a_bare_inference_add_takes_the_providers_engine() -> None:
+    """``aegis add inference`` beside ``ai[llamacpp]`` is llama.cpp, as at
+    init; a bracket that names the engine still wins."""
+    from aegis.core.components import component_option_answers
+
+    def engine(spec: str, providers: list[str] | None = None) -> str:
+        return component_option_answers(spec, providers)[AnswerKeys.INFERENCE_ENGINE]
+
+    assert engine("inference", ["llamacpp"]) == "llamacpp"
+    assert engine("inference[ollama]", ["llamacpp"]) == "ollama"
+    assert engine("inference") == "ollama"
+
+
 def test_adding_a_provider_keeps_the_installed_engine() -> None:
     """``aegis add-service ai[llamacpp]`` on an Ollama project is refused."""
     from aegis.core.services import local_engine_rule

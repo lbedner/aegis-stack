@@ -25,7 +25,7 @@ my-app context-modules list     # Context module catalog
 my-app context-modules show <slug>  # One module's definition
 
 # LLM Catalog
-my-app llm sync           # Sync ~2000 models from cloud/Ollama
+my-app llm sync           # Sync ~2000 models from cloud and the local engine
 my-app llm status         # Catalog statistics
 my-app llm vendors        # List vendors
 my-app llm modalities     # List modalities
@@ -264,16 +264,16 @@ Manage the local model catalog. See [LLM Catalog](llm-catalog.md) for full docum
 
 ### llm sync
 
-Sync model data from cloud APIs or local Ollama:
+Sync model data from cloud APIs or the local inference engine (Ollama, llama.cpp):
 
 ```bash
 # Default: sync chat models from cloud (OpenRouter + LiteLLM)
 my-app llm sync
 
-# Sync only Ollama models
+# Sync only the engine's models
 my-app llm sync --source local
 
-# Sync everything (cloud + Ollama)
+# Sync everything (cloud + the engine)
 my-app llm sync --source all --mode all
 
 # Preview without saving

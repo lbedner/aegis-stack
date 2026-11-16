@@ -42,7 +42,7 @@ from .migration_generator import (
     SENTIMENT_MIGRATION,
     VOICE_MIGRATION,
 )
-from .option_spec import OptionMode, OptionSpec
+from .option_spec import OptionMode, OptionSpec, multi_values
 from .plugins.spec import (
     FrontendWidgetWiring,
     PartCategory,
@@ -123,9 +123,7 @@ def local_providers_on(providers: str | list[str], engine: str) -> str:
     """``ai_providers`` (copier's comma-separated answer, or a list) once the
     engine is ``engine``: a local provider becomes the engine's, the rest
     stay."""
-    listed = providers.split(",") if isinstance(providers, str) else providers
-    chosen = [p.strip() for p in listed if p.strip()]
-    moved = [engine if p in AIProviders.LOCAL else p for p in chosen]
+    moved = [engine if p in AIProviders.LOCAL else p for p in multi_values(providers)]
     return ",".join(dict.fromkeys(moved))
 
 

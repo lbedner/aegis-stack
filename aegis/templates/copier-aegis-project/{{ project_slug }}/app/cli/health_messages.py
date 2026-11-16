@@ -14,7 +14,6 @@ _HEALTH_MSG_EXACT: dict[str, str] = {
     "System container has issues": "health.msg.system_issues",
     "Database connection successful": "health.msg.db_ok",
     "Database module not available": "health.msg.db_module_missing",
-    "PostgreSQL server not reachable": "health.msg.db_not_reachable",
     "PostgreSQL authentication failed": "health.msg.db_auth_failed",
     "PostgreSQL database does not exist": "health.msg.db_not_exist",
     "Database not initialized - file does not exist": "health.msg.db_not_init",
@@ -71,12 +70,14 @@ _HEALTH_MSG_PATTERNS: list[tuple[re.Pattern[str], str, str]] = [
     (re.compile(r"^(\d+) completed$"), "health.msg.completed", "count"),
     (re.compile(r"^(\d+) failed \(([\d.]+)%\)$"), "health.msg.failed", "count,pct"),
     (re.compile(r"^AI service ready"), "health.msg.ai_ready", ""),
-    # The inference engine, by its label (Ollama, llama.cpp).
+    # A server by its label (PostgreSQL; the inference engine, Ollama or
+    # llama.cpp).
     (
         re.compile(r"^(.+) server not reachable$"),
-        "health.msg.engine_not_reachable",
-        "engine",
+        "health.msg.server_not_reachable",
+        "server",
     ),
+    # The inference engine, by its label.
     (
         re.compile(r"^(.+) running but no models installed$"),
         "health.msg.engine_no_models",

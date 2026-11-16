@@ -1,7 +1,7 @@
 """
-Ollama Card
+Inference Card
 
-Modern card component for displaying Ollama local LLM infrastructure status.
+Modern card component for displaying the local inference engine's status.
 Top-down layout matching the service card pattern.
 """
 
@@ -21,7 +21,7 @@ from .card_utils import (
 
 class InferenceCard:
     """
-    A clean Ollama card with key infrastructure metrics.
+    A clean inference card with key infrastructure metrics.
 
     Features:
     - Top-down layout with header and metrics
@@ -31,7 +31,7 @@ class InferenceCard:
     """
 
     def __init__(self, component_data: ComponentStatus) -> None:
-        """Initialize with Ollama data from health check."""
+        """Initialize with inference data from health check."""
         self.component_data = component_data
         self.metadata = component_data.metadata or {}
 
@@ -127,7 +127,7 @@ class InferenceCard:
         )
 
     def build(self) -> ft.Container:
-        """Build and return the complete Ollama card."""
+        """Build and return the complete inference card."""
         _, _, border_color = get_status_colors(self.component_data)
 
         return CardContainer(

@@ -42,16 +42,16 @@ async def _ollama_health() -> ComponentStatus:
         return ComponentStatus(
             name=ComponentName.OLLAMA,
             status=ComponentStatusType.UNHEALTHY,
-            message="Ollama client not available",
+            message="Inference client not available",
             response_time_ms=None,
             metadata={"error": "inference component not installed"},
         )
     except Exception as e:
-        logger.error(f"Ollama health check failed: {e}")
+        logger.error(f"Inference health check failed: {e}")
         return ComponentStatus(
             name=ComponentName.OLLAMA,
             status=ComponentStatusType.UNHEALTHY,
-            message=f"Ollama health check failed: {str(e)}",
+            message=f"Inference health check failed: {str(e)}",
             response_time_ms=None,
             metadata={"error": str(e)},
         )
@@ -125,7 +125,6 @@ def ollama_status(
         metadata={
             "available": True,
             "base_url": ollama_url,
-            "can_load_unload": engine.can_load_unload,
             "version": server_status.version,
             "running_models": running_models_info,
             "running_models_count": len(server_status.running_models),

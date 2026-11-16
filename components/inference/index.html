@@ -7274,7 +7274,8 @@
 <ul>
 <li><code>--jinja</code>: the model's chat template, which tool calls need.</li>
 <li><code>-c</code>: the context. The catalog takes it from the server, and chat sizes its history to fit it.</li>
-<li><code>-np 1</code> (or a few): context and prompt cache are per slot, so <code>-c 32768 -np 2</code> gives each slot 16k.</li>
+<li><code>-np 1</code> (or a few): context and prompt cache are per slot, so <code>-c 32768 -np 2</code> gives each slot 16k.
+  With one slot, a long conversation's fold (its running summary, written on the worker as old turns leave the history) is a request of its own and replaces the chat's cached prompt, so the chat's next turn reads its prompt afresh: once per cut, not per turn. Give the <code>summarizer</code> agent row another model, or run a second slot, to keep the chat's cache.</li>
 <li><code>--metrics</code>: Prometheus counters at <code>/metrics</code>.</li>
 </ul>
 <p>In docker, the <code>llamacpp</code> service downloads <code>LLAMACPP_MODEL</code> (a Hugging Face <code>repo[:quant]</code>, default <code>ggml-org/Qwen3-1.7B-GGUF</code>) into a volume on its first start and serves it at <code>LLAMACPP_CONTEXT</code> (default 32768).</p>

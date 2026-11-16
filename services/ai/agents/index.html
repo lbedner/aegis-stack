@@ -7519,10 +7519,12 @@
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">register_tool</span><span class="p">(</span><span class="s2">&quot;save_note&quot;</span><span class="p">,</span> <span class="n">save_note</span><span class="p">,</span> <span class="n">effect</span><span class="o">=</span><span class="s2">&quot;writes&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <h2 id="per-user-memory">Per-User Memory</h2>
-<p>Agents can remember durable facts about a user across conversations. Two built-in tools are registered on every persistence-backed project:</p>
+<p>Agents can remember durable facts about a user across conversations. Four built-in tools are registered on every persistence-backed project, and each one files an approval card on the change queue: nothing is remembered or forgotten until the user approves it in the app, because untrusted text (a document, a fetched page) reaches the assistant and a fact saved on its say-so is a standing instruction in every later prompt.</p>
 <ul>
-<li><code>save_memory(new_fact, category)</code>: remember one fact (categories: family, food, lifestyle, health, personal, program, general). Duplicate facts within a category are deduplicated by substring match.</li>
+<li><code>save_memory(new_fact, category)</code>: remember one fact (categories: family, food, lifestyle, health, personal, program, finance, general). Duplicate facts within a category are deduplicated by substring match.</li>
 <li><code>replace_memory(memory_text)</code>: replace everything known about the user, one fact per line.</li>
+<li><code>update_memory(old_fact, new_fact)</code>: rewrite one saved fact in place; <code>old_fact</code> is a quote of it.</li>
+<li><code>forget_memory(fact)</code>: drop one saved fact, named by a quote of it.</li>
 </ul>
 <p>Saved facts are injected into later chats inside a <code>&lt;user_memory&gt;</code> guard block that explicitly frames them as data, not instructions. Facts are stored one JSON document per user in the <code>agent_user_memory</code> table.</p>
 <h2 id="knowledge-base-scoping">Knowledge Base Scoping</h2>

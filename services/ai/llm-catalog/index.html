@@ -7681,14 +7681,14 @@
 
 <h1 id="llm-catalog">LLM Catalog</h1>
 <p><a class="glightbox" href="../../../images/llm_catalog.png" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="LLM Catalog" src="../../../images/llm_catalog.png" /></a></p>
-<p>The LLM Catalog is a local database of ~2000 language models synced from cloud APIs and local Ollama. It provides model discovery, pricing, capabilities, and one-command model switching.</p>
+<p>The LLM Catalog is a local database of ~2000 language models synced from cloud APIs and the local inference engine (Ollama, llama.cpp). It provides model discovery, pricing, capabilities, and one-command model switching.</p>
 <div class="admonition info">
 <p class="admonition-title">Requires Database Backend</p>
 <p>The LLM Catalog requires a database backend (<code>ai[sqlite]</code> or <code>ai[postgres]</code>). With the in-memory backend, catalog features are not available.</p>
 </div>
 <h2 id="what-you-get">What You Get</h2>
 <ul>
-<li><strong>~2000 models</strong> synced from OpenRouter, LiteLLM, and local Ollama</li>
+<li><strong>~2000 models</strong> synced from OpenRouter, LiteLLM, and the local inference engine</li>
 <li><strong>32+ vendors</strong> including OpenAI, Anthropic, Google, Groq, Mistral, DeepSeek, and more</li>
 <li><strong>Pricing data</strong> with per-token input/output costs and price versioning</li>
 <li><strong>Capability tracking</strong> - modalities (text, image, audio, video), function calling, streaming, structured output</li>
@@ -7713,11 +7713,11 @@
 <hr />
 <h2 id="cli-commands">CLI Commands</h2>
 <h3 id="llm-sync">llm sync</h3>
-<p>Sync model data from cloud APIs or local Ollama into the local database.</p>
+<p>Sync model data from cloud APIs or the local inference engine (Ollama, llama.cpp) into the local database.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Default: sync chat models from cloud (OpenRouter + LiteLLM)</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Sync only Ollama models</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Sync only the engine&#39;s models</span>
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync<span class="w"> </span>--source<span class="w"> </span><span class="nb">local</span>
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
 </span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="c1"># Sync everything</span>
@@ -7782,13 +7782,13 @@
 <td>~2000 models</td>
 </tr>
 <tr>
-<td><code>ollama</code></td>
-<td>Locally installed Ollama models</td>
+<td><code>local</code></td>
+<td>The inference engine's models (<code>ollama</code> still works)</td>
 <td>Varies</td>
 </tr>
 <tr>
 <td><code>all</code></td>
-<td>Both cloud and Ollama</td>
+<td>Both cloud and the engine</td>
 <td>~2000+</td>
 </tr>
 </tbody>

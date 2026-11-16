@@ -7911,7 +7911,7 @@
 </span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>my-app<span class="w"> </span>context-modules<span class="w"> </span>show<span class="w"> </span>&lt;slug&gt;<span class="w">  </span><span class="c1"># One module&#39;s definition</span>
 </span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>
 </span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="c1"># LLM Catalog</span>
-</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync<span class="w">           </span><span class="c1"># Sync ~2000 models from cloud/Ollama</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync<span class="w">           </span><span class="c1"># Sync ~2000 models from cloud and the local engine</span>
 </span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>my-app<span class="w"> </span>llm<span class="w"> </span>status<span class="w">         </span><span class="c1"># Catalog statistics</span>
 </span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>my-app<span class="w"> </span>llm<span class="w"> </span>vendors<span class="w">        </span><span class="c1"># List vendors</span>
 </span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>my-app<span class="w"> </span>llm<span class="w"> </span>modalities<span class="w">     </span><span class="c1"># List modalities</span>
@@ -8142,14 +8142,14 @@
 <h2 id="llm-catalog-commands">LLM Catalog Commands</h2>
 <p>Manage the local model catalog. See <a href="../llm-catalog/">LLM Catalog</a> for full documentation.</p>
 <h3 id="llm-sync">llm sync</h3>
-<p>Sync model data from cloud APIs or local Ollama:</p>
+<p>Sync model data from cloud APIs or the local inference engine (Ollama, llama.cpp):</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="c1"># Default: sync chat models from cloud (OpenRouter + LiteLLM)</span>
 </span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync
 </span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
-</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1"># Sync only Ollama models</span>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1"># Sync only the engine&#39;s models</span>
 </span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync<span class="w"> </span>--source<span class="w"> </span><span class="nb">local</span>
 </span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a>
-</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="c1"># Sync everything (cloud + Ollama)</span>
+</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="c1"># Sync everything (cloud + the engine)</span>
 </span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync<span class="w"> </span>--source<span class="w"> </span>all<span class="w"> </span>--mode<span class="w"> </span>all
 </span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a>
 </span><span id="__span-16-10"><a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="c1"># Preview without saving</span>

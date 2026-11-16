@@ -233,7 +233,7 @@ async def check_model(session: AsyncSession, model_id: str) -> SetModelResult:
         )
     vendor_name = model.served_by.name if model and model.served_by else None
     if model is None:
-        vendor_name = await _ollama_vendor(model_id)
+        vendor_name = await _local_vendor(model_id)
         if not vendor_name:
             return _refused(
                 model_id,
@@ -268,16 +268,18 @@ def _refused(model_id: str, message: str, *, vendor: str | None = None) -> SetMo
     )
 
 
-async def _ollama_vendor(model_id: str) -> str | None:
-    """"Ollama" when a local Ollama has ``model_id`` pulled."""
+async def _local_vendor(model_id: str) -> str | None:
+    """The app's inference engine (its provider's name) when it serves
+    ``model_id``."""
     try:
         from app.components.inference import get_inference_engine
 
-        pulled = await get_inference_engine().fetch_models()
-        if any(m.model_id == model_id for m in pulled):
-            return "Ollama"
+        engine = get_inference_engine()
+        served = await engine.fetch_models()
+        if any(m.model_id == model_id for m in served):
+            return engine.NAME
     except Exception:
-        pass  # Ollama not available: not found anywhere
+        pass  # no engine, or it is down: not found anywhere
     return None
 
 

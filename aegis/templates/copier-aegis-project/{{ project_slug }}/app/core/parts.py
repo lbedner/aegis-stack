@@ -364,12 +364,9 @@ PARTS: dict[str, Part] = {
                 about=(
                     (
                         "host",
-                        "Use the Ollama already running on this machine. The default.",
+                        "Use the one already running on this machine. The default.",
                     ),
-                    (
-                        "docker",
-                        "Run Ollama as a container in the project's compose stack.",
-                    ),
+                    ("docker", "Run it as a container in the project's compose stack."),
                 ),
             ),
             Option(
@@ -382,7 +379,7 @@ PARTS: dict[str, Part] = {
                     ("none", "No speech server. The default."),
                     (
                         "kokoro_fastapi",
-                        "Text to speech for ai[voice], where Ollama runs.",
+                        "Text to speech for ai[voice], where the model server runs.",
                     ),
                 ),
             ),

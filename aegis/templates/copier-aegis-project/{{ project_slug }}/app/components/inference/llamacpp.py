@@ -67,6 +67,7 @@ class LlamaCppEngine(BaseInferenceEngine):
     LABEL = "llama.cpp"
     DEFAULT_URL = "http://localhost:8080"
     START = "llama-server --jinja -m <model.gguf>"
+    ADD_MODEL = START  # it serves the one it was started with
     can_load_unload = False
 
     async def _read(self) -> tuple[dict[str, Any], dict[str, Any]]:

@@ -126,8 +126,8 @@ MESSAGES: dict[str, str] = {
     "health.msg.comms_none": "No communication providers configured",
     "health.msg.comms_partial": "Comms service partially configured",
     "health.msg.comms_ok": "Communications service fully configured",
-    "health.msg.ollama_not_reachable": "Ollama server not reachable",
-    "health.msg.ollama_no_models": "Ollama running but no models installed",
+    "health.msg.engine_not_reachable": "{engine} server not reachable",
+    "health.msg.engine_no_models": "{engine} running but no models installed",
     "health.msg.worker_offline": "worker offline - no health check data",
     "health.msg.failed": "{count} failed ({pct}%)",
     # Queue descriptions
@@ -271,7 +271,7 @@ MESSAGES: dict[str, str] = {
     # Sync
     "llm.dry_run_mode": "Dry run mode - no changes will be saved",
     "llm.refresh_dry_run": "Refresh requested - would truncate all LLM tables",
-    "llm.syncing_ollama": "Syncing Ollama models",
+    "llm.syncing_local": "Syncing {engine} models",
     "llm.syncing_catalog_all": "Syncing LLM catalog (mode={mode}, source=all)",
     "llm.syncing_catalog": "Syncing LLM catalog (mode={mode})",
     "llm.sync_results": "Sync Results",
@@ -340,7 +340,7 @@ MESSAGES: dict[str, str] = {
     "llm.top_vendors": "Top Vendors by Model Count",
     # Help text
     "llm.help": "LLM catalog and model management commands",
-    "llm.help_sync": "Sync LLM catalog from cloud APIs or local Ollama into the local database.",
+    "llm.help_sync": "Sync LLM catalog from cloud APIs or the local inference engine into the local database.",
     "llm.help_status": "Show LLM catalog statistics (vendors, models, deployments, prices).",
     "llm.help_vendors": "List all LLM vendors in the catalog with model counts.",
     "llm.help_modalities": "List all modalities in the catalog with model counts.",
@@ -349,7 +349,7 @@ MESSAGES: dict[str, str] = {
     "llm.help_use": "Switch to a different LLM model. Updates AI_MODEL in .env.",
     "llm.help_info": "Show detailed information about a specific LLM model.",
     "llm.opt_mode": "One mode ('chat', 'realtime', 'embedding', ...) or 'all' (default: chat and voice)",
-    "llm.opt_source": "Data source: 'cloud' (OpenRouter/LiteLLM), 'ollama', or 'all'",
+    "llm.opt_source": "Data source: 'cloud' (OpenRouter/LiteLLM), 'local', or 'all'",
     "llm.opt_dry_run": "Preview changes without modifying the database",
     "llm.opt_refresh": "Truncate all LLM tables before syncing (full refresh)",
     "llm.arg_pattern": "Search pattern for model ID or title (case-insensitive)",

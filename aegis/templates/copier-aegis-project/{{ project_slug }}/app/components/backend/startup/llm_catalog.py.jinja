@@ -40,13 +40,13 @@ async def seed_llm_catalog() -> None:
 {%- if include_inference %}
         # The remote catalog never carries a local tag, and the picker's
         # ``usable`` filter shows only vendors the install can call - with
-        # no API keys, Ollama alone. Without this a fresh Ollama stack
+        # no API keys, the local engine alone. Without this a fresh local stack
         # opened an empty picker until someone knew to run
-        # ``llm sync --source ollama``.
+        # ``llm sync --source local``.
         if local_models_present(session):
-            logger.info("Ollama tags already in the catalog")
+            logger.info("Local models already in the catalog")
             return
-        result = await sync_llm_catalog(session, mode="chat", source="ollama")
-        logger.info(f"Ollama tags registered: {result.models_added} models")
+        result = await sync_llm_catalog(session, mode="chat", source="local")
+        logger.info(f"Local models registered: {result.models_added} models")
 {%- endif %}
 {%- endif %}

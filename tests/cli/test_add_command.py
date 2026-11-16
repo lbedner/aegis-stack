@@ -110,6 +110,36 @@ class TestAddCommand:
         assert (project_path / "app/components/inference/ollama.py").is_file()
         assert "ollama:" in (project_path / "docker-compose.yml").read_text()
 
+    def test_add_switches_an_installed_engine_and_its_provider(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """``aegis add inference[llamacpp]`` on an Ollama project moves it to
+        llama.cpp: the engine's models live outside the project, the
+        placement it named nothing about stays, the local provider follows,
+        and the files that branch on the engine re-render."""
+        project_path = project_factory("base")
+        ollama = run_aegis_command(
+            "add-service",
+            "ai[ollama,sqlite]",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+        assert ollama.success, f"Command failed: {ollama.stderr}"
+
+        result = run_aegis_command(
+            "add", "inference[llamacpp]", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success, f"Command failed: {result.stderr}"
+        answers = load_copier_answers(project_path)
+        assert answers.get("inference_engine") == "llamacpp"
+        assert answers.get("ai_providers") == "llamacpp"
+        assert answers.get("inference_placement") == "host"
+        settings = (project_path / "app/core/speech_settings.py").read_text()
+        assert 'INFERENCE_ENGINE: str = "llamacpp"' in settings
+        assert "LLAMACPP_BASE_URL" in settings
+
     def test_add_inference_with_a_speech_server_in_docker(
         self, project_factory: ProjectFactory
     ) -> None:

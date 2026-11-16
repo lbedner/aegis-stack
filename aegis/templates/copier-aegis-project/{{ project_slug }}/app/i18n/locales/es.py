@@ -126,8 +126,8 @@ MESSAGES: dict[str, str] = {
     "health.msg.comms_none": "Sin proveedores de comunicación configurados",
     "health.msg.comms_partial": "Servicio de comunicaciones parcialmente configurado",
     "health.msg.comms_ok": "Servicio de comunicaciones completamente configurado",
-    "health.msg.ollama_not_reachable": "Servidor Ollama no alcanzable",
-    "health.msg.ollama_no_models": "Ollama corriendo pero sin modelos instalados",
+    "health.msg.engine_not_reachable": "Servidor {engine} no alcanzable",
+    "health.msg.engine_no_models": "{engine} corriendo pero sin modelos instalados",
     "health.msg.worker_offline": "worker fuera de línea - sin datos de health check",
     "health.msg.failed": "{count} fallidos ({pct}%)",
     # Descripciones de colas
@@ -271,7 +271,7 @@ MESSAGES: dict[str, str] = {
     # Sincronización
     "llm.dry_run_mode": "Modo simulación - no se guardarán cambios",
     "llm.refresh_dry_run": "Refresh solicitado - truncaría todas las tablas LLM",
-    "llm.syncing_ollama": "Sincronizando modelos Ollama",
+    "llm.syncing_local": "Sincronizando modelos {engine}",
     "llm.syncing_catalog_all": "Sincronizando catálogo LLM (modo={mode}, fuente=todas)",
     "llm.syncing_catalog": "Sincronizando catálogo LLM (modo={mode})",
     "llm.sync_results": "Resultados de sincronización",
@@ -340,7 +340,7 @@ MESSAGES: dict[str, str] = {
     "llm.top_vendors": "Proveedores principales por cantidad de modelos",
     # Texto de ayuda
     "llm.help": "Comandos de catálogo y gestión de modelos LLM",
-    "llm.help_sync": "Sincronizar catálogo LLM desde APIs en la nube u Ollama local a la base de datos local.",
+    "llm.help_sync": "Sincronizar catálogo LLM desde APIs en la nube o el motor de inferencia local a la base de datos local.",
     "llm.help_status": "Mostrar estadísticas del catálogo LLM (proveedores, modelos, deployments, precios).",
     "llm.help_vendors": "Listar proveedores LLM en el catálogo con conteo de modelos.",
     "llm.help_modalities": "Listar modalidades en el catálogo con conteo de modelos.",
@@ -349,7 +349,7 @@ MESSAGES: dict[str, str] = {
     "llm.help_use": "Cambiar a otro modelo LLM. Actualiza AI_MODEL en .env.",
     "llm.help_info": "Mostrar información detallada de un modelo LLM específico.",
     "llm.opt_mode": "Filtro de modo: 'chat', 'embedding', o 'all'",
-    "llm.opt_source": "Fuente de datos: 'cloud' (OpenRouter/LiteLLM), 'ollama', o 'all'",
+    "llm.opt_source": "Fuente de datos: 'cloud' (OpenRouter/LiteLLM), 'local', o 'all'",
     "llm.opt_dry_run": "Previsualizar cambios sin modificar la base de datos",
     "llm.opt_refresh": "Truncar todas las tablas LLM antes de sincronizar (refresh completo)",
     "llm.arg_pattern": "Patrón de búsqueda para ID o título de modelo (no distingue mayúsculas)",

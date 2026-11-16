@@ -450,6 +450,18 @@ class ManualUpdater:
                     auth_level_answers(update_data[AnswerKeys.AUTH_LEVEL])
                 )
 
+            # A local AI provider chats with the engine of its name, so an
+            # engine switch moves it too.
+            if AnswerKeys.INFERENCE_ENGINE in update_data and self.answers.get(
+                AnswerKeys.AI_PROVIDERS
+            ):
+                from .services import local_providers_on
+
+                update_data[AnswerKeys.AI_PROVIDERS] = local_providers_on(
+                    self.answers[AnswerKeys.AI_PROVIDERS],
+                    update_data[AnswerKeys.INFERENCE_ENGINE],
+                )
+
             # Update answers with new component
             updated_answers = {**self.answers, **update_data}
             if rule := evals_rule(updated_answers):

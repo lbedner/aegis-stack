@@ -33,7 +33,12 @@ from ..core.components import COMPONENTS, CORE_COMPONENTS, component_option_answ
 from ..core.copier_manager import load_copier_answers
 from ..core.dependency_resolver import DependencyResolver
 from ..core.manual_updater import ManualUpdater
-from ..core.option_spec import is_spec_with_options, parse_options
+from ..core.option_spec import (
+    VariantConflictError,
+    is_spec_with_options,
+    parse_options,
+    variant_delta,
+)
 from ..core.plugins.discovery import discover_plugins
 from ..core.plugins.naming import dist_name
 from ..core.plugins.spec import PluginSpec
@@ -512,12 +517,26 @@ def add_command(
         brand.error(t("add.load_config_failed", error=e), err=True)
         raise typer.Exit(1)
 
-    # Check which components are already enabled
+    # Check which components are already enabled. A bracket request on one
+    # that changes an answer (``inference[llamacpp]`` on an Ollama project)
+    # is a variant change instead, applying only what the brackets name.
     already_enabled = []
     for component in resolved_components:
-        # Check if component is already enabled in answers
         include_key = AnswerKeys.include_key(component)
-        if existing_answers.get(include_key) is True:
+        if existing_answers.get(include_key) is not True:
+            continue
+        named = next(
+            (c for c in components_raw if extract_base_component_name(c) == component),
+            component,
+        )
+        try:
+            delta = variant_delta(named, COMPONENTS[component], existing_answers)
+        except VariantConflictError as e:
+            brand.error(str(e), err=True)
+            raise typer.Exit(1) from None
+        if delta:
+            option_answers[component] = delta
+        else:
             already_enabled.append(component)
 
     if already_enabled:

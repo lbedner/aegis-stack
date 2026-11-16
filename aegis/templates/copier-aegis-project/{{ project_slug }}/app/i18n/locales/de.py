@@ -126,8 +126,8 @@ MESSAGES: dict[str, str] = {
     "health.msg.comms_none": "Keine Kommunikationsanbieter konfiguriert",
     "health.msg.comms_partial": "Comms-Service teilweise konfiguriert",
     "health.msg.comms_ok": "Kommunikationsservice vollständig konfiguriert",
-    "health.msg.ollama_not_reachable": "Ollama-Server nicht erreichbar",
-    "health.msg.ollama_no_models": "Ollama läuft, aber keine Modelle installiert",
+    "health.msg.engine_not_reachable": "{engine}-Server nicht erreichbar",
+    "health.msg.engine_no_models": "{engine} läuft, aber keine Modelle installiert",
     "health.msg.worker_offline": "Worker offline — keine Health-Check-Daten",
     "health.msg.failed": "{count} fehlgeschlagen ({pct}%)",
     # Queue descriptions
@@ -271,7 +271,7 @@ MESSAGES: dict[str, str] = {
     # Sync
     "llm.dry_run_mode": "Trockenlauf — keine Änderungen werden gespeichert",
     "llm.refresh_dry_run": "Aktualisierung angefragt — würde alle LLM-Tabellen leeren",
-    "llm.syncing_ollama": "Ollama-Modelle synchronisieren",
+    "llm.syncing_local": "{engine}-Modelle synchronisieren",
     "llm.syncing_catalog_all": "LLM-Katalog synchronisieren (mode={mode}, source=all)",
     "llm.syncing_catalog": "LLM-Katalog synchronisieren (mode={mode})",
     "llm.sync_results": "Synchronisierungsergebnisse",
@@ -340,7 +340,7 @@ MESSAGES: dict[str, str] = {
     "llm.top_vendors": "Top-Anbieter nach Modellanzahl",
     # Help text
     "llm.help": "LLM-Katalog und Modellverwaltung",
-    "llm.help_sync": "LLM-Katalog aus Cloud-APIs oder lokalem Ollama in die lokale Datenbank synchronisieren.",
+    "llm.help_sync": "LLM-Katalog aus Cloud-APIs oder der lokalen Inferenz-Engine in die lokale Datenbank synchronisieren.",
     "llm.help_status": "LLM-Katalogstatistiken anzeigen (Anbieter, Modelle, Deployments, Preise).",
     "llm.help_vendors": "Alle LLM-Anbieter im Katalog mit Modellanzahl auflisten.",
     "llm.help_modalities": "Alle Modalitäten im Katalog mit Modellanzahl auflisten.",
@@ -349,7 +349,7 @@ MESSAGES: dict[str, str] = {
     "llm.help_use": "Zu anderem LLM-Modell wechseln. Aktualisiert AI_MODEL in .env.",
     "llm.help_info": "Detailinformationen zu einem bestimmten LLM-Modell anzeigen.",
     "llm.opt_mode": "Modusfilter: 'chat', 'embedding' oder 'all'",
-    "llm.opt_source": "Datenquelle: 'cloud' (OpenRouter/LiteLLM), 'ollama' oder 'all'",
+    "llm.opt_source": "Datenquelle: 'cloud' (OpenRouter/LiteLLM), 'local' oder 'all'",
     "llm.opt_dry_run": "Änderungen anzeigen ohne Datenbank zu ändern",
     "llm.opt_refresh": "Alle LLM-Tabellen vor Synchronisierung leeren (vollständige Aktualisierung)",
     "llm.arg_pattern": "Suchmuster für Modell-ID oder Titel (Groß-/Kleinschreibung egal)",

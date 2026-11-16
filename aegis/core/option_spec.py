@@ -90,6 +90,11 @@ class OptionSpec:
     a request for it once past it is satisfied. Any other mismatch on an
     unordered option is still a conflict (sqlite and postgres hold data)."""
 
+    switchable: bool = False
+    """No choice holds anything the project keeps (the inference engine:
+    its models live outside the project), so a request for another choice
+    moves the project to it instead of conflicting."""
+
     ordered: bool = False
     """``choices`` are ascending levels (auth: basic < rbac < org). A
     request at or below the project's current value is satisfied; above
@@ -316,6 +321,9 @@ def answers_delta(
             delta[key] = wanted
         elif opt.ordered:
             if opt.choices.index(wanted) > opt.choices.index(current):
+                delta[key] = wanted
+        elif opt.switchable:
+            if current != wanted:
                 delta[key] = wanted
         elif current != wanted != opt.upgrades_from:
             raise VariantConflictError(

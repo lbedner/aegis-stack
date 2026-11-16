@@ -132,6 +132,7 @@ class BaseInferenceEngine(ABC):
     LABEL: ClassVar[str]  # how its name reads to a person
     DEFAULT_URL: ClassVar[str]  # where it is when the settings do not say
     START: ClassVar[str]  # how a person starts it, for a page it does not answer
+    ADD_MODEL: ClassVar[str]  # how a model gets onto it, for an empty model list
     # Whether it loads and frees models on request; one that serves the
     # model it was started with offers neither (the pages hide the buttons).
     can_load_unload: ClassVar[bool] = True
@@ -147,6 +148,14 @@ class BaseInferenceEngine(ABC):
         concludes the engine is not installed."""
         self.base_url = str(base_url or self.configured_url()).rstrip("/")
         self._transport = transport  # tests answer through a MockTransport
+
+    @classmethod
+    def titled(cls, version: str | None) -> str:
+        """Its label, with the version it reports: ``v`` before a release
+        number (``Ollama v0.5.7``), a build as it is (``llama.cpp b6700``)."""
+        if not version:
+            return cls.LABEL
+        return f"{cls.LABEL} {'v' if version[0].isdigit() else ''}{version}"
 
     @classmethod
     def configured_url(cls) -> str:

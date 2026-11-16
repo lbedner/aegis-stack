@@ -47,7 +47,7 @@ Sync model data from cloud APIs or local Ollama into the local database.
 my-app llm sync
 
 # Sync only Ollama models
-my-app llm sync --source ollama
+my-app llm sync --source local
 
 # Sync everything
 my-app llm sync --source all --mode all
@@ -64,7 +64,7 @@ my-app llm sync --refresh
 | Flag | Values | Default | Description |
 |------|--------|---------|-------------|
 | `--mode, -m` | `chat`, `embedding`, `all` | `chat` | Model type filter |
-| `--source, -s` | `cloud`, `ollama`, `all` | `cloud` | Data source |
+| `--source, -s` | `cloud`, `local` (the inference engine; `ollama` still works), `all` | `cloud` | Data source |
 | `--dry-run, -n` | flag | off | Preview without saving |
 | `--refresh, -r` | flag | off | Truncate tables first |
 

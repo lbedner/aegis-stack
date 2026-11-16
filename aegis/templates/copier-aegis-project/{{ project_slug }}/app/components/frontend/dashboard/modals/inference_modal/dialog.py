@@ -123,8 +123,7 @@ class InferenceDetailDialog(BaseDetailPopup):
         """Build subtitle text based on version and running model count."""
         from app.components.inference import inference_engine_class
 
-        label = inference_engine_class().LABEL
-        subtitle = f"{label} v{version}" if version else label
+        subtitle = inference_engine_class().titled(version)
         if running_count > 0:
             status = f"{running_count} model{'s' if running_count > 1 else ''} loaded"
             subtitle = f"{subtitle} • {status}"

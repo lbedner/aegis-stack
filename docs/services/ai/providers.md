@@ -261,7 +261,7 @@ With the LLM Catalog, you can discover and switch Ollama models:
 
 ```bash
 # Sync Ollama models into catalog
-my-app llm sync --source ollama
+my-app llm sync --source local
 
 # List available Ollama models
 my-app llm list --vendor ollama

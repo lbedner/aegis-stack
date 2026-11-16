@@ -197,13 +197,13 @@ def _render(path: str, **overrides: object) -> str:
 
 
 def test_the_catalog_takes_local_models_whenever_inference_is_present() -> None:
-    """Not only when Ollama is the active provider: a model pulled locally
+    """Not only when a local provider is the active one: a model pulled locally
     belongs in the picker next to the hosted ones."""
     startup = "app/components/backend/startup/llm_catalog.py.jinja"
     on = _render(startup, include_inference=True)
-    assert 'source="ollama"' in on
+    assert 'source="local"' in on
     assert "AI_PROVIDER" not in on
-    assert 'source="ollama"' not in _render(startup, include_inference=False)
+    assert 'source="local"' not in _render(startup, include_inference=False)
 
     job = "app/services/ai/jobs.py.jinja"
     assert 'source="all"' in _render(job, include_inference=True)

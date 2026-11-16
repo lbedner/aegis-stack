@@ -602,6 +602,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 choices=list(InferenceEngines.ALL),
                 default=InferenceEngines.DEFAULT,
                 answer_key=AnswerKeys.INFERENCE_ENGINE,
+                switchable=True,
             ),
             OptionSpec(
                 name="placement",

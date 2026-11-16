@@ -587,7 +587,7 @@ services:
     user: "0:0"
     command:
       - "-proxysocketendpoint=/var/run/docker-proxy/docker.sock"
-      - '-allowGET=(/v1\.[0-9]+)?/(containers/json|containers/[a-zA-Z0-9_.-]+/(stats|logs)|info|system/df)'
+      - '-allowGET=(/v1\.[0-9]+)?/(containers/json|containers/[a-zA-Z0-9_.-]+/(stats|logs)|info|system/df|events)'
       - '-allowPOST=(/v1\.[0-9]+)?/containers/[a-zA-Z0-9_.-]+/restart'
       - "-allowhealthcheck"
       - "-shutdowngracetime=5"

@@ -13,10 +13,12 @@ from pathlib import Path
 from typing import Any
 
 import uvicorn
+from uvicorn.supervisors import ChangeReload
 
 from app.core.config import settings
 from app.core.log import logger
 from app.core.loops import check_engine_loop, resolve_loop
+from app.entrypoints.reloading import killed
 
 # Import string rather than the app object: both engines need one to
 # respawn reload workers in a fresh process.
@@ -115,6 +117,40 @@ def serve_zuvloop(loop: str) -> None:
     _zuvloop_run(uvicorn.Server(config).serve())
 
 
+# uvicorn's reloader for what is installed (watchfiles', else polling).
+class Respawning(ChangeReload):  # ty: ignore[unsupported-base]
+    """uvicorn's reload supervisor, which also starts a new webserver
+    process when the one it ran was killed. Uvicorn's restarts it only on
+    a change: one killed (out of memory) left the supervisor holding the
+    port with nothing serving it, every request hanging, and the
+    container, its main process alive, never restarted. One that exited
+    itself (code that fails to import) waits for the change that fixes
+    it, as before: a new one would only fail again, in a loop."""
+
+    def should_restart(self) -> list[Path] | None:
+        if (cause := killed(self.process.exitcode)) is not None:
+            logger.error(f"The webserver process was killed ({cause}); starting anew.")
+            self.restart()
+            return None  # started anew: a change waiting is in it already
+        return super().should_restart()
+
+
+def serve_reloading(loop: str) -> None:
+    """uvicorn with reload, as ``uvicorn.run`` serves it but supervised by
+    ``Respawning``: the app as an import string, which each new process
+    imports itself."""
+    config = uvicorn.Config(
+        APP_TARGET,
+        factory=True,
+        reload=True,
+        reload_dirs=[str(app_package_dir())],
+        timeout_graceful_shutdown=5,
+        **uvicorn_settings(loop),
+    )
+    server = uvicorn.Server(config)
+    Respawning(config, target=server.run, sockets=[config.bind_socket()]).run()
+
+
 def serve_uvicorn(loop: str) -> None:
     if loop == "zuvloop":
         if settings.AUTO_RELOAD:
@@ -128,15 +164,7 @@ def serve_uvicorn(loop: str) -> None:
         return
 
     if settings.AUTO_RELOAD:
-        # When reload is enabled, uvicorn requires an import string
-        uvicorn.run(
-            APP_TARGET,
-            factory=True,
-            reload=True,
-            reload_dirs=[str(app_package_dir())],
-            timeout_graceful_shutdown=5,
-            **uvicorn_settings(loop),
-        )
+        serve_reloading(loop)
         return
 
     # Use the integration layer (handles webserver hooks, service discovery, etc.)
@@ -166,9 +194,9 @@ def serve_granian(loop: str) -> None:
         reload=settings.AUTO_RELOAD,
         reload_paths=[app_package_dir()],
         # Granian defaults this off, so a worker that exits is never
-        # replaced. On in dev, off in production where the container
-        # healthcheck already restarts a dead server and respawning
-        # would hide a crashloop.
+        # replaced. On in dev, off in production, where granian then
+        # exits, the container with it, and its restart policy starts a
+        # new one; respawning would hide a crashloop.
         #
         # Measured caveat: this does NOT rescue a reload into code that
         # fails to import. Granian still tears the server down, and the

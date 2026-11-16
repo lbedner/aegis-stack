@@ -31,7 +31,8 @@
 
   const mic = () => document.getElementById('chat-mic');
   const box = () => chatComposer()?.querySelector('textarea');
-  const voice = () => JSON.parse(mic()?.dataset.voice || '{}');
+  // How it is heard: on the mic, or the phone where there is none (the stage).
+  const voice = () => JSON.parse((mic() || phone())?.dataset.voice || '{}');
 
   // A status line's wording, from the surface partial's template.
   const phrase = (state) => document.getElementById('chat-mic-states')
@@ -507,15 +508,25 @@
     call.step = null;
     happen({ type: 'step', on: false });
   };
-  // Its reply is done: no longer the cut one, and its steps with it.
+  const STAGE_FRONT = 3; // cards kept in view on the stage; the rest go to its strip
+  // A drawn card's new place (stage.html, else the thread's foot).
+  const cardSlot = () => {
+    const front = document.getElementById('chat-stage-front');
+    if (!front) return chatThread()?.appendChild(clone('chat-live-card'));
+    front.prepend(clone('chat-live-card'));
+    while (front.children.length > STAGE_FRONT) document.getElementById('chat-stage-strip').prepend(front.lastElementChild);
+    return front.firstElementChild;
+  };
   // The card she drew for the answer she is giving, wherever it is now:
   // in its live slot, or in the saved turn that replaced it while she was
   // still talking (saved when written, heard after). One she drew for an
-  // earlier answer is never it.
+  // earlier answer is never it. On the stage nothing replaces its slot.
   const drawnCard = () => {
-    if (!call?.drawn || !chatThread()) return null;
+    if (!call?.drawn) return null;
+    if (!chatThread()) return call.slot?.isConnected ? call.slot.querySelector('[data-card="path"]') : null;
     return [...chatThread().querySelectorAll(`[data-card="path"][hx-get^="${call.drawn}"]`)].pop() || null;
   };
+  // Its reply is done: no longer the cut one, and its steps with it.
   const replied = () => {
     call.turn = null; // the next turn's steps go under a row of their own
     happen({ type: 'reply' });
@@ -643,8 +654,8 @@
       // A chart up while it is talked about; the saved turn replaces it.
       // One a question: drawn again, it takes the first one's place, as
       // the saved turn keeps only the last.
-      if (!chatThread()) return; // no chat on screen: the saved turn has it
-      if (!call.slot?.isConnected) call.slot = chatThread().appendChild(clone('chat-live-card'));
+      if (!call.slot?.isConnected) call.slot = cardSlot();
+      if (!call.slot) return; // no chat on screen: the saved turn has it
       htmx.ajax('GET', event.url, { target: call.slot, swap: 'innerHTML' });
     } else if (event.type === 'page') {
       pageAction(event); // chat.js: the same as a typed turn's
@@ -692,11 +703,13 @@
     call = { ws, stream, sources: [], follows: [], playhead: 0, state: callState.start(voice().idle * 1000) };
     engaged(button);
     ws.addEventListener('message', ({ data }) => (typeof data === 'string' ? relayed(JSON.parse(data)) : voiceChunk(data)));
+    // Closed with no word from the server (an end says why: ``ended``):
+    // never reached, or dropped mid-call, as a killed webserver drops it.
     ws.addEventListener('close', () => {
       if (call?.ws !== ws || call.closing) return;
       const opened = call.ready;
       hangUp();
-      if (!opened) say('offline');
+      say(opened ? 'dropped' : 'offline');
     });
   };
   document.addEventListener('click', (event) => {

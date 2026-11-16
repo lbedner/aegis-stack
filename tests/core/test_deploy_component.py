@@ -107,6 +107,11 @@ def test_the_proxy_has_no_network_and_no_privileges() -> None:
         "/v1.47/containers/demo-webserver-1/logs",
         "/v1.47/info",
         "/v1.47/system/df",
+        # Docker's events, for a container that ran out of memory: its
+        # memory flag is inspect's, which is refused. Container lifecycle,
+        # names and labels (already in the list) and an exec's command
+        # line: no Env. The runtime asks for this project's ``oom`` alone.
+        "/v1.47/events",
     ],
 )
 def test_the_proxy_answers_the_reads(path: str) -> None:
@@ -127,7 +132,6 @@ def test_the_proxy_answers_the_reads(path: str) -> None:
         "/v1.47/images/json",
         "/v1.47/volumes",
         "/v1.47/secrets",
-        "/v1.47/events",
         "/v1.47/containers/a/../../images/json",
     ],
 )

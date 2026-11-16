@@ -79,6 +79,13 @@ lease renewal run every five seconds. Each running container on a known runtime
 page has an independent stream; workers are supported without importing worker
 modules. Sources reconnect with exponential backoff, capped at 30 seconds.
 
+A container that runs out of memory writes no line for it: the kernel kills a
+process in it. With the deploy component, the collector also reads Docker's
+`oom` events for the project's containers and records each as an error
+("ran out of memory") on that container's page. It reads back over the
+retention window, as far as Docker still holds them, so a webserver that ran
+out, and restarted with the collector in it, still shows what happened.
+
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `ERROR_TRACKING_ENABLED` | `true` | Enable background collection |

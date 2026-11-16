@@ -60,7 +60,15 @@ def test_only_a_service_that_opens_up_is_a_zoom() -> None:
 def test_each_service_in_the_server_opens_up(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    html = page_html(_opened(app, monkeypatch), "/overseer?view=map&zoom=backend")
+    client = _opened(app, monkeypatch)
+
+    # What opens up is its pieces alone: the lines out of each (every
+    # import, read from source, seconds cold) wait for one to be opened.
+    def lines_read(subject: str, model: object) -> None:
+        raise AssertionError(f"{subject}'s lines read to draw the Server")
+
+    monkeypatch.setattr(overseer_zoom, "pieces_of", lines_read)
+    html = page_html(client, "/overseer?view=map&zoom=backend")
     zoom = one(html, '[data-node="service_auth"] [data-zoom]')
     assert zoom.get("href") == OPENED
     none(html, '[data-node="secrets"] [data-zoom]')  # no pieces of its own

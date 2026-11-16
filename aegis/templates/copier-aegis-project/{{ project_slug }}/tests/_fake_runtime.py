@@ -11,6 +11,7 @@ import pytest
 from app.core import runtime
 from app.core.constants import ComponentName
 from app.core.runtime import (
+    ContainerEvent,
     Host,
     Instance,
     LogLine,
@@ -77,7 +78,8 @@ STATS = Stats(
 
 class FakeRuntime:
     """The services a stack runs, the same stats for every instance, and
-    each instance's log lines (``lines``, read; ``followed``, followed)."""
+    each instance's log lines (``lines``, read; ``followed``, followed),
+    and the containers that ran out of memory (``ran_out``)."""
 
     def __init__(
         self,
@@ -86,6 +88,7 @@ class FakeRuntime:
         fail: bool = False,
         lines: dict[str, list[LogLine]] | None = None,
         followed: dict[str, list[LogLine]] | None = None,
+        ran_out: list[ContainerEvent] | None = None,
     ) -> None:
         self.backend_name = backend_name
         self._instances = instances
@@ -94,6 +97,8 @@ class FakeRuntime:
         self.listed = 0
         self.lines = lines or {}
         self.followed = followed or {}
+        self.ran_out = ran_out or []
+        self.ran_out_since: list[datetime | None] = []
         # (instance, tail, since) for each logs read
         self.logged: list[tuple[str, int, datetime | None]] = []
         self.restarted: list[str] = []
@@ -123,6 +128,13 @@ class FakeRuntime:
     ) -> AsyncIterator[LogLine]:
         for line in self.followed.get(instance, []):
             yield line
+
+    async def out_of_memory(
+        self, since: datetime | None
+    ) -> AsyncIterator[ContainerEvent]:
+        self.ran_out_since.append(since)
+        for event in self.ran_out:
+            yield event
 
     async def host(self) -> Host:
         if self._fail:

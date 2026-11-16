@@ -6,7 +6,9 @@ re-reads the second before it: ids dedupe the overlap.
 """
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from functools import partial
 import json
 import random
 import time
@@ -18,6 +20,7 @@ from app.core.runtime import Instance, RuntimeUnavailableError
 from app.services.system.errors import scripts
 from app.services.system.errors.client import repository, unavailable_reason
 from app.services.system.errors.models import ErrorOccurrence
+from app.services.system.errors.normalize import memory_error
 from app.services.system.errors.store import ErrorStore, StoreUnavailableError
 from app.services.system.redis_keys import decoded
 
@@ -26,6 +29,7 @@ from .source import SourceReader
 TICK = 5
 LEASE_SECONDS = 20
 CURSOR_SECONDS = 1.0  # the least time between two saves of a source's cursor
+MEMORY = "out-of-memory"  # the pump reading containers that ran out (``_memory``)
 
 
 class LeaseLostError(RuntimeError):
@@ -54,12 +58,15 @@ class Collector:
         )
         await self.store.fenced(scripts.STATUS, self.token, "status", payload)
 
-    async def commit(self, reader: SourceReader, events: list[ErrorOccurrence]) -> None:
+    async def _insert(self, events: list[ErrorOccurrence]) -> None:
         for event in events:
             result = await self.store.insert(event, token=self.token)
             if result == "fenced":
                 raise LeaseLostError()
             self.dropped += result == "expired"
+
+    async def commit(self, reader: SourceReader, events: list[ErrorOccurrence]) -> None:
+        await self._insert(events)
         at = reader.resume_at()
         now = time.monotonic()
         if (
@@ -78,22 +85,31 @@ class Collector:
             reader.saved, reader.saved_at = at, now
         self.last_success = datetime.now(UTC).isoformat()
 
-    async def source(self, instance: Instance, page: str) -> None:
+    async def _retrying(self, key: str, connect: Callable[[], Awaitable[None]]) -> None:
+        """``connect`` again whenever it ends, backing off while it fails."""
         delay = 1.0
         while True:
             try:
-                await self._connection(instance, page)
-                self.reasons[instance.id] = (
-                    "Log stream ended; reconnecting with overlap."
-                )
+                await connect()
+                self.reasons[key] = "Stream ended; reconnecting with overlap."
                 delay = 1.0  # it connected: backoff is for a source that keeps failing
             except (RuntimeUnavailableError, StoreUnavailableError) as exc:
-                self.reasons[instance.id] = (
+                self.reasons[key] = (
                     type(exc).__name__
                     + ": reconnecting; rotated input may be unavailable."
                 )
             await asyncio.sleep(delay + random.random() * 0.25)
             delay = min(30.0, delay * 2)
+
+    async def _memory(self) -> None:
+        """This stack's containers running out of memory (Docker's ``oom``),
+        over the retention window: the webserver that ran out restarts with
+        this collector in it, after the event. Ids dedupe the replay; a
+        container with no page of its own is left out, as its logs are."""
+        since = datetime.now(UTC) - timedelta(seconds=self.store.retention_seconds)
+        async for event in runtime.out_of_memory(since=since):
+            if (page := runtime.page_for(event.service)) is not None:
+                await self._insert([memory_error(event, page=page)])
 
     async def _connection(self, instance: Instance, page: str) -> None:
         saved = await self.store.call("hget", self.store.key("cursors"), instance.id)
@@ -139,8 +155,11 @@ class Collector:
         ]
         limited = sources[: settings.ERROR_TRACKING_MAX_SOURCES]
         ids = {i.id for i, _ in limited}
+        wanted: dict[str, Callable[[], Awaitable[None]]] = {
+            i.id: partial(self._connection, i, p) for i, p in limited
+        } | {MEMORY: self._memory}
         self.dropped += max(0, len(sources) - len(limited))
-        removed = [key for key in self.pumps if key not in ids]
+        removed = [key for key in self.pumps if key not in wanted]
         for key in removed:
             task = self.pumps.pop(key)
             task.cancel()
@@ -150,14 +169,12 @@ class Collector:
         stale = [key for key in cursors if decoded(key) not in ids]
         if stale:
             await self.store.call("hdel", self.store.key("cursors"), *stale)
-        for instance, page in limited:
-            task = self.pumps.get(instance.id)
+        for key, connect in wanted.items():
+            task = self.pumps.get(key)
             if task is not None and task.done():
                 task.result()  # lease loss must end every pump
             if task is None:
-                self.pumps[instance.id] = asyncio.create_task(
-                    self.source(instance, page)
-                )
+                self.pumps[key] = asyncio.create_task(self._retrying(key, connect))
         await self.store.prune()
         reason = "; ".join(sorted(set(self.reasons.values())))
         if len(sources) > len(limited):

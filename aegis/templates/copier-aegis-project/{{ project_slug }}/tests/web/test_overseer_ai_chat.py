@@ -348,6 +348,7 @@ def test_the_hooks_the_scripts_read_are_the_ones_the_markup_emits(
         client.post(f"{CHAT}/turns", data={"message": "hi"}).text,
         str(macros.card_loader("/cards/x", "the chart")),
         str(frames.card_frame("path", "A flow", None, "/cards/x", caller=lambda: "")),
+        client.get(f"{CHAT}/stage").text,  # a call, full screen
     ]
     optional = {"dialog", "dialog-body"}
     if not chat_surface.HAS_VOICE:
@@ -359,6 +360,9 @@ def test_the_hooks_the_scripts_read_are_the_ones_the_markup_emits(
             "chat-call",
             "chat-mute",
             "chat-live-turn",
+            "chat-stage",
+            "chat-stage-front",
+            "chat-stage-strip",
             "data-countdown",
         }
     for element_id in ids - optional:

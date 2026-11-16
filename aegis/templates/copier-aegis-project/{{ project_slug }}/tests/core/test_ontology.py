@@ -400,6 +400,38 @@ async def test_a_warmed_model_is_built_once_off_the_loop_for_whoever_asks(
     assert built[0] != threading.current_thread().name  # off the loop
 
 
+async def test_the_parts_report_is_read_after_the_warmed_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The parts report (a zoomed map, the ``ontology`` tool's findings)
+    reads the same source as the model, every module cold: seconds a first
+    request would wait on. The warm-up reads it next, off the loop, from
+    the modules the model build already parsed."""
+    import threading
+    from types import SimpleNamespace
+
+    from app.services.system import service_parts
+
+    done: list[tuple[str, str]] = []
+    model = SimpleNamespace(partial=True)  # kept for no other process
+    monkeypatch.setattr(ontology_system, "_kept", None)
+    monkeypatch.setattr(
+        ontology_system,
+        "system_model",
+        lambda app=None: done.append(("model", "")) or model,
+    )
+    monkeypatch.setattr(
+        service_parts,
+        "report",
+        lambda: done.append(("report", threading.current_thread().name)),
+    )
+
+    await ontology_system._build()
+
+    assert [step for step, _ in done] == ["model", "report"]
+    assert done[1][1] != threading.current_thread().name  # off the loop
+
+
 def _registered(monkeypatch: pytest.MonkeyPatch, *, webserver: bool) -> None:
     """A webserver (every part registered) or a worker (none)."""
     names = ("backend",) if webserver else ()

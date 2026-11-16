@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 
 from app.core.log_records import TERMINAL, LogRecord, split_lead
-from app.core.runtime import message_of
+from app.core.runtime import ContainerEvent, message_of
 
 from . import redact
 from .fingerprint import digest, fingerprint
@@ -12,6 +12,34 @@ from .models import ErrorOccurrence
 # A process told to stop (a dev reload, a deploy) ends on this: a restart,
 # not an error, unless the line itself says error.
 STOPPED = "KeyboardInterrupt"
+
+
+def memory_error(event: ContainerEvent, *, page: str) -> ErrorOccurrence:
+    """A container that ran out of memory (Docker's ``oom``): the kernel
+    killed a process in it, which no log line says. One per event, so a
+    replay gives the same id; grouped by its container."""
+    message = (
+        f"{event.name} ran out of memory: the kernel killed a process in it "
+        "for going over its memory limit."
+    )
+    return ErrorOccurrence(
+        id=digest([event.id, event.at.isoformat()]),
+        fingerprint=fingerprint(event.service, page, None, None, "docker", message),
+        timestamp=event.at,
+        source_timestamp=None,
+        ordinal=0,
+        page=page,
+        service=event.service,
+        container_id=event.id,
+        container_name=event.name,
+        stream="docker",
+        level="error",
+        logger="docker",
+        message=message,
+        exception_type=None,
+        traceback=None,
+        fields={},
+    )
 
 
 def normalize(

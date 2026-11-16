@@ -265,3 +265,29 @@ class TestClosing:
 
         assert heard == [signal.SIGTERM]
         assert concurrency.closing().is_set()
+
+
+def test_once_builds_once_for_two_first_asks() -> None:
+    """``functools.cache`` lets two threads that ask before the first build
+    ends each run it (seconds of parsing, for the parts report); ``once``
+    has the second wait on the first build and take its result."""
+    import threading
+
+    built: list[object] = []
+    started = threading.Event()
+
+    @concurrency.once
+    def build() -> object:
+        started.set()
+        time.sleep(0.2)
+        built.append(object())
+        return built[-1]
+
+    found: list[object] = []
+    first = threading.Thread(target=lambda: found.append(build()))
+    first.start()
+    started.wait(5)
+    found.append(build())
+    first.join(5)
+
+    assert len(built) == 1 and found == [built[0], built[0]]

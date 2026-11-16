@@ -87,6 +87,16 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
         context = await chat.surface_context(bound)
         return _fragment(request, "partials/chat/surface.html", **context)
 
+    @router.get("/stage", response_class=HTMLResponse)
+    async def stage(
+        request: Request, bound: Mount, conversation_id: str | None = None
+    ) -> Response:
+        """A call, full screen, where the mount takes calls."""
+        if not chat.offers_calls(bound):
+            raise HTTPException(status_code=404)
+        context = await chat.stage_context(bound, conversation_id)
+        return _fragment(request, "partials/chat/stage.html", **context)
+
     @router.get("/conversations", response_class=HTMLResponse)
     async def history(request: Request, bound: Mount) -> Response:
         conversations = (await chat.conversations(bound))[: chat.HISTORY_LIMIT]

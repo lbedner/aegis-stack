@@ -11,8 +11,7 @@
    agent_url (the answering agent's editor, where the mount has one). #}
 {% from "components/macros/icons.html" import icon %}
 {% from "components/macros/chat.html" import agent_chip, assistant_row, button_classes, conversation_field, turn_head, voice_states %}
-{# A call's states, as the phone and the call bar both draw them. #}
-{% macro phone_states() %}{% call voice_states(record=True, work=True) %}{{ icon("phone", "w-4 h-4") }}{% endcall %}{% endmacro %}
+{% from "partials/chat/_call.html" import call_bar, mic_states, phone, phone_states with context %}
 <div id="chat" class="flex flex-col h-full"
      data-chat='{{ {"path": chat_path}|tojson }}'>
   {% if approvals %}
@@ -57,27 +56,7 @@
      a typed turn shows them, until the saved turn redraws the thread. #}
   <template id="chat-live-turn"><li {{ assistant_row() }} data-live-turn>{{ turn_head(assistant) }}</li></template>
   {% endif %}
-  {% if voice %}
-  {# What the microphone is doing, read out as well as shown. The server's
-     own refusals (nothing heard, transcription down) arrive as text. #}
-  <template id="chat-mic-states">
-    <span>
-      <span data-state="recording">Listening - press the microphone again when you're done.</span>
-      <span data-state="transcribing">Working out what you said...</span>
-      <span data-state="thinking">{{ assistant }} is working on it...</span>
-      <span data-state="speaking">Speaking - press the microphone to interrupt.</span>
-      <span data-state="denied">The microphone is blocked. Allow it for this site, or type instead.</span>
-      <span data-state="unsupported">This browser can't record here. You can type instead.</span>
-      <span data-state="offline">Couldn't reach the app. You can type instead.</span>
-      {% if calls %}
-      <span data-state="live">Talking live - just speak.</span>
-      <span data-state="working">{{ assistant }} is pulling that up...</span>
-      <span data-state="muted">Muted - {{ assistant }} can't hear you.</span>
-      <span data-state="hanging-up">Hanging up in <span data-countdown></span>s - say anything to stay on.</span>
-      {% endif %}
-    </span>
-  </template>
-  {% endif %}
+  {% if voice %}{{ mic_states() }}{% endif %}
   <p id="chat-mic-status" class="shrink-0 pt-2 text-xs text-aegis-muted empty:hidden" aria-live="polite"></p>
   {# Composer: the post appends the turn's bubbles; the script takes it from
      there. Enter sends, Shift+Enter inserts a newline. #}
@@ -119,45 +98,17 @@
     {% if calls %}
     {# A live call (routes/partials/chat_live.py): the server holds the
        engine's session and carries the audio over this mount's socket. #}
-    <button type="button" id="chat-live" data-state="idle"
-            class="group relative {{ button_classes('default') }} data-[state=recording]:text-aegis-teal data-[state=recording]:border-aegis-teal data-[state=speaking]:text-aegis-teal data-[state=speaking]:border-aegis-teal data-[state=working]:text-aegis-teal data-[state=working]:border-aegis-teal"
-            aria-pressed="false" aria-label="Talk live" title="Talk live"
-            data-relay="{{ chat_path }}/live/ws" data-worklet="{{ static('js/mic-worklet.js') }}"
-            data-thread="{{ chat_path }}/conversations/">
-      {{ phone_states() }}
-    </button>
+    {% call phone(button_classes('default') ~ " data-[state=recording]:text-aegis-teal data-[state=recording]:border-aegis-teal data-[state=speaking]:text-aegis-teal data-[state=speaking]:border-aegis-teal data-[state=working]:text-aegis-teal data-[state=working]:border-aegis-teal") %}{{ phone_states() }}{% endcall %}
+    {# The same call, full screen (stage.html), on the conversation open
+       here (chat.js's ``conversationId``). #}
+    <a href="{{ chat_path }}/stage" class="{{ button_classes('default') }}" title="Talk on the stage" aria-label="Talk on the stage"
+       onclick="this.search = conversationId() ? '?conversation_id=' + encodeURIComponent(conversationId()) : ''">
+      {{ icon("zoom-in", "w-4 h-4") }}
+    </a>
     {% endif %}
     <button type="button" id="chat-stop" hidden class="{{ button_classes('default') }}" aria-label="Stop">Stop</button>
     <button type="submit" id="chat-send" class="{{ button_classes('primary') }}" aria-label="Send" :disabled="!text.trim() && !staged">Send</button>
   </form>
-  {% if calls %}
-  {# In a call the composer row gives way to this: what the call is doing
-     (voice_states), the engine, a timer and the running cost, mute and
-     hang up. voice.js swaps the two and fills the figures. #}
-  <div id="chat-call" hidden data-state="idle"
-       class="group shrink-0 border-t border-aegis-border pt-3 flex items-center gap-3">
-    <span class="relative w-9 h-9 rounded-full bg-aegis-teal/10 text-aegis-teal flex items-center justify-center">
-      {{ phone_states() }}
-    </span>
-    <span class="min-w-0 flex-1 truncate text-sm text-aegis-text tabular-nums">
-      Live{% if operator %} · <span data-call-engine></span>{% endif %} · <span data-call-timer>0:00</span>
-      {% if operator %}<span class="text-aegis-muted"> · <span data-call-cost></span><span data-call-cost-later>priced as it goes</span></span>{% endif %}
-    </span>
-    {# Show the assistant a picture without leaving the call: the composer's
-       own picker (chat.js hands a picture to the call while it is up, as it
-       does a paste or a drop). #}
-    <label for="chat-attach" class="{{ button_classes('default') }} cursor-pointer" title="Show {{ assistant }} a picture">
-      {{ icon("paperclip", "w-4 h-4") }}
-    </label>
-    <button type="button" id="chat-mute" aria-pressed="false" aria-label="Mute" title="Mute"
-            class="group/mute {{ button_classes('default') }} aria-pressed:text-error aria-pressed:border-error">
-      <span class="group-aria-pressed/mute:hidden">{{ icon("mic", "w-4 h-4") }}</span>
-      {{ icon("mic-off", "hidden group-aria-pressed/mute:block w-4 h-4") }}
-    </button>
-    <button type="button" id="chat-hang-up" aria-label="Hang up" title="Hang up"
-            class="{{ button_classes('default') }} text-error border-error hover:bg-error/10">
-      {{ icon("phone", "w-4 h-4 rotate-[135deg]") }}
-    </button>
-  </div>
-  {% endif %}
+  {# In a call the composer row gives way to the call bar. #}
+  {% if calls %}{{ call_bar() }}{% endif %}
 </div>

@@ -9,6 +9,13 @@
 
 ### Added
 
+- **A stage for a live call.** Beside the chat's phone, a full-screen page
+  (`<chat mount>/stage`) holds the call on the same socket: the assistant's
+  figure in the middle shows her listening, speaking and pulling data up,
+  and each card she draws lands in front of her as it is drawn, newest
+  first, the older ones in a strip below; any one opens larger, and a path
+  card plays there. It carries on the conversation the chat had open, so
+  the thread stays the record.
 - **MCP tokens without auth.** With MCP and a database, the webserver
   serves `/mcp` and tokens can be made, listed and revoked (Overseer's MCP
   page, `mcp-tokens`, the token API) without the auth service. Such a token
@@ -39,6 +46,34 @@
 
 ### Fixed
 
+- **A map card in the chat no longer stalls the first open.** Drawing the
+  Server opened up asked which services open up by reading every import
+  between their pieces, and the parts report under it parsed every module
+  on first use: seconds after each start or reload, with the page's loader
+  creeping. Which services open up now reads their pieces alone, and the
+  startup warm-up reads the parts report right after the model, off the
+  loop, from what the model already parsed; two first asks wait on one
+  build (`concurrency.once`) instead of each parsing it.
+- **A killed dev webserver comes back.** With reload on, uvicorn's
+  supervisor restarted the process serving requests only on a change: one
+  killed (out of memory) left it holding the port with nothing serving it,
+  every request hanging, and the container, its main process alive, never
+  restarted. It now starts a new one at once and logs an error, which
+  Overseer's Errors page shows; one that exited itself (code that fails to
+  import) still waits for the change that fixes it. A live call dropped
+  that way says so instead of hanging up in silence.
+- **A killed dev scheduler or worker comes back.** The scheduler and the
+  arq and taskiq workers reloaded under watchfiles' CLI, which restarts
+  only on a change: one killed left the container up with nothing
+  running. They now run under `app/entrypoints/reloading.py`, which
+  restarts on a change, starts a new process at once when one was killed,
+  and logs the error, as the webserver's supervisor does.
+- **A container that runs out of memory is an error in Overseer.** The
+  kernel's kill writes no log line, and the container's memory flag is
+  inspect's, which the socket proxy refuses. The proxy now also answers
+  `GET /events`, and the error collector records each of the project's
+  containers' `oom` events on Overseer's Errors page, in dev and
+  production, for every container (webserver, worker, scheduler).
 - **No `InvalidStateError` when the webserver stops.** A followed log (or
   any Docker read through the socket proxy) cancelled as data arrived had
   uvloop settle anyio's cancelled socket wait, and the loop logged

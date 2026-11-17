@@ -81,8 +81,7 @@ class Secret:
     needed: bool | Callable[[], bool] = False
     # False where this stack cannot use it: no row unless held or needed.
     offered: Callable[[], bool] = lambda: True
-    # Raises SecretRejectedError if the provider refuses ``value``, or
-    # SecretUncheckedError if it cannot say; returns if it works.
+    # Raises SecretRejectedError (refused) or SecretUncheckedError (cannot say).
     verify: Callable[[str], Awaitable[None]] | None = None
     # Values the provider itself offers (an account's phone numbers, a
     # mail provider's verified domains), as (value, label), picked instead
@@ -106,8 +105,7 @@ class Secret:
 
 @dataclass(frozen=True)
 class Verdict:
-    """What checking a value found (``VERIFIED``...), and the words for it.
-    Never carries the value."""
+    """What checking a value found (``VERIFIED``...) and its words; never the value."""
 
     result: str
     message: str

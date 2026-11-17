@@ -65,7 +65,12 @@ def strip_attachment_marker(text: str) -> str:
 # What stands in a message for a paste kept apart from it
 # (``services/ai/domains/chat/pastes``): written by ``paste_marker``, read
 # back by ``paste_ids``, taken out of what a reader sees by ``readable``.
-_PASTE_MARKER = re.compile(r"\[pasted text #([0-9a-f]+)[^\]]*\]")
+# The id is the whole hex run: what follows it starts with a non-hex
+# character, so the two never contend for one (an unclosed marker over a
+# long run of digits backtracked quadratically). The tail stops at either
+# bracket - a name's are swapped out (``paste_marker``) - so a message of
+# unclosed markers is not rescanned from each one's start.
+_PASTE_MARKER = re.compile(r"\[pasted text #([0-9a-f]+)(?:[^\]\[0-9a-f][^\]\[]*)?\]")
 
 
 def paste_marker(paste_id: str, title: str, chars: int) -> str:

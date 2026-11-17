@@ -16,14 +16,20 @@ caller that forgot it would otherwise act on every user's rows.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from typing import Any
 from uuid import uuid4
 
 from app.core.chat_transcript import WITHDRAWN, card_outcome
 from app.core.time import utcnow
+from app.services.change_queue.follow_ups import landed
 from app.services.change_queue.models import PendingChange
-from app.services.change_queue.queries import batch_rows, get_change
-from app.services.change_queue.registry import ChangeExecutor, executor_for
+from app.services.change_queue.queries import batch_rows, get_change, list_changes
+from app.services.change_queue.registry import (
+    ChangeExecutor,
+    editable_fields,
+    executor_for,
+)
 from app.services.change_queue.schemas import (
     BatchResolveResponse,
     ChangeDisplayRow,
@@ -307,6 +313,7 @@ async def _approve(
     row.updated_at = row.resolved_at
     db.add(row)
     await db.flush()
+    landed(db, row)
     return row
 
 
@@ -336,14 +343,40 @@ async def _reject(
     display: list[ChangeDisplayRow],
     *,
     note: str | None = None,
+    status: str = "rejected",
 ) -> PendingChange:
-    row.status = "rejected"
+    """Decide ``row`` without running it (rejected, or ``status``), its card
+    frozen as ``display``."""
+    row.status = status
     row.result = {"display": _freeze(display), **({"note": note} if note else {})}
     row.resolved_at = utcnow()
     row.updated_at = row.resolved_at
     db.add(row)
     await db.flush()
     return row
+
+
+async def expire_naming(
+    db: AsyncSession,
+    field: str,
+    values: Collection[Any],
+    *,
+    {{ OWNER }},
+    note: str,
+) -> int:
+    """Set aside every waiting card whose payload's ``field`` names one of
+    ``values`` - the things about to go: approved later, it would apply to
+    nothing, or fail. Expired, saying why (``note``), its card frozen while
+    the thing is still there to describe. Returns how many."""
+    gone = set(values)
+    rows = [
+        row
+        for row in await list_changes(db, owner_user_id=owner_user_id)
+        if (row.payload or {}).get(field) in gone
+    ]
+    for row, display in zip(rows, await _describe_rows(db, rows)):
+        await _reject(db, row, display, note=note, status="expired")
+    return len(rows)
 
 
 async def withdraw(
@@ -407,7 +440,11 @@ async def cards(
     of queries."""
     return [
         PendingChangeResponse.from_row(
-            row, title=executor_for(row.change_type).title, display=display
+            row,
+            title=executor_for(row.change_type).title,
+            display=display,
+            editable=row.status == "pending"
+            and bool(editable_fields(executor_for(row.change_type))),
         )
         for row, display in zip(rows, await describe_changes(db, rows))
     ]

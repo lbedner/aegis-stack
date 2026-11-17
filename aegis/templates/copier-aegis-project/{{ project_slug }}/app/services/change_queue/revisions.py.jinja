@@ -1,0 +1,84 @@
+{% if include_finance or (include_ai and ai_backend != "memory") %}{%- set OWNER = "owner_user_id: int | None" ~ ("" if include_auth else " = None") %}"""Revising a waiting card: the reader's own words on it before approving.
+
+A card is a proposal, and a proposal can be corrected before it is
+answered - for the types that opt in (``ChangeExecutor.editable``), only
+the fields they allow (``editable_fields``), and only while it waits. The
+contract ``propose`` validated against validates again, so a revised card
+is as safe to approve as a fresh one; a bad revision dies here and leaves
+the card as it was.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import ValidationError
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.time import utcnow
+from app.services.change_queue.models import PendingChange
+from app.services.change_queue.queries import get_change
+from app.services.change_queue.queue import _found, _require_pending
+from app.services.change_queue.registry import (
+    ChangeExecutor,
+    editable_fields,
+    executor_for,
+)
+
+
+async def revise(
+    db: AsyncSession,
+    change_id: int,
+    fields: dict[str, str],
+    *,
+    {{ OWNER }},
+) -> PendingChange:
+    """Change some fields of a waiting card (``revise_row``)."""
+    row = await get_change(db, change_id, owner_user_id=owner_user_id)
+    return await revise_row(db, _found(row), fields)
+
+
+async def revise_row(
+    db: AsyncSession, row: PendingChange, fields: dict[str, str]
+) -> PendingChange:
+    """``revise`` for a row the caller already read, by the form or by an
+    agent: the fields given take what was given (blank clears one), the
+    rest stay as the card has them. Asking to change a field that is not
+    editable is refused, naming those that are."""
+    _require_pending(row)
+    executor = executor_for(row.change_type)
+    editable = editable_fields(executor)
+    if not editable:
+        raise ValueError(f"a {row.change_type} card is answered, not edited")
+    if stray := sorted(set(fields) - set(editable)):
+        raise ValueError(
+            f"{', '.join(stray)} cannot be edited on a {row.change_type} card; "
+            f"only {', '.join(editable)}"
+        )
+    kept = {k: v for k, v in current_payload(executor, row).items() if k not in fields}
+    given = {k: v.strip() for k, v in fields.items() if v.strip()}
+    try:
+        model = executor.payload_model.model_validate(kept | given)
+    except ValidationError as e:
+        raise ValueError(f"invalid {row.change_type} payload: {e}") from None
+    row.payload = model.model_dump(mode="json")
+    # An error from running the old words is not about these.
+    row.result = {}
+    row.updated_at = utcnow()
+    db.add(row)
+    await db.flush()
+    return row
+
+
+def current_payload(executor: ChangeExecutor, row: PendingChange) -> dict[str, Any]:
+    """A stored card read through today's contract, so one filed in an older
+    shape edits (and prefills its form) as a new one does."""
+    try:
+        return executor.payload_model.model_validate(row.payload).model_dump(
+            mode="json"
+        )
+    except ValidationError:
+        raise ValueError(
+            f"this {row.change_type} card no longer fits its type; reject it"
+        ) from None
+{% endif %}

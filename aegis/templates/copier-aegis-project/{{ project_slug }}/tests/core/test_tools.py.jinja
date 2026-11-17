@@ -164,6 +164,8 @@ EXPECTED_EFFECTS = {
     "pending": "proposes",
     "withdraw": "proposes",
     "withdraw_batch": "proposes",
+    # Corrects a waiting card before it is approved; files nothing new.
+    "revise": "proposes",
 {%- for plugin in _plugins | default([]) %}
 {%- for tool in plugin.wiring.agent_tools | default([]) %}
     # {{ plugin.name }}, declared in its spec: an effect someone decided.

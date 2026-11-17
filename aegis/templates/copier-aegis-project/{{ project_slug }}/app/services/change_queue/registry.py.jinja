@@ -17,7 +17,7 @@ package.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import BaseModel
@@ -60,6 +60,28 @@ class ChangeExecutor:
     # An operator's change: filed and approved only for an admin, and
     # named only to one.
     admin: bool = False
+    # Whether the person answering the card may put their own words on it
+    # first (``revise``): a card read off a header names the sender as the
+    # header does, and the reader knows the name better. Off by default: a
+    # yes/no card is not a form.
+    editable: bool = False
+    # For an editable type, the only fields that may change, where not every
+    # text field is the reader's (a scanned card's page and row are its own,
+    # the name read off it is not). Empty: every text field.
+    edits: tuple[str, ...] = ()
+    # For an editable type, the fields that pick from a set rather than take
+    # free text: ``{"kind": KINDS}`` draws a select. The payload model still
+    # decides what is valid.
+    choices: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # Work that needs the change COMMITTED first, run with the approval's
+    # result once it lands (a job that must find the new row): never fails
+    # an approval that already landed (``follow_ups``).
+    after_commit: Callable[[dict[str, Any]], Awaitable[None]] | None = None
+    # Where the pictures a card shows are stored: object-storage keys, in the
+    # order its ``describe`` marks rows ``scan`` (a scanned page, a photo).
+    scan: (
+        Callable[[AsyncSession, Any, int | None], Awaitable[list[str]]] | None
+    ) = None
 
 
 _EXECUTORS: dict[str, ChangeExecutor] = {}
@@ -80,6 +102,20 @@ def executor_for(change_type: str) -> ChangeExecutor:
         return _EXECUTORS[change_type]
     except KeyError:
         raise ValueError(f"unknown change type: {change_type!r}") from None
+
+
+def editable_fields(executor: ChangeExecutor) -> list[str]:
+    """The fields a person - or an agent, for them - may change on a waiting
+    card of this type: ``edits`` where it names them, else every text
+    field; none for a type that is answered, not edited."""
+    if not executor.editable:
+        return []
+    texts = [
+        name
+        for name, info in executor.payload_model.model_fields.items()
+        if info.annotation in (str, str | None)
+    ]
+    return [name for name in texts if name in executor.edits] if executor.edits else texts
 
 
 def registered_change_types() -> tuple[str, ...]:

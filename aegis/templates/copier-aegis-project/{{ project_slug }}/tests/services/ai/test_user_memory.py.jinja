@@ -147,7 +147,7 @@ class TestFinanceCategory:
 
     async def test_finance_is_a_real_category(self, session: AsyncSession) -> None:
         await save_user_fact(
-            "u1", "House Bedner is worth $711,200", "finance", session=session
+            "u1", "The house is worth $711,200", "finance", session=session
         )
 
         row = await get_user_memory(session, "u1")

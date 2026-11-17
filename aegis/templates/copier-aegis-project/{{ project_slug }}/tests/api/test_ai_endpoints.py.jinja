@@ -567,7 +567,9 @@ class TestChatErrorsReachTheClientCorrectly:
             response = client.post("/api/v1/ai/chat", json={"message": "hi"})
         assert self.SECRET not in response.text
 
-    @pytest.mark.parametrize("kind", ["ProviderError", "AIServiceError"])
+    @pytest.mark.parametrize(
+        "kind", ["ProviderError", "AIServiceError", "ConversationError"]
+    )
     def test_a_streamed_service_error_keeps_its_text_server_side(
         self, client: TestClient, kind: str
     ) -> None:

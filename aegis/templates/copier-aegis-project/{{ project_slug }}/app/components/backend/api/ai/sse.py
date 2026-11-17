@@ -111,14 +111,15 @@ async def _events(
                 if chunk.is_final:
                     break
         yield event("complete", {"status": "completed", "message": "Stream finished"})
-    # Subclasses before AIServiceError, or their branches never run. A
-    # provider's or the service's text is logged, not sent: it can carry
-    # keys or URLs. Only a conversation error's text is the caller's.
+    # Subclasses before AIServiceError, or their branches never run. An
+    # error's text is logged, not sent: a provider's or the service's can
+    # carry keys or URLs, and the label says enough.
     except ProviderError:
         logger.exception("Chat stream provider error")
         yield event("error", {"error": "AI provider error"})
-    except ConversationError as e:
-        yield event("error", {"error": "Conversation error", "detail": str(e)})
+    except ConversationError:
+        logger.warning("Chat stream conversation error", exc_info=True)
+        yield event("error", {"error": "Conversation error"})
     except AIServiceError:
         logger.exception("Chat stream service error")
         yield event("error", {"error": "AI service error"})

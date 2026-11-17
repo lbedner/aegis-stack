@@ -6,22 +6,23 @@ runs; approving or rejecting swaps the card for its new state.
 """
 
 from collections.abc import Iterator
+import json
 {%- if include_ai %}
 from types import SimpleNamespace
 {%- endif %}
-{%- if include_auth %}
 from typing import Any
-{%- endif %}
 
 from fastapi.testclient import TestClient
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services import change_queue
-from tests._change_queue import executed, note_type
-from tests.web.dom import one, select, text
+from app.services.change_queue import ChangeDisplayRow
+from tests._change_queue import KINDS, LetterPayload, _describe, executed, note_type
+from tests.web.dom import none, one, select, text
 
 NOTE = "test.card_note"
+LETTER = "test.card_letter"
 
 
 @pytest.fixture(autouse=True)
@@ -235,6 +236,127 @@ async def test_a_batch_approves_all_but_the_vetoed_rows(
     assert executed == ["keep"]
     card = text(one(resolved.text, "[data-change-batch]"))
     assert "Approved" in card and "Rejected" in card
+
+
+def test_an_editable_card_opens_its_form_prefilled(hx_user: TestClient) -> None:
+    """A type that lets the reader put their own words on a card first
+    (``editable``) offers Edit: the one dialog, every field the reader may
+    change prefilled as proposed, a select where the type names choices."""
+    with note_type(
+        LETTER,
+        payload_model=LetterPayload,
+        editable=True,
+        edits=("text", "kind"),
+        choices={"kind": KINDS},
+    ):
+        change_id = hx_user.post(
+            "/api/v1/changes",
+            json={"change_type": LETTER, "payload": {"text": "hi", "to": "box"}},
+        ).json()["id"]
+        card = hx_user.get(f"/partials/changes/{change_id}").text
+        form = hx_user.get(f"/partials/changes/{change_id}/edit").text
+
+    edit = one(card, "[data-change] [data-edit]")
+    assert edit.get("hx-get") == f"/partials/changes/{change_id}/edit"
+    assert one(form, 'input[name="text"]').get("value") == "hi"
+    assert one(form, 'select[name="kind"] option[selected]').get("value") == "note"
+    none(form, 'input[name="to"]')
+
+
+def test_a_card_that_is_answered_not_edited_has_no_form(hx_user: TestClient) -> None:
+    change_id = _propose(hx_user, "hi")
+
+    card = hx_user.get(f"/partials/changes/{change_id}").text
+
+    none(card, "[data-edit]")
+    assert hx_user.get(f"/partials/changes/{change_id}/edit").status_code == 404
+
+
+def test_saving_the_form_redraws_every_copy_of_the_card(hx_user: TestClient) -> None:
+    """Saved, the dialog closes and every copy of the card on the page (the
+    thread's and the waiting list's) fetches itself again; a revision the
+    contract refuses comes back to the form with why, as typed."""
+    with note_type(LETTER, payload_model=LetterPayload, editable=True):
+        change_id = hx_user.post(
+            "/api/v1/changes", json={"change_type": LETTER, "payload": {"text": "hi"}}
+        ).json()["id"]
+        url = f"/partials/changes/{change_id}"
+        card = hx_user.get(url).text
+        refused = hx_user.post(f"{url}/edit", data={"text": "hi", "to": "x" * 21})
+        saved = hx_user.post(f"{url}/edit", data={"text": "bye", "to": ""})
+        redrawn = hx_user.get(url).text
+
+    revised = json.loads(saved.headers["HX-Trigger"])["change:revised"]
+    listens = one(card, "[data-change]")
+    assert listens.get("hx-get") == url
+    assert revised["card"] in listens.get("hx-trigger", "")
+    assert refused.status_code == 422
+    one(refused.text, "[role=alert]")
+    assert one(refused.text, 'input[name="to"]').get("value") == "x" * 21
+    assert saved.status_code == 200
+    assert "dialog:close" in saved.headers["HX-Trigger-After-Settle"]
+    assert "bye" in text(one(redrawn, "[data-change]"))
+
+
+async def test_a_card_shows_the_pictures_its_type_names(
+    hx_user: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+    files: Any,
+) -> None:
+    """``scan``: a card that carries pictures (a scanned page, a photo) draws
+    each one its rows mark, served from where its type says it is stored."""
+    keys = [
+        await files.put(b"\xff\xd8\xff first", content_type="image/jpeg"),
+        await files.put(b"\x89PNG second", content_type="image/png"),
+    ]
+
+    async def pictured(
+        db: AsyncSession, payloads: list[Any], owner: int | None
+    ) -> list[list[ChangeDisplayRow]]:
+        pages = [ChangeDisplayRow(label="Page", value=str(n), scan=True) for n in (1, 2)]
+        return [[*rows, *pages] for rows in await _describe(db, payloads, owner)]
+
+    async def where(db: AsyncSession, payload: Any, owner: int | None) -> list[str]:
+        return keys
+
+    with note_type(LETTER, describe=pictured, scan=where):
+        row = await change_queue.propose(
+            async_db_session, LETTER, {"text": "two pages"}, owner_user_id=acting_owner_user_id
+        )
+        await async_db_session.commit()
+        url = f"/partials/changes/{row.id}"
+        card = hx_user.get(url).text
+        second = hx_user.get(f"{url}/scan", params={"page": 1})
+        past = hx_user.get(f"{url}/scan", params={"page": 2})
+
+    srcs = [img.get("src") for img in select(card, "[data-change] img[data-scan]")]
+    assert srcs == [f"{url}/scan", f"{url}/scan?page=1"]
+    assert second.status_code == 200
+    assert second.headers["content-type"] == "image/png"
+    assert second.content == b"\x89PNG second"
+    assert past.status_code == 404
+
+
+def test_a_card_without_pictures_has_none_to_serve(hx_user: TestClient) -> None:
+    change_id = _propose(hx_user, "hi")
+
+    assert hx_user.get(f"/partials/changes/{change_id}/scan").status_code == 404
+
+
+def test_approving_a_card_runs_its_follow_up(hx_user: TestClient) -> None:
+    followed: list[str] = []
+
+    async def follow(result: dict[str, Any]) -> None:
+        followed.append(result["noted"])
+
+    with note_type(LETTER, after_commit=follow):
+        change_id = hx_user.post(
+            "/api/v1/changes", json={"change_type": LETTER, "payload": {"text": "hi"}}
+        ).json()["id"]
+        hx_user.post(f"/partials/changes/{change_id}/approve")
+
+    assert followed == ["hi"]
 
 
 async def test_the_review_list_holds_only_what_waits(

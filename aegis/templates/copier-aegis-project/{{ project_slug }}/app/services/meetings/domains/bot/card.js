@@ -274,13 +274,14 @@
     until = at + sound.duration;
     return until - voice.currentTime;
   }
-  // Key taps into the mic (taps.js, read in ahead of this where on) while
-  // it works on the request in focus and nothing it says is playing.
+  // Its working sound into the mic (taps.js, read in ahead of this where
+  // on) while it works on the request in focus and nothing it says plays.
   function typing() {
-    const working = card.focus?.working && window.keyTaps;
+    const working = card.focus?.working && window.workingSound;
     if (!working || (voice && until > voice.currentTime)) return keys?.stop();
     const out = microphone();
-    keys ??= window.keyTaps(voice, out);
+    keys ??= window.workingSound(card.sound, voice, out);
+    if (!keys) return;
     voice.resume();
     keys.start();
   }

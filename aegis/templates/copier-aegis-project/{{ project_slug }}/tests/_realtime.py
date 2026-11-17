@@ -34,9 +34,15 @@ ENGINE = SimpleNamespace(
 class FakeSession:
     audio_input_sample_rate = 16_000
     audio_output_sample_rate = 24_000
+    speaks_after_audio = False  # its voice waits for the caller's first audio
 
     def __init__(
-        self, events: list[Any], *, after_audio: bool, ends: bool, after_text: bool
+        self,
+        events: list[Any],
+        *,
+        after_audio: bool,
+        ends: bool,
+        after_text: bool,
     ) -> None:
         self.events = events
         self.after_audio = after_audio
@@ -85,6 +91,8 @@ class FakeSession:
 
     def stream_audio(self) -> AsyncIterator[bytes]:
         async def voice() -> AsyncIterator[bytes]:
+            if self.speaks_after_audio and await self._until("_heard"):
+                return
             yield VOICE
             await self._flag("_closed").wait()
 

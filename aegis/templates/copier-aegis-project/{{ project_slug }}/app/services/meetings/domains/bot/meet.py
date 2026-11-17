@@ -22,7 +22,7 @@ import contextlib
 from contextlib import asynccontextmanager
 from enum import StrEnum
 import re
-from typing import Any, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 from playwright.async_api import Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -193,6 +193,10 @@ class MeetPage(Steps):
         """On the page and visible: Meet keeps controls it is not showing."""
         return await self.page.locator(selector).first.is_visible()
 
+    async def _there(self, selector: str) -> bool:
+        """On the page, shown or not: a part Meet adds with no size yet."""
+        return bool(await self.page.locator(selector).count())
+
     async def _click_if_visible(self, selector: str) -> bool:
         """Click it if it is there. The page can drop it between the look
         and the click (the call ends): then it was not there."""
@@ -205,11 +209,16 @@ class MeetPage(Steps):
         return True
 
     async def _work(
-        self, step: str, selector: str, shortcut: str = "", shows: str = ""
+        self,
+        step: str,
+        selector: str,
+        shortcut: str = "",
+        shows: str = "",
+        state: Literal["attached", "visible"] = "visible",
     ) -> bool:
         """``step``'s control clicked by its label, else Meet's ``shortcut``
         pressed (once a call) where it has one, worked if ``shows`` comes
-        up; kept as how it went."""
+        up (``state``: on the page, or visible too); kept as how it went."""
         if await self._click_if_visible(selector):
             self.took(step, LABEL)
             return True
@@ -219,7 +228,9 @@ class MeetPage(Steps):
             await self.page.evaluate("document.activeElement?.blur()")
             await self.page.keyboard.press(shortcut)
             try:
-                await self.page.locator(shows).first.wait_for(timeout=SHORTCUT_WAIT_MS)
+                await self.page.locator(shows).first.wait_for(
+                    state=state, timeout=SHORTCUT_WAIT_MS
+                )
             except PlaywrightTimeoutError:
                 pass
             else:
@@ -379,11 +390,13 @@ class MeetPage(Steps):
             )
             with contextlib.suppress(PlaywrightTimeoutError):
                 await offered.first.wait_for(timeout=wait_ms)
-        if await self._shown(CAPTIONS_REGION):
+        # On once Meet has added the region: with nobody speaking yet it
+        # has no size, so it is never visible until someone does.
+        if await self._there(CAPTIONS_REGION):
             self.took(CAPTIONS, ALREADY)
             return True
         return await self._work(
-            CAPTIONS, CAPTIONS_BUTTON, CAPTIONS_SHORTCUT, CAPTIONS_REGION
+            CAPTIONS, CAPTIONS_BUTTON, CAPTIONS_SHORTCUT, CAPTIONS_REGION, "attached"
         )
 
 

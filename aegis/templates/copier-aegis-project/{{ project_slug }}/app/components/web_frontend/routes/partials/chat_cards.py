@@ -72,6 +72,8 @@ async def drawn(
     # drawn from its hops, not kept with them.
     if isinstance(kept, PathCard) and kept.node:
         context |= await overseer_replay.wiring(kept.node)
+    elif isinstance(kept, PathCard) and kept.inside:
+        context |= await overseer_replay.inside(kept.inside)
     elif isinstance(kept, PathCard) and kept.path:
         context |= await overseer_replay.card(kept.path, large)
     return kind.template, context

@@ -43,7 +43,7 @@ While Illiana is answering, the card shows the question, what she is looking up,
 
 The bot joins with its camera on (unless its Camera switch is off), so its card shows from the first moment; it joins muted, unmutes only to answer, and never speaks to announce itself.
 
-While Illiana works on a question and has said nothing yet, the call hears soft key taps instead of her saying what she is looking up: the same taps as Overseer's voice chat, set by its working sound (`VOICE_WORKING_SOUND`, or the active voice profile).
+While Illiana works on a question and has said nothing yet, the call hears her working instead of her saying what she is looking up: the same sound as Overseer's voice chat (key taps, papers, or both), set by its working sound (`VOICE_WORKING_SOUND`, or the active voice profile).
 
 The bot hears a line put to Illiana as Meet captions it: the page tells the bot within a fraction of a second whenever a caption naming her, a reply to her, or anything said over her moves, so the card follows the words as they are said and a stop takes effect at once. Other talk is picked up on the bot's regular look, every couple of seconds.
 

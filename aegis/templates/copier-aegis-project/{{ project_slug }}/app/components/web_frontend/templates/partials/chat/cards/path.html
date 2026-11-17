@@ -8,6 +8,7 @@
 {% from "components/macros/icons.html" import icon %}
 {% set path = card["path"] %}
 {% if card["node"] %}{% set said = "Wiring · " ~ path_wired %}
+{% elif card["inside"] %}{% set said = "Inside · " ~ path_inside %}
 {% elif not path["staged"] %}{% set said = "Replay · " ~ path["method"] ~ " " ~ path["path"] ~ " · " ~ path["status"] ~ " in " ~ path["ms"] ~ " ms" %}
 {% elif path["method"] %}{% set said = "Code path · " ~ path["method"] ~ " " ~ path["path"] ~ " · read from the code, not run" %}
 {% else %}{% set said = "Flow · along the map's lines" %}{% endif %}

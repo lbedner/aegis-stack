@@ -27,3 +27,17 @@ def test_every_playwright_pin_names_the_same_version() -> None:
 
     assert all(len(found) == 1 for found in pins.values()), pins
     assert len({found[0] for found in pins.values()}) == 1, pins
+
+
+def test_the_browser_has_room_for_a_meeting() -> None:
+    """A live Meet call's tab outgrew 2 GiB, shared with ``/dev/shm``: the
+    kernel killed it mid call ("Target crashed"). 4 GiB by default, and an
+    operator can give it more (``BROWSER_MEMORY``)."""
+    from tests.core._compose import load, render
+
+    browser = load(render("docker-compose.yml.jinja", include_browser=True))[
+        "services"
+    ]["browser"]
+    memory = browser["deploy"]["resources"]["limits"]["memory"]
+    found = re.fullmatch(r"\$\{BROWSER_MEMORY:-(\d+)G\}", memory)
+    assert found and int(found[1]) >= 4, memory

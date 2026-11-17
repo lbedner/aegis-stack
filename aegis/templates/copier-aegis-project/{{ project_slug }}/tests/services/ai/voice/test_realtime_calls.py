@@ -259,6 +259,28 @@ class TestACallKnowsWhoSheIs:
         assert told.startswith("Keep it short.")
         assert 'Say "Traefik" as "traffic".' in told
 
+    @pytest.mark.asyncio
+    async def test_gpt_lives_voice_hears_the_thread_so_far(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The voice that speaks on GPT-Live heard only the call manners:
+        asked for "the wiring of the thing you were just talking about", it
+        made up a power source and a sensor harness, and said it had no
+        earlier conversation (2026-11-16). It hears the thread as every
+        other engine does, and when to hand a question to the backend."""
+        _, realtime = await _built(
+            monkeypatch,
+            model="openai:gpt-live-1",
+            instructions="Keep it short.",
+            history="User: how is the browser built?",
+        )
+
+        from app.services.ai.domains.voice.live_engines import LIVE_HANDS_OFF
+
+        told = realtime["model_settings"]["openai_live_instructions"]
+        assert "User: how is the browser built?" in told
+        assert LIVE_HANDS_OFF in told
+
 
 async def _built(
     monkeypatch: pytest.MonkeyPatch, held: str | None = None, **asked: Any
@@ -282,6 +304,8 @@ async def _built(
     built: dict[str, Any] = {}
     prompts: list[str] = []
 
+    history = asked.pop("history", "")
+
     async def build_turn(conversation: Any, agent_config: Any, **kwargs: Any) -> Any:
         built.update(kwargs, slug=agent_config.slug)
         built["held"] = conversation.metadata.get(chat.AGENT_KEY)
@@ -289,7 +313,7 @@ async def _built(
         agent = SimpleNamespace(
             system_prompt_parts=_no_parts, realtime=lambda model, **kw: kw
         )
-        return SimpleNamespace(agent=agent, conversation_context="")
+        return SimpleNamespace(agent=agent, conversation_context=history)
 
     async def _no_parts() -> list[Any]:
         return []

@@ -308,16 +308,16 @@ async def _start(
     session: AsyncSession, meeting: Meeting, account: BotAccount, voice: Any | None
 ) -> card.Start:
     """The card the bot joins as: the name it joins as, its agent's
-    (``account``) picture and camera setting, and whether its keys tap while
-    it works (its ``voice``'s working sound)."""
+    (``account``) picture and camera setting, and what plays while it works
+    (its ``voice``'s working sound)."""
     kept = await image_named(session, account.name)
     image = None
     if kept is not None:
         encoded = base64.b64encode(kept.data).decode()
         image = f"data:{kept.content_type};base64,{encoded}"
-    taps = getattr(voice, "VOICE_WORKING_SOUND", None) == "typing"
+    sound = getattr(voice, "VOICE_WORKING_SOUND", None) or "none"
     return card.Start(
-        name=meeting.bot_name, image=image, camera=account.camera, taps=taps
+        name=meeting.bot_name, image=image, camera=account.camera, sound=sound
     )
 
 

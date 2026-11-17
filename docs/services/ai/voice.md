@@ -432,9 +432,11 @@ call and a tool to end it.
 
 - **Working, not narrating.** From the moment your turn ends until the
   agent starts to speak, and while it runs a step, the call bar shows it
-  working and the page plays soft key taps (the profile's "while it works"
-  sound) instead of the agent announcing its lookups: you know you were
-  heard before the answer comes.
+  working, and once the wait is long enough to notice (a second and a
+  half) the page plays the profile's "while it works" sound: key taps
+  (`typing`), papers shuffled (`papers`), the two mixed (`desk`), or
+  nothing (`none`). The agent does not announce its lookups: you know you
+  were heard before the answer comes.
 - **The quiet.** No provider ends a call on silence, and a call bills while
   it is open, so the page counts real quiet: nobody speaking (from your
   first sound, where the provider reports it: OpenAI and xAI do, Gemini

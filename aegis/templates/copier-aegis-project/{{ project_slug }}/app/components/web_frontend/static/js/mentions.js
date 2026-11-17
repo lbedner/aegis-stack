@@ -79,18 +79,21 @@
     return drawn.get(card);
   };
 
-  // ``key``'s part and its lines lit on ``card`` (none: nothing lit); the
-  // part already lit is left as it is.
+  // ``key``'s part and its lines lit on ``card`` (none: nothing lit); what
+  // they do not join dims, as hovering a part on the map does (the map's
+  // own ``applyMapFocus``, app.js). The part already lit is left as it is.
   const lit = new WeakMap();
   function light(card, key) {
     if ((lit.get(card) ?? null) === key) return;
     lit.set(card, key);
-    card.querySelectorAll('[data-lit]').forEach((el) => { el.removeAttribute('data-lit'); });
+    for (const el of card.querySelectorAll('[data-lit]')) el.removeAttribute('data-lit');
+    if (key) card.dataset.hover = key;
+    else delete card.dataset.hover;
+    applyMapFocus(card);
     if (!key) return;
     const at = CSS.escape(key);
-    card
-      .querySelectorAll(`[data-node="${at}"], .map-link[data-from="${at}"], .map-link[data-to="${at}"]`)
-      .forEach((el) => { el.setAttribute('data-lit', ''); });
+    const parts = `[data-node="${at}"], .map-link[data-from="${at}"], .map-link[data-to="${at}"]`;
+    for (const el of card.querySelectorAll(parts)) el.setAttribute('data-lit', '');
   }
 
   // The names in a settled answer's text, each marked in place for

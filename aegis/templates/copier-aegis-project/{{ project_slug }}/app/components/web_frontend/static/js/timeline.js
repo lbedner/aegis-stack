@@ -187,7 +187,7 @@ function player(root) {
     if (reduced) {
       running = setInterval(() => {
         t = stepFrom(steps, t, 1);
-        if (t >= end) stop();
+        if (t >= end || !root.checkVisibility()) stop();
         else show();
       }, STEP_HOLD_MS);
       show();
@@ -197,7 +197,8 @@ function player(root) {
     const frame = (now) => {
       t = tick(steps, t, now - last, speed);
       last = now;
-      if (t >= end) {
+      // Hidden (a stage card not up): it stops, not playing out unseen.
+      if (t >= end || !root.checkVisibility()) {
         stop();
         return;
       }

@@ -64,13 +64,28 @@
   thinking, to an operator. Overseer AI > Costs gains Models (each model by
   what it was used for) and Calls (each call with the answers it handed
   off), and `ai costs` prints both.
+- **What is inside a service, on a card.** Asked how a service is built,
+  the assistant draws a path card with `inside`: the map's own zoom into
+  that service, each piece in its lane. A service's wiring card now stops
+  at its own lines and what its sub-services reach outside it, instead of
+  every line its sub-services draw inside. A queue opens up into its tasks
+  only on a wiring that holds it (Redis, the queue itself), and tasks
+  calling a part are drawn from their queue: the AI service's wiring went
+  from 125 lines to 25.
+- **Papers and a desk.** A voice's working sound can be papers shuffled
+  (`papers`) or keys and papers mixed (`desk`), beside key taps, in the
+  chat, on calls and from the meetings bot; it starts only once a wait is
+  long enough to notice.
 - **A stage for a live call.** Beside the chat's phone, a full-screen page
   (`<chat mount>/stage`) holds the call on the same socket: the assistant's
-  figure in the middle shows her listening, speaking and pulling data up,
-  and each card she draws lands in front of her as it is drawn, newest
-  first, the older ones in a strip below; any one opens larger, and a path
-  card plays there. It carries on the conversation the chat had open, so
-  the thread stays the record.
+  figure in the middle shows her listening, speaking and pulling data up.
+  Once she draws a card she steps aside as a speaker tile (her name and the
+  sentence she is on) and the card takes the stage, one at a time: a tab
+  strip below names every card she drew, the one up underlined, and a
+  click puts another up. A map shows at
+  full strength there, and the part she names lights with what it joins,
+  only the unrelated dimming (in the chat too). It carries on the
+  conversation the chat had open, so the thread stays the record.
 - **MCP tokens without auth.** With MCP and a database, the webserver
   serves `/mcp` and tokens can be made, listed and revoked (Overseer's MCP
   page, `mcp-tokens`, the token API) without the auth service. Such a token

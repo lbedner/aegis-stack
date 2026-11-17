@@ -56,7 +56,7 @@
   {% if calls %}
   {# A card drawn mid-call, which the call announces: held at the foot of
      the thread until the saved turn redraws the thread. #}
-  <template id="chat-live-card"><li {{ assistant_row() }} data-live-card></li></template>
+  <template id="chat-live-card"><li {{ assistant_row() }}></li></template>
   {# Her turn on a call as it runs: each step she takes, under her name, as
      a typed turn shows them, until the saved turn redraws the thread. #}
   <template id="chat-live-turn"><li {{ assistant_row() }} data-live-turn>{{ turn_head(assistant) }}</li></template>

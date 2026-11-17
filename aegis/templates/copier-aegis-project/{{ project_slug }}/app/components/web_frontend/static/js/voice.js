@@ -6,8 +6,8 @@
 
    How it is heard is the server's, on the mic as data-voice: `reply`
    "live" speaks each sentence as soon as it is complete, "answer" plays
-   the settled answer; `sound` "typing" plays soft key taps while the
-   assistant works and has said nothing yet. Any answer's Listen button
+   the settled answer; `sound` is what plays while the assistant works and
+   has said nothing yet (taps.js: keys, papers, or both). Any answer's Listen button
    plays it on demand.
 
    Nothing is recorded until the microphone is pressed - that is when the
@@ -54,18 +54,28 @@
     if (state === 'idle') say(null);
   };
 
-  // --- Working: soft key taps until it speaks (taps.js) ---------------------
+  // --- Working: its working sound until it speaks (taps.js) ----------------
   let ear = null; // the AudioContext, made on the mic press that allows it
   let keys = null;
   let quiet = null;
+  // Only once the wait is long enough to notice: on a call nearly every
+  // answer is owed a moment, and a burst of taps before each was noise.
+  const TYPING_AFTER_MS = 1500;
+  let typingSoon = null;
   const startTyping = () => {
-    if (voice().sound !== 'typing' || !ear) return;
-    ear.resume();
-    keys ??= keyTaps(ear, ear.destination);
-    keys.start();
+    if (!ear || typingSoon !== null || keys?.on) return;
+    typingSoon = setTimeout(() => {
+      typingSoon = null;
+      keys ??= workingSound(voice().sound, ear, ear.destination);
+      if (!keys) return; // "none"
+      ear.resume();
+      keys.start();
+    }, TYPING_AFTER_MS);
   };
   const stopTyping = () => {
     clearTimeout(quiet);
+    clearTimeout(typingSoon);
+    typingSoon = null;
     keys?.stop();
   };
 
@@ -281,6 +291,8 @@
   // A sentence ends at . ! or ? before a space, or at a line break (a list
   // item or a heading has no full stop).
   const ENDS = /[.!?](?=\s)|\n/;
+  // The sentence ``text`` ends on, by the same rule.
+  const lastSentence = (text) => text.trim().split(ENDS).pop().trim();
   const cut = () => {
     for (let at = pending.search(ENDS); at !== -1; at = pending.search(ENDS)) {
       enqueue(pending.slice(0, at + 1));
@@ -521,22 +533,15 @@
     call.step = null;
     happen({ type: 'step', on: false });
   };
-  const STAGE_FRONT = 3; // cards kept in view on the stage; the rest go to its strip
-  // A drawn card's new place (stage.html, else the thread's foot).
-  const cardSlot = () => {
-    const front = document.getElementById('chat-stage-front');
-    if (!front) return chatThread()?.appendChild(clone('chat-live-card'));
-    front.prepend(clone('chat-live-card'));
-    while (front.children.length > STAGE_FRONT) document.getElementById('chat-stage-strip').prepend(front.lastElementChild);
-    return front.firstElementChild;
-  };
+  // A drawn card's new place: the stage's (stage.js), else the thread's foot.
+  const cardSlot = () => window.chatStage?.slot() ?? chatThread()?.appendChild(clone('chat-live-card'));
   // The card she drew for the answer she is giving, wherever it is now:
   // in its live slot, or in the saved turn that replaced it while she was
   // still talking (saved when written, heard after). One she drew for an
   // earlier answer is never it. On the stage nothing replaces its slot.
   const drawnCard = () => {
     if (!call?.drawn) return null;
-    if (!chatThread()) return call.slot?.isConnected ? call.slot.querySelector('[data-card="path"]') : null;
+    if (!chatThread()) return call.slot?.querySelector('[data-card="path"]') ?? null;
     return [...chatThread().querySelectorAll(`[data-card="path"][hx-get^="${call.drawn}"]`)].pop() || null;
   };
   // Its reply is done: no longer the cut one, and its steps with it.
@@ -661,6 +666,7 @@
       call.follows.push(setTimeout(() => {
         const card = drawnCard();
         if (card) mentions.follow(card, said);
+        window.chatStage?.saying(lastSentence(said)); // her speaker tile
       }, ahead * 1000));
     } else if (event.type === 'card') {
       call.drawn = event.url; // what she names lights here (``drawnCard``)
@@ -669,7 +675,11 @@
       // the saved turn keeps only the last.
       if (!call.slot?.isConnected) call.slot = cardSlot();
       if (!call.slot) return; // no chat on screen: the saved turn has it
-      htmx.ajax('GET', event.url, { target: call.slot, swap: 'innerHTML' });
+      const slot = call.slot;
+      // On the stage, at the size it asks for (``data-card-size``).
+      const size = slot.closest('[data-card-size]')?.dataset.cardSize;
+      htmx.ajax('GET', size ? `${event.url}?size=${size}` : event.url, { target: slot, swap: 'innerHTML' })
+        .then(() => window.chatStage?.loaded(slot));
     } else if (event.type === 'page') {
       pageAction(event); // chat.js: the same as a typed turn's
     } else if (event.type === 'looked') {

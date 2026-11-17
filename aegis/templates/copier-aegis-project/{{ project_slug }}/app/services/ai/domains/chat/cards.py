@@ -334,6 +334,9 @@ async def draw_card(kind: str, payload: dict[str, Any]) -> Drawn | Refused:
           it, what breaks if it fails -> path with its node (its id, a
           table's object:<name> too: what the ontology joins it to, on
           the map)
+        what is inside a service, how it is built, its pieces -> path
+          with inside (its id, service:ai): its pieces lane by lane, the
+          ways in, wiring, facade, domains, data and what it reaches
         call these a flow, a replay, a code path or its wiring, never a
           "path card"; a diagram of parts is this card, never arrows
           typed in your answer. Name its parts as the map titles them

@@ -336,6 +336,23 @@ async def test_captions_without_their_button_come_on_by_meets_shortcut(
     assert "Leave call" in (took[("captions", "shortcut")] or "")
 
 
+async def test_captions_on_with_nobody_speaking_yet_count_as_on(
+    meet: MeetPage,
+) -> None:
+    """Meet adds its captions region the moment captions come on, but with
+    nobody speaking it has no size, so it is not visible: on all the same.
+    Waiting for it to be visible missed them, and the card said "Can't see
+    captions" until someone spoke and the next beat found them."""
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate(
+        "admit(); captions.replaceChildren(); captions.style.height = '0'"
+    )
+    await _without(meet, "Turn on captions")
+
+    assert await meet.turn_on_captions()
+    assert ("captions", "shortcut") in _took(meet)
+
+
 async def test_captions_meet_draws_a_while_after_it_is_in_are_waited_for(
     meet: MeetPage,
 ) -> None:

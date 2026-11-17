@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 
 from app.core.figures import FIGURES, absent
 from app.core.tools import Refused
@@ -41,6 +41,24 @@ class ChangeDisplayRow(BaseModel):
     # This row is a picture the card carries (a scanned page, a photo),
     # drawn from where its change type's ``scan`` says it is stored.
     scan: bool | None = absent()
+    # What the line is about, beside the sentence rather than only inside
+    # it: a card holding seventy of them can total them and name their span
+    # without parsing money back out of its own prose. Cents, named so a
+    # model reading the card never takes them for dollars (an older frozen
+    # card says ``amount``); ``at`` is ISO, as the frozen card stores it.
+    amount_cents: int | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        validation_alias=AliasChoices("amount_cents", "amount"),
+    )
+    at: str | None = absent()
+    # Where the value came from, drawn on a line of its own under it.
+    note: str | None = absent()
+    # The page of a stored document the value was read off, so the card can
+    # show it beside the claim. Ids, not a URL: a decided card is frozen as
+    # JSON, and a route that moves would rewrite history.
+    document_id: int | None = absent()
+    page: int | None = absent()
 
 
 class ChangeRevision(BaseModel):

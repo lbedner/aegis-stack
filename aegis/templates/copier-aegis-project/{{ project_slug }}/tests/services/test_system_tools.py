@@ -878,6 +878,27 @@ async def test_anyone_but_an_admin_reads_only_the_apps_data() -> None:
         assert (result_data(await tools.ontology(kind="route")))["total"] == 151
 
 
+@pytest.mark.usefixtures("model")
+async def test_anyone_but_an_admin_is_told_what_is_an_admins() -> None:
+    """Every answer says what it leaves out, and a part asked for by name
+    is refused as an admin's, not as unknown: the model tells the user,
+    where an empty list had it look further."""
+    with acting_as(None, "assistant", admin=False):
+        answers = [
+            result_data(await tools.ontology()),
+            result_data(await tools.ontology(kind="route")),
+            result_data(await tools.ontology(node="object:payment_charge")),
+        ]
+        for hidden in ("service:payment", ["object:payment_charge", "route:x"]):
+            with pytest.raises(ValueError, match="an admin's"):
+                await tools.ontology(node=hidden)
+    assert [a["note"] for a in answers] == [tools.DOMAIN_ONLY] * 3
+
+    with acting_as(None, "assistant", admin=True):
+        seen = result_data(await tools.ontology(kind="route"))
+    assert tools.DOMAIN_ONLY not in (seen["note"] or "")
+
+
 async def test_a_routes_dry_path_is_an_admins(app: object) -> None:
     """Every hop it can take, each at its line: the code's, so an admin's."""
     with acting_as(None, "assistant", admin=True):

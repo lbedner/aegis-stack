@@ -6,6 +6,9 @@ component, not with either frontend."""
 
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+import hashlib
+import json
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -107,9 +110,10 @@ class FakeClient(OllamaEngine):
     async def get_server_status(self) -> InferenceServerStatus:
         return self.status
 
-    async def _move(self, action: str, model_name: str) -> bool:
+    async def _move(self, action: str, model_name: str) -> None:
         FakeClient.calls.append((action, model_name))
-        return self.loaded
+        if not self.loaded:
+            raise httpx.HTTPError("the server refused")
 
 
 def serve(
@@ -144,3 +148,19 @@ def serving(routes: dict[str, Any]) -> Callable[[httpx.Request], httpx.Response]
 def down(request: httpx.Request) -> httpx.Response:
     """A ``MockTransport`` handler for a server that is not there."""
     raise httpx.ConnectError("refused", request=request)
+
+
+def pulled(ollama: Path, repo: str, tag: str, data: bytes, kind: str = "") -> Path:
+    """A model Ollama pulled onto disk (``ollama_library``): its blob, and a
+    manifest naming it; a GGUF model's layer unless ``kind`` says otherwise."""
+    from app.components.inference.ollama_library import GGUF_LAYER
+
+    digest = "sha256:" + hashlib.sha256(data).hexdigest()
+    blob = ollama / "blobs" / digest.replace(":", "-")
+    blob.parent.mkdir(parents=True, exist_ok=True)
+    blob.write_bytes(data)
+    manifest = ollama / "manifests" / repo / tag
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    layer = {"mediaType": kind or GGUF_LAYER, "digest": digest}
+    manifest.write_text(json.dumps({"layers": [layer]}))
+    return blob

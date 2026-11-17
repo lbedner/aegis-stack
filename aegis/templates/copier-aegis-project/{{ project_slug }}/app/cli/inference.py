@@ -5,21 +5,29 @@ inference API:
 - ``inference speech`` - what it reports, and its voices by accent and gender.
 - ``inference speak "a line" -v af_heart`` - the line said, into an MP3.
 - ``inference speech-model unload|reload`` - its model out of memory, or back.
+- ``inference link-ollama`` - Ollama's GGUF models into llama-server's
+  ``--models-dir`` (``app.components.inference.ollama_library``).
+- ``inference llama`` - that folder served by a llama-server router, here
+  (``make llama``).
 """
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlsplit
 
 import typer
 
 from app.cli import theme
+from app.components.inference.llamacpp import LlamaCppEngine, router_command
+from app.components.inference.ollama_library import link_ollama as link
 from app.core import speech_server
 from app.core.config import settings
 
 app = typer.Typer(
     name="inference",
-    help="The local inference servers: the speech server.",
+    help="The local inference servers: the speech server, and llama.cpp's models.",
     no_args_is_help=True,
 )
 
@@ -76,3 +84,52 @@ async def speech_model(
     except (ValueError, speech_server.SpeechServerError) as exc:
         theme.fail(str(exc))
     theme.good(f"{speech_server.NAME}: {action}ed")
+
+
+def _folders() -> tuple[Path, Path]:
+    """Ollama's folder, and the one a llama-server router serves."""
+    return (
+        Path(settings.OLLAMA_MODELS).expanduser(),
+        Path(settings.LLAMACPP_MODELS_DIR).expanduser(),
+    )
+
+
+async def _link(ollama: Path, folder: Path) -> None:
+    linked = await asyncio.to_thread(link, folder, ollama)
+    theme.good(f"Linked {len(linked)} of Ollama's models into {folder}")
+    for name in linked:
+        typer.echo(f"  {name}")
+
+
+@app.command("link-ollama")
+async def link_ollama() -> None:
+    """Link Ollama's GGUF models into llama-server's --models-dir
+    (LLAMACPP_MODELS_DIR)."""
+    ollama, folder = _folders()
+    if not (ollama / "manifests").is_dir():
+        theme.fail(f"No Ollama models at {ollama} (OLLAMA_MODELS)")
+    await _link(ollama, folder)
+    typer.echo("Serve the folder: make llama")
+
+
+@app.command()
+async def llama() -> None:
+    """Serve llama.cpp's models on this machine (make llama): Ollama's
+    linked in when it is here, then this process becomes a llama-server
+    router over LLAMACPP_MODELS_DIR, on LLAMACPP_BASE_URL's port, at
+    LLAMACPP_CONTEXT, with LLAMACPP_ARGS. Ctrl-C stops it."""
+    ollama, folder = _folders()
+    if (ollama / "manifests").is_dir():
+        await _link(ollama, folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    argv = router_command(
+        str(folder),
+        urlsplit(LlamaCppEngine.configured_url()).port or 8080,
+        settings.LLAMACPP_CONTEXT,
+        settings.LLAMACPP_ARGS,
+    )
+    theme.good(" ".join(argv))
+    try:
+        os.execvp(argv[0], argv)
+    except FileNotFoundError:
+        theme.fail("llama-server is not installed: brew install llama.cpp")

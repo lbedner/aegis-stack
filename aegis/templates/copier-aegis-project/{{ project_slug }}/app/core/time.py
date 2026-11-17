@@ -79,3 +79,24 @@ def shift_month(anchor: date, delta: int) -> date:
     """
     index = (anchor.year * 12 + anchor.month - 1) + delta
     return date(index // 12, index % 12 + 1, 1)
+
+
+# ``short_date``'s own ``today`` argument shadows the function.
+_today = today
+
+
+def short_date(value: date | datetime | str | None, today: date | None = None) -> str:
+    """``Jul 15`` this year, ``Jul 15, 2025`` otherwise. Blank stays blank."""
+    if not value:
+        return ""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return value
+    if isinstance(value, datetime):
+        value = value.date()
+    label = f"{value:%b} {value.day}"
+    if value.year == (today or _today()).year:
+        return label
+    return f"{label}, {value.year}"

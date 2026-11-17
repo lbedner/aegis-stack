@@ -259,6 +259,10 @@ def stack() -> Stack:
     )
 
 
+# What any chat user may read (``SystemModel.domain``); the rest is an admin's.
+DOMAIN_KINDS = (Kind.OBJECT, Kind.CHANGE)
+
+
 class SystemModel(BaseModel):
     """What this app is. ``partial`` when built where nothing registered
     (a CLI, a worker): what is on disk, not what runs."""
@@ -278,7 +282,7 @@ class SystemModel(BaseModel):
         nodes = tuple(
             n.model_copy(update={"module": None})
             for n in self.nodes
-            if n.kind in (Kind.OBJECT, Kind.CHANGE)
+            if n.kind in DOMAIN_KINDS
         )
         kept = {n.id for n in nodes}
         edges = tuple(e for e in self.edges if e.source in kept and e.target in kept)

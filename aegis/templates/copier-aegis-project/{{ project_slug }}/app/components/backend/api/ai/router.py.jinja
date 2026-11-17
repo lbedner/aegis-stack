@@ -15,7 +15,7 @@ from app.components.backend.api.ai import memory as memory_routes
 {% endif %}
 from app.components.backend.api.ai import chat, status
 {%- if ai_backend != "memory" %}
-from app.components.backend.api.ai import analytics
+from app.components.backend.api.ai import analytics, cards
 {%- endif %}
 {%- if ai_voice %}
 from app.components.backend.api.ai import speech
@@ -76,6 +76,7 @@ router.include_router(chat.router)
 router.include_router(status.router)
 {%- if ai_backend != "memory" %}
 router.include_router(analytics.router)
+router.include_router(cards.router)
 {%- endif %}
 {%- if ai_voice %}
 router.include_router(speech.router)

@@ -3,6 +3,7 @@ provider's homepage by the shared fetcher (``app.core.brand_icons``), once,
 and only where the org has none. Lab avatars cover open-weight models;
 this covers the API providers they never reach."""
 
+import base64
 from typing import Any
 
 import pytest
@@ -45,6 +46,29 @@ async def test_a_miss_leaves_the_initial(
     assert await provider_marks.attach_provider_marks(etl_session) == 0
     org = etl_session.exec(select(LLMOrg).where(LLMOrg.slug == "groq")).one()
     assert org.icon_b64 is None
+
+
+async def test_llamacpp_wears_the_mark_it_ships(
+    etl_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """llama.cpp's homepage is a GitHub repo (GitHub's logo), so the app
+    ships the mark llama.cpp's own web UI wears, asks no one for it, and
+    writes it over whatever an earlier sync stored."""
+    # An earlier sync stored GitHub's logo, its homepage's: the shipped
+    # mark replaces it.
+    etl_session.add(LLMOrg(slug="llamacpp", name="llama.cpp", icon_b64="octocat"))
+    etl_session.commit()
+    asked: list[str] = []
+
+    async def fetch(domains: Any) -> dict[str, str | None]:
+        asked.extend(domains)
+        return dict.fromkeys(domains, "fetched")
+
+    monkeypatch.setattr(provider_marks, "fetch_icons", fetch)
+    assert await provider_marks.attach_provider_marks(etl_session) == 1
+    org = etl_session.exec(select(LLMOrg).where(LLMOrg.slug == "llamacpp")).one()
+    assert base64.b64decode(org.icon_b64 or "").startswith(b"\x89PNG")
+    assert asked == []
 
 
 def test_every_provider_has_a_homepage() -> None:

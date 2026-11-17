@@ -28,14 +28,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ValidationError, computed_field, model_validator
 
-from app.core.chat_transcript import card_markers
+from app.core.chat_transcript import DRAWN_CARD, card_markers
 from app.core.db import get_async_session
 from app.core.figures import FIGURES, misfit, shape_of
 from app.core.tools import Refused, current_conversation_id, register_tool
 from app.services.ai.domains.chat import path_card
 from app.services.ai.models.chat_card import ChatCard
 
-MARKER = "chat_card"
+MARKER = DRAWN_CARD
 # Money is integer cents.
 Unit = Literal["money", "count", "percent"]
 
@@ -253,11 +253,17 @@ def kinds_help() -> str:
     return "\n".join(lines)
 
 
-def last_drawn(trace: list[dict[str, Any]]) -> str | None:
-    """The card a reply drew (its id, from the markers on its steps): one
-    per answer, so a redraw replaces the card before it."""
-    drawn = [m for e in trace for m in card_markers(e) if m["kind"] == MARKER]
-    return drawn[-1]["id"] if drawn else None
+def kept(row: ChatCard) -> tuple[CardKind, BaseModel] | None:
+    """A stored card's kind and payload, read through the shape the kind
+    keeps (its defaults fill in); None for a kind that is gone, or a
+    payload an old version kept in another shape."""
+    kind = lookup(row.kind)
+    if kind is None:
+        return None
+    try:
+        return kind, kind.stored.model_validate(row.payload)
+    except ValidationError:
+        return None
 
 
 async def stored_card(card_id: str) -> ChatCard | None:

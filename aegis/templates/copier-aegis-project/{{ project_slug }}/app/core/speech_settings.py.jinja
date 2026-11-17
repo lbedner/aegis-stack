@@ -23,6 +23,15 @@ class InferenceEngineSettings(BaseSettings):
 {%- if include_inference %}
 
     INFERENCE_ENGINE: str = "{{ inference_engine }}"
+    # On the host: the folder a llama-server router serves (``--models-dir``),
+    # and where Ollama keeps its pulls (its own variable, and its default),
+    # for ``inference link-ollama`` (``ollama_library``).
+    LLAMACPP_MODELS_DIR: str = "~/models"
+    OLLAMA_MODELS: str = "~/.ollama/models"
+    # The context each model is served at (the compose service's too), and
+    # any further llama-server flags for ``make llama`` (``-np 2 -kvu``).
+    LLAMACPP_CONTEXT: int = 32768
+    LLAMACPP_ARGS: str = ""
 {%- if inference_engine == "llamacpp" %}
 {%- if inference_placement == "docker" %}
     LLAMACPP_BASE_URL: str = "http://llamacpp:8080"  # the compose service

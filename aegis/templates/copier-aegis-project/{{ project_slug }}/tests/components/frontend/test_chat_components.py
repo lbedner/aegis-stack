@@ -901,3 +901,75 @@ class TestAttachmentChips:
         chip = self._chip()
         assert "order.png" in rendered(chip)
         assert any(getattr(n, "tooltip", None) == "Remove" for n in walk(chip))
+
+
+class TestDrawnCards:
+    """A card the assistant drew (``draw_card``) draws in the Flet chat
+    too: the marker names it, the API gives its kind and payload."""
+
+    _TREND = {
+        "kind": "trend",
+        "card": {
+            "title": "Spending by month",
+            "measure": "Spent",
+            "unit": "money",
+            "rows": [
+                {"date": "2026-08-01", "value": 61_250},
+                {"date": "2026-09-01", "value": 58_900},
+            ],
+        },
+    }
+
+    def _trace(self, *ids: str) -> list[dict[str, Any]]:
+        return [
+            {"tool": "run_code", "component": [{"kind": "chat_card", "id": i}]}
+            for i in ids
+        ]
+
+    def test_the_last_drawn_card_is_the_answers(self) -> None:
+        """One per answer, as the htmx thread draws it: a redraw (the first
+        one fixed) replaces the card before it."""
+        from app.components.frontend.controls.chat.components import (
+            components_from_trace,
+        )
+        from app.components.frontend.controls.chat.drawn_card import DrawnCard
+
+        async def fetch(card_id: str) -> dict[str, Any] | None:
+            return None
+
+        cards = components_from_trace(
+            self._trace("first", "fixed"), on_action=_noop_action, fetch_card=fetch
+        )
+        assert [c.card_id for c in cards if isinstance(c, DrawnCard)] == ["fixed"]
+
+    async def test_a_chart_kind_draws_and_opens_larger(self) -> None:
+        from app.components.frontend.controls.chat.drawn_card import DrawnCard
+        from app.components.frontend.dashboard.modals.modal_sections.chart_line import (
+            LineChartCard,
+        )
+        from tests.components.frontend._tree import walk
+
+        async def fetch(card_id: str) -> dict[str, Any] | None:
+            return self._TREND
+
+        drawn: list[bool] = []
+        card = DrawnCard("abc", fetch, lambda: drawn.append(True))
+        await card.load()
+        assert card.visible
+        assert drawn == [True]  # the thread follows it to its end
+        assert any(isinstance(c, LineChartCard) for c in walk(card))
+        assert "Spending by month" in rendered(card)
+        assert card.on_click is not None
+
+    @pytest.mark.parametrize("body", [None, {"kind": "table", "card": {"title": "T"}}])
+    async def test_a_kind_without_a_drawing_or_a_gone_card_stays_absent(
+        self, body: dict[str, Any] | None
+    ) -> None:
+        from app.components.frontend.controls.chat.drawn_card import DrawnCard
+
+        async def fetch(card_id: str) -> dict[str, Any] | None:
+            return body
+
+        card = DrawnCard("abc", fetch)
+        await card.load()
+        assert not card.visible

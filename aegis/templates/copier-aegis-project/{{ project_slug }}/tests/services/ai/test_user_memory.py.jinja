@@ -450,4 +450,26 @@ class TestMemoryWritesAreCards:
 
         assert "the user this turn is for" in refused["error"]
         assert (await session.exec(select(PendingChange))).first() is None
+
+
+class TestTurnAdmin:
+    """Whether a turn is an admin's: what it was handed, else what its
+    runner already bound (the request's sign-in, the CLI's shell)."""
+
+    @pytest.mark.parametrize(
+        ("bound", "handed", "turn"),
+        [(True, None, True), (None, None, None), (True, False, False)],
+    )
+    def test_a_turn_keeps_its_runners_admin_unless_handed_one(
+        self, bound: bool | None, handed: bool | None, turn: bool | None
+    ) -> None:
+        from app.core.tools import current_admin
+
+        outer = current_admin.set(bound)
+        try:
+            with user_memory_module.memory_user("0", admin=handed):
+                assert current_admin.get() is turn
+            assert current_admin.get() is bound
+        finally:
+            current_admin.reset(outer)
 {% endif %}

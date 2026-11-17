@@ -76,7 +76,7 @@ class ModelsSection(ft.Container):
             page,
             dialog,
             total_vram_gb,
-            can_move=inference_engine_class().can_load_unload,
+            can_move=metadata.get("can_load_unload", True),
         )
 
         if rows:

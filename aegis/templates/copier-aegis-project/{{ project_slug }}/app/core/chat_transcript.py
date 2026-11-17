@@ -399,6 +399,17 @@ def card_markers(entry: dict[str, Any]) -> list[dict[str, Any]]:
     return [marker] if marker else []
 
 
+# The marker a card the assistant drew rides its script's trace entry as.
+DRAWN_CARD = "chat_card"
+
+
+def last_drawn(trace: list[dict[str, Any]]) -> str | None:
+    """The card a reply drew (its id, from the markers on its steps): one
+    per answer, so a redraw replaces the card before it."""
+    drawn = [m for e in trace for m in card_markers(e) if m["kind"] == DRAWN_CARD]
+    return drawn[-1]["id"] if drawn else None
+
+
 def salvage_identity(clipped: str) -> dict[str, Any] | None:
     """A proposal's identity from its result clipped to invalid JSON: the
     identity fields lead the result, so they survive the clip."""

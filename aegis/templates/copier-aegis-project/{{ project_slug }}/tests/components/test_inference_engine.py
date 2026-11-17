@@ -21,12 +21,19 @@ from tests._fake_ollama import down, serving
 
 # Each engine's fake server: its name in ``ENGINES`` and the JSON it
 # answers per path.
-SERVERS = [("ollama", _fake_ollama.ROUTES), ("llamacpp", _fake_llamacpp.ROUTES)]
-# What each serves: the models installed, and those loaded. Ollama has two
-# with one loaded; a single-model llama-server, its one.
+SERVERS = [
+    pytest.param("ollama", _fake_ollama.ROUTES, id="ollama"),
+    pytest.param("llamacpp", _fake_llamacpp.ROUTES, id="llamacpp"),
+    pytest.param("llamacpp", _fake_llamacpp.ROUTER, id="llamacpp-router"),
+]
+TWO = {"qwen2.5:7b", "llama3.1:8b"}
+# What each serves: the models installed, and those loaded. Ollama and a
+# llama-server router have two with one loaded; a single-model llama-server,
+# its one.
 SERVES = {
-    "ollama": ({"qwen2.5:7b", "llama3.1:8b"}, ["qwen2.5:7b"]),
-    "llamacpp": ({"qwen2.5:7b"}, ["qwen2.5:7b"]),
+    id(_fake_ollama.ROUTES): (TWO, ["qwen2.5:7b"]),
+    id(_fake_llamacpp.ROUTES): ({"qwen2.5:7b"}, ["qwen2.5:7b"]),
+    id(_fake_llamacpp.ROUTER): (TWO, ["qwen2.5:7b"]),
 }
 
 
@@ -42,7 +49,7 @@ class TestTheContract:
         self, name: str, routes: dict[str, Any]
     ) -> None:
         status = await _engine(name, serving(routes)).get_server_status()
-        installed, loaded = SERVES[name]
+        installed, loaded = SERVES[id(routes)]
 
         assert isinstance(status, InferenceServerStatus)
         assert status.available and status.version
@@ -56,7 +63,7 @@ class TestTheContract:
     ) -> None:
         models = await _engine(name, serving(routes)).fetch_models()
 
-        assert {m.model_id for m in models} == SERVES[name][0]
+        assert {m.model_id for m in models} == SERVES[id(routes)][0]
 
     async def test_a_server_that_is_down_is_unavailable_not_an_error(
         self, name: str, routes: dict[str, Any]
@@ -70,7 +77,8 @@ class TestTheContract:
         or still being loaded. A single-model server answers on the model it
         serves, whatever the turn calls it."""
         engine = _engine(name, serving(routes))
-        cold = "loading" if engine.can_load_unload else "thinking"
+        status = await engine.get_server_status()
+        cold = "loading" if status.can_load_unload else "thinking"
 
         assert await engine.waiting_reason("qwen2.5:7b") == "thinking"
         assert await engine.waiting_reason("llama3.1:8b") == cold
@@ -98,8 +106,8 @@ class TestTheContract:
     ) -> None:
         engine = _engine(name, serving(routes))
 
-        async def moved(action: str, model: str) -> bool:
-            return True
+        async def moved(action: str, model: str) -> None:
+            return None
 
         monkeypatch.setattr(engine, "_move", moved)
         monkeypatch.setattr(activity, "_tracker", activity.ActivityTracker())
@@ -130,8 +138,40 @@ async def test_a_single_model_llama_server_cannot_move_its_model() -> None:
     unload to offer, and asking for one does nothing."""
     engine = _engine("llamacpp", serving(_fake_llamacpp.ROUTES))
 
-    assert not engine.can_load_unload
+    assert not (await engine.get_server_status()).can_load_unload
     assert not await engine.move("unload", "qwen2.5:7b")
+
+
+@pytest.mark.parametrize("action", ["load", "unload"])
+async def test_a_llama_server_router_moves_a_model_by_name(action: str) -> None:
+    """A router (``--models-dir``) loads and frees its models on request,
+    as Ollama does: the pages offer the buttons."""
+    asked: list[tuple[str, bytes]] = []
+    answer = serving(_fake_llamacpp.ROUTER)
+
+    def recorded(request: httpx.Request) -> httpx.Response:
+        asked.append((request.url.path, request.content))
+        return answer(request)
+
+    engine = _engine("llamacpp", recorded)
+
+    assert (await engine.get_server_status()).can_load_unload
+    assert await engine.move(action, "llama3.1:8b")
+    assert (f"/models/{action}", b'{"model":"llama3.1:8b"}') in asked
+
+
+async def test_a_router_reports_the_context_a_model_was_trained_for() -> None:
+    """A router knows each model's trained context, and where it found it;
+    not its size until loaded, so the size stays the unknown 0."""
+    status = await _engine(
+        "llamacpp", serving(_fake_llamacpp.ROUTER)
+    ).get_server_status()
+    model = next(m for m in status.installed_models if m.name == "llama3.1:8b")
+
+    assert status.version == "b12110-cd959bae9"
+    assert model.details.context_length == 131072
+    assert model.details.format == "gguf"
+    assert model.size == 0
 
 
 async def test_llama_server_reports_what_the_ollama_shaped_list_leaves_empty() -> None:

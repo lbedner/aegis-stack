@@ -174,7 +174,7 @@ def model_rows(server: InferenceServerStatus) -> list[dict[str, Any]]:
             or "-",
             "context": format_context_window(m.details.context_length) or "-",
             "can": ", ".join(c for c in CAPABILITIES if c in m.capabilities) or "-",
-            "size": f"{m.size_gb:.1f} GB",
+            "size": f"{m.size_gb:.1f} GB" if m.size else "-",
             "modified": format_relative_time(m.modified_at),
             "state": _state(m.name, warm),
             "loaded": m.name in warm,
@@ -206,6 +206,7 @@ async def models_view() -> dict[str, Any]:
     return _reach(server, base_url) | {
         "partials": PARTIALS,
         "models": model_rows(server),
+        "can_move": server.can_load_unload,
         "models_events": MODELS_EVENTS,
         "models_event": MODELS_EVENT,
     }

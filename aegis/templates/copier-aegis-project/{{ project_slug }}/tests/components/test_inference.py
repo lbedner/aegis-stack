@@ -156,9 +156,8 @@ class TestModelMoves:
         calls: list[tuple[str, str]] = []
 
         class Recording(OllamaEngine):
-            async def _move(self, action: str, model_name: str) -> bool:
+            async def _move(self, action: str, model_name: str) -> None:
                 calls.append((action, model_name))
-                return True
 
         assert await Recording(base_url="http://x").move("load", "m") is True
         assert calls == [("load", "m")]

@@ -49,3 +49,37 @@ ROUTES: dict[str, Any] = {
         ],
     },
 }
+
+# A router (``llama-server --models-dir``), as b12110 answers: ``/props``
+# says so, and ``/v1/models`` lists every model it can serve, each with its
+# status and where it found it; ``/models/load`` and ``/models/unload`` move
+# one. It knows a model's trained context, not its size or what it can do.
+OTHER = "llama3.1:8b"
+ROUTER: dict[str, Any] = {
+    "/props": {
+        "role": "router",
+        "model_path": "none",
+        "build_info": "b12110-cd959bae9",
+    },
+    "/v1/models": {
+        "object": "list",
+        "data": [
+            {
+                "id": name,
+                "aliases": [],
+                "object": "model",
+                "owned_by": "llamacpp",
+                "status": {"value": state, "args": []},
+                "source": source,
+                "can_remove": source == "cache",
+                "context_length": 131072,
+            }
+            for name, state, source in (
+                (MODEL, "loaded", "models_dir"),
+                (OTHER, "unloaded", "cache"),
+            )
+        ],
+    },
+    "/models/load": {"success": True},
+    "/models/unload": {"success": True},
+}

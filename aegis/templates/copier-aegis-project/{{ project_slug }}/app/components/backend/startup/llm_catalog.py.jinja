@@ -11,6 +11,9 @@ failed boot.
 
 from sqlmodel import Session
 
+{% if include_inference -%}
+from app.core.config import settings
+{% endif -%}
 from app.core.db import engine
 from app.core.log import logger
 from app.services.ai.service import (
@@ -39,8 +42,8 @@ async def seed_llm_catalog() -> None:
 {%- endif %}
 {%- if include_inference %}
         # A fresh local stack's picker is empty without this (why:
-        # ``local_models_present``).
-        if local_models_present(session):
+        # ``local_models_present``), and so is a switched engine's.
+        if local_models_present(session, engine=settings.INFERENCE_ENGINE):
             logger.info("Local models already in the catalog")
             return
         result = await sync_llm_catalog(session, mode="chat", source="local")

@@ -812,21 +812,28 @@ class TestLocalModelsPresent:
     ``local_models_present``)."""
 
     def test_false_on_an_empty_catalog(self, sync_db_session: Session) -> None:
-        assert local_models_present(sync_db_session) is False
+        assert local_models_present(sync_db_session, engine="ollama") is False
 
-    def test_false_when_only_cloud_models_exist(self, sync_db_session: Session) -> None:
-        TestCatalogStats._served_model(LLMSyncService(sync_db_session), "openai", "openai/gpt-4o")
-        assert local_models_present(sync_db_session) is False
-
-    def test_true_once_a_local_tag_is_registered(self, sync_db_session: Session) -> None:
-        TestCatalogStats._served_model(LLMSyncService(sync_db_session), "ollama", "gpt-oss:20b")
-        assert local_models_present(sync_db_session) is True
-
-    def test_true_once_a_llamacpp_model_is_registered(
-        self, sync_db_session: Session
+    @pytest.mark.parametrize(
+        ("served_by", "running", "present"),
+        [
+            ("ollama", "ollama", True),
+            ("llamacpp", "llamacpp", True),
+            ("ollama", "llamacpp", False),
+            ("openai", "ollama", False),
+        ],
+    )
+    def test_only_the_running_engines_models_count(
+        self, sync_db_session: Session, served_by: str, running: str, present: bool
     ) -> None:
-        TestCatalogStats._served_model(LLMSyncService(sync_db_session), "llamacpp", "qwen2.5:7b")
-        assert local_models_present(sync_db_session) is True
+        """An install switched from Ollama to llama.cpp still has Ollama's
+        tags: asked for the engine it runs, the catalog has none of its
+        models yet, so the boot sync registers them. A cloud model is
+        never a local one."""
+        TestCatalogStats._served_model(
+            LLMSyncService(sync_db_session), served_by, "some-model"
+        )
+        assert local_models_present(sync_db_session, engine=running) is present
 
 {%- if include_inference %}
 
@@ -855,9 +862,19 @@ class TestLocalSync:
             """The maker lookup fetches from the registry (its own tests)."""
 
         monkeypatch.setattr(llm_sync_service, "attach_labs", no_labs)
-        result = await LLMSyncService(sync_db_session).sync_local()
+        marked: list[Session] = []
+
+        async def mark(session: Session) -> int:
+            marked.append(session)
+            return 0
+
+        monkeypatch.setattr(llm_sync_service, "attach_provider_marks", mark)
+        result = await LLMSyncService(sync_db_session).sync(source="local")
 
         assert result.models_added == 1 and not result.errors
+        # A local-only install never runs the cloud sync: its engine's
+        # logo is filled here too.
+        assert marked
         model = sync_db_session.exec(
             select(LargeLanguageModel).where(LargeLanguageModel.model_id == "qwen2.5:7b")
         ).one()

@@ -104,23 +104,22 @@ class LLMSyncService(UpsertMixin):
         """
         source = sync_source(source)
 
-        # The inference engine's models only
-        if source == "local":
-            return await self.sync_local(dry_run=dry_run)
-
-        # Handle "all" - sync both cloud and the engine
-        if source == "all":
-            cloud_result = await self._sync_cloud(mode_filter, dry_run)
+        if source == "local":  # the inference engine's models only
+            result = await self.sync_local(dry_run=dry_run)
+        elif source == "all":  # both cloud and the engine, merged
+            result = await self._sync_cloud(mode_filter, dry_run)
             local_result = await self.sync_local(dry_run=dry_run)
-            # Merge results
-            cloud_result.vendors_added += local_result.vendors_added
-            cloud_result.models_added += local_result.models_added
-            cloud_result.models_updated += local_result.models_updated
-            cloud_result.errors.extend(local_result.errors)
-            return cloud_result
-
-        # Default: cloud-only sync
-        return await self._sync_cloud(mode_filter, dry_run)
+            result.vendors_added += local_result.vendors_added
+            result.models_added += local_result.models_added
+            result.models_updated += local_result.models_updated
+            result.errors.extend(local_result.errors)
+        else:
+            result = await self._sync_cloud(mode_filter, dry_run)
+        if not dry_run:
+            # Once per sync, whichever ran: a local-only install never runs
+            # the cloud half, and its engine's logo is filled here too.
+            await attach_provider_marks(self.session)
+        return result
 
     async def _sync_cloud(
         self,
@@ -195,7 +194,6 @@ class LLMSyncService(UpsertMixin):
             # Prices are memoized in the shared cache for the recording
             # path; a sync is the only thing that changes them.
             await invalidate_price_cache()
-            await attach_provider_marks(self.session)
 
         logger.info(
             f"Sync complete: {result.vendors_added} vendors added, "

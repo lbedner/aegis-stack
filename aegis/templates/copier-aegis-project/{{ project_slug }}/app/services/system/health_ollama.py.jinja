@@ -131,6 +131,7 @@ def ollama_status(
             "installed_models": installed_models_info,
             "installed_models_count": server_status.installed_models_count,
             "total_vram_gb": round(server_status.total_vram_gb, 2),
+            "can_load_unload": server_status.can_load_unload,
         },
     )
 {% endif %}

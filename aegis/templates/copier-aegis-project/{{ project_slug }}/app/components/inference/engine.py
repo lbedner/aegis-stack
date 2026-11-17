@@ -110,6 +110,9 @@ class InferenceServerStatus(BaseModel):
     running_models: list[RunningModel] = []
     installed_models: list[InferenceModel] = []
     total_vram_gb: float = 0.0
+    # Whether it loads and frees models on request; a llama-server started
+    # on one model offers neither (the pages hide the buttons).
+    can_load_unload: bool = True
 
     @computed_field
     @property
@@ -133,9 +136,6 @@ class BaseInferenceEngine(ABC):
     DEFAULT_URL: ClassVar[str]  # where it is when the settings do not say
     START: ClassVar[str]  # how a person starts it, for a page it does not answer
     ADD_MODEL: ClassVar[str]  # how a model gets onto it, for an empty model list
-    # Whether it loads and frees models on request; one that serves the
-    # model it was started with offers neither (the pages hide the buttons).
-    can_load_unload: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -176,6 +176,12 @@ class BaseInferenceEngine(ABC):
         response.raise_for_status()
         return response.json()
 
+    async def _post(self, path: str, body: dict[str, Any], timeout: float) -> None:
+        """POST ``body`` to ``path``, raising the HTTP error."""
+        async with self._client(timeout) as client:
+            response = await client.post(f"{self.base_url}{path}", json=body)
+            response.raise_for_status()
+
     @abstractmethod
     async def get_server_status(self) -> InferenceServerStatus:
         """The server now; unreachable is ``available=False``, not an error."""
@@ -185,8 +191,9 @@ class BaseInferenceEngine(ABC):
         """The models it has; raises the HTTP error when it is down."""
 
     @abstractmethod
-    async def _move(self, action: str, model_name: str) -> bool:
-        """Load or unload ``model_name`` on the server; False when it did not."""
+    async def _move(self, action: str, model_name: str) -> None:
+        """Load or unload ``model_name`` on the server, raising when it
+        did not (``move`` says so, once for every engine)."""
 
     @abstractmethod
     async def _holds(self, client: httpx.AsyncClient, model: str) -> bool:
@@ -212,7 +219,12 @@ class BaseInferenceEngine(ABC):
         a move that happened goes on the Activity tab."""
         if action not in MODEL_ACTIONS:
             raise ValueError(f"Unknown model action: {action}")
-        if not await self._move(action, model_name):
+        try:
+            await self._move(action, model_name)
+        except Exception as e:
+            logger.error(
+                f"{self.LABEL} at {self.base_url} could not {action} {model_name}: {e}"
+            )
             return False
         logger.info("inference.model_moved", action=action, model=model_name)
         activity = get_inference_activity()

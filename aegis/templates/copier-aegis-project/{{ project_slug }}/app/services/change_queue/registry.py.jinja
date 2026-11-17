@@ -85,6 +85,20 @@ class ChangeExecutor:
 
 
 _EXECUTORS: dict[str, ChangeExecutor] = {}
+# Whether every service's types have been imported (``_known``).
+_loaded = False
+
+
+def _known() -> dict[str, ChangeExecutor]:
+    """The registry, every service's ``change_types`` imported on the first
+    read rather than when this package is: a service whose own modules use
+    the queue's shapes would otherwise be imported half-built by its own
+    registrants."""
+    global _loaded
+    if not _loaded:
+        _loaded = True
+        load_change_types()
+    return _EXECUTORS
 
 
 def register(executor: ChangeExecutor) -> ChangeExecutor:
@@ -99,16 +113,22 @@ def register(executor: ChangeExecutor) -> ChangeExecutor:
 
 def executor_for(change_type: str) -> ChangeExecutor:
     try:
-        return _EXECUTORS[change_type]
+        return _known()[change_type]
     except KeyError:
         raise ValueError(f"unknown change type: {change_type!r}") from None
 
 
-def editable_fields(executor: ChangeExecutor) -> list[str]:
+def known_executor(change_type: str) -> ChangeExecutor | None:
+    """``executor_for``, or None for a type no longer registered (retired,
+    or not built where the app runs) - a stored card outlives its type."""
+    return _known().get(change_type)
+
+
+def editable_fields(executor: ChangeExecutor | None) -> list[str]:
     """The fields a person - or an agent, for them - may change on a waiting
     card of this type: ``edits`` where it names them, else every text
     field; none for a type that is answered, not edited."""
-    if not executor.editable:
+    if executor is None or not executor.editable:
         return []
     texts = [
         name
@@ -119,7 +139,7 @@ def editable_fields(executor: ChangeExecutor) -> list[str]:
 
 
 def registered_change_types() -> tuple[str, ...]:
-    return tuple(sorted(_EXECUTORS))
+    return tuple(sorted(_known()))
 
 
 def change_type_contracts(admin: bool = True) -> dict[str, ChangeTypeContract]:
@@ -133,7 +153,7 @@ def change_type_contracts(admin: bool = True) -> dict[str, ChangeTypeContract]:
             object=executor.object.__tablename__ if executor.object else None,
             payload_schema=executor.payload_model.model_json_schema(),
         )
-        for name, executor in sorted(_EXECUTORS.items())
+        for name, executor in sorted(_known().items())
         if admin or not executor.admin
     }
 

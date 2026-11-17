@@ -8,6 +8,8 @@ a 404 to act on (``change_queue.deps``), never a card. Shown, a card that is
 gone (or not yours, which reads the same) says so (``card_missing``).
 A type that lets the reader edit a card first opens its form in the one
 dialog (``edit``); a card that carries pictures serves them (``scan``).
+A card's first line is its subject, wearing the face a service gives it
+(``face_provider``); a line it cites from a document draws that page.
 """
 
 from collections.abc import Awaitable, Callable
@@ -18,6 +20,7 @@ from fastapi.responses import HTMLResponse, Response
 from markupsafe import Markup
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.components.web_frontend.filters import short_date
 from app.components.web_frontend.rendering import (
     close_dialog,
     dialog,
@@ -30,7 +33,7 @@ from app.core.chat_transcript import CARD_STATUS, batch_outcome, proposer_line
 from app.core.db import get_async_db
 from app.core.log import logger
 from app.core.storage import get_storage
-from app.core.untrusted import untrusted_response
+from app.core.untrusted import untrusted_picture
 from app.services import change_queue
 from app.services.change_queue import (
     ChangeDisplayRow,
@@ -53,15 +56,29 @@ RESOLVED = "change:resolved"
 # Sent when a card is revised in the dialog, with the card's URL: every copy
 # of that card on the page fetches itself again (``_refresh``).
 REVISED = "change:revised"
-# What a stored picture is, by its first bytes: the scan route serves it as
-# that, never as the type its bytes might pass for.
-# ponytail: four signatures; a type outside them is served as a download.
-PICTURES = {
-    b"\xff\xd8\xff": "image/jpeg",
-    b"\x89PNG": "image/png",
-    b"GIF8": "image/gif",
-    b"RIFF": "image/webp",
-}
+# What a page behind listens for to redraw (``redraws_on_decision``).
+templates.env.globals["change_resolved"] = RESOLVED
+# What will change, marked on a card's line.
+WILL = Markup('<span data-will class="text-aegis-teal font-medium">{}</span>')
+
+# The face each card a service knows wears beside its subject: ``avatar``'s
+# arguments (``name``, ``icon_url``...) by change id, for a whole list of
+# cards in one call (``face_provider``).
+Faces = Callable[
+    [AsyncSession, list[PendingChange]], Awaitable[dict[int, dict[str, Any]]]
+]
+FACES: list[Faces] = []
+# Where a cited document opens, by its id, in an app with a reader for it;
+# without one, the cited page itself opens.
+document_reader: Callable[[int], str] | None = None
+
+
+def face_provider(provider: Faces) -> Faces:
+    """Registers ``provider`` (once): a service's faces for the cards it
+    knows."""
+    if provider not in FACES:
+        FACES.append(provider)
+    return provider
 
 
 def change_url(change_id: int | str) -> str:
@@ -104,6 +121,42 @@ def _linked(line: ChangeDisplayRow) -> str | Markup:
     ).format(line.url, Markup(elsewhere), line.value)
 
 
+def _will(value: str) -> Markup:
+    """A proposed value with the part that will change marked: an arrow's
+    target, else what leads a "head · rest" line, else all of it."""
+    before, arrow, target = value.rpartition(" → ")
+    if arrow:
+        return Markup("{} → {}").format(before, WILL.format(target))
+    head, dot, tail = value.partition(" · ")
+    if dot:
+        return Markup("{} · {}").format(WILL.format(head), tail)
+    return WILL.format(value)
+
+
+def _fact(line: ChangeDisplayRow) -> str | Markup:
+    """A line after the subject: its value, marked or linked, and its note
+    under it."""
+    shown = _linked(line) if line.url else _will(line.value)
+    if not line.note:
+        return shown
+    return Markup(
+        '{}<span data-fact-note class="block text-xxs text-aegis-muted/70 break-all">{}</span>'
+    ).format(shown, line.note)
+
+
+def _cited(lines: list[ChangeDisplayRow]) -> dict[str, Any] | None:
+    """The page the first citing line was read off, and where it opens."""
+    line = next((line for line in lines if line.document_id and line.page), None)
+    if line is None or line.document_id is None:
+        return None
+    src = f"/api/v1/documents/{line.document_id}/pages/{line.page}/image"
+    return {
+        "page": line.page,
+        "src": src,
+        "reader": document_reader(line.document_id) if document_reader else None,
+    }
+
+
 def _refresh(url: str) -> Markup:
     """The attributes of a card that redraws itself when it is revised
     (``REVISED`` naming ``url``): every copy on the page, wherever it is."""
@@ -114,16 +167,27 @@ def _refresh(url: str) -> Markup:
 
 
 async def _views(db: AsyncSession, rows: list[PendingChange]) -> list[dict[str, Any]]:
-    """Rows as their cards show them, described together."""
+    """Rows as their cards show them, described together and faced
+    together."""
+    faces: dict[int, dict[str, Any]] = {}
+    for provider in FACES:
+        faces |= await provider(db, rows)
     views = []
     for row, card in zip(rows, await change_queue.cards(db, rows)):
+        subject, *lines = card.display or [None]
         outcome = change_queue.outcome_of(row)
         label, tone = CARD_STATUS[outcome]
         url = change_url(card.id)
         views.append(
             card.model_dump()
             | {
-                "display": [(line.label, _linked(line)) for line in card.display],
+                "subject": _linked(subject) if subject else None,
+                "amount_cents": subject.amount_cents if subject else None,
+                "at": subject.at if subject else None,
+                "face": faces.get(card.id),
+                "display": [(line.label, _fact(line)) for line in lines if line],
+                # A card's own pictures are what it files; else the page cited.
+                "cited": None if card.scans else _cited(card.display),
                 "outcome": outcome,
                 "label": label,
                 "tone": tone,
@@ -172,14 +236,31 @@ def _batch_shape(batch_id: str, views: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _groups(views: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """A batch's rows folded into groups of the same change, in first-seen
-    order: rows whose lines match but for the first (which one it is about)
-    read once, with ``shared`` those lines. A group carries its rows, so
-    each one's skip survives behind the fold; one row is never a group."""
+    order: rows whose face and lines match but for the subject (which one
+    it is about) read once, with ``shared`` those lines, what their
+    subjects' amounts come to and the dates they span. A group carries its
+    rows, so each one's skip survives behind the fold; one row is never a
+    group."""
     found: dict[Any, list[dict[str, Any]]] = {}
     for view in views:
-        rest = tuple((label, str(value)) for label, value in view["display"][1:])
-        found.setdefault(rest or view["id"], []).append(view)
-    return [{"rows": rows, "shared": rows[0]["display"][1:]} for rows in found.values()]
+        rest = tuple((label, str(value)) for label, value in view["display"])
+        face = (view["face"] or {}).get("name")
+        found.setdefault((face, rest) if rest else view["id"], []).append(view)
+    return [_group(rows) for rows in found.values()]
+
+
+def _group(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    amounts = [row["amount_cents"] for row in rows]
+    dates = sorted(row["at"] for row in rows if row["at"])
+    return {
+        "rows": rows,
+        "shared": rows[0]["display"],
+        "face": rows[0]["face"],
+        "total": None if None in amounts else sum(amounts),
+        "span": " - ".join(dict.fromkeys(short_date(d) for d in (dates[0], dates[-1])))
+        if dates
+        else None,
+    }
 
 
 def _render(card: str, view: dict[str, Any]) -> HTMLResponse:
@@ -205,14 +286,9 @@ async def _resolve(
     return trigger(_render("change_card", await _view(db, row)), RESOLVED)
 
 
-@router.get("", response_class=HTMLResponse)
-async def review(
-    request: Request,
-    db: AsyncSession = Depends(get_async_db),
-    owner: int | None = Depends(get_owner_user_id),
-) -> Response:
-    """Every card still waiting for this user, a batch as one card (every
-    batch read in one query)."""
+async def waiting_cards(db: AsyncSession, owner: int | None) -> list[dict[str, Any]]:
+    """Every card still waiting for ``owner``, a batch as one card (every
+    batch read in one query): what ``partials/changes/review.html`` draws."""
     rows = await change_queue.list_changes(db, owner_user_id=owner, status="pending")
     ids = [*{row.batch_id for row in rows if row.batch_id}]
     batches: dict[str, list[PendingChange]] = {}
@@ -230,14 +306,24 @@ async def review(
             groups.append(batches.pop(row.batch_id))
     # Every card on the page is described in one pass.
     views = iter(await _views(db, [row for group in groups for row in group]))
-    cards = [
+    return [
         _batch_shape(str(group[0].batch_id), [next(views) for _ in group])
         if group[0].batch_id
         else next(views)
         for group in groups
     ]
+
+
+@router.get("", response_class=HTMLResponse)
+async def review(
+    request: Request,
+    db: AsyncSession = Depends(get_async_db),
+    owner: int | None = Depends(get_owner_user_id),
+) -> Response:
     return templates.TemplateResponse(
-        request, "partials/changes/review.html", {"cards": cards}
+        request,
+        "partials/changes/review.html",
+        {"cards": await waiting_cards(db, owner)},
     )
 
 
@@ -331,7 +417,7 @@ def _edit_fields(
 async def _editable(row: PendingChange = Depends(owned_change)) -> PendingChange:
     """A waiting card whose type takes edits, or a 404: a decided card, or
     one that is answered rather than edited, has no form."""
-    executor = change_queue.executor_for(row.change_type)
+    executor = change_queue.known_executor(row.change_type)
     if row.status != "pending" or not change_queue.editable_fields(executor):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Nothing to edit")
     return row
@@ -398,20 +484,13 @@ async def scan(
 ) -> Response:
     """A picture a card carries (a scanned page, a photo), where its change
     type says it is stored; ``page`` counts from 0."""
-    executor = change_queue.executor_for(row.change_type)
-    keys = (
-        await executor.scan(
-            db, executor.payload_model.model_validate(row.payload), row.owner_user_id
-        )
-        if executor.scan
-        else []
-    )
+    executor = change_queue.known_executor(row.change_type)
+    keys = []
+    if executor and executor.scan:
+        payload = executor.payload_model.model_validate(row.payload)
+        keys = await executor.scan(db, payload, row.owner_user_id)
     data = await get_storage().get(keys[page]) if 0 <= page < len(keys) else None
     if data is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="No such picture")
-    kind = next(
-        (kind for magic, kind in PICTURES.items() if data.startswith(magic)),
-        "application/octet-stream",
-    )
-    return untrusted_response(data, kind)
+    return untrusted_picture(data)
 {% endif %}

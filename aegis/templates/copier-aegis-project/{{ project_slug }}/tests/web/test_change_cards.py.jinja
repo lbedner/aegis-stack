@@ -18,7 +18,13 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services import change_queue
 from app.services.change_queue import ChangeDisplayRow
-from tests._change_queue import KINDS, LetterPayload, _describe, executed, note_type
+from tests._change_queue import (
+    KINDS,
+    LetterPayload,
+    _describe,
+    executed,
+    note_type,
+)
 from tests.web.dom import none, one, select, text
 
 NOTE = "test.card_note"
@@ -336,6 +342,156 @@ async def test_a_card_shows_the_pictures_its_type_names(
     assert second.headers["content-type"] == "image/png"
     assert second.content == b"\x89PNG second"
     assert past.status_code == 404
+
+
+async def _card_of(
+    client: TestClient,
+    db: AsyncSession,
+    owner: int | None,
+    rows: list[ChangeDisplayRow],
+) -> str:
+    """The card of a change whose type describes it as ``rows``."""
+
+    async def described(
+        db: AsyncSession, payloads: list[Any], owner: int | None
+    ) -> list[list[ChangeDisplayRow]]:
+        return [rows for _ in payloads]
+
+    with note_type(LETTER, describe=described):
+        row = await change_queue.propose(db, LETTER, {"text": "x"}, owner_user_id=owner)
+        await db.commit()
+        return client.get(f"/partials/changes/{row.id}").text
+
+
+async def test_a_card_reads_its_first_line_as_its_subject(
+    hx_user: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    """The first line is what the card is about; the lines after it are
+    what will change, the changing part marked (an arrow's target, what
+    leads a "head · rest" line), each with its note under it."""
+    card = await _card_of(
+        hx_user,
+        async_db_session,
+        acting_owner_user_id,
+        [
+            ChangeDisplayRow(label="Payment", value="$3.99 · Market"),
+            ChangeDisplayRow(label="Category", value="None → Groceries"),
+            ChangeDisplayRow(label="Amount", value="$5.00 · twice", note="why"),
+        ],
+    )
+
+    assert text(one(card, "[data-subject]")) == "$3.99 · Market"
+    none(card, "[data-subject] [data-will]")
+    assert [text(will) for will in select(card, "[data-will]")] == [
+        "Groceries",
+        "$5.00",
+    ]
+    assert text(one(card, "[data-fact-note]")) == "why"
+
+
+async def test_a_card_wears_the_face_its_provider_gives_it(
+    hx_user: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A service that knows what a card is about gives it a face beside its
+    subject (``face_provider``), every card of a list in one call."""
+    from app.components.web_frontend.routes.partials import changes
+
+    asked: list[int] = []
+
+    async def faces(
+        db: AsyncSession, rows: list[change_queue.PendingChange]
+    ) -> dict[int, dict[str, Any]]:
+        asked.append(len(rows))
+        return {row.id: {"name": "Market"} for row in rows if row.id}
+
+    monkeypatch.setattr(changes, "FACES", [])
+    changes.face_provider(faces)
+    card = await _card_of(
+        hx_user,
+        async_db_session,
+        acting_owner_user_id,
+        [ChangeDisplayRow(label="Payment", value="lunch")],
+    )
+
+    assert one(card, "[data-subject]").getprevious().get("data-avatar") == "M"
+    assert asked == [1]
+
+
+@pytest.mark.parametrize("reader", [None, "/read/{}"])
+async def test_a_card_draws_the_page_its_claim_was_read_off(
+    hx_user: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+    monkeypatch: pytest.MonkeyPatch,
+    reader: str | None,
+) -> None:
+    """A citation the reader can check where they decide: the page itself,
+    opening the app's document reader where it has one, else the page."""
+    from app.components.web_frontend.routes.partials import changes
+
+    monkeypatch.setattr(changes, "document_reader", reader.format if reader else None)
+    card = await _card_of(
+        hx_user,
+        async_db_session,
+        acting_owner_user_id,
+        [
+            ChangeDisplayRow(label="Letter", value="a bill"),
+            ChangeDisplayRow(label="Due", value="Jul 1", document_id=7, page=2),
+        ],
+    )
+
+    page = one(card, "[data-change] img[data-page]")
+    assert page.get("src") == "/api/v1/documents/7/pages/2/image"
+    opener = page.getparent()
+    if reader:
+        assert opener.get("hx-get") == "/read/7"
+    else:
+        assert opener.get("href") == page.get("src")
+
+
+async def test_a_folded_group_says_what_its_rows_come_to(
+    hx_user: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    """Seventy-one of the same change read once, with the total of their
+    amounts and the dates they span."""
+    lines = iter(
+        [
+            ChangeDisplayRow(
+                label="Payment", value="one", amount_cents=150, at="2026-07-01"
+            ),
+            ChangeDisplayRow(
+                label="Payment", value="two", amount_cents=250, at="2026-07-15"
+            ),
+        ]
+    )
+
+    async def described(
+        db: AsyncSession, payloads: list[Any], owner: int | None
+    ) -> list[list[ChangeDisplayRow]]:
+        return [
+            [next(lines), ChangeDisplayRow(label="Tag", value="Pool")] for _ in payloads
+        ]
+
+    with note_type(LETTER, describe=described):
+        rows = await change_queue.propose_many(
+            async_db_session,
+            LETTER,
+            [{"text": "a"}, {"text": "b"}],
+            owner_user_id=acting_owner_user_id,
+        )
+        await async_db_session.commit()
+        card = hx_user.get(f"/partials/changes/batch/{rows[0].batch_id}").text
+
+    group = one(card, "[data-change-group]")
+    assert text(one(group, "[data-total]")) == "$4.00"
+    assert text(one(group, "[data-span]")) == "Jul 1 - Jul 15"
 
 
 def test_a_card_without_pictures_has_none_to_serve(hx_user: TestClient) -> None:

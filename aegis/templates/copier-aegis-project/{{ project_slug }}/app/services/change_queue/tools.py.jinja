@@ -40,6 +40,9 @@ from app.services.change_queue.schemas import (
     Revised,
     Withdrawn,
 )
+{%- if include_auth %}
+from app.services.shared import deps as shared_deps
+{%- endif %}
 from app.services.shared.deps import caller_is_admin
 
 Answer = TypeVar("Answer")
@@ -50,8 +53,9 @@ def _owner() -> int | None:
     (``current_owner_user_id``)."""
     owner = current_owner_user_id.get()
 {%- if include_auth %}
-    # Unscoped, a call without one would reach every user's cards.
-    if owner is None:
+    # Unscoped, a call without one would reach every user's cards - unless
+    # unowned rows are the household's, whose turn it then is.
+    if owner is None and not shared_deps.UNOWNED_IS_HOUSEHOLD:
         raise ValueError("no signed-in user to file this change for")
 {%- endif %}
     return owner

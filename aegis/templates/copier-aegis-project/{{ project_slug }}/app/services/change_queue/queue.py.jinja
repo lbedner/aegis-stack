@@ -22,13 +22,14 @@ from uuid import uuid4
 
 from app.core.chat_transcript import WITHDRAWN, card_outcome
 from app.core.time import utcnow
-from app.services.change_queue.follow_ups import landed
+from app.services.change_queue.follow_ups import approving, landed
 from app.services.change_queue.models import PendingChange
 from app.services.change_queue.queries import batch_rows, get_change, list_changes
 from app.services.change_queue.registry import (
     ChangeExecutor,
     editable_fields,
     executor_for,
+    known_executor,
 )
 from app.services.change_queue.schemas import (
     BatchResolveResponse,
@@ -225,7 +226,10 @@ async def _describe_rows(
     bodies: dict[int, list[ChangeDisplayRow]] = {}
     groups: dict[tuple[str, int | None], list[tuple[int, Any]]] = {}
     for index, row in enumerate(rows):
-        executor = executor_for(row.change_type)
+        executor = known_executor(row.change_type)
+        if executor is None:
+            bodies[index] = _unusable(row.change_type, "Type gone", str(row.payload))
+            continue
         try:
             model = executor.payload_model(**row.payload)
         except ValidationError:
@@ -298,7 +302,11 @@ async def _approve(
         # never the batch's approvals before it.
         async with db.begin_nested():
             await _for_an_admin(db, executor, row.owner_user_id)
-            result = await executor.execute(db, model, row.owner_user_id)
+            token = approving.set(row)
+            try:
+                result = await executor.execute(db, model, row.owner_user_id)
+            finally:
+                approving.reset(token)
     except Exception as e:
         # The row stays PENDING: the error is audit, the decision is
         # still the user's (reject it, or fix the world and re-approve).
@@ -441,12 +449,12 @@ async def cards(
     return [
         PendingChangeResponse.from_row(
             row,
-            title=executor_for(row.change_type).title,
+            title=executor.title if executor else row.change_type,
             display=display,
-            editable=row.status == "pending"
-            and bool(editable_fields(executor_for(row.change_type))),
+            editable=row.status == "pending" and bool(editable_fields(executor)),
         )
         for row, display in zip(rows, await describe_changes(db, rows))
+        for executor in [known_executor(row.change_type)]
     ]
 
 

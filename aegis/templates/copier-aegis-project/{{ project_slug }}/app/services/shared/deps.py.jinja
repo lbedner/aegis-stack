@@ -100,6 +100,14 @@ async def get_admin_reader(user: User = Depends(get_current_active_user)) -> Non
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Admins only")
 
 
+# Whether an owner of ``None`` is the household's: true in an app whose
+# ``get_owner_user_id`` scopes every signed-in user to the rows kept before
+# sign-in. A tool call bound to ``None`` then acts for the household; where it
+# is false, ``None`` is a call nobody signed in to, which the queue's tools
+# refuse rather than reach every user's rows.
+UNOWNED_IS_HOUSEHOLD = False
+
+
 async def get_owner_user_id(
     current_user: User = Depends(get_current_active_user),
 ) -> int | None:

@@ -7,7 +7,7 @@
    redraws the card wherever it is up (``refresh``). #}
 {% from "components/macros/form.html" import action, checkbox %}
 {% from "components/macros/feedback.html" import error_banner %}
-{% from "components/macros/layout.html" import badge, facts %}
+{% from "components/macros/layout.html" import avatar, badge, facts %}
 
 {# The frame both cards share: a title line, its right-hand side as the
    caller's body, then ``rows``. A batch is a form so its "skip" boxes ride
@@ -57,15 +57,42 @@
 {% endif %}
 {% endmacro %}
 
+{# The page a card's claim was read off (``cited``), drawn where it is
+   decided: the one moment someone could check the reading. Lazy: a queue
+   of forty cards must not fetch forty pages to show the first screen.
+   The intrinsic size is a rendered page's, so the box holds its place. #}
+{% macro _cited(cited) %}
+{% if cited %}
+{% set page %}<img data-page loading="lazy" width="1275" height="1650" src="{{ cited.src }}" alt="Page {{ cited.page }}, the page this was read from"
+     class="w-full max-h-64 object-contain object-top rounded border border-aegis-border bg-aegis-bg hover:border-aegis-teal transition-colors">{% endset %}
+{% set label = "Open the document at page " ~ cited.page %}
+{% if cited.reader %}<button type="button" {{ hx_dialog(cited.reader) }} aria-label="{{ label }}" class="block w-full mt-2 text-left">{{ page }}</button>
+{% else %}<a href="{{ cited.src }}" target="_blank" rel="noopener" aria-label="{{ label }}" class="block mt-2">{{ page }}</a>{% endif %}
+{% endif %}
+{% endmacro %}
+
+{# What a card is about: the face its service gives it, then ``caller``. #}
+{% macro _subject(face) %}
+<p class="mt-2 flex items-center gap-2 text-sm font-medium text-aegis-text">{% if face %}{{ avatar(**face) }}{% endif %}{{ caller() }}</p>
+{% endmacro %}
+
+{# A card's reading: its subject, the lines that will change, the page it
+   cites or the pictures it files, and its error. #}
+{% macro _body(row) %}
+{{ _note(row) }}
+{% if row.subject %}{% call _subject(row.face) %}<span data-subject>{{ row.subject }}</span>{% endcall %}{% endif %}
+<div class="mt-2">{{ facts(row.display) }}</div>
+{{ _pictures(row) }}
+{{ _cited(row.cited) }}
+{% if row.error %}<div class="mt-2">{{ error_banner([row.error]) }}</div>{% endif %}
+{% endmacro %}
+
 {# Why a decided row went the way it did: a withdrawal's reason, a veto. #}
 {% macro _note(row) %}{% if row.note and row.status != "pending" %}<p class="mt-2 text-xs text-aegis-muted" data-note>{{ row.note }}</p>{% endif %}{% endmacro %}
 
 {% macro change_card(change) %}
 {% call _card("div", "change-" ~ change.id, "data-change", change.title, badge(change.label, change.tone), change.by, decided=change.status != "pending", refresh=change.refresh) %}
-  {{ _note(change) }}
-  <div class="mt-2">{{ facts(change.display) }}</div>
-  {{ _pictures(change) }}
-  {% if change.error %}<div class="mt-2">{{ error_banner([change.error]) }}</div>{% endif %}
+  {{ _body(change) }}
   {% if change.status == "pending" %}{{ _actions(change.url, "data-change", "Reject", change.edit) }}{% endif %}
 {% endcall %}
 {% endmacro %}
@@ -77,15 +104,13 @@
     {% if row.status == "pending" %}{{ checkbox("exclude_ids", label="Skip this one", value=row.id) }}{% endif %}
     <span class="ml-auto flex items-center gap-2 text-xxs">{{ _edit(row.edit) }}{{ badge(row.label, row.tone) }}</span>
   </div>
-  {{ _note(row) }}
-  <div class="mt-2">{{ facts(row.display) }}</div>
-  {{ _pictures(row) }}
-  {% if row.error %}<div class="mt-2">{{ error_banner([row.error]) }}</div>{% endif %}
+  {{ _body(row) }}
 </li>
 {% endmacro %}
 
 {# A batch: every row with its own skip, rows that say the same thing
-   (``groups``) read once - what they share, how many - with one skip for
+   (``groups``) read once - what they share, how many, what they come to
+   and over what span - with one skip for
    all of them (app.js ticks the rows' own boxes, which are all the form
    reads) and the rows behind a fold: what folds is the reading, never the
    control. #}
@@ -99,8 +124,10 @@
     <li class="border-t border-aegis-border/50 pt-2 first:border-0 first:pt-0" data-change-group>
       <div class="flex items-center justify-between gap-3">
         {% if batch.pending %}{{ checkbox("", label="Skip all " ~ group.rows|length, attrs="data-skip-group") }}{% endif %}
-        <span class="text-xxs ml-auto text-aegis-muted">× {{ group.rows|length }}</span>
+        <span class="text-xxs ml-auto text-aegis-muted">× {{ group.rows|length }}{% if group.total is not none %} · <span data-total class="tabular-nums">{{ group.total|money }}</span>{% endif %}</span>
       </div>
+      {% if group.face %}{% call _subject(group.face) %}{{ group.face.name }}{% endcall %}{% endif %}
+      {% if group.span %}<p data-span class="mt-1 text-xxs text-aegis-muted">{{ group.span }}</p>{% endif %}
       <div class="mt-2">{{ facts(group.shared) }}</div>
       <details class="group/rows mt-2">
         <summary class="list-none cursor-pointer inline-flex items-center gap-1 text-xxs text-aegis-muted hover:text-aegis-text transition-colors">
@@ -116,3 +143,14 @@
   {% if batch.pending %}{{ _actions(batch.url, "data-change-batch", "Reject all") }}{% endif %}
 {% endcall %}
 {% endmacro %}
+
+{# Redraws ``target`` from ``url`` when a card is decided anywhere on the
+   page (``change_resolved``, from the card routes), so what was approved
+   shows on the page behind at once. An element of its OWN, hidden and
+   childless: put on the section itself, its hx-select and hx-target are
+   inherited by the lazy blocks inside it. ``include`` carries a form's
+   fields along (a list's filters). #}
+{% macro redraws_on_decision(url, target, include=None) -%}
+<div hidden data-redraws hx-get="{{ url }}" hx-trigger="{{ change_resolved }} from:body"
+     hx-target="{{ target }}" hx-select="{{ target }}" hx-swap="outerHTML"{% if include %} hx-include="{{ include }}"{% endif %}></div>
+{%- endmacro %}

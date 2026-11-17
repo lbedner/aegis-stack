@@ -14,6 +14,15 @@ INERT = {
     "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox"
 }
 VIEWED_ELSEWHERE = frozenset({"application/pdf"})
+# What a stored picture is, by its first bytes: served as that, never as the
+# type its bytes might pass for.
+# ponytail: four signatures; a type outside them is served as a download.
+PICTURES = {
+    b"\xff\xd8\xff": "image/jpeg",
+    b"\x89PNG": "image/png",
+    b"GIF8": "image/gif",
+    b"RIFF": "image/webp",
+}
 
 
 def untrusted_response(
@@ -22,3 +31,13 @@ def untrusted_response(
     """``data`` as ``media_type``, inert whatever is in it."""
     kept = NO_SNIFFING if media_type in VIEWED_ELSEWHERE else NO_SNIFFING | INERT
     return Response(data, media_type=media_type, headers=kept | (headers or {}))
+
+
+def untrusted_picture(data: bytes) -> Response:
+    """A stored picture as the type its first bytes say (``PICTURES``),
+    anything else a download."""
+    kind = next(
+        (kind for magic, kind in PICTURES.items() if data.startswith(magic)),
+        "application/octet-stream",
+    )
+    return untrusted_response(data, kind)

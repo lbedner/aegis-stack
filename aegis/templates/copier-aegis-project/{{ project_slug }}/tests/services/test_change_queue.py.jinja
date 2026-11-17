@@ -19,7 +19,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.tools import result_data
 {% endif -%}
 from app.services import change_queue
-from app.services.change_queue import PendingChange
+from app.services.change_queue import ChangeDisplayRow, PendingChange, follow_ups
 from tests._change_queue import (
     BREAKS_AT_FLUSH,
     GONE,
@@ -309,6 +309,140 @@ async def test_an_approvals_follow_up_runs_once_after_the_commit(
     assert followed == ["keep", "loud"]
     assert [row.id for row in landed] == [rows[0].id, rows[2].id]
     assert again == []
+
+
+@pytest.mark.asyncio
+async def test_a_card_whose_type_is_gone_still_draws_and_can_be_rejected(
+    async_db_session: AsyncSession,
+) -> None:
+    """A change type can leave (retired, or not built where the app runs)
+    while its card waits: the list it is on stays up, the card names itself
+    by its type and payload, and it can be rejected from there."""
+    row = await change_queue.propose(
+        async_db_session, NOTE, {"text": "a"}, owner_user_id=None
+    )
+    row.change_type = "test.retired"
+
+    (card,) = await change_queue.cards(async_db_session, [row])
+    await change_queue.reject_row(async_db_session, row)
+
+    assert "test.retired" in card.title
+    assert not card.editable
+    assert [line.value for line in card.display] == ["test.retired", "{'text': 'a'}"]
+    assert row.status == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_an_executor_knows_which_card_it_runs(
+    async_db_session: AsyncSession,
+) -> None:
+    """``approving``: while a card executes, the row is in hand, so the
+    mutation can say whose proposal it carries out (an edit log naming the
+    agent that asked); outside an approval there is none."""
+    seen: list[tuple[int | None, str | None]] = []
+
+    async def execute(
+        db: AsyncSession, payload: LetterPayload, owner_user_id: int | None
+    ) -> Any:
+        row = change_queue.approving.get()
+        seen.append((row.id, row.proposed_by_agent) if row else (None, None))
+        return LetterPayload(text=payload.text)
+
+    with _letter(execute=execute):
+        row = await change_queue.propose(
+            async_db_session,
+            LETTER,
+            {"text": "a"},
+            owner_user_id=None,
+            proposed_by_agent="helper",
+        )
+        await change_queue.approve_row(async_db_session, row)
+
+    assert seen == [(row.id, "helper")]
+    assert change_queue.approving.get() is None
+
+
+@pytest.mark.asyncio
+async def test_whoever_listens_hears_every_approval_that_landed(
+    async_db_session: AsyncSession,
+) -> None:
+    """``on_landed``: after the commit, a listener hears the rows the action
+    landed, all at once (one message per approval, not per card), after each
+    row's own follow-up; one that fails never fails the approval."""
+    heard: list[list[int | None]] = []
+
+    async def listen(db: AsyncSession, rows: list[PendingChange]) -> None:
+        heard.append([row.id for row in rows])
+
+    async def loud(db: AsyncSession, rows: list[PendingChange]) -> None:
+        raise RuntimeError("the listener broke")
+
+    change_queue.on_landed(loud)
+    change_queue.on_landed(listen)
+    try:
+        rows = await change_queue.propose_many(
+            async_db_session, NOTE, [{"text": "a"}, {"text": "b"}], owner_user_id=None
+        )
+        await change_queue.approve_rows(async_db_session, rows)
+        await async_db_session.commit()
+        landed = await change_queue.after_commit(async_db_session)
+        await change_queue.after_commit(async_db_session)
+    finally:
+        follow_ups.LISTENERS.remove(loud)
+        follow_ups.LISTENERS.remove(listen)
+
+    assert heard == [[rows[0].id, rows[1].id]]
+    assert landed == rows
+
+
+@pytest.mark.asyncio
+async def test_a_card_line_keeps_its_figures_once_decided(
+    async_db_session: AsyncSession,
+) -> None:
+    """A line carries what its sentence is about beside it (an amount, a
+    date, the page it was read off, where the value came from), and the
+    frozen card keeps them: a decided card reads as it did."""
+
+    async def describe(
+        db: AsyncSession, payloads: list[Any], owner_user_id: int | None
+    ) -> list[list[ChangeDisplayRow]]:
+        return [
+            [
+                ChangeDisplayRow(
+                    label="Charge",
+                    value=p.text,
+                    amount_cents=1250,
+                    at="2026-11-01",
+                    note="read off the statement",
+                    document_id=7,
+                    page=2,
+                )
+            ]
+            for p in payloads
+        ]
+
+    with _letter(describe=describe):
+        row = await change_queue.propose(
+            async_db_session, LETTER, {"text": "a"}, owner_user_id=None
+        )
+        await change_queue.approve_row(async_db_session, row)
+        (line,) = await change_queue.describe_change(async_db_session, row)
+
+    assert (line.amount_cents, line.at, line.note, line.document_id, line.page) == (
+        1250,
+        "2026-11-01",
+        "read off the statement",
+        7,
+        2,
+    )
+    # A card frozen before the money was named in cents still reads.
+    old = {"label": "a", "value": "b", "amount": 5}
+    assert ChangeDisplayRow.model_validate(old).amount_cents == 5
+    # A line that carries none of them says none of them.
+    assert ChangeDisplayRow(label="a", value="b").model_dump() == {
+        "label": "a",
+        "value": "b",
+    }
 
 
 @pytest.mark.asyncio
@@ -639,9 +773,16 @@ async def test_a_chat_proposal_belongs_to_the_turns_owner(
 
 
 @pytest.mark.asyncio
-async def test_a_turn_without_an_owner_touches_no_cards(chat_tools: Any) -> None:
+async def test_a_turn_without_an_owner_touches_no_cards(
+    chat_tools: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """With auth, a turn nobody signed in to (an anonymous call, the CLI)
-    declines: unscoped, it would reach every user's cards."""
+    declines: unscoped, it would reach every user's cards. Unless unowned
+    rows are the household's (``UNOWNED_IS_HOUSEHOLD``): then it is the
+    household's turn, which the tests above run as."""
+    from app.services.shared import deps
+
+    monkeypatch.setattr(deps, "UNOWNED_IS_HOUSEHOLD", False)
     proposed = result_data(await chat_tools.propose(NOTE, {"text": "orphan"}))
     listed = result_data(await chat_tools.pending())
 

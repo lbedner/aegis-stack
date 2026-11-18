@@ -2228,6 +2228,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/runner/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runner
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -7190,28 +7218,13 @@
 <p>Each run shows under its question: waiting, answering, then answered or failed. A run claimed and never finished fails after half an hour.</p>
 <p>To ask an action of every question as it is heard, set <code>MEETINGS_AUTO_ACTIONS</code> (Overseer &gt; Meetings &gt; Settings), for example <code>question=agent</code>.</p>
 <h2 id="the-runner">The runner</h2>
-<p>The coding agent runs on your machine, not in the app. The runner asks the app for waiting runs, answers each in a fresh worktree of your repository, and posts back what it printed.</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a> &quot;Ask agent&quot;  ---&gt;  run: asked
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>                    POST /runs/claim   &lt;---  runner claims the oldest
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>                                             fresh worktree of --repo
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>                                             runs --command
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>                    POST /runs/{id}/finish &lt;-- posts what it printed
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>                    run: done | failed
-</span></code></pre></div>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>runner-token<span class="w"> </span>create<span class="w"> </span>laptop
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">MEETINGS_RUNNER_TOKEN</span><span class="o">=</span>mrt_...
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>runner<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span>--url<span class="w"> </span>https://my-app.example.com<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span>--repo<span class="w"> </span>~/code/my-service<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span>--command<span class="w"> </span><span class="s1">&#39;claude -p {prompt} --permission-mode plan&#39;</span>
-</span></code></pre></div>
-<p>Any headless agent works (<code>codex exec {prompt}</code>, <code>aider --message {prompt}</code>). A runner answers one run at a time, oldest first; start more to answer more at once. In the dev stack a <code>meetings-runner</code> service runs one for you, configured in <code>.env.meetings-runner</code>.</p>
+<p>The coding agent runs on your machine, not in the app. "Ask agent" asks a run of the <a href="../../../components/runner/">runner component</a>: a runner asks the app for waiting runs, answers each in a fresh worktree of your repository, and posts back what it printed. How to start one, its options, routes and tokens are on <a href="../../../components/runner/#running-one">its page</a>; in the dev stack a <code>runner</code> service runs one for you.</p>
 <h2 id="your-own-moments-and-actions">Your own moments and actions</h2>
 <p>Register them in a <code>meeting_moments.py</code> beside any service's <code>service.py</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.meetings.service</span><span class="w"> </span><span class="kn">import</span> <span class="n">Action</span><span class="p">,</span> <span class="n">register_action</span><span class="p">,</span> <span class="n">register_detector</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">register_detector</span><span class="p">(</span><span class="s2">&quot;decision&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">heard</span><span class="p">:</span> <span class="n">heard</span><span class="o">.</span><span class="n">text</span> <span class="k">if</span> <span class="s2">&quot;we decided&quot;</span> <span class="ow">in</span> <span class="n">heard</span><span class="o">.</span><span class="n">text</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Decisions&quot;</span><span class="p">)</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">register_action</span><span class="p">(</span><span class="n">Action</span><span class="p">(</span><span class="s2">&quot;ticket&quot;</span><span class="p">,</span> <span class="s2">&quot;File a ticket&quot;</span><span class="p">,</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;question&quot;</span><span class="p">}),</span> <span class="s2">&quot;runner&quot;</span><span class="p">))</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.meetings.service</span><span class="w"> </span><span class="kn">import</span> <span class="n">Action</span><span class="p">,</span> <span class="n">register_action</span><span class="p">,</span> <span class="n">register_detector</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">register_detector</span><span class="p">(</span><span class="s2">&quot;decision&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">heard</span><span class="p">:</span> <span class="n">heard</span><span class="o">.</span><span class="n">text</span> <span class="k">if</span> <span class="s2">&quot;we decided&quot;</span> <span class="ow">in</span> <span class="n">heard</span><span class="o">.</span><span class="n">text</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Decisions&quot;</span><span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">register_action</span><span class="p">(</span><span class="n">Action</span><span class="p">(</span><span class="s2">&quot;ticket&quot;</span><span class="p">,</span> <span class="s2">&quot;File a ticket&quot;</span><span class="p">,</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;question&quot;</span><span class="p">}),</span> <span class="s2">&quot;runner&quot;</span><span class="p">))</span>
 </span></code></pre></div>
 <p>An action runs in the <code>browser</code> (its prompt copied), the <code>app</code>, or on a <code>runner</code> started with <code>--action ticket</code>.</p>
 

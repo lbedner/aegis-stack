@@ -2228,6 +2228,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/runner/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runner
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -7227,40 +7255,10 @@
 <td><code>POST /api/v1/meetings/{id}/lines/{line_id}/about</code></td>
 <td>What a line is about (or, with <code>?part=component:scheduler</code>, the part it names), as Illiana says it to the meeting's owner: <code>{"summary": ..., "card_id": ...}</code> (the card she drew of the part it names, or <code>null</code>); <code>404</code> for a line the meeting does not hold, or a stack without her</td>
 </tr>
-<tr>
-<td><code>GET /api/v1/meetings/runner-tokens</code></td>
-<td>The caller's live runner tokens</td>
-</tr>
-<tr>
-<td><code>POST /api/v1/meetings/runner-tokens</code></td>
-<td><code>{"name": ...}</code>: a runner token; <code>201</code> with its <code>value</code>, shown this once</td>
-</tr>
-<tr>
-<td><code>DELETE /api/v1/meetings/runner-tokens/{id}</code></td>
-<td>Revoke one; <code>404</code> for one that is not the caller's</td>
-</tr>
 </tbody>
 </table>
 <h2 id="the-runners-routes">The runner's routes</h2>
-<p>A runner's routes take its token (<code>Authorization: Bearer mrt_...</code>), not a user. See <a href="../moments/#the-runner">The runner</a>.</p>
-<table>
-<thead>
-<tr>
-<th>Route</th>
-<th>What it does</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>POST /api/v1/meetings/runs/claim</code></td>
-<td><code>{"actions": [...]}</code>: the oldest waiting run of those actions among the token's owner's meetings, now the runner's, with its prompt; <code>204</code> when there is none</td>
-</tr>
-<tr>
-<td><code>POST /api/v1/meetings/runs/{id}/finish</code></td>
-<td><code>{"ok": ..., "result": ...}</code>: what the run came back with</td>
-</tr>
-</tbody>
-</table>
+<p>Claiming a run, finishing it and runner tokens are the <a href="../../../components/runner/#api">runner component</a>'s (<code>/api/v1/runner/...</code>).</p>
 <h2 id="overseers-routes">Overseer's routes</h2>
 <p>Across every owner. Reading them takes an admin where the stack has auth; a change is an operator's (an admin, or without auth only the local dev build):</p>
 <table>

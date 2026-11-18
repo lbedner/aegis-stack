@@ -2228,6 +2228,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../components/runner/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runner
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -4206,10 +4234,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#runner-options" class="md-nav__link">
+  <a href="#the-runner" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Runner options
+        The runner
       
     </span>
   </a>
@@ -7084,10 +7112,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#runner-options" class="md-nav__link">
+  <a href="#the-runner" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Runner options
+        The runner
       
     </span>
   </a>
@@ -7130,24 +7158,9 @@
 </span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>search<span class="w"> </span><span class="s2">&quot;&lt;words&gt;&quot;</span><span class="w">         </span><span class="c1"># Lines and notes with any of the words (-n LIMIT)</span>
 </span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>series<span class="w"> </span><span class="o">[</span>ID<span class="o">]</span><span class="w">              </span><span class="c1"># The series, or one in full</span>
 </span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>look-over<span class="w"> </span><span class="o">[</span>ID...<span class="o">]</span><span class="w">        </span><span class="c1"># Read calls over again for moments (--series, --all)</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="c1"># Runner</span>
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>runner<span class="w">                   </span><span class="c1"># Answer waiting runs on this machine</span>
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>runner-token<span class="w"> </span>create<span class="w"> </span>&lt;name&gt;<span class="w">   </span><span class="c1"># A token, shown once (--owner)</span>
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>runner-token<span class="w"> </span>list<span class="w">            </span><span class="c1"># The live tokens</span>
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>runner-token<span class="w"> </span>revoke<span class="w"> </span>&lt;id&gt;<span class="w">     </span><span class="c1"># Revoke one</span>
 </span></code></pre></div>
-<h2 id="runner-options">Runner options</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>--command<span class="w"> </span>CMD<span class="w">    </span><span class="c1"># Required: the command each run runs; {prompt} is its prompt (stdin without it)</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>--repo<span class="w"> </span>PATH<span class="w">      </span><span class="c1"># Answer from a fresh worktree of this repository</span>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>--ref<span class="w"> </span>REF<span class="w">        </span><span class="c1"># What each worktree checks out (origin/main)</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>--action<span class="w"> </span>NAME<span class="w">    </span><span class="c1"># An action this runner answers (agent); repeat for more</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>--url<span class="w"> </span>URL<span class="w">        </span><span class="c1"># The app (API_BASE_URL by default)</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>--token<span class="w"> </span>TOKEN<span class="w">    </span><span class="c1"># Its runner token (or MEETINGS_RUNNER_TOKEN)</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>--once<span class="w">           </span><span class="c1"># Answer one waiting run and stop</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>--poll<span class="w"> </span>SECONDS<span class="w">   </span><span class="c1"># How often it looks while idle</span>
-</span></code></pre></div>
-<p>See <a href="../moments/#the-runner">The runner</a>.</p>
+<h2 id="the-runner">The runner</h2>
+<p>The runner and its tokens are the <a href="../../../components/runner/">runner component</a>'s: <code>my-app runner run</code> and <code>my-app runner token</code>.</p>
 
 
 

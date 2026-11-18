@@ -2,9 +2,10 @@
 meeting's runs with the questions they answer. The runs themselves are
 the runner component's (``app.components.runner``), about moments."""
 
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, String, cast
+from sqlalchemy import Select, String, cast, func
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -44,10 +45,13 @@ async def moment(
     moment_id: int,
     owner_user_id: int | None,
     meeting_id: int | None = None,
-) -> tuple[MeetingMoment, int | None] | None:
-    """The moment and whose its meeting is, if it is in one of the owner's
-    meetings (``meeting_id``, when given)."""
-    query = _owned(select(MeetingMoment, Meeting.owner_user_id), owner_user_id).where(
+) -> tuple[MeetingMoment, int | None, str | None, datetime] | None:
+    """The moment, and of its meeting whose it is, what its calendar calls
+    it and when it was held (joined, else asked for), if it is in one of
+    the owner's meetings (``meeting_id``, when given)."""
+    held = func.coalesce(col(Meeting.joined_at), col(Meeting.created_at))
+    found = select(MeetingMoment, Meeting.owner_user_id, Meeting.title, held)
+    query = _owned(found, owner_user_id).where(
         col(MeetingMoment.id) == moment_id,
         *([MeetingMoment.meeting_id == meeting_id] if meeting_id else []),
     )

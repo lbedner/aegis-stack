@@ -6,6 +6,7 @@ from typing import Any
 
 import flet as ft
 
+from app.components.frontend.controls import ErrorText
 from app.components.frontend.dashboard.modals.meetings_moments import moments_controls
 from app.components.frontend.dashboard.modals.modal_sections.chart_primitives import (
     ChartColors,
@@ -33,6 +34,20 @@ def _moment(**fields: Any) -> dict[str, Any]:
             {"name": "agent", "label": "Ask agent", "where": "runner", "prompt": None},
         ],
         "runs": [],
+    } | fields
+
+
+def _ran(**fields: Any) -> dict[str, Any]:
+    """A run asked of an agent: waiting, unless ``fields`` say otherwise."""
+    return {
+        "id": 1,
+        "action": "agent",
+        "label": "Ask agent",
+        "status": "asked",
+        "state": "Waiting for a runner",
+        "tone": "muted",
+        "result": None,
+        "runner": None,
     } | fields
 
 
@@ -76,32 +91,33 @@ def test_a_burst_reads_as_one_question_with_its_follow_ups() -> None:
 
 def test_each_run_says_where_it_stands_and_what_it_came_back_with() -> None:
     runs = [
-        {
-            "id": 1,
-            "action": "agent",
-            "label": "Ask agent",
-            "status": "asked",
-            "state": "Waiting for a runner",
-            "tone": "muted",
-            "result": None,
-            "runner": None,
-        },
-        {
-            "id": 2,
-            "action": "agent",
-            "label": "Ask agent",
-            "status": "done",
-            "state": "Answered on laptop",
-            "tone": "ok",
-            "result": "Yes: export.py ships it.",
-            "runner": "laptop",
-        },
+        _ran(),
+        _ran(
+            id=2,
+            status="done",
+            state="Answered on laptop",
+            tone="ok",
+            result="Yes: export.py ships it.",
+            runner="laptop",
+        ),
     ]
 
     shown = _shown(_moment(runs=runs))
 
     assert "Waiting for a runner" in shown
     assert "Answered on laptop" in shown and "Yes: export.py ships it." in shown
+
+
+def test_a_failed_run_says_why_as_it_was_said() -> None:
+    """Not as markdown, which eats an error's stars and underscores."""
+    why = "error: **not** a repo"
+    failed = _ran(status="failed", state="Failed on laptop", tone="error", result=why)
+
+    shown = moments_controls({"moments": [_moment(runs=[failed])]}, _nothing, _nothing)
+    (said,) = (c for c in walk(ft.Column(shown)) if getattr(c, "value", None) == why)
+
+    assert isinstance(said, ErrorText)
+    assert said.selectable
 
 
 def test_nothing_heard_shows_nothing() -> None:
@@ -119,14 +135,7 @@ def _tile(
 def test_a_question_folds_away_unless_it_is_being_answered() -> None:
     """Folded to what was asked; open while an answer is going, or as the
     reader last left it (``folds``, kept across the pane's redraws)."""
-    going = {
-        "id": 1,
-        "label": "Ask agent",
-        "status": "claimed",
-        "state": "Answering on laptop",
-        "tone": "muted",
-        "going": True,
-    }
+    going = _ran(status="claimed", state="Answering on laptop", going=True)
 
     assert not _tile(_moment()).initially_expanded
     assert "Can the CSV export ship this week?" in texts(_tile(_moment()).title)

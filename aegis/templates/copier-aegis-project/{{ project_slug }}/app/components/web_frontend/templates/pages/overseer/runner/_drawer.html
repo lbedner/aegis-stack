@@ -1,0 +1,16 @@
+{# One run in the drawer: what was asked, in its asker's words, then what
+   came back, the facts of it, and what the agent was sent, folded
+   (overseer_runner.drawer_context). #}
+{% from "components/macros/layout.html" import badge, card, code_block, dialog_title, facts as fact_list, fold %}
+{% from "pages/overseer/runner/_macros.html" import result as run_result %}
+<div class="space-y-4">
+  {{ dialog_title(title, ids) }}
+  <div>{{ badge(status.label, status.tone) }}</div>
+  {% if result %}
+  {% call card("Came back", id="run-result") %}{{ run_result(result, status.tone) }}{% endcall %}
+  {% endif %}
+  {% call card("Details", id="run-facts") %}{{ fact_list(facts) }}{% endcall %}
+  {% call card("Prompt", id="run-prompt") %}
+  {% call fold("Show prompt") %}{{ code_block(prompt, wrap=True) }}{% endcall %}
+  {% endcall %}
+</div>

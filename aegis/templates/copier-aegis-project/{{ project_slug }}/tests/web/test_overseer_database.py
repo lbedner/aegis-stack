@@ -33,7 +33,7 @@ from app.services.system.service_pieces import Piece
 from app.services.system.ui import registry_key
 from tests._audit import recording
 from tests._ontology import model_of
-from tests.web.dom import none, one, select, table_rows, text
+from tests.web.dom import none, one, select, table_rows, table_text, text
 from tests.web.overseer import sign_in, status_with
 
 POSTGRES: dict[str, Any] = {
@@ -606,10 +606,7 @@ class TestQuery:
     def test_its_rows_and_what_it_cost(self, sqlite: TestClient) -> None:
         audit = recording(sqlite)
         html = self._run(sqlite, "SELECT 1 AS one, 'two' AS two")
-        found = table_rows(html, "[data-rows]")
-        assert [{k: text(v) for k, v in row.items()} for row in found] == [
-            {"one": "1", "two": "two"}
-        ]
+        assert table_text(html, "[data-rows]") == [{"one": "1", "two": "two"}]
         assert "read-only" in text(one(html, "[data-query-footer]"))
         assert len(select(html, "th button[data-sort-rows]")) == 2
         assert [(e["event_type"], e["outcome"]) for e in audit.events] == [
@@ -859,7 +856,9 @@ class TestTransactions:
         """The Query cell is one line cut at the edge; opened, the whole
         statement as SQL; its copy takes the whole of it, as do Process's
         and PID's."""
-        statement = "SELECT id, name FROM llm_model WHERE name = $1 " + "AND 1 = 1 " * 40
+        statement = (
+            "SELECT id, name FROM llm_model WHERE name = $1 " + "AND 1 = 1 " * 40
+        )
         row = _row(pid=41, process="pg_dump", code="", container=None, query=statement)
         _transactions(monkeypatch, [row], postgres=True)
         html = _get(postgres, "transactions")

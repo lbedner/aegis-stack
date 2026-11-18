@@ -11,13 +11,13 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.components.runner import tokens
+from app.components.runner.protocol import RUNS
 from tests._audit import as_admin, let_into_overseer
 from tests._meetings import a_meeting, asked_a_question, said, someone_else
+from tests._runner import signed
 
 MEETINGS = "/api/v1/meetings"
 ADMIN = "/api/v1/meetings/admin"
-RUNS = "/api/v1/runner/runs"
 
 
 async def test_an_owner_reads_a_meetings_moments_and_what_each_offers(
@@ -136,8 +136,7 @@ async def test_a_question_asked_of_an_agent_shows_what_a_runner_posts_back(
     authenticated_client.post(
         f"{MEETINGS}/{meeting_id}/moments/{moment_id}/runs", json={"action": "agent"}
     )
-    _, value = await tokens.create(async_db_session, acting_owner_user_id, "laptop")
-    runner = {"Authorization": f"Bearer {value}"}
+    runner = await signed(async_db_session, acting_owner_user_id)
 
     claimed = authenticated_client.post(
         f"{RUNS}/claim", json={"actions": ["agent"]}, headers=runner

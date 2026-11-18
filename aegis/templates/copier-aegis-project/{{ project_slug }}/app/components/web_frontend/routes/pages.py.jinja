@@ -109,6 +109,11 @@ from app.components.web_frontend.routes.partials import (
     overseer_mcp as overseer_mcp_partials,
 )
 {%- endif %}
+{%- if include_runner %}
+from app.components.web_frontend.routes.partials import (
+    overseer_runner as overseer_runner_partials,
+)
+{%- endif %}
 {%- if include_worker %}
 from app.components.web_frontend.routes.partials import (
     overseer_worker as overseer_worker_partials,
@@ -216,6 +221,9 @@ router.include_router(overseer_inference_partials.router)
 {%- endif %}
 {%- if include_mcp %}
 router.include_router(overseer_mcp_partials.router)
+{%- endif %}
+{%- if include_runner %}
+router.include_router(overseer_runner_partials.router)
 {%- endif %}
 {%- if include_worker %}
 router.include_router(overseer_worker_partials.router)

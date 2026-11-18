@@ -117,6 +117,11 @@ async def startup_hook() -> None:
     register_health_check(ComponentName.BROWSER, check_browser_health)
     logger.info("Browser component health check registered")
     {%- endif %}
+    {%- if include_runner %}
+    # Register runner component health check (runs waiting, a runner listening)
+    from app.components.runner.health import check_runner_health
+    register_health_check(ComponentName.RUNNER, check_runner_health)
+    {%- endif %}
 
     {%- if include_secrets %}
     # Register secrets component health check (store installed, counts)

@@ -158,8 +158,8 @@ def find_installed(group: str, name: str) -> NavItem | None:
 
 def runtime_page_url(page: str) -> str:
     """The Overseer page a runtime page's containers show on: its
-    component's (``redis`` is the Cache's), its service's (``meetings``,
-    its runner), or a page of its own (``deployments``, deploy's agent)."""
+    component's (``redis`` is the Cache's), its service's, or a page of
+    its own (``deployments``, deploy's agent)."""
     # Imported here: the sections module builds its pages from this one.
     from .overseer_sections import SECTIONED_PAGES, STANDALONE
 

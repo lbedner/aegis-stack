@@ -533,7 +533,12 @@ class TestAddCommand:
             "app/components/runner/client.py",
             "app/components/backend/api/runner.py",
             "app/cli/runner.py",
+            "app/components/runner/health.py",
+            "app/components/frontend/dashboard/cards/runner_card.py",
+            "app/components/frontend/dashboard/modals/runner_modal.py",
             "tests/components/test_runner.py",
+            "tests/components/test_runner_health.py",
+            "tests/components/frontend/test_runner_modal.py",
             "alembic/versions/001_runner.py",
         ):
             assert (project_path / rel).exists(), rel

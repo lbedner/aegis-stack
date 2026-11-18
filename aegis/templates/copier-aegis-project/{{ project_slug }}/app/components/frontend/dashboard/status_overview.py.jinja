@@ -305,6 +305,8 @@ class StatusOverviewPanel(ft.Container):
             ComponentName.MCP,
 {% endif %}{% if include_browser %}
             ComponentName.BROWSER,
+{% endif %}{% if include_runner %}
+            ComponentName.RUNNER,
 {% endif %}
         ]
 

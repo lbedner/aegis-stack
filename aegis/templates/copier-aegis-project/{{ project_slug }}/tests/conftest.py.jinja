@@ -915,6 +915,24 @@ def token_owner() -> int | None:
     return None
 {%- endif %}
 {%- endif %}
+{%- if (include_mcp or include_runner) and include_database %}
+
+
+@pytest.fixture
+{%- if include_auth %}
+def token_maker(authenticated_client: TestClient) -> TestClient:
+    """Who makes a machine's token over the API (MCP's, a runner's): a
+    signed-in person, their own."""
+    return authenticated_client
+{%- else %}
+def token_maker(async_client_with_db: TestClient) -> TestClient:
+    """Who makes a machine's token over the API (MCP's, a runner's): with
+    no one to sign in, the operator, on the local dev build."""
+    from tests._audit import at_localhost
+
+    return at_localhost(async_client_with_db.app)
+{%- endif %}
+{%- endif %}
 @pytest.fixture
 async def authenticated_client(
     async_client_with_db: TestClient,

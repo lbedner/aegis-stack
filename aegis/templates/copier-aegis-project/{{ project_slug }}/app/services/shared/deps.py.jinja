@@ -31,7 +31,7 @@ from app.services.auth.deps import (
 {%- else %}
 from typing import TYPE_CHECKING
 
-from fastapi import HTTPException, status
+from fastapi import Depends, HTTPException, status
 
 from app.core import exposure
 from app.core.tools import current_admin
@@ -121,6 +121,11 @@ async def get_optional_owner_user_id(
     """The signed-in user's id on a route that also serves anonymous
     callers, else ``None``."""
     return user.id if user else None
+
+
+# Whose a token a machine shows the app is, to whoever makes or revokes
+# one (an MCP client's, a runner's): the signed-in person's own.
+get_token_holder = get_owner_user_id
 {%- else %}
 
 
@@ -166,6 +171,14 @@ async def get_owner_user_id() -> int | None:
 # Nobody signs in, so a route that also serves anonymous callers scopes
 # the same way.
 get_optional_owner_user_id = get_owner_user_id
+
+
+async def get_token_holder(actor: Actor = Depends(get_admin_actor)) -> int | None:
+    """Whose a token a machine shows the app is, to whoever makes or
+    revokes one (an MCP client's, a runner's): with no one to sign in, the
+    operator's (None), and theirs to change only where ``get_admin_actor``
+    lets a change through."""
+    return actor.id
 {%- endif %}
 
 

@@ -1,0 +1,16 @@
+{# Overseer > Runner: how the queue stands, then the newest runs, each by
+   what was asked, with how long it took, what it cost and how it went;
+   runs asked in one place of one action fold into a row that holds them
+   (overseer_runner). A run's row opens it in the drawer. #}
+{% from "components/macros/layout.html" import card, drawer_sync, stats_strip %}
+{% from "components/macros/table.html" import data_table %}
+{% macro held(row) %}{{ data_table(run_columns, row.runs, flush=False) }}{% endmacro %}
+<div class="space-y-4">
+  {{ stats_strip(figures, id="runner-figures") }}
+  {% if chips %}{% with chips_label = "Action" %}{% include "pages/overseer/_chips.html" %}{% endwith %}{% endif %}
+  {% call card("Runs") %}
+  <div id="runner-runs">{{ data_table(run_columns, runs, empty=no_runs, detail=held if folds else none) }}</div>
+  {% if cut %}<p class="text-xs text-aegis-muted" data-cut>{{ cut }}</p>{% endif %}
+  {% endcall %}
+</div>
+{{ drawer_sync(open_drawer, drawer_param) }}

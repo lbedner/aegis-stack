@@ -15,7 +15,6 @@ only as the one-off dev ``uv sync``, never as a resident parent.
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -24,9 +23,9 @@ import yaml
 from jinja2 import Environment, FileSystemLoader
 
 from aegis.core.component_files import get_copier_defaults, get_template_path
+from tests.core._compose import entrypoint_calls as _run
 
 SLUG = "{{ project_slug }}"
-STUBS = ("uv", "python", "watchfiles", "taskiq", "dramatiq")
 
 
 def _render(rel: str, **overrides: Any) -> str:
@@ -35,42 +34,6 @@ def _render(rel: str, **overrides: Any) -> str:
     )
     ctx = {**get_copier_defaults(), "project_slug": "demo", **overrides}
     return env.get_template(f"{SLUG}/{rel}").render(ctx)
-
-
-def _run(
-    tmp_path: Path, role: list[str], env: dict[str, str], **ctx: Any
-) -> list[dict]:
-    """Run the entrypoint for ``role``; return each stub call in order."""
-    script = tmp_path / "entrypoint.sh"
-    script.write_text(_render("scripts/entrypoint.sh.jinja", **ctx))
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir(exist_ok=True)
-    log = tmp_path / "calls.jsonl"
-    for name in STUBS:
-        stub = bin_dir / name
-        stub.write_text(
-            "#!/bin/bash\n"
-            f'printf \'{{"cmd": "{name}", "pid": %s, "args": "%s"}}\\n\' '
-            f'"$$" "$*" >> "{log}"\n'
-        )
-        stub.chmod(0o755)
-    proc = subprocess.Popen(
-        ["bash", str(script), *role],
-        env={
-            "PATH": f"{bin_dir}:/usr/bin:/bin",
-            "DOCKER_CONTAINER": "true",
-            "HOME": str(tmp_path),
-            **env,
-        },
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-    _, err = proc.communicate(timeout=30)
-    assert proc.returncode == 0, err.decode()
-    calls = [json.loads(line) for line in log.read_text().splitlines()]
-    for call in calls:
-        call["exec"] = call["pid"] == proc.pid
-    return calls
 
 
 ROLES = [

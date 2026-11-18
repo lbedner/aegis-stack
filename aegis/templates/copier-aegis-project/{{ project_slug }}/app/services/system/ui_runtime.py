@@ -18,6 +18,7 @@ from typing import Any, Literal
 from app.core import runtime, series, thresholds
 from app.core.config import settings
 from app.core.ownership import page_of_part
+from app.core.parts import PARTS
 from app.core.runtime import Instance, RuntimeUnavailableError, Stats
 from app.core.series import Sample, Sampler
 from app.services.system import container_events, container_rows
@@ -174,6 +175,14 @@ def page_of(component: str) -> str | None:
     """The page a health component's containers show on, if any has one."""
     page = page_of_part(component)
     return page if page in runtime.PAGES else None
+
+
+def own_page(component: str) -> str | None:
+    """``page_of`` for a component that runs in containers of its own: none
+    for one whose only containers are its agents', which act for it and
+    are not it, so its card says how it is doing, not how they are."""
+    part = PARTS.get(component)
+    return page_of(component) if part and part.tier is not None else None
 
 
 async def sample() -> Sample:

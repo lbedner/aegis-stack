@@ -80,6 +80,9 @@ def modal_registry() -> dict[str, type[ft.Container]]:
     {%- if include_browser %}
     from app.components.frontend.dashboard.modals.browser_modal import BrowserDetailDialog
     {%- endif %}
+    {%- if include_runner %}
+    from app.components.frontend.dashboard.modals.runner_modal import RunnerDetailDialog
+    {%- endif %}
     {%- if ollama_mode != "none" %}
     from app.components.frontend.dashboard.modals.inference_modal import InferenceDetailDialog
     {%- endif %}
@@ -148,6 +151,9 @@ def modal_registry() -> dict[str, type[ft.Container]]:
         {%- endif %}
         {%- if include_browser %}
         ComponentName.BROWSER: BrowserDetailDialog,
+        {%- endif %}
+        {%- if include_runner %}
+        ComponentName.RUNNER: RunnerDetailDialog,
         {%- endif %}
         {%- if ollama_mode != "none" %}
         ComponentName.OLLAMA: InferenceDetailDialog,

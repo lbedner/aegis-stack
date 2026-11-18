@@ -135,6 +135,19 @@ class TestTableRows:
         )
         assert text(rows[0]["Name"]) == "Rent" and text(rows[0]["Amount"]) == "$1"
 
+    def test_a_table_inside_an_unfolded_row_is_not_its_rows(self) -> None:
+        inner = (
+            "<table><thead><tr><th>Part</th></tr></thead>"
+            "<tbody><tr><td>Milk</td></tr></tbody></table>"
+        )
+        rows = table_rows(
+            '<div id="list"><table><thead><tr><th>Name</th></tr></thead><tbody>'
+            f"<tr><td>Rent</td></tr><tr data-detail><td>{inner}</td></tr>"
+            "</tbody></table></div>",
+            "#list > table",
+        )
+        assert [text(row["Name"]) for row in rows] == ["Rent"]
+
 
 class TestTriggers:
     def test_merges_the_three_trigger_headers(self) -> None:
@@ -173,6 +186,29 @@ class TestWithQuery:
         assert with_query("/p", vendor=["openai", "anthropic"]) == (
             "/p?vendor=openai&vendor=anthropic"
         )
+
+
+class TestChips:
+    """A filter's chips: a link per choice that sets its parameter (None
+    takes the filter off), keeps the other filters and marks the chosen."""
+
+    def test_each_choice_links_to_itself_and_keeps_the_rest(self) -> None:
+        from app.components.web_frontend.rendering import chips
+
+        choices = [(None, "All"), ("ai", "ai")]
+
+        assert chips("/p", "action", choices, "ai", kind="open") == [
+            {"label": "All", "url": "/p?kind=open", "active": False},
+            {"label": "ai", "url": "/p?kind=open&action=ai", "active": True},
+        ]
+
+
+class TestStatusCell:
+    def test_a_status_may_carry_a_second_line(self) -> None:
+        from app.components.web_frontend.rendering import status_cell
+
+        assert status_cell("Done", "ok") == {"label": "Done", "tone": "ok"}
+        assert status_cell("Running", "accent", "Edit a.py")["sub"] == "Edit a.py"
 
 
 class TestFormNumber:

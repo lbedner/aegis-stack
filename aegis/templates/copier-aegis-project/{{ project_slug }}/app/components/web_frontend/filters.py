@@ -4,11 +4,12 @@ Registered on the environment by ``rendering.py``. Amounts arrive from the
 finance service as integer minor units with a currency code.
 """
 
-import html
-import re
 from collections.abc import Callable, Iterable
 from functools import cache
+import html
+import re
 from typing import Any
+from urllib.parse import urlsplit
 
 from markupsafe import Markup
 
@@ -86,8 +87,10 @@ def money_to_cents(raw: str | None) -> int | None:
 # A settled assistant message is markdown written by a model. marko renders
 # it (GFM: tables, strikethrough, autolinks); raw HTML in the source is
 # escaped rather than passed through, so the model can format but never
-# inject markup. The mixin is registered LAST so it sits first in the
-# renderer's MRO, ahead of GFM's own tag filter.
+# inject markup, and a link leads to a page or a mailbox or nowhere: a
+# ``javascript:`` address would run as whoever clicks it. The mixin is
+# registered LAST so it sits first in the renderer's MRO, ahead of GFM's
+# own tag filter.
 #
 # Fenced code is highlighted by ``highlight``. marko's own codehilite
 # extension is not used: it passes ``key=value`` pairs from the fence line to
@@ -96,6 +99,11 @@ def money_to_cents(raw: str | None) -> int | None:
 #
 # Built once at import: marko compiles its parser and renderer per
 # ``Markdown()``, and a chat thread renders one of these per message.
+# Where a link in model markdown may lead: a page (its own site's, with no
+# scheme, or the web's) or a mailbox.
+LINK_SCHEMES = frozenset({"", "http", "https", "mailto"})
+
+
 def _safe_markdown() -> Any:
     from marko import Markdown
     from marko.ext.gfm import GFM
@@ -107,6 +115,17 @@ def _safe_markdown() -> Any:
 
         def render_inline_html(self, element: Any) -> str:
             return html.escape(element.children)
+
+        def escape_url(self, raw: str) -> str:
+            """Every destination marko writes (a link's, an image's, an
+            autolink's) goes through here."""
+            try:
+                scheme = urlsplit(raw.strip()).scheme.lower()
+            except ValueError:  # not an address at all
+                return ""
+            if scheme not in LINK_SCHEMES:
+                return ""
+            return super().escape_url(raw)  # type: ignore[misc,no-any-return]
 
     class Highlight:
         def render_fenced_code(self, element: Any) -> str:
@@ -266,7 +285,15 @@ def color_tone(color: str) -> str:
     return _TONE_BY_COLOR.get(color, "muted")
 
 
-_WORST_FIRST = ("error", "warn")
+# A badge's tones, what wants a look first.
+LOUDEST = ("error", "warn", "accent", "muted", "ok")
+_WORST_FIRST = LOUDEST[:2]
+
+
+def loudness(tone: str) -> int:
+    """Where a tone stands among ``LOUDEST``, to sort by; one it does not
+    know comes last."""
+    return LOUDEST.index(tone) if tone in LOUDEST else len(LOUDEST)
 
 
 # What a ``pattern`` attribute escapes: the browser compiles it with the v

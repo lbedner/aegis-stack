@@ -11,7 +11,6 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.components.runner import tokens
 from app.components.runner.models import RunnerRun
 from app.services.meetings import service as meetings_service
 from app.services.meetings.domains.actions import runs as action_runs
@@ -45,7 +44,11 @@ from app.services.meetings.models import (
     subjects,
 )
 from app.services.meetings.service import MeetingsService
-from tests._runner import someone_else  # noqa: F401 - asked for here
+from tests import _runner
+from tests._runner import (  # noqa: F401 - asked for here
+    a_runner_looked_in,
+    someone_else,
+)
 from tests._secret_settings import use_store
 from tests._session import opens
 
@@ -347,12 +350,6 @@ async def said(
     return [rows[str(n)] for n in range(len(lines))]
 
 
-async def a_runner_looked_in(session: AsyncSession) -> None:
-    """A runner for every owner has just asked for runs: one is running."""
-    _, value = await tokens.create(session, None, "laptop")
-    await tokens.resolve(session, value)
-
-
 def summary_only(_: list[int]) -> Notes:
     """Notes that say next to nothing, for a meeting whose notes do not
     matter to the test."""
@@ -476,7 +473,7 @@ async def topic(session: AsyncSession, moment_ids: list[int], name: str) -> None
 def a_run(moment_id: int, **fields: Any) -> RunnerRun:
     """A run about the moment, as ``fields`` say it stands."""
     (subject,) = subjects([moment_id])
-    return RunnerRun(subject_kind=MOMENT, subject_id=subject, **fields)
+    return _runner.a_run(subject_kind=MOMENT, subject_id=subject, **fields)
 
 
 async def asked_a_question(

@@ -70,12 +70,6 @@ from app.components.backend.api.meetings.moments import (
 from app.components.backend.api.meetings.moments import (
     router as meetings_moments_router,
 )
-from app.components.backend.api.meetings.moments import (
-    runs_router as meetings_runs_router,
-)
-from app.components.backend.api.meetings.moments import (
-    tokens_router as meetings_runner_tokens_router,
-)
 from app.components.backend.api.meetings.people import (
     admin_router as meetings_people_admin_router,
 )
@@ -113,6 +107,10 @@ from app.components.backend.api.deploy.router import router as deploy_router
 {%- endif %}
 {%- if include_mcp and include_database %}
 from app.components.backend.api.mcp_tokens import router as mcp_tokens_router
+{%- endif %}
+{%- if include_runner %}
+from app.components.backend.api.runner import runs_router as runner_runs_router
+from app.components.backend.api.runner import tokens_router as runner_tokens_router
 {%- endif %}
 {%- for p in _plugins | default([]) %}
 {%- for r in p.wiring.routers %}
@@ -186,12 +184,10 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(research_router, prefix="/api/v1")
     {%- endif %}
     {%- if include_meetings %}
-    # Before the meeting routes: /meetings/admin, /people, /runs,
-    # /runner-tokens, /search and /series are not ids.
+    # Before the meeting routes: /meetings/admin, /people, /search and
+    # /series are not ids.
     app.include_router(meetings_search_admin_router, prefix="/api/v1")
     app.include_router(meetings_search_router, prefix="/api/v1")
-    app.include_router(meetings_runs_router, prefix="/api/v1")
-    app.include_router(meetings_runner_tokens_router, prefix="/api/v1")
     app.include_router(meetings_moments_admin_router, prefix="/api/v1")
     app.include_router(meetings_moments_router, prefix="/api/v1")
     app.include_router(meetings_series_admin_router, prefix="/api/v1")
@@ -212,6 +208,10 @@ def include_routers(app: FastAPI) -> None:
     {%- endif %}
     {%- if include_mcp and include_database %}
     app.include_router(mcp_tokens_router, prefix="/api/v1")
+    {%- endif %}
+    {%- if include_runner %}
+    app.include_router(runner_runs_router, prefix="/api/v1")
+    app.include_router(runner_tokens_router, prefix="/api/v1")
     {%- endif %}
     {%- if include_finance %}
     app.include_router(finance_router, prefix="/api/v1")

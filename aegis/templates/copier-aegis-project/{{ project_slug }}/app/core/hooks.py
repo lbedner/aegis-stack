@@ -2,7 +2,7 @@
 happens inside (``Hook.tell``): nothing listens unless bound, a task
 started inside carries it, and a listener that fails is logged, never the
 work's failure. An agent's steps (``app.core.steps``) and a service's own
-changes (the meetings' runs) are each one."""
+changes (the runner's runs) are each one."""
 
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, contextmanager

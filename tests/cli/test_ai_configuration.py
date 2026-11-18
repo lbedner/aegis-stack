@@ -50,6 +50,7 @@ class TestAIProviderSelection:
             False,  # deploy
             False,  # mcp
             False,  # browser
+            False,  # runner
             *BEFORE_AI,
             True,  # AI service
             False,  # Use PydanticAI? (framework, default True)
@@ -96,6 +97,7 @@ class TestAIProviderSelection:
             False,  # deploy
             False,  # mcp
             False,  # browser
+            False,  # runner
             *BEFORE_AI,
             True,  # AI service
             True,  # Use LangChain? Yes
@@ -143,6 +145,7 @@ class TestAIProviderSelection:
             False,  # deploy
             False,  # mcp
             False,  # browser
+            False,  # runner
             *BEFORE_AI,
             True,  # AI service
             False,  # Use LangChain? No (use PydanticAI)
@@ -190,6 +193,7 @@ class TestAIProviderSelection:
             False,  # deploy
             False,  # mcp
             False,  # browser
+            False,  # runner
             *BEFORE_AI,
             False,  # AI service
             *AFTER_AI,
@@ -239,6 +243,7 @@ class TestAIBackendSelection:
                 False,  # deploy
                 False,  # mcp
                 False,  # browser
+                False,  # runner
                 *BEFORE_AI,
                 True,  # AI service
                 False,  # Use LangChain? No (use PydanticAI)
@@ -300,6 +305,7 @@ class TestAIBackendSelection:
                 False,  # deploy
                 False,  # mcp
                 False,  # browser
+                False,  # runner
                 *BEFORE_AI,
                 True,  # AI service
                 False,  # Use LangChain? No (use PydanticAI)
@@ -352,6 +358,7 @@ class TestAIBackendSelection:
             False,  # deploy
             False,  # mcp
             False,  # browser
+            False,  # runner
             *BEFORE_AI,
             True,  # AI service
             False,  # Use LangChain? No (use PydanticAI)
@@ -522,6 +529,7 @@ class TestAIConfigurationEndToEnd:
             False,  # deploy
             False,  # mcp
             False,  # browser
+            False,  # runner
             *BEFORE_AI,
             True,  # Yes AI service
             True,  # Use LangChain? Yes
@@ -631,6 +639,7 @@ class TestOllamaModeSelection:
             False,  # deploy
             False,  # mcp
             False,  # browser
+            False,  # runner
             *BEFORE_AI,
             True,  # AI service
             False,  # Use LangChain? No

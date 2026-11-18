@@ -13,6 +13,7 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.components.runner.models import CLAIMED
 from app.core.config import settings
 from app.services.meetings.domains.accounts import service as accounts
 from app.services.meetings.domains.bot import card, voice
@@ -20,12 +21,10 @@ from app.services.meetings.domains.bot import run as bot
 from app.services.meetings.domains.bot.meet import CallState
 from app.services.meetings.models import (
     CAPTIONS,
-    CLAIMED,
     LEFT,
     SHORTCUT,
     Caption,
     Meeting,
-    MeetingActionRun,
     MeetingParticipant,
     MeetingStatus,
 )
@@ -35,6 +34,7 @@ from tests._meetings import (
     SAID,
     SHOWN,
     FakeCall,
+    a_run,
     asked_a_question,
     bot_on,
     hold_the_answers,
@@ -664,11 +664,7 @@ async def test_its_card_says_when_a_runner_is_answering(
     meeting_id, moment_id = await asked_a_question(async_db_session)
 
     async def answering() -> None:
-        async_db_session.add(
-            MeetingActionRun(
-                moment_id=moment_id, action="ask", prompt="-", status=CLAIMED
-            )
-        )
+        async_db_session.add(a_run(moment_id, action="ask", prompt="-", status=CLAIMED))
         await async_db_session.commit()
 
     call = FakeCall(

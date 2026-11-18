@@ -28,6 +28,7 @@ class ComponentNames:
     DEPLOY = "deploy"
     MCP = "mcp"
     BROWSER = "browser"
+    RUNNER = "runner"
 
     # Ordered list for interactive selection. Worker leads and redis
     # follows the steps that auto-add it (worker bundles redis), so most
@@ -48,6 +49,7 @@ class ComponentNames:
         DEPLOY,
         MCP,
         BROWSER,
+        RUNNER,
     ]
 
 
@@ -275,6 +277,7 @@ class AnswerKeys:
     OBSERVABILITY = "include_observability"
     STORAGE = "include_storage"
     BROWSER = "include_browser"
+    RUNNER = "include_runner"
 
     # Service include flags
     AUTH = "include_auth"

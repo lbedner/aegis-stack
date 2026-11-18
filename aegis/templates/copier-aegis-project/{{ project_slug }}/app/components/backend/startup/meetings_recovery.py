@@ -1,39 +1,18 @@
 """Runs ``fail_interrupted`` every ``STALE_SECONDS``, first that long after
 startup: a run that died with the last process, or a ``meetings join``
-killed since, has stopped beating by then, and a live run has not. The
-same sweep fails action runs a runner claimed and never finished."""
-
-import asyncio
-
-from sqlalchemy.exc import SQLAlchemyError
+killed since, has stopped beating by then, and a live run has not."""
 
 from app.components.backend import background
 from app.core.db import get_async_session
-from app.core.log import logger
-from app.services.meetings.service import (
-    STALE_SECONDS,
-    actions_runs,
-    fail_interrupted,
-)
+from app.services.meetings.service import STALE_SECONDS, fail_interrupted
 
 NAME = "meetings_recovery"
 
 
 async def sweep_forever() -> None:
-    while True:
-        await asyncio.sleep(STALE_SECONDS)
-        try:
-            async with get_async_session() as session:
-                count = await fail_interrupted(session)
-                abandoned = await actions_runs.fail_abandoned(session)
-        except SQLAlchemyError as e:
-            # The table arrives with a migration that may not have run yet.
-            logger.warning(f"Interrupted meetings not checked: {e}")
-            continue
-        if count:
-            logger.info(f"Marked {count} interrupted meeting(s) failed")
-        if abandoned:
-            logger.info(f"Marked {abandoned} abandoned action run(s) failed")
+    await background.sweep_every(
+        STALE_SECONDS, fail_interrupted, get_async_session, "interrupted meeting(s)"
+    )
 
 
 async def startup_hook() -> None:

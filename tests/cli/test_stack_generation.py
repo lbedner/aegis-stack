@@ -154,6 +154,22 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet", "playwright"],
     ),
     StackCombination(
+        name="runner",
+        # Without meetings: any service can ask a run of a coding agent.
+        components=["runner"],
+        description="Base stack with the runner (work sent out to a coding agent)",
+        expected_files=[
+            "app/components/runner/runs.py",
+            "app/components/runner/client.py",
+            "app/components/backend/api/runner.py",
+            "app/cli/runner.py",
+            "tests/components/test_runner.py",
+            "alembic/versions/001_runner.py",
+        ],
+        expected_docker_services=["webserver"],
+        expected_pyproject_deps=["fastapi", "flet", "sqlmodel", "alembic"],
+    ),
+    StackCombination(
         name="documents_worker",
         components=["worker", "database"],
         services=["documents"],
@@ -497,13 +513,14 @@ STACK_COMBINATIONS = [
         name="meetings",
         # The service on its own: no auth (every meeting unowned). It brings
         # the browser component the bot joins through.
-        components=["database", "htmx", "browser"],
+        components=["database", "htmx", "browser", "runner"],
         services=["meetings"],
         description="Meetings service (calls, participants, transcript) + database",
         expected_files=[
             "app/services/meetings/",
             "app/cli/meetings.py",
             "app/components/browser/client.py",
+            "app/components/runner/runs.py",
             "app/core/db.py",
             "alembic/versions/001_meetings.py",
         ],
@@ -652,7 +669,7 @@ STACK_COMBINATIONS = [
         # one row where its Overseer pages and admin API meet basic auth,
         # where a meeting's owner is a real user and the admin is whoever
         # ADMIN_USER_EMAILS names (no roles).
-        components=["htmx", "database", "inference", "secrets", "browser"],
+        components=["htmx", "database", "inference", "secrets", "browser", "runner"],
         services=["auth", "meetings"],
         description="htmx web frontend with the auth service (auth pages)",
         expected_files=[
@@ -703,7 +720,7 @@ STACK_COMBINATIONS = [
     ),
     StackCombination(
         name="everything",
-        components=["database", "scheduler", "worker", "redis", "browser"],
+        components=["database", "scheduler", "worker", "redis", "browser", "runner"],
         # Every service, which is the point of the row: `documents` sits in
         # 6 of the 10 service pairs nothing used to build and `finance` in 5,
         # so carrying both here closes all ten at no new runner. See

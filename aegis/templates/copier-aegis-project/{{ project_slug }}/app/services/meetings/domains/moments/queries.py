@@ -8,6 +8,8 @@ from collections.abc import Callable, Iterable
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.components.runner import runs
+from app.components.runner.models import RunnerRun
 from app.services.meetings.domains.moments.detectors import (
     ADDRESSED,
     OBEYED,
@@ -20,15 +22,16 @@ from app.services.meetings.domains.moments.detectors import (
 )
 from app.services.meetings.domains.notes.queries import with_speaker
 from app.services.meetings.models import (
+    MOMENT,
     NOT_DONE,
     UNKNOWN,
     BotAccount,
     Meeting,
-    MeetingActionRun,
     MeetingMoment,
     MeetingParticipant,
     MeetingPerson,
     TranscriptLine,
+    subjects,
 )
 
 
@@ -226,14 +229,9 @@ async def of_meeting(
     ]
 
 
-async def runs_of(db: AsyncSession, moment_ids: list[int]) -> list[MeetingActionRun]:
+async def runs_of(db: AsyncSession, moment_ids: list[int]) -> list[RunnerRun]:
     """These moments' runs, oldest first."""
-    query = (
-        select(MeetingActionRun)
-        .where(col(MeetingActionRun.moment_id).in_(moment_ids))
-        .order_by(col(MeetingActionRun.asked_at), col(MeetingActionRun.id))
-    )
-    return list((await db.exec(query)).all())
+    return await runs.about(db, MOMENT, subjects(moment_ids))
 
 
 async def said(

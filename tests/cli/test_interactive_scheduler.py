@@ -57,6 +57,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # deploy
                 False,  # mcp
                 False,  # browser
+                False,  # runner
                 False,  # auth
                 False,  # payment
                 False,  # AI
@@ -108,6 +109,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # deploy
                 False,  # mcp
                 False,  # browser
+                False,  # runner
                 False,  # auth
                 False,  # payment
                 False,  # AI
@@ -152,6 +154,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # deploy
                 False,  # mcp
                 False,  # browser
+                False,  # runner
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -192,6 +195,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # deploy
                 False,  # mcp
                 False,  # browser
+                False,  # runner
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -238,6 +242,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # deploy
                 False,  # mcp
                 False,  # browser
+                False,  # runner
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -292,6 +297,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # deploy
                 False,  # mcp
                 False,  # browser
+                False,  # runner
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -338,6 +344,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # deploy
                 False,  # mcp
                 False,  # browser
+                False,  # runner
                 False,  # no auth
                 False,  # payment
                 False,  # no AI

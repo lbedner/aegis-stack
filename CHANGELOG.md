@@ -90,6 +90,22 @@
   its requests and how long each line took. `my-app inference speech`,
   `speak` and `speech-model`, and `/api/v1/inference/speech`, do the same.
 
+- **A runner component: work the app sends out to a coding agent.** The
+  queue of runs, the runner that answers them and its tokens were part of
+  the meetings service; they are a component of their own (`aegis add
+  runner`), so any service can ask a run of a coding agent, about something
+  of its own (`runs.ask(..., kind=, subject_id=)`), without the meeting bot.
+  Meetings requires it and asks its questions of it, as before. The commands
+  and routes moved with it: `meetings runner` is `runner run`, `meetings
+  runner-token` is `runner token`, and `/api/v1/meetings/runs` and
+  `/runner-tokens` are `/api/v1/runner/runs` and `/runner/tokens`. A stack
+  updated across the change keeps its runs and tokens (the migration carries
+  them into `runner_run` and `runner_token`), and its dev service (now
+  `runner`) still reads `.env.meetings-runner` and the `MEETINGS_RUNNER_*`
+  names until they are moved to `.env.runner`. Overseer no longer lists the
+  dev service's container and logs (they were on the Meetings page): the
+  runner has no Overseer page of its own yet.
+
 ### Fixed
 
 - **Models.** A model that refuses `temperature` is retried once without it

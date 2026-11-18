@@ -12,6 +12,8 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.components.runner.models import RunnerRun
+from app.components.runner.runs import claim, finish, watching
 from app.core.config import settings
 from app.services.meetings.domains.actions import registry, runs
 from app.services.meetings.domains.actions.registry import (
@@ -22,17 +24,19 @@ from app.services.meetings.domains.actions.registry import (
 from app.services.meetings.domains.actions.runs import (
     ActionNotFoundError,
     ask,
-    claim,
-    finish,
 )
 from app.services.meetings.domains.moments.service import moments_of
-from app.services.meetings.models import MeetingActionRun, MeetingMoment
+from app.services.meetings.models import (
+    moment_of,
+)
 from tests._meetings import (
     FakeLive,
     a_meeting,
+    a_run,
     a_runner_looked_in,
     asked_a_question,
     said,
+    someone_else,
     topic,
 )
 
@@ -118,8 +122,8 @@ async def test_her_answers_to_lines_put_to_her_newest_first(
         ]
     ):
         async_db_session.add(
-            MeetingActionRun(
-                moment_id=moment.id or 0,
+            a_run(
+                moment.id or 0,
                 action="agent",
                 prompt="-",
                 status=status,
@@ -230,7 +234,7 @@ async def test_asking_any_question_of_a_burst_asks_them_all(
 
     run = await moments.ask(async_db_session, meeting_id, follow.id, "agent", None)
 
-    assert run.moment_id == led.id and led.line_id == lines[0]
+    assert moment_of(run) == led.id and led.line_id == lines[0]
     assert "export ship" in run.prompt and "billing sign off" in run.prompt
     assert "It depends on billing." in run.prompt
 
@@ -270,9 +274,7 @@ async def test_a_card_keeps_one_answer_whichever_question_it_was_on(
         apart=600.0,
     )
     first, second = await moments_of(async_db_session, meeting_id)
-    earlier = MeetingActionRun(
-        moment_id=second.id, action="agent", prompt="?", status="done", result="Old."
-    )
+    earlier = a_run(second.id, action="agent", prompt="?", status="done", result="Old.")
     async_db_session.add(earlier)
     await topic(async_db_session, [first.id, second.id], "Scale returns")
 
@@ -322,97 +324,39 @@ async def test_a_card_asked_across_a_long_call_reads_only_what_it_needs(
     assert max(read) <= 2 * prompt.CONTEXT_LINES + 1
 
 
-async def test_a_runner_claims_a_run_once_and_finishes_it(
+async def test_a_run_is_its_meetings_owners_about_the_moment(
     async_db_session: AsyncSession,
 ) -> None:
-    _, moment_id = await asked_a_question(async_db_session)
+    """What a runner claims and finishes is the runner component's run:
+    asked here for the meeting's owner, about the moment."""
+    owner = await someone_else(async_db_session)
+    meeting_id, moment_id = await asked_a_question(async_db_session, owner)
+
     asked = await ask(async_db_session, moment_id, "agent", owner_user_id=None)
 
-    claimed = await claim(async_db_session, None, ["agent"], runner="laptop")
+    assert (asked.owner_user_id, asked.subject_kind) == (owner, "moment")
+    claimed = await claim(async_db_session, owner, ["agent"], runner="laptop")
     assert claimed is not None and claimed.id == asked.id
-    assert (claimed.status, claimed.runner) == ("claimed", "laptop")
-    assert await claim(async_db_session, None, ["agent"], runner="desk") is None
-
-    done = await finish(
-        async_db_session, claimed.id or 0, None, "It can.", ok=True, runner="laptop"
+    await finish(
+        async_db_session, asked.id or 0, owner, "It can.", ok=True, runner="laptop"
     )
-
-    assert (done.status, done.result) == ("done", "It can.")
-    assert done.finished_at is not None
-
-
-async def test_only_what_claimed_a_run_finishes_it(
-    async_db_session: AsyncSession,
-) -> None:
-    """Another of the owner's runners cannot post over a claimed run, nor
-    over one the app is answering: the answer would be lost."""
-    _, moment_id = await asked_a_question(async_db_session)
-    await ask(async_db_session, moment_id, "agent", owner_user_id=None)
-    claimed = await claim(async_db_session, None, ["agent"], runner="laptop")
-    assert claimed is not None
-
-    with pytest.raises(runs.RunNotFoundError):
-        await finish(
-            async_db_session, claimed.id or 0, None, "Not mine", ok=True, runner="desk"
-        )
-
-    done = await finish(
-        async_db_session, claimed.id or 0, None, "It can.", ok=True, runner="laptop"
-    )
-    assert (done.status, done.result) == ("done", "It can.")
-
-
-async def test_a_run_that_fails_says_why(async_db_session: AsyncSession) -> None:
-    _, moment_id = await asked_a_question(async_db_session)
-    await ask(async_db_session, moment_id, "agent", owner_user_id=None)
-    claimed = await claim(async_db_session, None, ["agent"], runner="laptop")
-
-    failed = await finish(
-        async_db_session, claimed.id, None, "No repo", ok=False, runner="laptop"
-    )  # type: ignore[union-attr, arg-type]
-
-    assert (failed.status, failed.result) == ("failed", "No repo")
-
-
-async def test_a_run_whose_runner_went_quiet_fails(
-    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A runner that died with its run, or a restart that took an in-app
-    run with it, never finishes it; past its time it fails, so nothing
-    waits on it."""
-    _register(
-        monkeypatch,
-        Action("ticket", "File a ticket", frozenset({"question"}), "runner"),
-    )
-    _, moment_id = await asked_a_question(async_db_session)
-    await ask(async_db_session, moment_id, "agent", owner_user_id=None)
-    await ask(async_db_session, moment_id, "ticket", owner_user_id=None)
-    gone = await claim(async_db_session, None, ["agent"], runner="laptop")
-    live = await claim(async_db_session, None, ["ticket"], runner="desk")
-    gone.claimed_at -= runs.ABANDONED_AFTER  # type: ignore[union-attr, operator]
-    async_db_session.add(gone)
-    await async_db_session.commit()
-
-    assert await runs.fail_abandoned(async_db_session) == 1
-
-    row = await async_db_session.get_one(MeetingMoment, moment_id)
-    (moment,) = await moments_of(async_db_session, row.meeting_id)
-    assert [(r.runner, r.status) for r in moment.runs] == [
-        ("laptop", "failed"),
-        ("desk", "claimed"),
+    (moment,) = await moments_of(async_db_session, meeting_id)
+    assert [(r.status, r.result, r.runner) for r in moment.runs] == [
+        ("done", "It can.", "laptop")
     ]
-    assert live is not None and moment.runs[0].result
 
 
-async def test_a_runner_claims_only_its_owners_runs_and_its_actions(
+async def test_a_deleted_meetings_runs_go_with_it(
     async_db_session: AsyncSession,
 ) -> None:
-    """A runner holds one owner's token and names the actions it runs."""
-    _, mine = await asked_a_question(async_db_session)
-    await ask(async_db_session, mine, "agent", owner_user_id=None)
+    from app.services.meetings.service import MeetingsService
 
-    assert await claim(async_db_session, None, ["other"], runner="laptop") is None
-    assert await claim(async_db_session, None, ["agent"], runner="laptop") is not None
+    meeting_id, moment_id = await asked_a_question(async_db_session)
+    await ask(async_db_session, moment_id, "agent", owner_user_id=None)
+
+    await MeetingsService(async_db_session, None).delete(meeting_id)
+
+    assert (await async_db_session.exec(select(RunnerRun))).all() == []
 
 
 async def test_a_browser_action_is_not_asked(async_db_session: AsyncSession) -> None:
@@ -491,7 +435,7 @@ async def test_a_kind_can_ask_an_action_by_itself(
 
     claimed = await claim(async_db_session, None, ["agent"], runner="laptop")
 
-    assert claimed is not None and claimed.moment_id == moment_id
+    assert claimed is not None and moment_of(claimed) == moment_id
     assert await claim(async_db_session, None, ["agent"], runner="laptop") is None
 
 
@@ -575,7 +519,7 @@ async def test_a_question_put_to_the_bot_is_answered_by_her_unasked(
     for started in held:
         await started
 
-    (run,) = (await async_db_session.exec(select(MeetingActionRun))).all()
+    (run,) = (await async_db_session.exec(select(RunnerRun))).all()
     assert (run.action, run.status, run.result) == ("ai", "done", "Sam owns billing.")
     message, how = asked[0]
     # Told she is in the meeting over her own prompt (``IN_A_MEETING``),
@@ -741,8 +685,7 @@ async def test_whoever_watches_hears_a_run_asked_taken_and_finished_at_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The bot in a call hears each change to a run made in its own process
-    as it happens (``changes.watching``), not on its next look."""
-    from app.services.meetings.domains.actions import changes
+    as it happens (``watching``), not on its next look."""
     from tests._session import opens
 
     async def probe(prompt: str, owner_user_id: int | None) -> str:
@@ -757,7 +700,7 @@ async def test_whoever_watches_hears_a_run_asked_taken_and_finished_at_once(
     _, moment_id = await asked_a_question(async_db_session)
     heard: list[str] = []
 
-    with changes.watching(lambda: heard.append("changed")):
+    with watching(lambda: heard.append("changed")):
         await runs.ask(async_db_session, moment_id, "probe", owner_user_id=None)
         for started in held:
             await started
@@ -866,5 +809,5 @@ async def test_asked_what_a_line_is_about_she_says_and_draws_the_part(
     assert "Dana: We should move the scheduler onto Redis." in message
     assert (how["admin"], how["surface"], how["agent_slug"]) == (True, "meetings", None)
     assert how["owner_user_id"] == acting_owner_user_id
-    runs_kept = (await async_db_session.exec(select(MeetingActionRun))).all()
+    runs_kept = (await async_db_session.exec(select(RunnerRun))).all()
     assert runs_kept == []

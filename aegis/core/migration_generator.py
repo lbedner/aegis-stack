@@ -168,7 +168,15 @@ AI_MIGRATION = ServiceMigrationSpec(
 )
 
 
-def _carry_rows(old: str, new: str, cols: str, *, schema: str | None = None) -> str:
+def _carry_rows(
+    old: str,
+    new: str,
+    cols: str,
+    *,
+    schema: str | None = None,
+    select: str = "{cols}",
+    joined: str = "",
+) -> str:
     """The body of ``upgrade()`` moving ``old``'s rows into ``new``, the table
     the models replaced it with, ids included, then dropping ``old``.
 
@@ -177,6 +185,10 @@ def _carry_rows(old: str, new: str, cols: str, *, schema: str | None = None) -> 
     is where ``old`` lives on Postgres (SQLite keeps one file). The
     sequence is moved past the copied ids so the next insert does not
     collide with them. A database that never had ``old`` is left alone.
+
+    A table reshaped on the way (a column replaced by ones read through
+    another table) names what fills ``cols`` (``select``, over ``old`` as
+    ``o``) and the tables it reads them through (``joined``).
     """
     where = f"{schema!r} if postgres else None" if schema else "None"
     named = f'f"{{schema}}.{old}" if schema else "{old}"' if schema else f'"{old}"'
@@ -187,7 +199,7 @@ def _carry_rows(old: str, new: str, cols: str, *, schema: str | None = None) -> 
     if sa.inspect(bind).has_table("{old}", schema=schema):
         old = {named}
         cols = "{cols}"
-        op.execute(f"INSERT INTO {new} ({{cols}}) SELECT {{cols}} FROM {{old}}")
+        op.execute(f"INSERT INTO {new} ({{cols}}) SELECT {select} FROM {{old}}{joined}")
         if postgres:
             op.execute(
                 "SELECT setval(pg_get_serial_sequence('{new}', 'id'), "
@@ -370,6 +382,43 @@ DATABASE_MIGRATION = ServiceMigrationSpec(
     service_name="database",
     description="Saved queries and the storage catalog",
     stamp_signature=("table", "saved_query"),
+)
+
+
+# The runner component's queue and tokens were meetings' until any service
+# could ask a run: both tables' rows carry over, ids included. A run was
+# its moment's; it becomes its owner's (its meeting's), about that moment.
+_MEETINGS_RUNS_CARRY_OVER = "\n".join(
+    (
+        _carry_rows(
+            "meeting_runner_token",
+            "runner_token",
+            "id, owner_user_id, name, digest, hint, created_at, last_used_at, "
+            "revoked_at",
+        ),
+        _carry_rows(
+            "meeting_action_run",
+            "runner_run",
+            "id, owner_user_id, subject_kind, subject_id, action, prompt, status, "
+            "result, runner, asked_at, claimed_at, finished_at",
+            select=(
+                "o.id, m.owner_user_id, 'moment', CAST(o.moment_id AS TEXT), "
+                "o.action, o.prompt, o.status, o.result, o.runner, o.asked_at, "
+                "o.claimed_at, o.finished_at"
+            ),
+            joined=(
+                " o JOIN meeting_moment mo ON mo.id = o.moment_id "
+                "JOIN meeting m ON m.id = mo.meeting_id"
+            ),
+        ),
+    )
+)
+
+RUNNER_MIGRATION = ServiceMigrationSpec(
+    service_name="runner",
+    description="Runner: work asked of a coding agent, and the tokens that claim it",
+    data_after=_MEETINGS_RUNS_CARRY_OVER,
+    stamp_signature=("table", "runner_run"),
 )
 
 
@@ -1030,6 +1079,11 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     # Secrets component: its one table. No FK to anything, so order is free.
     if on(AnswerKeys.SECRETS):
         services.append("secrets")
+
+    # Runner component: its queue and tokens. After auth (owner key to
+    # ``user``) and after meetings (it carries meetings' old rows over).
+    if on(AnswerKeys.RUNNER):
+        services.append("runner")
 
     # A component whose tables live in its database-only files (its
     # FileManifest extras keyed on the database: deploy's history, mcp's

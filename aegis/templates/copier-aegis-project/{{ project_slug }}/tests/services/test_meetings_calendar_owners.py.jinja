@@ -108,6 +108,25 @@ async def test_given_away_its_people_and_notes_go_with_it(
     assert await person_named(async_db_session, None, "Ada") is None
 
 
+async def test_a_meeting_given_to_someone_takes_its_runs_with_it(
+    async_db_session: AsyncSession, user_factory
+) -> None:
+    """A run asked while nobody owned the meeting is its new owner's
+    runner's to claim."""
+    from app.components.runner.runs import claim
+    from app.services.meetings.domains.actions.runs import ask
+    from tests._meetings import asked_a_question
+
+    leo = await user_factory(email="leo@example.com")
+    meeting_id, moment_id = await asked_a_question(async_db_session)
+    asked = await ask(async_db_session, moment_id, "agent", owner_user_id=None)
+
+    await _given(async_db_session, meeting_id, leo.id)
+
+    claimed = await claim(async_db_session, leo.id, ["agent"], runner="laptop")
+    assert claimed is not None and claimed.id == asked.id
+
+
 async def test_one_someone_owns_is_not_given_away(
     async_db_session: AsyncSession, user_factory
 ) -> None:

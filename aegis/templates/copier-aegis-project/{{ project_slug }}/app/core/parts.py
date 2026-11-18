@@ -324,7 +324,6 @@ PARTS: dict[str, Part] = {
         category=Category.AI,
         cli="meetings",
         marker="app/services/meetings",
-        agents=("meetings-runner",),
         order=55,
         description="A bot that joins Google Meet as its own agent: transcript, notes, threads, people, what keeps coming up, joined from its calendar",
         experimental=True,
@@ -409,6 +408,13 @@ PARTS: dict[str, Part] = {
         marker="app/services/research",
         order=50,
         description="Outside posts and threads, collected by saved searches",
+    ),
+    "runner": Part(
+        kind="component",
+        category=Category.AI,
+        cli="runner",
+        marker="app/components/runner",
+        description="Work the app sends out to a coding agent: a queue of runs, and a runner on any machine with the repository that answers them",
     ),
     "scheduler": Part(
         kind="component",

@@ -13,18 +13,10 @@
 | `POST /api/v1/meetings/{id}/moments/find` | Read the call over again for moments: what it holds after |
 | `POST /api/v1/meetings/{id}/moments/{moment_id}/runs` | `{"action": ...}`: ask an action of a moment; `202` with the run, `404` for an action that cannot be asked (a browser one) |
 | `POST /api/v1/meetings/{id}/lines/{line_id}/about` | What a line is about (or, with `?part=component:scheduler`, the part it names), as Illiana says it to the meeting's owner: `{"summary": ..., "card_id": ...}` (the card she drew of the part it names, or `null`); `404` for a line the meeting does not hold, or a stack without her |
-| `GET /api/v1/meetings/runner-tokens` | The caller's live runner tokens |
-| `POST /api/v1/meetings/runner-tokens` | `{"name": ...}`: a runner token; `201` with its `value`, shown this once |
-| `DELETE /api/v1/meetings/runner-tokens/{id}` | Revoke one; `404` for one that is not the caller's |
 
 ## The runner's routes
 
-A runner's routes take its token (`Authorization: Bearer mrt_...`), not a user. See [The runner](moments.md#the-runner).
-
-| Route | What it does |
-|-------|--------------|
-| `POST /api/v1/meetings/runs/claim` | `{"actions": [...]}`: the oldest waiting run of those actions among the token's owner's meetings, now the runner's, with its prompt; `204` when there is none |
-| `POST /api/v1/meetings/runs/{id}/finish` | `{"ok": ..., "result": ...}`: what the run came back with |
+Claiming a run, finishing it and runner tokens are the [runner component](../../components/runner.md#api)'s (`/api/v1/runner/...`).
 
 ## Overseer's routes
 

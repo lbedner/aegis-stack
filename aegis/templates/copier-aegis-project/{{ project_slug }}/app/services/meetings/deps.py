@@ -4,7 +4,7 @@ caller (``get_owner_user_id``): one owner never reads another's meetings."""
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from fastapi import Depends, Header, HTTPException, Response, UploadFile, status
+from fastapi import Depends, HTTPException, Response, UploadFile, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_db
@@ -15,11 +15,9 @@ from app.services.meetings.domains.accounts.service import (
     image_named,
     set_image,
 )
-from app.services.meetings.domains.actions import tokens
 from app.services.meetings.domains.actions.runs import (
     ActionNotFoundError,
     MomentNotFoundError,
-    RunNotFoundError,
 )
 from app.services.meetings.domains.calendar.entries import EventNotFoundError
 from app.services.meetings.domains.calendar.owners import NoSuchOwnerError
@@ -32,7 +30,7 @@ from app.services.meetings.domains.series.service import (
     SeriesNotFoundError,
     SeriesService,
 )
-from app.services.meetings.models import BotAccount, MeetingRunnerToken
+from app.services.meetings.models import BotAccount
 from app.services.meetings.service import (
     MeetingInProgressError,
     MeetingNotFoundError,
@@ -92,9 +90,8 @@ def as_http() -> Iterator[None]:
     the caller cannot see is a 404, one the bot is still in or someone owns
     already (or notes, a guide or a series that cannot be written now) a 409, a link it cannot join, a speaker who was not
     there, an agent there is not, a picture a card cannot carry or an owner
-    nobody here is a 422. A moment, action, claimed run or
-    runner token the caller cannot reach is a 404 too, as is a meeting on no
-    calendar."""
+    nobody here is a 422. A moment or action the caller cannot reach is a
+    404 too, as is a meeting on no calendar."""
     try:
         yield
     except (
@@ -103,8 +100,6 @@ def as_http() -> Iterator[None]:
         SeriesNotFoundError,
         MomentNotFoundError,
         ActionNotFoundError,
-        RunNotFoundError,
-        tokens.RunnerTokenNotFoundError,
         EventNotFoundError,
     ) as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
@@ -118,24 +113,6 @@ def as_http() -> Iterator[None]:
         NoSuchOwnerError,
     ) as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
-
-
-async def get_runner_token(
-    authorization: str | None = Header(default=None),
-    db: AsyncSession = Depends(get_async_db),
-) -> MeetingRunnerToken:
-    """The runner token the request carries (``Authorization: Bearer
-    mrt_...``), noting its use; a 401 without a live one. A runner is a
-    machine: it never holds a session."""
-    value = (authorization or "").removeprefix("Bearer ").strip()
-    token = await tokens.resolve(db, value) if value.startswith(tokens.PREFIX) else None
-    if token is None:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED,
-            "A live runner token is needed",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return token
 
 
 # A picture's address carries its version (``AgentRow.image``): kept for

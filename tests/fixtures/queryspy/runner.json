@@ -1,0 +1,48 @@
+{
+  "tool": "queryspy",
+  "version": "0.4.1",
+  "entries": [
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM runner_run WHERE runner_run.id = :id_1",
+      "file": "app/components/runner/queries.py",
+      "function": "run"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM runner_run WHERE runner_run.owner_user_id = :owner_user_id_1 AND runner_run.status = :status_1 AND runner_run.action IN (__[POSTCOMPILE_action_1]) ORDER BY runner_run.asked_at, runner_run.id LIMIT :param_1",
+      "file": "app/components/runner/queries.py",
+      "function": "waiting"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM runner_run WHERE runner_run.status = :status_1 AND runner_run.action IN (__[POSTCOMPILE_action_1]) ORDER BY runner_run.asked_at, runner_run.id LIMIT :param_1",
+      "file": "app/components/runner/queries.py",
+      "function": "waiting"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM runner_run WHERE runner_run.subject_kind = :subject_kind_1 AND runner_run.subject_id IN (__[POSTCOMPILE_subject_id_1]) ORDER BY runner_run.asked_at, runner_run.id",
+      "file": "app/components/runner/queries.py",
+      "function": "about"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM runner_token WHERE runner_token.owner_user_id IS NULL AND runner_token.revoked_at IS NULL ORDER BY runner_token.created_at DESC",
+      "file": "app/components/runner/queries.py",
+      "function": "live_tokens"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM runner_token WHERE runner_token.revoked_at IS NULL AND runner_token.digest = :digest_1",
+      "file": "app/components/runner/queries.py",
+      "function": "live_token"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM runner_token WHERE runner_token.revoked_at IS NULL AND runner_token.id = :id_1 AND runner_token.owner_user_id IS NULL",
+      "file": "app/components/runner/queries.py",
+      "function": "live_token"
+    }
+  ]
+}

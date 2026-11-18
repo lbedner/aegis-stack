@@ -10,6 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.concurrency import background
 from app.core.discovery import optional
 from app.services.meetings import queries
+from app.services.meetings.domains.actions import runs as action_runs
 from app.services.meetings.domains.bot.row import transition
 from app.services.meetings.domains.labels import call_length, status_label
 from app.services.meetings.domains.moments import service as moments
@@ -20,6 +21,7 @@ from app.services.meetings.domains.people import participants
 from app.services.meetings.domains.people import queries as people_queries
 from app.services.meetings.domains.people.heard import heard_line, voices
 from app.services.meetings.domains.series import queries as series_queries
+from app.components.runner.models import RunnerRun
 from app.services.meetings.models import (
     IN_PROGRESS,
     LEAVABLE,
@@ -28,7 +30,6 @@ from app.services.meetings.models import (
     UNKNOWN,
     KeptNotes,
     Meeting,
-    MeetingActionRun,
     MeetingGuidePoint,
     MeetingGuidePointLine,
     MeetingNoteItem,
@@ -66,10 +67,6 @@ if TYPE_CHECKING:
         set_default_owner,
         set_switch,
     )
-    from app.services.meetings.domains.actions import runs as actions_runs  # noqa: F401
-    from app.services.meetings.domains.actions import (  # noqa: F401
-        tokens as actions_tokens,
-    )
     from app.services.meetings.domains.actions.about import (  # noqa: F401
         asks_about,
         line_about,
@@ -78,11 +75,6 @@ if TYPE_CHECKING:
     from app.services.meetings.domains.actions.registry import (  # noqa: F401
         Action,
         register_action,
-    )
-    from app.services.meetings.domains.actions.runner import (  # noqa: F401
-        Runner,
-        run_forever,
-        run_once,
     )
 {%- if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
     from app.services.meetings.domains.agents import (  # noqa: F401
@@ -168,7 +160,6 @@ if TYPE_CHECKING:
         GuideRecord,
         GuideRow,
         LineAbout,
-        MeetingRunnerToken,
         MeetingSeries,
         MomentRecord,
         Notes,
@@ -370,7 +361,7 @@ class MeetingsService:
         await tidy.look_over(self.db, [meeting_id], wait=False)
         return await self.read(meeting_id)
 
-    async def ask(self, meeting_id: int, moment_id: int, name: str) -> MeetingActionRun:
+    async def ask(self, meeting_id: int, moment_id: int, name: str) -> RunnerRun:
         """Ask the action ``name`` of a moment in one of the owner's meetings
         (of its burst): in the app it starts at once; on a runner it waits."""
         return await moments.ask(
@@ -413,6 +404,7 @@ class MeetingsService:
         )
         here = await people_queries.meeting_people(self.db, meeting_id)
         owner, link = meeting.owner_user_id, series_queries.series_link(meeting.url)
+        await action_runs.forget(self.db, meeting_id)
         await self.db.delete(meeting)
         await self.db.flush()
         await notes_queries.delete_in(

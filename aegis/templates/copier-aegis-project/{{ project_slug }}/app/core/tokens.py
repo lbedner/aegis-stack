@@ -1,5 +1,5 @@
 """Secret tokens a machine shows the app instead of a session (an MCP
-client, a meeting runner): minted once, shown once, kept only as a digest,
+client, a runner): minted once, shown once, kept only as a digest,
 with a short hint to tell them apart."""
 
 from dataclasses import dataclass

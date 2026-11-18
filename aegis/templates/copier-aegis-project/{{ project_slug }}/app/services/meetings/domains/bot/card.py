@@ -36,6 +36,7 @@ from typing import Any
 from playwright.async_api import Page
 from pydantic import BaseModel, ConfigDict
 
+from app.components.runner.models import CLAIMED, DONE
 from app.core.log import logger
 from app.services.meetings.domains.bot.voice import sentences
 from app.services.meetings.domains.moments.detectors import (
@@ -49,7 +50,10 @@ from app.services.meetings.domains.moments.detectors import (
     says_more,
     stops,
 )
-from app.services.meetings.models import CLAIMED, DONE, IN_THE_APP, Going
+from app.services.meetings.models import (
+    IN_THE_APP,
+    Going,
+)
 
 LISTENING = "Listening"
 NO_CAPTIONS = "Can't see captions"

@@ -11,10 +11,11 @@ from typing import TypeVar
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.components.runner import tokens
+from app.components.runner.models import ASKED, CLAIMED, DONE, GOING, RunnerRun
 from app.core.config import settings
 from app.core.log import logger
 from app.services.meetings.domains.actions import runs as action_runs
-from app.services.meetings.domains.actions import tokens
 from app.services.meetings.domains.actions.prompt import excerpt_from
 from app.services.meetings.domains.actions.registry import (
     ANSWERS,
@@ -33,18 +34,14 @@ from app.services.meetings.domains.moments.detectors import (
 )
 from app.services.meetings.domains.notes.queries import delete_in
 from app.services.meetings.models import (
-    ASKED,
-    CLAIMED,
-    DONE,
-    GOING,
     IN_THE_APP,
     TONES,
     ActionChoice,
     Meeting,
-    MeetingActionRun,
     MeetingMoment,
     MomentRecord,
     RunRecord,
+    moment_of,
 )
 
 # A moment of a kind said this soon after the first of a burst is on the
@@ -105,7 +102,7 @@ async def find_again(db: AsyncSession, meeting_ids: list[int]) -> None:
 async def drop_unasked(db: AsyncSession, moment_ids: list[int]) -> None:
     """Delete these moments, but those something was asked of: their
     answers stay. The caller commits."""
-    asked = {run.moment_id for run in await queries.runs_of(db, moment_ids)}
+    asked = {moment_of(run) for run in await queries.runs_of(db, moment_ids)}
     await delete_in(db, MeetingMoment.id, [m for m in moment_ids if m not in asked])
 
 
@@ -211,7 +208,7 @@ async def ask(
     moment_id: int,
     action: str,
     owner_user_id: int | None,
-) -> MeetingActionRun:
+) -> RunnerRun:
     """Ask ``action`` of the burst the moment is in: a run on its first
     moment, framed from them all."""
     card = (await cards_of(db, meeting_id)).get(moment_id)
@@ -225,7 +222,7 @@ async def _ask_card(
     moment_id: int,
     action: str,
     owner_user_id: int | None,
-) -> MeetingActionRun:
+) -> RunnerRun:
     """``action`` asked of ``card``'s first moment, framed from them all;
     of ``moment_id`` alone when it is on no card of the meeting's."""
     return await action_runs.ask(
@@ -377,7 +374,7 @@ async def _runs_of(
     for run in rows:
         action = named[run.id]
         stalled = run.id in waiting and not listening
-        runs.setdefault(run.moment_id, []).append(
+        runs.setdefault(moment_of(run), []).append(
             RunRecord(
                 id=run.id or 0,
                 action=run.action,
@@ -407,7 +404,7 @@ def state_of(status: str, where: str, runner: str | None, stalled: bool) -> str:
     """Where a run stands, as both Overseers say it."""
     on = f" on {runner}" if runner and runner != IN_THE_APP else ""
     if stalled:
-        return "No runner is running: start one with meetings runner"
+        return "No runner is running: start one with runner run"
     if status == ASKED:
         return "Waiting for a runner" if where == "runner" else "Asked"
     if status == CLAIMED:

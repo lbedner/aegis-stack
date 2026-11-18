@@ -42,4 +42,4 @@ A bot that joins a call as a visible, announced participant, and keeps who was t
 | [Notes, People and Series](notes.md) | What is written once a call is over, and the agents that write it |
 | [Meetings Page and Overseer](pages.md) | The `/meetings` page, Overseer's views, the Flet dashboard, and search |
 | [CLI Commands](cli.md) | `my-app meetings ...` |
-| [API Reference](api.md) | The owner's, the runner's and Overseer's routes |
+| [API Reference](api.md) | The owner's and Overseer's routes |

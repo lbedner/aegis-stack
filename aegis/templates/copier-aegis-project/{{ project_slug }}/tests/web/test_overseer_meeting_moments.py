@@ -9,9 +9,9 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.components.runner.runs import claim, finish
 from app.components.web_frontend import overseer_meetings
 from app.components.web_frontend.rendering import templates
-from app.services.meetings.domains.actions.runs import claim, finish
 from app.services.meetings.domains.moments import tidy
 from app.services.meetings.domains.notes.queries import delete_in
 from app.services.meetings.models import MeetingMoment, MeetingStatus
@@ -78,7 +78,7 @@ async def test_an_action_asked_from_the_drawer_shows_where_it_stands(
 
     assert response.status_code == 200, response.text
     run = one(response.text, f'[data-moment="{moment_id}"] [data-run]')
-    assert "Ask agent" in text(run) and "meetings runner" in text(run)
+    assert "Ask agent" in text(run) and "runner run" in text(run)
     again = one(response.text, f'[data-moment="{moment_id}"] [data-action="agent"]')
     assert again.get("disabled") is not None
 

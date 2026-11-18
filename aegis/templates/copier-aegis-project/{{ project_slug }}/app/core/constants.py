@@ -42,6 +42,7 @@ class ComponentName(StrEnum):
     OBSERVABILITY = "observability"
     MCP = "mcp"
     BROWSER = "browser"
+    RUNNER = "runner"
     OLLAMA = "ollama"
     DEPLOY = "deploy"
 

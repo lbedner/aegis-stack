@@ -32,7 +32,7 @@ STACKS = {
     ),
     "finance_auth": (["database[postgres]", "scheduler"], ["auth", "finance"]),
     # Search's full-text index is the revision's own (no model declares it).
-    "meetings": (["database[postgres]", "browser"], ["meetings"]),
+    "meetings": (["database[postgres]", "browser", "runner"], ["meetings"]),
 }
 
 CREATE_DB = """

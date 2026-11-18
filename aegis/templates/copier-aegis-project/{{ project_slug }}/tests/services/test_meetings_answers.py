@@ -11,6 +11,7 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.components.runner.models import RunnerRun
 from app.services.meetings.domains.actions import registry, runs
 from app.services.meetings.domains.actions.live import IN_A_MEETING
 from app.services.meetings.domains.actions.registry import ANSWERS, Action
@@ -20,7 +21,9 @@ from app.services.meetings.domains.bot.meet import CallState
 from app.services.meetings.domains.bot.transcript import said_again
 from app.services.meetings.domains.moments import detectors
 from app.services.meetings.domains.moments.service import moments_of
-from app.services.meetings.models import Caption, MeetingActionRun
+from app.services.meetings.models import (
+    Caption,
+)
 from tests._meetings import (
     FakeCall,
     FakeLive,
@@ -56,7 +59,7 @@ async def _unused(prompt: str, owner_user_id: int | None) -> str:
 
 async def _over(db: AsyncSession, status: str, result: str) -> None:
     """Her answer to the one question put to her, done or failed."""
-    (run,) = (await db.exec(select(MeetingActionRun))).all()
+    (run,) = (await db.exec(select(RunnerRun))).all()
     run.status, run.result = status, result
     db.add(run)
     await db.commit()
@@ -821,7 +824,7 @@ async def test_told_to_stop_she_drops_everything_and_listens_again(
     assert call.said == [] and call.spoken == []
     assert call.silenced and live.stopped and not call.mic_open
     assert answering.saying() == set() and not answering.waiting
-    (run,) = (await async_db_session.exec(select(MeetingActionRun))).all()
+    (run,) = (await async_db_session.exec(select(RunnerRun))).all()
     assert (run.status, run.result) == ("failed", runs.STOPPED)
     await answering.heard(async_db_session, [(moment_id, "addressed")])
     assert answering.waiting

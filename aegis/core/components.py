@@ -28,6 +28,7 @@ from .migration_generator import (
     DATABASE_MIGRATION,
     DEPLOY_MIGRATION,
     MCP_MIGRATION,
+    RUNNER_MIGRATION,
     SCHEDULER_MIGRATION,
     SECRETS_MIGRATION,
 )
@@ -875,6 +876,45 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "tests/_browser.py",
             ],
             extras={AnswerKeys.HTMX: ["tests/web/test_overseer_browser.py"]},
+        ),
+    ),
+    ComponentNames.RUNNER: ComponentSpec(
+        readme=ReadmeWiring(
+            reach="/api/v1/runner and the `runner` CLI",
+            cli_groups=["runner"],
+        ),
+        name=ComponentNames.RUNNER,
+        category=PartCategory.AI,
+        docs_path="components/runner",
+        type=ComponentType.INFRASTRUCTURE,
+        description="Work the app sends out to a coding agent: a queue of runs, and a runner on any machine with the repository that answers them",
+        long_description=(
+            "A queue of work the app asks of a coding agent, and the runner "
+            "that answers it: a process on any machine with the repository "
+            "and the agent's login, which claims a run over the API with a "
+            "token of its own, runs a headless command for it in a fresh "
+            "worktree, and posts back what it printed. Meetings asks its "
+            "questions of it; any service can."
+        ),
+        required_components=[ComponentNames.BACKEND, ComponentNames.DATABASE],
+        # Its dev service (``runner``) is not listed as an agent yet: an
+        # agent shows on its part's Overseer page, and the runner has none
+        # until it has a health check, so the rows would link nowhere.
+        migrations=[RUNNER_MIGRATION],
+        marker_path="app/components/runner",
+        files=FileManifest(
+            primary=[
+                "app/components/runner",
+                "app/components/backend/api/runner.py",
+                "app/components/backend/startup/runner_recovery.py",
+                "app/components/backend/shutdown/runner_recovery.py",
+                "app/cli/runner.py",
+                "tests/_runner.py",
+                "tests/components/test_runner.py",
+                "tests/components/test_runner_runs.py",
+                "tests/components/test_runner_tokens.py",
+                "tests/api/test_runner_endpoints.py",
+            ],
         ),
     ),
 }

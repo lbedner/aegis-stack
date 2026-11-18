@@ -36,6 +36,7 @@ For complete workflows with real-world examples, see **[Evolving Your Stack →]
 | **[MCP](https://docs.aegis-stack.io/components/mcp/)** | Serves the app's own tools to Claude Desktop, Claude Code or a local model over MCP: the tools you grant, never a write | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Observability](https://docs.aegis-stack.io/components/observability/)** | Pydantic Logfire tracing + metrics + logging | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Redis](https://docs.aegis-stack.io/components/redis/)** | Redis for caching, sessions, pub/sub | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Runner](https://docs.aegis-stack.io/components/runner/)** | Work the app sends out to a coding agent: a queue of runs, and a runner on any machine with the repository that answers them | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Scheduler](https://docs.aegis-stack.io/components/scheduler/)** | APScheduler with persistent jobs | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Secrets](https://docs.aegis-stack.io/components/secrets/)** | Encrypted credential store: keys set while the app runs, checked with the provider on paste, never shown again | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Storage](https://docs.aegis-stack.io/components/storage/)** | S3 object storage for the files an app keeps, SeaweedFS in dev | ![Optional](https://img.shields.io/badge/-optional-blue) |

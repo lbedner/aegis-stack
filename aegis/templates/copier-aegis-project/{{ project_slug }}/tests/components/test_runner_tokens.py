@@ -5,7 +5,8 @@ digest is kept, with a hint to tell tokens apart."""
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.meetings.domains.actions import tokens
+from app.components.runner import tokens
+from tests._runner import someone_else
 
 
 async def test_a_token_is_shown_once_and_resolves_to_its_owner(
@@ -51,8 +52,6 @@ async def test_an_unknown_or_revoked_token_resolves_to_nothing(
 async def test_an_owner_lists_and_revokes_only_their_own(
     async_db_session: AsyncSession,
 ) -> None:
-    from tests._meetings import someone_else
-
     theirs = await someone_else(async_db_session)
     mine, _ = await tokens.create(async_db_session, None, "laptop")
     other, _ = await tokens.create(async_db_session, theirs, "desk")

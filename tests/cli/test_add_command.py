@@ -514,6 +514,31 @@ class TestAddCommand:
         assert "BrowserSettings" in (project_path / "app/core/config.py").read_text()
         assert "playwright==" in (project_path / "pyproject.toml").read_text()
 
+    def test_add_runner_to_base_project(self, project_factory: ProjectFactory) -> None:
+        """Adding the runner brings its queue, its API and CLI, the database
+        it keeps runs in, and the dev service that answers them."""
+        project_path = project_factory("base")
+        assert load_copier_answers(project_path).get("include_runner") is False
+
+        result = run_aegis_command(
+            "add", "runner", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success, f"Command failed: {result.stderr}"
+        answers = load_copier_answers(project_path)
+        assert answers.get("include_runner") is True
+        assert answers.get("include_database") is True
+        for rel in (
+            "app/components/runner/runs.py",
+            "app/components/runner/client.py",
+            "app/components/backend/api/runner.py",
+            "app/cli/runner.py",
+            "tests/components/test_runner.py",
+            "alembic/versions/001_runner.py",
+        ):
+            assert (project_path / rel).exists(), rel
+        assert "  runner:" in (project_path / "docker-compose.dev.yml").read_text()
+
     def test_add_database_already_enabled(
         self, project_factory: ProjectFactory
     ) -> None:

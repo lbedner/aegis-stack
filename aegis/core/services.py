@@ -1667,7 +1667,6 @@ SERVICES: dict[str, ServiceSpec] = {
         ),
         name="meetings",
         experimental=True,
-        agents=["meetings-runner"],
         category=PartCategory.AI,
         order=55,
         docs_path="services/meetings",
@@ -1684,6 +1683,7 @@ SERVICES: dict[str, ServiceSpec] = {
             ComponentNames.BACKEND,
             ComponentNames.DATABASE,
             ComponentNames.BROWSER,
+            ComponentNames.RUNNER,
         ],
         # Keeps the bot's Google sign-in; without it the bot joins as a guest.
         recommended_components=[ComponentNames.SECRETS],
@@ -1699,18 +1699,6 @@ SERVICES: dict[str, ServiceSpec] = {
                     module="app.components.backend.api.meetings.search",
                     symbol="router",
                     alias="meetings_search_router",
-                    prefix="/api/v1",
-                ),
-                RouterWiring(
-                    module="app.components.backend.api.meetings.moments",
-                    symbol="runs_router",
-                    alias="meetings_runs_router",
-                    prefix="/api/v1",
-                ),
-                RouterWiring(
-                    module="app.components.backend.api.meetings.moments",
-                    symbol="tokens_router",
-                    alias="meetings_runner_tokens_router",
                     prefix="/api/v1",
                 ),
                 RouterWiring(
@@ -1853,8 +1841,6 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_meetings_actions.py",
                 "tests/services/test_meetings_heard.py",
                 "tests/services/test_meetings_answers.py",
-                "tests/services/test_meetings_runner.py",
-                "tests/services/test_meetings_runner_tokens.py",
                 "tests/api/test_meetings_moments_endpoints.py",
                 "tests/components/frontend/test_meetings_moments_ui.py",
                 "app/components/frontend/dashboard/modals/meetings_moments.py",

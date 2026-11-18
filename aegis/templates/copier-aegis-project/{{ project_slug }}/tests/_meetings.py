@@ -5,17 +5,16 @@ import base64
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from importlib.util import find_spec
 from typing import Any
-from uuid import uuid4
 
 import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.components.runner import tokens
+from app.components.runner.models import RunnerRun
 from app.services.meetings import service as meetings_service
 from app.services.meetings.domains.actions import runs as action_runs
-from app.services.meetings.domains.actions import tokens
 from app.services.meetings.domains.bot import run as bot
 from app.services.meetings.domains.bot import transcript
 from app.services.meetings.domains.bot.audio import RATE
@@ -30,6 +29,7 @@ from app.services.meetings.domains.series import service as series_service
 from app.services.meetings.domains.series.kept import keep_series
 from app.services.meetings.domains.series.queries import series_link
 from app.services.meetings.models import (
+    MOMENT,
     NOT_DONE,
     ActionItem,
     Caption,
@@ -42,8 +42,10 @@ from app.services.meetings.models import (
     PersonGuide,
     Platform,
     SeriesNotes,
+    subjects,
 )
 from app.services.meetings.service import MeetingsService
+from tests._runner import someone_else  # noqa: F401 - asked for here
 from tests._secret_settings import use_store
 from tests._session import opens
 
@@ -471,6 +473,12 @@ async def topic(session: AsyncSession, moment_ids: list[int], name: str) -> None
     )
 
 
+def a_run(moment_id: int, **fields: Any) -> RunnerRun:
+    """A run about the moment, as ``fields`` say it stands."""
+    (subject,) = subjects([moment_id])
+    return RunnerRun(subject_kind=MOMENT, subject_id=subject, **fields)
+
+
 async def asked_a_question(
     session: AsyncSession,
     owner: int | None = None,
@@ -512,20 +520,6 @@ async def kept_series(
         model_name="test-model",
         meetings=2,
     )
-
-
-async def someone_else(session: AsyncSession) -> int:
-    """An owner other than the one signed in: a user of their own where the
-    stack has auth (a meeting's owner is one), any other number where it
-    has not."""
-    if find_spec("app.models.user") is None:
-        return 4242
-    from app.models.user import User
-
-    user = User(email=f"someone.{uuid4().hex[:8]}@example.com", hashed_password="-")
-    session.add(user)
-    await session.flush()
-    return user.id  # type: ignore[return-value]
 
 
 def record(meeting: Meeting | None = None, **fields: Any) -> MeetingRecord:

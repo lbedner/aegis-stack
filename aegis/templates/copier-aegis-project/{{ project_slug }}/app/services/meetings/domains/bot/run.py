@@ -22,6 +22,7 @@ from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.components.runner.runs import watching as runs_watching
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
@@ -31,9 +32,6 @@ from app.services.meetings.domains.accounts.service import (
     image_named,
     pick,
     sent_as,
-)
-from app.services.meetings.domains.actions.changes import (
-    watching as runs_watching,
 )
 from app.services.meetings.domains.actions.live import ASKED
 from app.services.meetings.domains.actions.queries import answered_in, going_in
@@ -119,7 +117,7 @@ class _Pulse:
 
     def soon(self) -> None:
         """Read the runs in flight on the next look, not the next beat, and
-        look now: a run changed here (``changes.watching``) or she took a
+        look now: a run changed here (``runs.watching``) or she took a
         step."""
         self.wanted = True
         self.wake()

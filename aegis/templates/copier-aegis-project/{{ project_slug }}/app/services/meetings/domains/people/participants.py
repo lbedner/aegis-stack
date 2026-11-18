@@ -6,6 +6,7 @@ meeting nobody owns given to someone, its people with it (``give``)."""
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.meetings.domains.actions import runs as action_runs
 from app.services.meetings.domains.calendar.owners import check_owner
 from app.services.meetings.domains.people import queries
 from app.services.meetings.domains.series import queries as series_queries
@@ -80,7 +81,8 @@ async def give(db: AsyncSession, meeting: Meeting, user_id: int) -> None:
 async def _hand_over(db: AsyncSession, meeting: Meeting, owner_user_id: int) -> None:
     """Make the meeting ``owner_user_id``'s, its people with it: each the
     person the new owner already knows by that name, or someone new to
-    them, and its note items theirs. Anyone left in no meeting goes."""
+    them, and its note items and runs theirs. Anyone left in no meeting
+    goes."""
     meeting_id: int = meeting.id  # type: ignore[assignment]
     old = {
         person.id: person.name
@@ -92,6 +94,7 @@ async def _hand_over(db: AsyncSession, meeting: Meeting, owner_user_id: int) -> 
     meeting.owner_user_id = owner_user_id
     db.add(meeting)
     await db.flush()
+    await action_runs.hand_over(db, meeting_id, owner_user_id)
     await queries.drop_people_in_no_meeting(db, list(old))  # type: ignore[arg-type]
 
 

@@ -83,6 +83,7 @@ MESSAGES: dict[str, str] = {
     "component.deploy": "Destino de despliegue (Docker Compose), leído por el Overseer",
     "component.mcp": "MCP server: an outside assistant reads the app's tools",
     "component.browser": "Remote-driven browser (Playwright server)",
+    "component.runner": "Work the app sends out to a coding agent: a queue of runs, and a runner on any machine with the repository that answers them",
     "component.storage": "S3 object storage, SeaweedFS in dev",
     "component.htmx": "Server-rendered htmx web frontend",
     # ── Service descriptions ────────────────────────────────────────────
@@ -1257,6 +1258,7 @@ MESSAGES: dict[str, str] = {
     "component.deploy.long": "Dónde se ejecuta la app, como componente: hoy, Docker Compose en un host. Añade un proxy del socket, el único contenedor que toca el socket de Docker, que solo responde consultas de lectura (contenedores, estadísticas, logs, disco) para que el Overseer muestre qué se está ejecutando sin que el servidor web tenga nunca el socket.",
     "component.mcp.long": "Serves the app's own registered tools to an outside assistant (Claude Desktop, Claude Code, a local model) over MCP, through FastMCP. A client sees only the tools granted in MCP_TOOLS, and never a write; every call is recorded with the client that made it.",
     "component.browser.long": "A Chromium the app drives over Playwright's remote protocol, in its own container: pages that need JavaScript, sign-ins, a bot that joins a meeting. The app ships only the Playwright client; the browser and its system libraries stay in the container.",
+    "component.runner.long": "A queue of work the app asks of a coding agent, and the runner that answers it: a process on any machine with the repository and the agent's login, which claims a run over the API with a token of its own, runs a headless command for it in a fresh worktree, and posts back what it printed. Meetings asks its questions of it; any service can.",
     "component.storage.long": "An S3 backend for the object store every stack already has: documents, chat attachments, anything addressed by its content hash. Talks to any S3-compatible endpoint; the dev stack ships SeaweedFS in a container. Switching from the filesystem is a byte copy, never a migration.",
     "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "Gestión completa de usuarios con autenticación JWT, cookies de sesión y rotación de tokens de actualización. Tres niveles: correo/contraseña básico, roles y permisos RBAC, u organizaciones multiinquilino. Incluye registro, inicio de sesión y una pestaña de panel de administración.",

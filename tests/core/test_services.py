@@ -280,17 +280,16 @@ class TestServicesRegistry:
     def test_meetings_service_wiring(self):
         """Meetings owns its tables, its API and CLI, and the startup check
         that closes out meetings a restart interrupted; it brings the
-        browser the bot joins through."""
+        browser the bot joins through and the runner its questions are
+        asked of."""
         spec = SERVICES["meetings"]
 
-        assert "browser" in spec.required_components
-        # Before the meeting routes: /meetings/admin, /people, /runs,
-        # /runner-tokens, /search and /series are not ids.
+        assert {"browser", "runner"} <= set(spec.required_components)
+        # Before the meeting routes: /meetings/admin, /people, /search and
+        # /series are not ids.
         assert [r.alias for r in spec.wiring.routers] == [
             "meetings_search_admin_router",
             "meetings_search_router",
-            "meetings_runs_router",
-            "meetings_runner_tokens_router",
             "meetings_moments_admin_router",
             "meetings_moments_router",
             "meetings_series_admin_router",

@@ -16,7 +16,7 @@ from app.core import replays, runtime
 from app.core import storage as storage_seam
 from app.core.audit import audit_emitter
 from app.core.ontology import Kind, PartNode, graph
-from app.core.ontology.model import Node, SystemModel
+from app.core.ontology.model import DOMAIN_KINDS, Node, SystemModel
 from app.core.ontology.observed import running
 from app.core.ontology.summary import summary
 from app.core.tools import current_agent_slug, register_tool
@@ -266,6 +266,21 @@ async def _node(
     )
 
 
+# What ``ontology`` tells anyone but an admin, in every answer: an empty
+# list alone had a model try each kind in turn.
+DOMAIN_ONLY = (
+    "Only the app's tables and the changes to them are read here: its "
+    "parts, routes, jobs, queues, containers and keys are an admin's. "
+    "Tell the user so; do not look further for them."
+)
+
+
+def _an_admins(ids: list[str]) -> list[str]:
+    """The ids naming a kind only an admin reads."""
+    hidden = set(Kind) - set(DOMAIN_KINDS)
+    return [i for i in ids if i.partition(":")[0] in hidden]
+
+
 async def ontology(
     kind: str | None = None,
     category: str | None = None,
@@ -306,9 +321,16 @@ async def ontology(
     if route:
         return await _dry_path(route)
     model = await running()
-    if not await caller_is_admin():
-        model = model.domain()
     note = "Partial: built outside the webserver." if model.partial else None
+    if not await caller_is_admin():
+        asked = [
+            *([node] if isinstance(node, str) else node or []),
+            *filter(None, [to]),
+        ]
+        if refused := _an_admins(asked):
+            raise ValueError(f"{', '.join(refused)}: {DOMAIN_ONLY}")
+        model = model.domain()
+        note = " ".join(filter(None, (note, DOMAIN_ONLY)))
     if isinstance(node, list):
         if to:
             raise ValueError("Paths run from one node: name one with `to`.")

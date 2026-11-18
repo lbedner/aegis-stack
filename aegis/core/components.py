@@ -642,6 +642,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/components/frontend/dashboard/modals/inference_modal",
                 "tests/components/test_inference.py",
                 "tests/components/test_inference_engine.py",
+                "tests/components/test_ollama_library.py",
                 "tests/api/test_inference_endpoints.py",
                 "tests/cli/test_inference_cli.py",
                 "tests/components/frontend/test_inference_model_table.py",

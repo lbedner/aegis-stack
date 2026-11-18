@@ -205,7 +205,7 @@ class TestTheRegistryWrapsWhatItResolves:
         self, written: list[dict[str, Any]]
     ) -> None:
         """Wrapping happens at the registry, so a tool added later is
-        measured by existing."""
+        measured by existing; the agent calls it by its registered name."""
         from app.core.tools import register_tool, unregister_tool
         from app.services.ai.domains.chat.tools import resolve_tools
 
@@ -216,7 +216,7 @@ class TestTheRegistryWrapsWhatItResolves:
         try:
             resolved = resolve_tools(["ledger_probe"])
             assert len(resolved) == 1
-            assert resolved[0].__name__ == "probe"
+            assert resolved[0].__name__ == "ledger_probe"
             assert resolved[0] is not probe
         finally:
             unregister_tool("ledger_probe")

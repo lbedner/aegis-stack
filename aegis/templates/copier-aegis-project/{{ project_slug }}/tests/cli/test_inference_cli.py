@@ -52,3 +52,104 @@ def test_without_a_server_it_says_how_to_set_one() -> None:
 
     assert result.exit_code == 1
     assert "SPEECH_BASE_URL" in result.output
+
+
+def test_link_ollama_links_its_models_into_the_router_folder(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Into ``LLAMACPP_MODELS_DIR``, from ``OLLAMA_MODELS``; and it says how
+    to serve the folder (``make llama``)."""
+    from app.core.config import settings
+    from tests._fake_ollama import pulled
+
+    pulled(tmp_path / "ollama", "registry.ollama.ai/library/qwen", "7b", b"GGUF")
+    monkeypatch.setattr(settings, "OLLAMA_MODELS", str(tmp_path / "ollama"))
+    monkeypatch.setattr(settings, "LLAMACPP_MODELS_DIR", str(tmp_path / "models"))
+
+    result = invoke(["inference", "link-ollama"])
+
+    assert result.exit_code == 0
+    assert (tmp_path / "models" / "qwen:7b.gguf").is_symlink()
+    assert "qwen:7b" in result.output
+    assert "make llama" in result.output
+
+
+def test_link_ollama_without_ollama_says_where_it_looked(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "OLLAMA_MODELS", str(tmp_path / "none"))
+
+    result = invoke(["inference", "link-ollama"])
+
+    assert result.exit_code != 0
+    assert "OLLAMA_MODELS" in result.output
+
+
+def test_llama_links_ollama_then_becomes_the_router(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``make llama``: Ollama's models linked in, then the process becomes a
+    llama-server router over the folder, on LLAMACPP_BASE_URL's port, at
+    LLAMACPP_CONTEXT, with LLAMACPP_ARGS; its terminal is the server's."""
+    import os
+
+    from app.components.inference.llamacpp import LlamaCppEngine
+    from app.core.config import settings
+    from tests._fake_ollama import pulled
+
+    pulled(tmp_path / "ollama", "registry.ollama.ai/library/qwen", "7b", b"GGUF")
+    for name, value in {
+        "OLLAMA_MODELS": str(tmp_path / "ollama"),
+        "LLAMACPP_MODELS_DIR": str(tmp_path / "models"),
+        "LLAMACPP_CONTEXT": 65536,
+        "LLAMACPP_ARGS": "-np 2 -kvu",
+    }.items():
+        monkeypatch.setattr(settings, name, value)
+    monkeypatch.setattr(
+        LlamaCppEngine,
+        "configured_url",
+        classmethod(lambda cls: "http://localhost:8090"),
+    )
+    became: list[list[str]] = []
+    monkeypatch.setattr(os, "execvp", lambda path, argv: became.append(argv))
+
+    result = invoke(["inference", "llama"])
+
+    assert result.exit_code == 0
+    assert (tmp_path / "models" / "qwen:7b.gguf").is_symlink()
+    assert became == [
+        [
+            "llama-server",
+            "--models-dir",
+            str(tmp_path / "models"),
+            "--jinja",
+            "-c",
+            "65536",
+            "--metrics",
+            "--port",
+            "8090",
+            "-np",
+            "2",
+            "-kvu",
+        ]
+    ]
+
+
+def test_llama_without_ollama_serves_the_folder_alone(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An install that only ever picks llama.cpp has no Ollama: the folder
+    (made if new) and llama.cpp's own downloads are the list."""
+    import os
+
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "OLLAMA_MODELS", str(tmp_path / "none"))
+    monkeypatch.setattr(settings, "LLAMACPP_MODELS_DIR", str(tmp_path / "models"))
+    became: list[list[str]] = []
+    monkeypatch.setattr(os, "execvp", lambda path, argv: became.append(argv))
+
+    assert invoke(["inference", "llama"]).exit_code == 0
+    assert (tmp_path / "models").is_dir() and became

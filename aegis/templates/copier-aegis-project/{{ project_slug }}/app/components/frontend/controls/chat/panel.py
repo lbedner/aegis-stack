@@ -219,6 +219,12 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
 
         return get_session_state(self.page).api_client
 
+    async def _fetch_card(self, card_id: str) -> dict[str, Any] | None:
+        body = await self._api().get(
+            f"/api/v1/ai/cards/{card_id}", {"user_id": self.user_id}
+        )
+        return body if isinstance(body, dict) else None
+
     # -- history -----------------------------------------------------------
 
     async def _resume_latest(self) -> None:
@@ -255,6 +261,8 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
                     on_action=self._changes.resolve,
                     on_batch_action=self._changes.resolve_batch,
                     fetch_items=self._changes.fetch_batch,
+                    fetch_card=self._fetch_card,
+                    on_card_drawn=self._scroll_to_latest,
                 )
                 bubble.set_components(cards)
                 # Snapshot state is propose-time state: a resolution made
@@ -390,6 +398,8 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
                     on_action=self._changes.resolve,
                     on_batch_action=self._changes.resolve_batch,
                     fetch_items=self._changes.fetch_batch,
+                    fetch_card=self._fetch_card,
+                    on_card_drawn=self._scroll_to_latest,
                 )
                 reply.set_components(cards)
                 self._track_cards(cards)

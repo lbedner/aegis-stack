@@ -27,6 +27,7 @@ from app.components.backend.api.ai.service import ai_service, lifted_turn
 from app.core.chat_transcript import (
     card_markers,
     footer_line,
+    last_drawn,
     readable,
     strip_attachment_marker,
     trace_failed,
@@ -319,9 +320,7 @@ def drawn_card_urls(chat: ChatSurface, trace: list[dict[str, Any]]) -> list[str]
     rows, so none without a database."""
     if not PERSISTED:
         return []
-    from app.services.ai.service import cards
-
-    drawn = cards.last_drawn(trace)
+    drawn = last_drawn(trace)
     return [f"{chat.path}/cards/{drawn}"] if drawn else []
 
 

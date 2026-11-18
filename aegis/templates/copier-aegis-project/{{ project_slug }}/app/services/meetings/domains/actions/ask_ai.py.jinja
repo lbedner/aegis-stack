@@ -118,7 +118,7 @@ async def about(
     """What ``line`` is about (``ABOUT_IT``), or the ``part`` it names (a
     node id: ``ABOUT_PART``), from what was said ``before`` and ``after``
     it: her words, and the card she drew of the part it names."""
-    from app.services.ai.service import cards  # with her, loaded when asked
+    from app.core.chat_transcript import last_drawn
 
     asked = ABOUT_PART.format(part=part) if part else ABOUT_IT
     prompt = (
@@ -127,7 +127,7 @@ async def about(
     )
     said = await _her_turn(prompt, owner_user_id, admin=admin)
     trace = (said.metadata or {}).get("tool_trace", [])
-    return LineAbout(summary=said.content, card_id=cards.last_drawn(trace))
+    return LineAbout(summary=said.content, card_id=last_drawn(trace))
 
 
 async def _her_turn(

@@ -65,6 +65,14 @@ class TestRegistration:
         tool = get_tool("echo")
         assert tool is not None and tool.func is other
 
+    def test_a_tool_is_served_under_its_registered_name(self) -> None:
+        """An agent names a tool by its callable's ``__name__``: two
+        functions both called ``requests``, registered apart, would
+        collide in one agent and fail it."""
+        register_tool("server_echo", _echo, effect="read")
+
+        assert get_tool("server_echo").served.__name__ == "server_echo"  # type: ignore[union-attr]
+
     def test_unregister_unknown_is_an_error(self) -> None:
         with pytest.raises(KeyError):
             unregister_tool("never-registered")

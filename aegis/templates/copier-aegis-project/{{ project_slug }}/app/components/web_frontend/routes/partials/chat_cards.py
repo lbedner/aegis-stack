@@ -14,7 +14,6 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
-from pydantic import ValidationError
 
 from app.components.web_frontend import chat_surface as chat
 from app.components.web_frontend import overseer_replay
@@ -59,14 +58,10 @@ async def drawn(
     and what it is drawn with, at ``url`` (where it opens larger, unless
     drawn ``large`` already); None for a card whose kind is gone, or whose
     payload an old version kept in another shape."""
-    kind = cards.lookup(row.kind)
-    if kind is None:
+    found = cards.kept(row)
+    if found is None:
         return None
-    try:
-        # Read through the shape the kind keeps: its defaults fill in.
-        kept = kind.stored.model_validate(row.payload)
-    except ValidationError:
-        return None
+    kind, kept = found
     context = {
         "card": kept.model_dump(),
         "card_id": row.id,

@@ -54,27 +54,15 @@ class OllamaEngine(BaseInferenceEngine):
         running = _Ps.model_validate(await self._get(client, "/api/ps")).models
         return any(model in (m.name, m.model) for m in running)
 
-    async def _move(self, action: str, model_name: str) -> bool:
+    async def _move(self, action: str, model_name: str) -> None:
         """An empty ``/api/generate``: loads the model and keeps it 30
         minutes, or (``keep_alive`` 0) frees it now; generates nothing."""
         loading = action == "load"
-        try:
-            async with self._client(60.0 if loading else 30.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/api/generate",
-                    json={
-                        "model": model_name,
-                        "prompt": "",
-                        "keep_alive": "30m" if loading else 0,
-                    },
-                )
-                response.raise_for_status()
-                return True
-        except Exception as e:
-            logger.error(
-                f"Ollama at {self.base_url} could not {action} {model_name}: {e}"
-            )
-            return False
+        await self._post(
+            "/api/generate",
+            {"model": model_name, "prompt": "", "keep_alive": "30m" if loading else 0},
+            60.0 if loading else 30.0,
+        )
 
     async def get_server_status(self) -> InferenceServerStatus:
         """In one connection: the installed models' ``/api/tags`` also

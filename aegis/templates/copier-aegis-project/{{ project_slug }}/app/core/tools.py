@@ -132,7 +132,9 @@ class RegisteredTool:
         """``func`` as every caller is served it (an agent, code mode's
         script, an MCP client): its money in dollars beside its cents
         (``with_dollars``). Its signature and docstring stay ``func``'s,
-        so the schema built from it is too."""
+        so the schema built from it is too; its name is the registered one,
+        which an agent calls it by (two modules' ``requests`` would
+        collide)."""
         func = self.func
         if inspect.iscoroutinefunction(func):
 
@@ -140,13 +142,14 @@ class RegisteredTool:
             async def served(*args: Any, **kwargs: Any) -> Any:
                 return with_dollars(await func(*args, **kwargs))
 
-            return served
+        else:
 
-        @functools.wraps(func)
-        def served_sync(*args: Any, **kwargs: Any) -> Any:
-            return with_dollars(func(*args, **kwargs))
+            @functools.wraps(func)
+            def served(*args: Any, **kwargs: Any) -> Any:
+                return with_dollars(func(*args, **kwargs))
 
-        return served_sync
+        served.__name__ = served.__qualname__ = self.name
+        return served
 
 
 # Code mode's one tool: a script run against the read tools, in the sandbox.

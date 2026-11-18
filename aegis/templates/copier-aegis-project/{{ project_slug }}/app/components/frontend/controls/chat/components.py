@@ -23,6 +23,7 @@ from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.chat.display_rows import (
     _display_rows,
 )
+from app.components.frontend.controls.chat.drawn_card import DrawnCard, FetchCard
 from app.components.frontend.controls.text import LabelText, SecondaryText
 from app.components.frontend.theme import TONE_COLORS
 from app.components.frontend.theme import AegisTheme as Theme
@@ -31,6 +32,7 @@ from app.core.chat_transcript import (
     batch_outcome,
     card_markers,
     card_outcome,
+    last_drawn,
     proposer_line,
 )
 
@@ -374,13 +376,18 @@ def components_from_trace(
     on_action: ChangeAction,
     on_batch_action: BatchAction | None = None,
     fetch_items: Callable[[str], Awaitable[list[dict[str, Any]] | None]] | None = None,
+    fetch_card: FetchCard | None = None,
+    on_card_drawn: Callable[[], None] | None = None,
 ) -> list[ft.Control]:
     """Cards for the trace's approval cards (``card_markers``: a marker,
-    else an old trace's result parsed or salvaged). A marker is identity
-    only, so a card starts with no rows, pending, and reads its rows from
-    the queue (the panel's ``_track_cards``). A kind this registry does not
-    draw is left to the trail's ordinary rendering.
+    else an old trace's result parsed or salvaged), then the card the reply
+    drew (``last_drawn``: one per answer). A marker is identity only, so a
+    card starts with no rows, pending, and reads its rows from the queue
+    (the panel's ``_track_cards``); a drawn card reads its payload with
+    ``fetch_card``. A kind this registry does not draw is left to the
+    trail's ordinary rendering.
     """
+    drawn = last_drawn(trace) if fetch_card is not None else None
     return [
         card
         for entry in trace
@@ -395,4 +402,4 @@ def components_from_trace(
             )
         )
         is not None
-    ]
+    ] + ([DrawnCard(drawn, fetch_card, on_card_drawn)] if drawn and fetch_card else [])

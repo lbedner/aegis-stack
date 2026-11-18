@@ -13,9 +13,8 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import TypeVar
 
-from sqlmodel import Session, SQLModel, col, func, select
+from sqlmodel import Session, SQLModel, col, func, or_, select
 
-from app.services.ai.models.provider_names import LOCAL_PROVIDERS
 from app.services.ai.models.llm import (
     LargeLanguageModel,
     LLMDeployment,
@@ -43,11 +42,17 @@ def llms_by_model_ids(
     return {row.model_id: row for row in rows}
 
 
-def orgs_without_marks(session: Session, slugs: Iterable[str]) -> Sequence[LLMOrg]:
-    """The named orgs that have no logo yet (the provider marks fill)."""
+def orgs_to_mark(
+    session: Session, fetched: Iterable[str], shipped: Iterable[str]
+) -> Sequence[LLMOrg]:
+    """The provider orgs whose logo the marks step may write: a fetched
+    one's while it has none, a shipped one's always (it costs no fetch)."""
     return session.exec(
         select(LLMOrg).where(
-            col(LLMOrg.slug).in_(set(slugs)), col(LLMOrg.icon_b64).is_(None)
+            or_(
+                col(LLMOrg.slug).in_(set(fetched)) & col(LLMOrg.icon_b64).is_(None),
+                col(LLMOrg.slug).in_(set(shipped)),
+            )
         )
     ).all()
 
@@ -76,20 +81,21 @@ def catalog_is_populated(session: Session) -> bool:
     return first is not None
 
 
-def local_models_present(session: Session) -> bool:
-    """Whether any locally served model (Ollama's, llama.cpp's) is in the
-    catalog.
+def local_models_present(session: Session, engine: str) -> bool:
+    """Whether a model ``engine`` serves is in the catalog.
 
     The remote catalog never carries a local tag, and the picker's
     ``usable`` filter shows only vendors the install can call - with no
     API keys, the local engine alone. A fresh local stack therefore opened
     an empty picker until someone knew to run ``llm sync --source local``.
-    The startup hook syncs local tags when this says none are there.
+    The startup hook syncs local tags when this says none are there, asked
+    for the engine it runs: an install switched engines still holds the
+    old one's tags, and none of the new one's.
     """
     first = session.exec(
         select(LargeLanguageModel.id)
         .join(LLMOrg, LargeLanguageModel.served_by_org_id == LLMOrg.id)
-        .where(col(LLMOrg.name).in_([p.value for p in LOCAL_PROVIDERS]))
+        .where(LLMOrg.name == engine)
         .limit(1)
     ).first()
     return first is not None

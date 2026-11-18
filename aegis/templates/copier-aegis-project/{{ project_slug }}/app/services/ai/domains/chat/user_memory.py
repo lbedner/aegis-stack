@@ -24,7 +24,7 @@ from app.core.db import get_async_session
 from app.core.figures import FIGURES
 from app.core.log import logger
 from app.core.time import utcnow
-from app.core.tools import acting_as, current_subject
+from app.core.tools import acting_as, current_admin, current_subject
 from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.readings import Reading, kept_readings
 from app.services.ai.domains.chat.tool_telemetry import tool_turn
@@ -61,8 +61,9 @@ def memory_user(
 ) -> Iterator[None]:
     """Bind the turn's identity: whose turn, whose cards
     (``current_owner_user_id``), which agent, which chat, what it is about
-    (``current_subject``), and whether it is an admin's, where the runner
-    knows (``current_admin``).
+    (``current_subject``), and whether it is an admin's (``current_admin``):
+    as handed, else as its runner already bound it (a request's sign-in, the
+    CLI's shell), where the owner alone would not say.
 
     Every chat runtime wraps its model call in this. Without it a
     memory write has no owner (the tool declines and the model reads
@@ -72,6 +73,8 @@ def memory_user(
     """
     token = current_user_id.set(user_id)
     about = current_subject.set(subject)
+    if admin is None:
+        admin = current_admin.get()
     try:
         with (
             acting_as(owner_user_id, agent_slug, conversation_id, admin),

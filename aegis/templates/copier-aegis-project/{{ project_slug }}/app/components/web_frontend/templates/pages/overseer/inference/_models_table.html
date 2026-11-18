@@ -24,6 +24,6 @@
       {"key": "size", "label": "Size", "align": "right"},
       {"key": "modified", "label": "Modified"},
       {"key": "state", "label": "State", "kind": "status"},
-    ], models, actions=row_actions if engine.can_load_unload else none, empty="No models installed. Add one with " ~ engine.ADD_MODEL ~ ".") }}
+    ], models, actions=row_actions if can_move else none, empty="No models installed. Add one with " ~ engine.ADD_MODEL ~ ".") }}
   {% endcall %}
 </div>

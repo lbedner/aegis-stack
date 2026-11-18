@@ -22,27 +22,7 @@ To ask an action of every question as it is heard, set `MEETINGS_AUTO_ACTIONS` (
 
 ## The runner
 
-The coding agent runs on your machine, not in the app. The runner asks the app for waiting runs, answers each in a fresh worktree of your repository, and posts back what it printed.
-
-```
- "Ask agent"  --->  run: asked
-                    POST /runs/claim   <---  runner claims the oldest
-                                             fresh worktree of --repo
-                                             runs --command
-                    POST /runs/{id}/finish <-- posts what it printed
-                    run: done | failed
-```
-
-```bash
-my-app meetings runner-token create laptop
-export MEETINGS_RUNNER_TOKEN=mrt_...
-my-app meetings runner \
-  --url https://my-app.example.com \
-  --repo ~/code/my-service \
-  --command 'claude -p {prompt} --permission-mode plan'
-```
-
-Any headless agent works (`codex exec {prompt}`, `aider --message {prompt}`). A runner answers one run at a time, oldest first; start more to answer more at once. In the dev stack a `meetings-runner` service runs one for you, configured in `.env.meetings-runner`.
+The coding agent runs on your machine, not in the app. "Ask agent" asks a run of the [runner component](../../components/runner.md): a runner asks the app for waiting runs, answers each in a fresh worktree of your repository, and posts back what it printed. How to start one, its options, routes and tokens are on [its page](../../components/runner.md#running-one); in the dev stack a `runner` service runs one for you.
 
 ## Your own moments and actions
 

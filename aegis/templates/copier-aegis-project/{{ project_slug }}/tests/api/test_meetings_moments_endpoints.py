@@ -1,7 +1,8 @@
 """Moments and their actions over HTTP: an owner reads what a meeting's
 call threw up, with what each offers, asks an action of one, and copies
 its prompt; every owner's for Overseer's admin; and a runner on another
-machine, holding a token, claims a run and posts its result."""
+machine, holding a token, claims a run and posts its result (the runner
+component's routes)."""
 
 from importlib.util import find_spec
 from unittest.mock import AsyncMock
@@ -10,14 +11,13 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.meetings.domains.actions import tokens
+from app.components.runner import tokens
 from tests._audit import as_admin, let_into_overseer
 from tests._meetings import a_meeting, asked_a_question, said, someone_else
 
 MEETINGS = "/api/v1/meetings"
 ADMIN = "/api/v1/meetings/admin"
-RUNS = "/api/v1/meetings/runs"
-TOKENS = "/api/v1/meetings/runner-tokens"
+RUNS = "/api/v1/runner/runs"
 
 
 async def test_an_owner_reads_a_meetings_moments_and_what_each_offers(
@@ -123,11 +123,13 @@ async def test_the_admin_reads_and_asks_every_owners(
     assert asked.status_code == 202, asked.text
 
 
-async def test_a_runner_with_a_token_claims_a_run_and_posts_its_result(
+async def test_a_question_asked_of_an_agent_shows_what_a_runner_posts_back(
     authenticated_client: TestClient,
     async_db_session: AsyncSession,
     acting_owner_user_id: int | None,
 ) -> None:
+    """Asked here, claimed and finished over the runner component's routes
+    (theirs to test), the answer reads under its question."""
     meeting_id, moment_id = await asked_a_question(
         async_db_session, acting_owner_user_id
     )
@@ -136,43 +138,21 @@ async def test_a_runner_with_a_token_claims_a_run_and_posts_its_result(
     )
     _, value = await tokens.create(async_db_session, acting_owner_user_id, "laptop")
     runner = {"Authorization": f"Bearer {value}"}
-    want = {"actions": ["agent"]}
 
-    refused = authenticated_client.post(
-        f"{RUNS}/claim", json=want, headers={"Authorization": ""}
+    claimed = authenticated_client.post(
+        f"{RUNS}/claim", json={"actions": ["agent"]}, headers=runner
     )
-    claimed = authenticated_client.post(f"{RUNS}/claim", json=want, headers=runner)
-    none_left = authenticated_client.post(f"{RUNS}/claim", json=want, headers=runner)
-    run_id = claimed.json()["id"]
-    finished = authenticated_client.post(
-        f"{RUNS}/{run_id}/finish",
+    authenticated_client.post(
+        f"{RUNS}/{claimed.json()['id']}/finish",
         json={"ok": True, "result": "It can."},
         headers=runner,
     )
 
-    assert refused.status_code == 401
-    assert claimed.status_code == 200, claimed.text
     assert "CSV export" in claimed.json()["prompt"]
-    assert none_left.status_code == 204
-    assert finished.status_code == 200, finished.text
     (moment,) = authenticated_client.get(f"{MEETINGS}/{meeting_id}/moments").json()
     assert [(r["status"], r["result"], r["runner"]) for r in moment["runs"]] == [
         ("done", "It can.", "laptop")
     ]
-
-
-async def test_an_owner_makes_lists_and_revokes_runner_tokens(
-    authenticated_client: TestClient,
-) -> None:
-    made = authenticated_client.post(TOKENS, json={"name": "laptop"})
-    listed = authenticated_client.get(TOKENS)
-    revoked = authenticated_client.delete(f"{TOKENS}/{made.json()['id']}")
-
-    assert made.status_code == 201, made.text
-    assert made.json()["value"].startswith(tokens.PREFIX)
-    assert [(t["name"], "value" in t) for t in listed.json()] == [("laptop", False)]
-    assert revoked.status_code == 204
-    assert authenticated_client.get(TOKENS).json() == []
 
 
 async def test_an_owner_has_a_meeting_read_over_again(

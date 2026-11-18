@@ -216,6 +216,11 @@ include_browser:
   help: "Include a remote-driven browser (Playwright server container)?"
   default: false
 
+include_runner:
+  type: bool
+  help: "Include the runner (work the app sends out to a coding agent)?"
+  default: false
+
 ingress_tls:
   type: bool
   help: "Enable TLS with Let's Encrypt?"

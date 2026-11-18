@@ -9,13 +9,16 @@ it came from; so is each person's guide, how to work with them, read
 across the owner's meetings, and what each series of meetings (one link,
 met again and again) keeps coming back to. Every link between them is a foreign key:
 deleting a meeting deletes what was kept of it, and a deleted line takes
-its citations with it.
+its citations with it. What was asked of a moment is a run of the runner
+component's (``app.components.runner``), about the moment: no key ties it
+here, so a meeting's runs are forgotten as it is deleted
+(``domains.actions.runs.forget``).
 
 ``Notes`` and ``Guide`` are what the model writes and what the pages read;
 the rows are how they are kept (``domains.notes``, ``domains.people``).
 
-One module per domain the tables belong to (``accounts``, ``actions``,
-``bot``, ``calendar``, ``moments``, ``notes``, ``people``, ``series``), the meeting
+One module per domain the tables belong to (``accounts``, ``bot``,
+``calendar``, ``moments``, ``notes``, ``people``, ``series``), the meeting
 itself (``meeting``), and what they all share (``base``). Importing this
 package imports every table module, which is the point: a model never
 imported is absent from ``SQLModel.metadata``, and alembic autogenerate
@@ -26,19 +29,15 @@ reads that metadata.
 from app.services.meetings.domains.search import fts  # noqa: F401
 from app.services.meetings.models.accounts import AgentImage, BotAccount
 from app.services.meetings.models.actions import (
-    ASKED,
-    CLAIMED,
-    DONE,
-    FAILED,
-    GOING,
     IN_THE_APP,
+    MOMENT,
     TONES,
     ActionChoice,
     Going,
     LineAbout,
-    MeetingActionRun,
-    MeetingRunnerToken,
     RunRecord,
+    moment_of,
+    subjects,
 )
 from app.services.meetings.models.base import (
     IN_PROGRESS,
@@ -132,19 +131,14 @@ __all__ = [
     "Took",
     "MOST_ERROR_CHARS",
     "fitted",
-    "ASKED",
     "ActionChoice",
     "ActionItem",
     "AgentImage",
     "BotAccount",
-    "CLAIMED",
     "CalendarEvent",
     "Caption",
     "Commitment",
     "Contradiction",
-    "DONE",
-    "FAILED",
-    "GOING",
     "FollowUp",
     "GUIDE_SECTIONS",
     "Guide",
@@ -157,7 +151,6 @@ __all__ = [
     "KeptNotes",
     "LEAVABLE",
     "Meeting",
-    "MeetingActionRun",
     "MeetingGuidePoint",
     "MeetingGuidePointLine",
     "MeetingMoment",
@@ -168,7 +161,9 @@ __all__ = [
     "MeetingPerson",
     "MeetingRecord",
     "MeetingsCounts",
-    "MeetingRunnerToken",
+    "MOMENT",
+    "moment_of",
+    "subjects",
     "MeetingSeries",
     "MeetingStatus",
     "MeetingTheme",

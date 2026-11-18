@@ -15,9 +15,13 @@ import wave
 from playwright.async_api import Page
 import pytest
 
+from app.components.runner.models import ASKED, CLAIMED, DONE, FAILED
 from app.services.meetings.domains.bot import card
 from app.services.meetings.domains.bot.meet import BROWSER_ARGS
-from app.services.meetings.models import ASKED, CLAIMED, DONE, FAILED, IN_THE_APP, Going
+from app.services.meetings.models import (
+    IN_THE_APP,
+    Going,
+)
 from tests._browser import live_browser
 
 _ids = count(1)

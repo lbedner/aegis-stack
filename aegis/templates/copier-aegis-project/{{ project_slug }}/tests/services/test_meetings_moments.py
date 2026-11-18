@@ -11,11 +11,12 @@ from app.services.meetings.domains.moments.detectors import Heard, register_dete
 from app.services.meetings.domains.moments.service import find_again, moments_of
 from app.services.meetings.domains.moments.tidy import meeting_ids_of
 from app.services.meetings.domains.notes.queries import delete_in
-from app.services.meetings.models import Caption, MeetingActionRun, MeetingMoment
+from app.services.meetings.models import Caption, MeetingMoment
 from app.services.meetings.service import MeetingsService, write_captions
 from tests._meetings import (
     MEET,
     a_meeting,
+    a_run,
     hold_the_answers,
     kept_series,
     said,
@@ -168,9 +169,7 @@ async def test_past_meetings_are_looked_over_again(
     )
     async_db_session.add_all([stale, kept])
     await async_db_session.flush()
-    async_db_session.add(
-        MeetingActionRun(moment_id=kept.id or 0, action="agent", prompt="?")
-    )
+    async_db_session.add(a_run(kept.id or 0, action="agent", prompt="?"))
     await async_db_session.commit()
 
     await find_again(async_db_session, [meeting_id])

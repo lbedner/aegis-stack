@@ -5,7 +5,7 @@ An action takes some kinds of moment and runs in one place:
 - ``browser`` - nothing to run: the page copies its prompt (Copy for agent)
 - ``app`` - its ``run`` is called in the app, at once (Ask Illiana)
 - ``runner`` - it waits for a runner on another machine to claim it (Ask
-  agent: a coding agent in a fresh worktree, ``meetings runner``)
+  agent: a coding agent in a fresh worktree, ``runner run``)
 
 Registered like tools and detectors. The built-ins are registered here;
 another service registers its own in its ``meeting_moments`` module

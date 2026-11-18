@@ -2,7 +2,7 @@
 app's API, runs a command for each, and posts back what it printed.
 
 It holds a runner token, never a session, and talks only HTTP, so it runs
-wherever the repository and the agent's login are (``meetings runner``).
+wherever the repository and the agent's login are (``runner run``).
 Each run gets a fresh worktree of ``repo`` at ``ref`` (none without a
 repository), so the command answers from the code as it is, never from
 whatever branch is checked out, and changes nothing that stays. The
@@ -62,7 +62,7 @@ async def run_once(
         timeout=30.0,
     ) as api:
         claimed = await api.post(
-            "/api/v1/meetings/runs/claim", json={"actions": runner.actions}
+            "/api/v1/runner/runs/claim", json={"actions": runner.actions}
         )
         claimed.raise_for_status()
         if claimed.status_code == 204:
@@ -71,7 +71,7 @@ async def run_once(
         logger.info("Run claimed", run_id=run["id"], action=run["action"])
         ok, result = await _answer(runner, run["prompt"])
         finished = await api.post(
-            f"/api/v1/meetings/runs/{run['id']}/finish",
+            f"/api/v1/runner/runs/{run['id']}/finish",
             json={"ok": ok, "result": result[-KEEP:]},
         )
         finished.raise_for_status()
@@ -110,7 +110,7 @@ def _worktree(repo: Path | None, ref: str) -> Iterator[Path | None]:
         return
     git = ["git", "-C", str(repo)]
     subprocess.run([*git, "fetch", "--quiet"], capture_output=True, check=False)
-    with tempfile.TemporaryDirectory(prefix="meetings-run-") as parent:
+    with tempfile.TemporaryDirectory(prefix="runner-run-") as parent:
         path = Path(parent) / "worktree"
         subprocess.run(
             [*git, "worktree", "add", "--quiet", "--detach", str(path), ref],

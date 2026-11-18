@@ -141,9 +141,9 @@ class TestAuthDatabaseDance:
         # db prompt
         mock_confirm.side_effect = (
             [False, False, True, False, False, False, False, False, False, False]
-            + [False, False, False]
+            + [False, False, False, False]
             + [True]
-            + [False] * (_prompt_count() - 14)  # the other services
+            + [False] * (_prompt_count() - 15)  # the other services
         )
         components, _, services, _ = interactive_project_selection()
         assert "database" in components
@@ -261,10 +261,11 @@ class TestEngineWithScriptedUI:
         # worker=y (bundles redis, redis prompt skipped), scheduler=y
         # (backend via choose_scheduler_backend, db auto-added and skipped),
         # storage=n, ingress=n, observability=n, htmx=n, inference=n, secrets=n,
-        # deploy=n, mcp=n, browser=n, then the services: auth, ai and blog
+        # deploy=n, mcp=n, browser=n, runner=n, then the services: auth, ai
+        # and blog
         ui = ScriptedUI(
             confirms=[True, True, False, False, False, False, False, False, False]
-            + [False, False]
+            + [False, False, False]
             + [s in {"auth", "ai", "blog"} for s in asked_services()],
             worker_backend="taskiq",
             scheduler_backend="postgres",

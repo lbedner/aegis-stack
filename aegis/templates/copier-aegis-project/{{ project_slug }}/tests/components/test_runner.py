@@ -12,7 +12,7 @@ from typing import Any
 import httpx
 import pytest
 
-from app.services.meetings.domains.actions.runner import Runner, run_once
+from app.components.runner.client import Runner, run_once
 
 PROMPT = "Then Dana asked:\n\nCan the CSV export ship this week?"
 
@@ -24,7 +24,7 @@ def _api(
     and keeps what each finish posted."""
 
     def handle(request: httpx.Request) -> httpx.Response:
-        assert request.headers["Authorization"] == "Bearer mrt_test"
+        assert request.headers["Authorization"] == "Bearer rnr_test"
         if request.url.path.endswith("/runs/claim"):
             assert json.loads(request.content) == {"actions": ["agent"]}
             return (
@@ -55,7 +55,7 @@ def repo(tmp_path: Path) -> Path:
 def _runner(repo: Path | None, command: list[str]) -> Runner:
     return Runner(
         url="http://app",
-        token="mrt_test",
+        token="rnr_test",
         actions=["agent"],
         command=command,
         repo=repo,

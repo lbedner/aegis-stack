@@ -123,3 +123,18 @@ def test_postgres_startup_migrates_exactly_when_a_migration_ships(stack: str) ->
     assert (
         "def _check_and_stamp_existing_tables" in _database_init(answers)
     ) is migrates
+
+
+@pytest.mark.parametrize("plugin", _migrating_plugins())
+def test_postgres_startup_follows_every_plugins_migrations(plugin: str) -> None:
+    """Derived, as the dependency check is: a part that ships a revision and
+    is left off the startup rule (the runner, mcp's activity record) is
+    made by ``create_all`` and its revision never applied or stamped."""
+    from aegis.constants import AnswerKeys
+
+    answers = {"include_database": True, AnswerKeys.include_key(plugin): True}
+    migrates = bool(get_services_needing_migrations(answers))
+
+    assert (
+        "def _check_and_stamp_existing_tables" in _database_init(answers)
+    ) is migrates

@@ -28,6 +28,7 @@ from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.components.runner.models import DONE
 from app.core.log import logger
 from app.services.meetings.domains.actions import runs
 from app.services.meetings.domains.actions.queries import answered
@@ -40,7 +41,6 @@ from app.services.meetings.domains.moments.detectors import (
     STOP,
 )
 from app.services.meetings.domains.moments.service import answerer
-from app.services.meetings.models import DONE
 
 LOOKING = "Let me look that up."
 NOT_FOUND = "Sorry, I couldn't find that."

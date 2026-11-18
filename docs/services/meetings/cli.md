@@ -18,24 +18,8 @@ my-app meetings search "<words>"         # Lines and notes with any of the words
 my-app meetings series [ID]              # The series, or one in full
 my-app meetings look-over [ID...]        # Read calls over again for moments (--series, --all)
 
-# Runner
-my-app meetings runner                   # Answer waiting runs on this machine
-my-app meetings runner-token create <name>   # A token, shown once (--owner)
-my-app meetings runner-token list            # The live tokens
-my-app meetings runner-token revoke <id>     # Revoke one
 ```
 
-## Runner options
+## The runner
 
-```bash
---command CMD    # Required: the command each run runs; {prompt} is its prompt (stdin without it)
---repo PATH      # Answer from a fresh worktree of this repository
---ref REF        # What each worktree checks out (origin/main)
---action NAME    # An action this runner answers (agent); repeat for more
---url URL        # The app (API_BASE_URL by default)
---token TOKEN    # Its runner token (or MEETINGS_RUNNER_TOKEN)
---once           # Answer one waiting run and stop
---poll SECONDS   # How often it looks while idle
-```
-
-See [The runner](moments.md#the-runner).
+The runner and its tokens are the [runner component](../../components/runner.md)'s: `my-app runner run` and `my-app runner token`.

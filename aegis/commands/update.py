@@ -92,6 +92,12 @@ def _detect_existing_features(target_path: Path) -> dict[str, Any]:
         if spec.marker_path and (target_path / spec.marker_path).exists():
             detected[AnswerKeys.include_key(spec.name)] = True
 
+    # The runner was meetings' own before it was a component: a project
+    # with meetings has it, though it has no answer for it and no marker
+    # yet, and would otherwise render meetings without what it now imports.
+    if detected.get(AnswerKeys.MEETINGS):
+        detected[AnswerKeys.RUNNER] = True
+
     # Insights sub-flags come from the collector registration, so we
     # neither resurrect collectors the user never opted into nor tear
     # down ones they use.

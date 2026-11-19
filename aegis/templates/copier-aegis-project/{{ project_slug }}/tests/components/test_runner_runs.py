@@ -14,6 +14,7 @@ from app.components.runner.models import (
     DONE,
     FAILED,
     MOST_ACTIVITY,
+    MOST_AGENT,
     MOST_TITLE,
     RunnerRun,
 )
@@ -531,3 +532,15 @@ async def test_a_tally_says_how_each_actions_runs_stand_and_what_they_cost_latel
         runs.Tally("agent", waiting=1, running=1, failed=1, cost=0.25),
         runs.Tally("ai", waiting=1, running=0, failed=0, cost=0.0),
     ]
+
+
+async def test_a_claimed_run_keeps_only_so_much_of_its_agents_name(
+    async_db_session: AsyncSession,
+) -> None:
+    """Whatever claims it: a runner cuts the name before it says it, and
+    the app cuts what it is told."""
+    run = await asked(async_db_session)
+
+    taken = await claimed(async_db_session, run, agent="c" * 100)
+
+    assert taken.agent == "c" * MOST_AGENT

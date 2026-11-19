@@ -27,7 +27,7 @@ from app.core.time import utcnow
 
 from . import queries
 from .models import DONE, FAILED, MOST_ACTIVITY, MOST_TITLE, RunnerRun
-from .protocol import TIMEOUT_SECONDS, kept
+from .protocol import MOST_AGENT, TIMEOUT_SECONDS, kept
 
 # How long a claimed run is waited for where its runner gave no timeout
 # (the app's own, or a runner from before they did): twice a runner's
@@ -125,13 +125,15 @@ async def take(
     *,
     timeout: float | None = None,
     worktrees: str | None = None,
+    agent: str | None = None,
 ) -> bool:
     """Claim the run for ``runner`` if it is still asked. What the runner
     says of itself goes on the run: how long it gives a command
-    (``timeout``, seconds), so the run is waited for twice that, and where
+    (``timeout``, seconds), so the run is waited for twice that, where
     it keeps a branch's worktree (``worktrees``), so a run on a branch says
-    where its work is before it is back. A run asked in no session is
-    given one, so what its agent says it is doing finds it (``note``)."""
+    where its work is before it is back, and which ``agent`` it runs (cut
+    to what a run keeps). A run asked in no session is given one, so what
+    its agent says it is doing finds it (``note``)."""
     wait = timedelta(seconds=2 * timeout) if timeout else ABANDONED_AFTER
     taken = await queries.take(
         db,
@@ -140,6 +142,7 @@ async def take(
         overdue_at=utcnow() + wait,
         session_id=new_session(),
         worktrees=worktrees,
+        agent=_cut(agent, MOST_AGENT),
     )
     await db.commit()
     if taken:
@@ -155,6 +158,7 @@ async def claim(
     runner: str,
     timeout: float | None = None,
     worktrees: str | None = None,
+    agent: str | None = None,
 ) -> RunnerRun | None:
     """The oldest asked run of ``actions`` among the owner's, now claimed by
     ``runner`` (``take``); None when there is none."""
@@ -162,7 +166,10 @@ async def claim(
         run_id = await queries.waiting(db, owner_user_id, actions)
         if run_id is None:
             return None
-        if await take(db, run_id, runner, timeout=timeout, worktrees=worktrees):
+        taken = await take(
+            db, run_id, runner, timeout=timeout, worktrees=worktrees, agent=agent
+        )
+        if taken:
             return await queries.run(db, run_id)
     return None
 

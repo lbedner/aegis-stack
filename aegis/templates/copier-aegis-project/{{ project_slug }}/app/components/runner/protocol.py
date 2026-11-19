@@ -15,6 +15,8 @@ RUNS = "/api/v1/runner/runs"
 TIMEOUT_SECONDS = 900.0
 # The most a run keeps of what came back.
 KEEP = 20_000
+# The most a run keeps of its agent's name.
+MOST_AGENT = 64
 
 
 def kept(result: str, ok: bool) -> str:
@@ -29,6 +31,11 @@ class ClaimRequest(BaseModel):
     where a run's work will be and when to stop waiting for it."""
 
     actions: list[str] = Field(description="The actions this runner runs")
+    agent: str | None = Field(
+        None,
+        max_length=MOST_AGENT,
+        description="The agent it runs them with: its command's program",
+    )
     worktrees: str | None = Field(
         None, description="The folder it keeps a branch's worktree under"
     )

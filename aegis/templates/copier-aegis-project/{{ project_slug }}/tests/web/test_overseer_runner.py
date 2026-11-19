@@ -16,6 +16,7 @@ from app.components.runner import runs
 from app.components.runner.health import RunnerFact
 from app.components.runner.models import CLAIMED, DONE, FAILED, RunnerRun
 from app.components.web_frontend import overseer_runner
+from app.components.web_frontend.assets import STATIC_DIR
 from app.core.constants import ComponentName
 from app.core.runtime import Instance
 from app.core.time import utcnow
@@ -98,7 +99,7 @@ async def _timed(db: AsyncSession, run_id: int) -> None:
 def _asked(html: str) -> list[tuple[str, str]]:
     """Each run listed: what was asked, and the line under it."""
     cells = select(html, f"{RUNS} tbody td:first-child")
-    return [(text(one(cell, "a")), text(one(cell, "div"))) for cell in cells]
+    return [(text(one(cell, "a")), text(one(cell, "[data-sub]"))) for cell in cells]
 
 
 async def test_a_run_reads_as_what_was_asked_and_where(
@@ -322,7 +323,10 @@ async def test_runs_asked_in_one_place_of_one_action_fold_into_a_row(
 
     [fold] = table_rows(html, RUNS)
     asked = fold["What was asked"]
-    assert text(asked).startswith(PLACE) and text(one(asked, "div")) == "agent · 2 runs"
+    assert (
+        text(asked).startswith(PLACE)
+        and text(one(asked, "[data-sub]")) == "agent · 2 runs"
+    )
     assert (text(fold["Took"]), text(fold["Cost"])) == ("1m 30s", "$0.7500")
     said = one(fold["Result"], "[data-tone]")
     assert (text(said), said.get("data-tone")) == ("1 No answer, 1 Answered", "warn")
@@ -388,6 +392,76 @@ async def test_runs_fold_only_with_their_own_action_in_their_own_place(
     assert text(one(rows[2]["What was asked"], "a")) == "Alone?"
 
 
+@pytest.mark.parametrize(
+    ("agent", "icon"),
+    [
+        # The agent's own mark, where the icons draw its maker's.
+        ("claude", "claude-code"),
+        # However its program is spelled, and by the icon that is its own.
+        ("Gemini", "gemini-ai"),
+        # What starts an agent is not one, though the icons draw it too.
+        ("python", "robot"),
+        ("nonesuch", "robot"),
+        (None, "robot"),
+    ],
+)
+async def test_a_run_is_marked_with_its_agents_icon(
+    overseer: TestClient,
+    async_db_session: AsyncSession,
+    agent: str | None,
+    icon: str,
+) -> None:
+    async_db_session.add(a_run(agent=agent))
+    await async_db_session.flush()
+
+    mark = one(page_html(overseer, PAGE), f"{RUNS} tbody img")
+
+    assert f"/{icon}.svg" in mark.get("src")
+
+
+def test_every_agent_the_page_marks_has_its_icon() -> None:
+    """Most of the icons are another project's: one it drops must not
+    leave a broken image."""
+    drawn = {*overseer_runner.AGENT_ICONS.values(), overseer_runner.PLAIN_AGENT}
+
+    assert [icon for icon in drawn if not (STATIC_DIR / icon).is_file()] == []
+
+
+@pytest.mark.parametrize(
+    ("agents", "icon"),
+    [
+        (("claude", "claude"), "claude-code"),
+        # One still waiting has no agent yet: the rest say whose they are.
+        (("claude", None), "claude-code"),
+        (("claude", "gemini"), "robot"),
+    ],
+)
+async def test_a_fold_is_marked_with_the_agent_its_runs_share(
+    overseer: TestClient,
+    async_db_session: AsyncSession,
+    agents: tuple[str | None, str | None],
+    icon: str,
+) -> None:
+    async_db_session.add_all([a_run(source=PLACE, agent=agent) for agent in agents])
+    await async_db_session.flush()
+
+    [fold] = table_rows(page_html(overseer, PAGE), RUNS)
+
+    assert f"/{icon}.svg" in one(fold["What was asked"], "img").get("src")
+
+
+async def test_the_drawer_names_the_agent_with_its_runner(
+    overseer: TestClient, async_db_session: AsyncSession
+) -> None:
+    run = a_run(runner="laptop", agent="claude", status=DONE, result="Yes.")
+    async_db_session.add(run)
+    await async_db_session.flush()
+
+    html = page_html(overseer, overseer_runner.drawer_url(run.id or 0))
+
+    assert stat(html, "Runner") == "laptop · claude"
+
+
 async def test_two_owners_runs_in_a_place_of_one_name_stay_apart(
     overseer: TestClient, async_db_session: AsyncSession
 ) -> None:
@@ -413,7 +487,7 @@ async def test_a_list_cut_short_says_so_and_its_last_fold_counts_what_is_listed(
     html = page_html(overseer, PAGE)
 
     [fold] = table_rows(html, RUNS)
-    assert text(one(fold["What was asked"], "div")) == "agent · 2 runs"
+    assert text(one(fold["What was asked"], "[data-sub]")) == "agent · 2 runs"
     assert text(one(html, "[data-cut]")) == (
         "The newest 2 runs. Older ones are not listed."
     )

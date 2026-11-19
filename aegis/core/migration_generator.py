@@ -434,10 +434,24 @@ _MEETINGS_RUNS_NAMED = f"""\
             "WHERE subject_kind = 'moment' AND title IS NULL"
         )"""
 
+# A run says which agent ran it (``agent``: its runner's command's
+# program). Nothing recorded that of the runs a runner took before, and
+# the app never sees a runner's command; the one a runner is given unless
+# told otherwise (``scripts/entrypoint.sh``) runs ``claude``, so they are
+# taken to be its. A runner took a run that carries a runner token's name:
+# a run its asker took in the app carries the asker's own.
+_RUNS_BEFORE_AGENTS = """\
+    op.execute(
+        "UPDATE runner_run SET agent = 'claude' "
+        "WHERE agent IS NULL AND runner IN (SELECT name FROM runner_token)"
+    )"""
+
 RUNNER_MIGRATION = ServiceMigrationSpec(
     service_name="runner",
     description="Runner: work asked of a coding agent, and the tokens that claim it",
-    data_after=f"{_MEETINGS_RUNS_CARRY_OVER}\n{_MEETINGS_RUNS_NAMED}",
+    data_after="\n".join(
+        (_MEETINGS_RUNS_CARRY_OVER, _MEETINGS_RUNS_NAMED, _RUNS_BEFORE_AGENTS)
+    ),
     stamp_signature=("table", "runner_run"),
 )
 

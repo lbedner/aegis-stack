@@ -58,6 +58,7 @@ async def take(
     overdue_at: datetime,
     session_id: str,
     worktrees: str | None = None,
+    agent: str | None = None,
 ) -> bool:
     """Claim the run for ``runner`` if it is still asked, in one
     statement, so only one runner ever takes it: overdue at ``overdue_at``,
@@ -71,6 +72,7 @@ async def take(
         .values(
             status=CLAIMED,
             runner=runner,
+            agent=agent,
             claimed_at=utcnow(),
             overdue_at=overdue_at,
             session_id=func.coalesce(col(RunnerRun.session_id), session_id),

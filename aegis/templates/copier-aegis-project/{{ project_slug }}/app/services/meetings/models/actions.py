@@ -9,10 +9,12 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from app.components.runner.models import DONE, FAILED, RunnerRun
+from app.components.runner.models import TONES as RUN_TONES
 from app.core.figures import FIGURES
 
-# How a run reads in both Overseers, by its status; any other is muted.
-TONES = {DONE: "ok", FAILED: "error"}
+# How a run that is back reads in both Overseers (the runner's tones for
+# them); any other is muted.
+TONES = {status: RUN_TONES[status] for status in (DONE, FAILED)}
 # What claims a run of an action that runs in the app.
 IN_THE_APP = "app"
 # What a meetings run is about (its subject's kind): a moment, by its id.

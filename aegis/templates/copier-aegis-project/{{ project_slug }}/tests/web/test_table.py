@@ -121,6 +121,14 @@ class TestCellKinds:
         badge = one(html, "td [data-tone]")
         assert text(badge) == "Overdue" and badge.get("data-tone") == "warn"
 
+    def test_a_status_may_say_more_under_its_badge(self) -> None:
+        """As a link does (``sub``): a job's step under where it stands."""
+        columns = [{"key": "state", "label": "State", "kind": "status"}]
+        state = {"label": "Running", "tone": "accent", "sub": "Edit app/main.py"}
+        cell = one(render(columns, [{"state": state}]), "tbody td")
+        assert text(one(cell, "[data-tone]")) == "Running"
+        assert text(cell) == "Running Edit app/main.py"
+
     def test_signed_money_carries_a_plus_and_a_tone(self) -> None:
         columns = [
             {"key": "amount", "label": "Amount", "kind": "money", "signed": True}
@@ -227,6 +235,23 @@ class TestDetailRows:
         buttons = select(html, "tbody button[aria-expanded]")
         assert len(buttons) == 2
         assert buttons[0].get("aria-expanded") == "false"
+
+    def test_a_flat_row_among_them_has_nothing_to_unfold(self) -> None:
+        """A row of its own beside rows that unfold: no toggle and no
+        detail, its cells still under their headings."""
+        template = templates.env.from_string(
+            '{% from "components/macros/table.html" import data_table %}'
+            '{% macro more(row) %}<p class="more">{{ row.name }}</p>{% endmacro %}'
+            "{{ data_table(columns, rows, detail=more) }}"
+        )
+        rows = [{"name": "Coffee"}, {"name": "Tea", "flat": True}]
+        html = template.render(columns=[{"key": "name", "label": "Name"}], rows=rows)
+
+        folds, flat = select(html, "tbody")
+        one(folds, "tr[data-detail]")
+        none(flat, "tr[data-detail]")
+        none(flat, "button")
+        assert [text(td) for td in one(flat, "tr").getchildren()] == ["", "Tea"]
 
     def test_without_detail_there_is_no_toggle(self) -> None:
         html = render(COLUMNS, [Row(date(2026, 7, 15), "Coffee", -450)])

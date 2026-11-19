@@ -414,10 +414,30 @@ _MEETINGS_RUNS_CARRY_OVER = "\n".join(
     )
 )
 
+# A run says what was asked and where (``title``, ``source``); the runs
+# meetings asked before runs did are named as meetings names one it asks
+# now (``meetings.domains.actions.runs.ask``): its card's topic, else the
+# question, and its meeting by its calendar's name (cut to 232, so the
+# day fits in what a run keeps) and its day, else by its number.
+# A run that has a name keeps it, so this is safe on every runner revision.
+_ITS_MOMENT = "meeting_moment mo WHERE CAST(mo.id AS TEXT) = runner_run.subject_id"
+_MEETINGS_RUNS_NAMED = f"""\
+    if sa.inspect(op.get_bind()).has_table("meeting_moment"):
+        op.execute(
+            "UPDATE runner_run SET "
+            "title = (SELECT SUBSTR(COALESCE(NULLIF(mo.topic, ''), mo.text), 1, 255) "
+            "FROM {_ITS_MOMENT}), "
+            "source = (SELECT SUBSTR(CASE WHEN COALESCE(m.title, '') = '' "
+            "THEN 'Meeting ' || CAST(m.id AS TEXT) ELSE 'Meeting · ' || SUBSTR(m.title, 1, 232) "
+            "|| ' · ' || SUBSTR(CAST(COALESCE(m.joined_at, m.created_at) AS TEXT), 1, 10) "
+            "END, 1, 255) FROM meeting m, {_ITS_MOMENT} AND m.id = mo.meeting_id) "
+            "WHERE subject_kind = 'moment' AND title IS NULL"
+        )"""
+
 RUNNER_MIGRATION = ServiceMigrationSpec(
     service_name="runner",
     description="Runner: work asked of a coding agent, and the tokens that claim it",
-    data_after=_MEETINGS_RUNS_CARRY_OVER,
+    data_after=f"{_MEETINGS_RUNS_CARRY_OVER}\n{_MEETINGS_RUNS_NAMED}",
     stamp_signature=("table", "runner_run"),
 )
 

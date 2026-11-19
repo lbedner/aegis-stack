@@ -126,12 +126,27 @@ def row_text(markup: Markup, rows: str, needle: str) -> str:
 def table_rows(markup: Markup, table: str = "table") -> list[dict[str, HtmlElement]]:
     """Each body row of ``table`` as ``{header label: cell}``, so tests read
     cells by name instead of counting columns; a row's opened detail
-    (``data_table``'s ``detail``) is not a row."""
+    (``data_table``'s ``detail``) is not a row, nor is anything in a table
+    it holds."""
     root = one(markup, table)
-    headers = [text(th) for th in select(root, "thead th")]
+    headers = [text(th) for th in root.xpath("./thead/tr/th")]
     return [
         dict(zip(headers, tr.getchildren(), strict=False))
-        for tr in select(root, "tbody tr:not([data-detail])")
+        for tr in root.xpath("./tbody/tr[not(@data-detail)]")
+    ]
+
+
+def unfolded(markup: Markup, css: str = "tbody") -> bool:
+    """Whether the one row that unfolds (``data_table``'s ``detail``; ``css``
+    finds its ``tbody``) starts open."""
+    return "open: true" in (one(markup, css).get("x-data") or "")
+
+
+def table_text(markup: Markup, table: str = "table") -> list[dict[str, str]]:
+    """``table_rows``, each cell as the text it shows."""
+    return [
+        {label: text(cell) for label, cell in row.items()}
+        for row in table_rows(markup, table)
     ]
 
 

@@ -195,11 +195,31 @@ elif [ "$run_command" = "runner" ]; then
         exec sleep infinity
     fi
     export RUNNER_TOKEN
-    # Its own variable: the } in {prompt} would end a ${...:-default}.
-    default_command="claude -p {prompt} --permission-mode plan"
+    # Their own variables: the } in {prompt} would end a ${...:-default}.
+    # The agent names its session and answers as JSON, so a run says what
+    # it cost and a later run of its session picks it up, and its hooks
+    # post each step to the app ({hooks}, which the runner fills in), so a
+    # run says what it is doing; the resume form goes with the command it
+    # resumes, so only the default one has it unless RUNNER_RESUME_COMMAND
+    # says another.
+    how="--output-format json --permission-mode plan --settings {hooks}"
+    default_command="claude -p {prompt} --session-id {session} $how"
+    default_resume="claude -p {prompt} --resume {session} $how"
+    if [ -z "$RUNNER_COMMAND" ]; then
+        : "${RUNNER_RESUME_COMMAND:=$default_resume}"
+    fi
     args=(--url "$RUNNER_URL" --command "${RUNNER_COMMAND:-$default_command}")
+    if [ -n "$RUNNER_RESUME_COMMAND" ]; then
+        args+=(--resume-command "$RUNNER_RESUME_COMMAND")
+    fi
     if [ -n "$RUNNER_REPO" ]; then
         args+=(--repo "$RUNNER_REPO")
+    fi
+    if [ -n "$RUNNER_WORKTREES" ]; then
+        args+=(--worktrees "$RUNNER_WORKTREES")
+    fi
+    if [ -n "$RUNNER_TIMEOUT" ]; then
+        args+=(--timeout "$RUNNER_TIMEOUT")
     fi
     exec "${RUN[@]}" python -m app.cli.main runner run "${args[@]}" "$@"
 {%- endif %}

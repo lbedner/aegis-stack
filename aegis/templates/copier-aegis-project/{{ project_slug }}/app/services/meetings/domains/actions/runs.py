@@ -8,11 +8,12 @@ background; one that runs on a runner waits to be claimed.
 """
 
 import asyncio
+from datetime import datetime
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.runner import runs
-from app.components.runner.models import RunnerRun
+from app.components.runner.models import MOST_TITLE, RunnerRun
 from app.components.runner.runs import STOPPED, RunNotFoundError
 from app.core.concurrency import background
 from app.core.db import get_async_session
@@ -41,6 +42,21 @@ class MomentNotFoundError(LookupError):
     """No moment by that id is this owner's."""
 
 
+# The most of a meeting's name a run's place keeps: what a run keeps of a
+# place, less the words and the day around the name.
+MOST_NAME = MOST_TITLE - len("Meeting ·  · 0000-00-00")
+
+
+def _place(meeting_id: int, called: str | None, held: datetime) -> str:
+    """Where a run about one of a meeting's moments was asked: by its
+    calendar's name for it and its day (UTC; one held every week is called
+    the same each time, and a list of runs folds by place), else as its
+    page is headed. A long name is cut so its day always fits."""
+    if not called:
+        return f"Meeting {meeting_id}"
+    return f"Meeting · {called[:MOST_NAME]} · {held:%Y-%m-%d}"
+
+
 async def ask(
     db: AsyncSession,
     moment_id: int,
@@ -63,7 +79,7 @@ async def ask(
     found = await queries.moment(db, moment_id, owner_user_id, meeting_id)
     if found is None:
         raise MomentNotFoundError(moment_id)
-    moment, owner = found
+    moment, owner, called, held = found
     card = [moment, *(together or [])]
     ids = subjects(m.id or 0 for m in card)
     going = await runs.going(db, MOMENT, ids, action.name)
@@ -75,6 +91,9 @@ async def ask(
         kind=MOMENT,
         subject_id=ids[0],
         action=action.name,
+        # What a list of runs calls it: its card's topic, else the question.
+        title=moment.topic or moment.text,
+        source=_place(moment.meeting_id, called, held),
         prompt=action.frame(await excerpt(db, card)),
         replacing=ids,
     )

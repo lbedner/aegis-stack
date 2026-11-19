@@ -1,39 +1,27 @@
 """The runner over HTTP.
 
 - ``runs_router``: a runner on another machine claims a run of the actions
-  it runs and posts its result, holding a runner token (``Authorization:
-  Bearer rnr_...``), never a session.
+  it runs and posts its result, and its agent's hooks post what the run is
+  doing, all holding a runner token (``Authorization: Bearer rnr_...``),
+  never a session.
 - ``tokens_router``: the caller's runner tokens, made (the value shown
-  once), listed and revoked.
+  once), listed and revoked. With no one to sign in they are the
+  operator's, made and revoked only where an operator's change is let
+  through (``get_token_holder``).
 """
 
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.components.runner import runs, tokens
+from app.components.runner import hooks, runs, tokens
 from app.components.runner.models import RunnerToken
+from app.components.runner.protocol import Answer, ClaimedRun, ClaimRequest
 from app.core.db import get_async_db
-from app.services.shared.deps import get_owner_user_id
-
-
-class ClaimRequest(BaseModel):
-    actions: list[str] = Field(description="The actions this runner runs")
-
-
-class ClaimedRun(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    action: str
-    prompt: str
-
-
-class FinishRequest(BaseModel):
-    ok: bool
-    result: str
+from app.services.shared.deps import get_owner_user_id, get_token_holder
 
 
 class RunStanding(BaseModel):
@@ -98,16 +86,24 @@ async def claim(
 ) -> ClaimedRun | Response:
     """The oldest run of ``actions`` waiting among the token's owner's, now
     this runner's (named for its token)."""
-    run = await runs.claim(db, token.owner_user_id, body.actions, runner=token.name)
+    run = await runs.claim(
+        db,
+        token.owner_user_id,
+        body.actions,
+        runner=token.name,
+        timeout=body.timeout,
+        worktrees=body.worktrees,
+    )
     if run is None:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
-    return ClaimedRun.model_validate(run)
+    claimed = ClaimedRun.model_validate(run)
+    return claimed.model_copy(update={"resume": await runs.resumes(db, run)})
 
 
 @runs_router.post("/{run_id}/finish", response_model=RunStanding)
 async def finish(
     run_id: int,
-    body: FinishRequest,
+    body: Answer,
     token: RunnerToken = Depends(get_runner_token),
     db: AsyncSession = Depends(get_async_db),
 ) -> RunStanding:
@@ -121,10 +117,27 @@ async def finish(
             body.result,
             ok=body.ok,
             runner=token.name,
+            cost=body.cost,
+            worktree=body.worktree,
         )
     except runs.RunNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     return RunStanding.model_validate(run)
+
+
+@runs_router.post("/activity", status_code=status.HTTP_204_NO_CONTENT)
+async def activity(
+    event: dict[str, Any],
+    token: RunnerToken = Depends(get_runner_token),
+    db: AsyncSession = Depends(get_async_db),
+) -> Response:
+    """An agent's hook says what its session is doing (``hooks``): kept on
+    the latest run a runner took in it. An event that says nothing of that
+    is taken and changes nothing."""
+    doing, session = hooks.activity_of(event), event.get("session_id")
+    if doing is not None and session:
+        await runs.note(db, token.owner_user_id, str(session), doing)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 tokens_router = APIRouter(prefix="/runner/tokens", tags=["runner"])
@@ -143,7 +156,7 @@ async def every_token(
 @tokens_router.post("", response_model=NewToken, status_code=status.HTTP_201_CREATED)
 async def make_token(
     body: TokenRequest,
-    owner_user_id: int | None = Depends(get_owner_user_id),
+    owner_user_id: int | None = Depends(get_token_holder),
     db: AsyncSession = Depends(get_async_db),
 ) -> NewToken:
     """A token for the caller's runner ``name``; its value is shown once."""
@@ -154,7 +167,7 @@ async def make_token(
 @tokens_router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_token(
     token_id: int,
-    owner_user_id: int | None = Depends(get_owner_user_id),
+    owner_user_id: int | None = Depends(get_token_holder),
     db: AsyncSession = Depends(get_async_db),
 ) -> Response:
     """Revoke one of the caller's tokens: its runner is refused from now."""

@@ -13,18 +13,9 @@ from app.components.mcp.models.tokens import (
     McpTokenResponse,
 )
 from app.core.db import get_async_db
-from app.services.shared.deps import {% if include_auth %}get_owner_user_id{% else %}Actor, get_admin_actor, get_owner_user_id{% endif %}
+from app.services.shared.deps import get_owner_user_id, get_token_holder
 
 router = APIRouter(prefix="/mcp/tokens", tags=["mcp"])
-{%- if include_auth %}
-holder = get_owner_user_id
-{%- else %}
-
-
-async def holder(actor: Actor = Depends(get_admin_actor)) -> int | None:
-    """Whose tokens: the operator's (None), where they may be changed."""
-    return actor.id
-{%- endif %}
 
 
 @router.get("", response_model=list[McpTokenResponse])
@@ -40,7 +31,7 @@ async def list_tokens(
 @router.post("", response_model=McpTokenCreated, status_code=status.HTTP_201_CREATED)
 async def create_token(
     body: McpTokenCreate,
-    user_id: int | None = Depends(holder),
+    user_id: int | None = Depends(get_token_holder),
     db: AsyncSession = Depends(get_async_db),
 ) -> McpTokenCreated:
     """Make a token. Its value is in this answer and nowhere else."""
@@ -52,7 +43,7 @@ async def create_token(
 @router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_token(
     token_id: int,
-    user_id: int | None = Depends(holder),
+    user_id: int | None = Depends(get_token_holder),
     db: AsyncSession = Depends(get_async_db),
 ) -> Response:
     """Revoke a token: it fails on its next use."""

@@ -1,0 +1,8 @@
+{# How what a run came back with reads on a page, by its status's tone
+   (the runner's ``TONES``): a failure as it was said, an answer as markdown
+   in the typography a chat reply wears. #}
+{% import "components/macros/layout.html" as layout %}
+{% macro result(text, tone) %}
+{% if tone == "error" %}<p class="text-sm text-error whitespace-pre-wrap" data-answer>{{ text }}</p>
+{% else %}<div class="{{ layout.prose }}" data-answer>{{ text|markdown }}</div>{% endif %}
+{% endmacro %}

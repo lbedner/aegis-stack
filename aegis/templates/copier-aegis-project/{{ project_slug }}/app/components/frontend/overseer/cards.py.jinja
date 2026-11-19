@@ -76,6 +76,8 @@ from ..dashboard.cards import (
     McpCard,
 {% endif %}{% if include_browser %}
     BrowserCard,
+{% endif %}{% if include_runner %}
+    RunnerCard,
 {% endif %}
 {% if ollama_mode != "none" %}
     InferenceCard,
@@ -223,6 +225,9 @@ def create_component_card(
 {% endif %}{% if include_browser %}
         elif component_name == ComponentName.BROWSER:
             return BrowserCard(component_data).build()
+{% endif %}{% if include_runner %}
+        elif component_name == ComponentName.RUNNER:
+            return RunnerCard(component_data).build()
 {% endif %}
 {% if ollama_mode != "none" %}
         elif component_name == ComponentName.OLLAMA:

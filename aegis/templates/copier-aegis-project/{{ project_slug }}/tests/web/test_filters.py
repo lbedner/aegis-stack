@@ -38,6 +38,21 @@ def pct() -> Callable[..., str]:
     return templates.env.filters["pct"]
 
 
+def test_tones_sort_by_what_wants_a_look_first() -> None:
+    from app.components.web_frontend.filters import loudness
+
+    tones = ["ok", "nonesuch", "muted", "error", "accent", "warn"]
+
+    assert sorted(tones, key=loudness) == [
+        "error",
+        "warn",
+        "accent",
+        "muted",
+        "ok",
+        "nonesuch",
+    ]
+
+
 class TestMoney:
     @pytest.mark.parametrize(
         ("cents", "expected"),
@@ -154,6 +169,35 @@ class TestMarkdown:
         keywords = [text(span) for span in select(out, ".highlight pre span.k")]
         assert "def" in keywords
         assert "pass" in keywords
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "[x](javascript:alert(1))",
+            "[x](JaVaScRiPt:alert(1))",
+            "<javascript:alert(1)>",
+            "[x](vbscript:msgbox(1))",
+            "[x](data:text/html,hi)",
+        ],
+    )
+    def test_a_link_that_would_run_as_script_leads_nowhere(
+        self, markdown: Callable[..., str], source: str
+    ) -> None:
+        """A model's answer is read by an admin, signed in: a link in it
+        opens a page or writes a mail, and nothing else."""
+        assert [a.get("href") for a in select(markdown(source), "a")] == [""]
+
+    def test_a_link_to_a_page_or_a_mailbox_is_kept(
+        self, markdown: Callable[..., str]
+    ) -> None:
+        out = markdown(
+            "[a](https://example.com/a?b=1) [b](/overseer) [c](mailto:a@example.com)"
+        )
+        assert [a.get("href") for a in select(out, "a")] == [
+            "https://example.com/a?b=1",
+            "/overseer",
+            "mailto:a@example.com",
+        ]
 
     def test_fence_options_never_reach_the_formatter(
         self, markdown: Callable[..., str]

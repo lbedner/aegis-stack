@@ -57,6 +57,9 @@ from .mcp_card import McpCard
 {%- if include_browser %}
 from .browser_card import BrowserCard
 {%- endif %}
+{%- if include_runner %}
+from .runner_card import RunnerCard
+{%- endif %}
 {%- if ollama_mode != "none" %}
 from .inference_card import InferenceCard
 {%- endif %}
@@ -131,6 +134,9 @@ __all__ = [
 {%- endif %}
 {%- if include_browser %}
     "BrowserCard",
+{%- endif %}
+{%- if include_runner %}
+    "RunnerCard",
 {%- endif %}
 {%- if ollama_mode != "none" %}
     "InferenceCard",

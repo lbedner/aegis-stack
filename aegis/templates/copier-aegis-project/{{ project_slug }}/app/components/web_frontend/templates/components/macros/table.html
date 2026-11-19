@@ -9,11 +9,12 @@
    row's ``currency`` when it has one; ``signed`` adds a leading ``+`` and
    colours by sign, ``toned`` colours by sign without the plus), ``date``,
    ``int``, ``status`` (the value is
-   ``{"label", "tone"}``, rendered as a ``badge``), ``code`` (monospace,
+   ``{"label", "tone"}``, rendered as a ``badge``, and ``sub``, a muted
+   second line under it), ``code`` (monospace,
    wrapping: a key, a rule, a command), ``file`` (the value is ``{"path",
    "url"}``: the path as code after its type's icon, ``file_icon``, linked
    when it has a ``url``) or ``link`` (the value is
-   ``{"label", "url"}``, and ``sub``, a muted second line under it; the
+   ``{"label", "url"}``, and ``sub`` as a status has; the
    link replaces ``target``, default ``#app-content``, the way a list's
    row opens its item), ``avatar`` (the
    row's ``icon_url`` brand mark, or the initial, before the name); ``wrap`` lets a
@@ -33,7 +34,8 @@
    (``actions=none`` leaves it out, so one table serves both cases). ``detail`` is a macro taking the
    row: each row then gets a toggle and a hidden full-width row under it
    with that macro's output (the Flet expandable rows), shown from the
-   start where the row says ``open``. #}
+   start where the row says ``open``; a row that says ``flat`` has nothing
+   to unfold (a row of its own among rows that hold others). #}
 {% from "components/macros/feedback.html" import empty_state %}
 {% from "components/macros/icons.html" import file_icon %}
 {% from "components/macros/layout.html" import avatar, badge %}
@@ -41,6 +43,9 @@
 {# A key, a rule, a path: monospace, wrapping anywhere so a long one
    never pushes the columns after it out of view. #}
 {% macro _code(text) %}<code class="font-mono text-xs whitespace-normal [overflow-wrap:anywhere]">{{ text }}</code>{% endmacro %}
+
+{# A cell's muted second line (a link's, a status's ``sub``). #}
+{% macro _sub(value) %}{% if value.sub %}<div class="text-xs text-aegis-muted">{{ value.sub }}</div>{% endif %}{% endmacro %}
 
 {% macro _cell(row, col) -%}
 {%- set value = row[col.key] if row is mapping or col.key is number else row|attr(col.key) -%}
@@ -52,7 +57,7 @@
 {%- set currency = (row["currency"] if row is mapping and "currency" in row else row|attr("currency")) -%}
 {{ "+" if col.signed and value > 0 }}{{ value|money(currency if currency is string else "USD") }}
 {%- elif col.kind == "status" -%}
-{{ badge(value.label, value.tone) }}
+{{ badge(value.label, value.tone) }}{{ _sub(value) }}
 {%- elif col.kind == "date" -%}
 {{ value|short_date }}
 {%- elif col.kind == "int" -%}
@@ -70,7 +75,7 @@
 {%- set icon_url = row["icon_url"] if row is mapping and "icon_url" in row else row|attr("icon_url") -%}
 <span class="inline-flex items-center gap-2">{{ avatar(value.label, icon_url if icon_url is string else None) }}{{ link }}</span>
 {%- else -%}{{ link }}{%- endif -%}
-{%- if value.sub %}<div class="text-xs text-aegis-muted">{{ value.sub }}</div>{% endif -%}
+{{- _sub(value) -}}
 {%- else -%}
 {{ value }}
 {%- endif -%}
@@ -89,7 +94,7 @@ text-aegis-text
 {# One row. ``id`` lets an action swap this row back by itself; ``oob``
    marks it as an out-of-band answer (pattern 2); ``actions`` is a macro
    (a call block's ``caller``) rendering the trailing actions cell. #}
-{% macro table_row(columns, row, id=None, oob=False, actions=None, expandable=False) %}
+{% macro table_row(columns, row, id=None, oob=False, actions=None, expandable=False, flat=False) %}
 {# A row swapped out of band travels wrapped: a bare <tr> at the top
    of a response bound for anything but a table is thrown away by the
    HTML parser, and its cells spill into whatever was being swapped — a
@@ -106,6 +111,8 @@ text-aegis-text
     <button type="button" @click.stop="open = !open" aria-expanded="false" :aria-expanded="open.toString()" aria-label="Details"
             class="text-aegis-muted hover:text-aegis-text"><span aria-hidden="true" class="inline-block transition-transform" :class="open && 'rotate-90'">›</span></button>
   </td>
+  {% elif flat %}
+  <td></td>
   {% endif %}
   {% for col in columns %}
   <td class="{{ 'pl-10 pr-5' if indented and loop.first else 'px-5' }} py-2 {{ 'whitespace-normal' if col.wrap else 'whitespace-nowrap' }} {{ 'text-right tabular-nums' if col.align == 'right' else 'text-left' }} {{ _tone(row, col) }}">{{ _cell(row, col) }}</td>
@@ -133,11 +140,14 @@ text-aegis-text
     </thead>
     {% if detail %}
     {% for row in rows %}
+    {% set flat = row is mapping and row.get("flat") %}
     <tbody x-data="{ open: {{ 'true' if row is mapping and row.get('open') else 'false' }} }" class="border-b border-aegis-border/60 last:border-0">
-      {{ table_row(columns, row, id=(row_id ~ "-" ~ (row["id"] if row is mapping else row.id)) if row_id else None, actions=actions, expandable=True) }}
+      {{ table_row(columns, row, id=(row_id ~ "-" ~ (row["id"] if row is mapping else row.id)) if row_id else None, actions=actions, expandable=not flat, flat=flat) }}
+      {% if not flat %}
       <tr data-detail x-show="open" x-cloak>
         <td colspan="{{ columns|length + 1 + (1 if actions else 0) }}" class="px-5 pb-4 pt-2 bg-aegis-border/10">{{ detail(row) }}</td>
       </tr>
+      {% endif %}
     </tbody>
     {% endfor %}
     {% else %}

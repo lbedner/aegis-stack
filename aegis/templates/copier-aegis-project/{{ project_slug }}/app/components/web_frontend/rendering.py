@@ -6,6 +6,7 @@ a full page inside the page layout and a bare fragment for htmx.
 """
 
 from base64 import b64decode
+from collections.abc import Iterable
 from hashlib import sha1
 import json
 from typing import Any
@@ -181,10 +182,10 @@ def one_decimal(row: dict[str, Any], *keys: str) -> dict[str, Any]:
     return row | {key: f"{float(row.get(key) or 0):.1f}" for key in keys}
 
 
-def status_cell(label: str, tone: str) -> dict[str, str]:
+def status_cell(label: str, tone: str, sub: str | None = None) -> dict[str, str]:
     """A ``data_table`` status cell (rendered as a ``badge``); ``tone`` is ok,
-    warn, error, muted or accent."""
-    return {"label": label, "tone": tone}
+    warn, error, muted or accent, and ``sub`` a muted second line under it."""
+    return {"label": label, "tone": tone} | ({"sub": sub} if sub else {})
 
 
 def columns(
@@ -234,6 +235,27 @@ def with_query(path: str, **params: str | list[str] | None) -> str:
     ]
     query = urlencode(pairs)
     return f"{path}?{query}" if query else path
+
+
+def chips(
+    path: str,
+    param: str,
+    choices: Iterable[tuple[str | None, str]],
+    chosen: str | None,
+    **kept: str | None,
+) -> list[dict[str, Any]]:
+    """A filter's chips, for ``pages/overseer/_chips.html``: one per
+    ``(key, label)`` choice, each a link to ``path`` with ``param`` set to
+    its key (None takes the filter off) and the ``kept`` parameters
+    carried, the ``chosen`` one marked."""
+    return [
+        {
+            "label": label,
+            "url": with_query(path, **kept, **{param: key}),
+            "active": key == chosen,
+        }
+        for key, label in choices
+    ]
 
 
 def pager(

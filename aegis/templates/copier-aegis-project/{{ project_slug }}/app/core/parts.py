@@ -414,6 +414,7 @@ PARTS: dict[str, Part] = {
         category=Category.AI,
         cli="runner",
         marker="app/components/runner",
+        agents=("runner",),
         description="Work the app sends out to a coding agent: a queue of runs, and a runner on any machine with the repository that answers them",
     ),
     "scheduler": Part(

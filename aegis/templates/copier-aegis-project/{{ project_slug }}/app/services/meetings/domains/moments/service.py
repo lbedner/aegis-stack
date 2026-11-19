@@ -12,7 +12,7 @@ from typing import TypeVar
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.runner import tokens
-from app.components.runner.models import ASKED, CLAIMED, DONE, GOING, RunnerRun
+from app.components.runner.models import ASKED, CLAIMED, GOING, RunnerRun, outcome
 from app.core.config import settings
 from app.core.log import logger
 from app.services.meetings.domains.actions import runs as action_runs
@@ -374,15 +374,16 @@ async def _runs_of(
     for run in rows:
         action = named[run.id]
         stalled = run.id in waiting and not listening
+        went, tone = outcome(run.status, run.branch, bool(run.result))
         runs.setdefault(moment_of(run), []).append(
             RunRecord(
                 id=run.id or 0,
                 action=run.action,
                 label=action.label if action else run.action,
                 status=run.status,
-                state=state_of(run.status, where[run.id], run.runner, stalled),
+                state=state_of(run.status, where[run.id], run.runner, stalled, went),
                 going=run.status in GOING and not stalled,
-                tone=TONES.get(run.status, "muted"),
+                tone=tone if run.status in TONES else "muted",
                 result=run.result,
                 runner=run.runner,
                 asked_at=run.asked_at,
@@ -400,8 +401,11 @@ def _detected(kind: str, detect: Detector, heard: Heard) -> str | None:
         return None
 
 
-def state_of(status: str, where: str, runner: str | None, stalled: bool) -> str:
-    """Where a run stands, as both Overseers say it."""
+def state_of(
+    status: str, where: str, runner: str | None, stalled: bool, went: str
+) -> str:
+    """Where a run stands, as both Overseers say it: one that is over says
+    how it ``went`` (the runner's ``outcome``) and on what."""
     on = f" on {runner}" if runner and runner != IN_THE_APP else ""
     if stalled:
         return "No runner is running: start one with runner run"
@@ -409,4 +413,4 @@ def state_of(status: str, where: str, runner: str | None, stalled: bool) -> str:
         return "Waiting for a runner" if where == "runner" else "Asked"
     if status == CLAIMED:
         return f"Answering{on}…"
-    return f"Answered{on}" if status == DONE else f"Failed{on}"
+    return f"{went}{on}"

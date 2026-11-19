@@ -5,6 +5,7 @@ claimed once by what runs it and finished with what it came back with."""
 
 import asyncio
 from collections.abc import Awaitable
+from datetime import datetime
 from importlib.util import find_spec
 from typing import Any
 
@@ -151,6 +152,72 @@ async def test_the_prompt_is_the_question_and_what_led_to_it(
     assert "Can the CSV export ship this week?" in run.prompt
     assert "Dana: The usage report is late." in run.prompt
     assert run.prompt.index("usage report") < run.prompt.index("CSV export")
+
+
+JOINED = datetime(2026, 11, 16, 18)
+
+
+@pytest.mark.parametrize(
+    ("called", "joined", "source"),
+    [
+        (None, JOINED, "Meeting {id}"),
+        ("Weekly sync", JOINED, "Meeting · Weekly sync · 2026-11-16"),
+        # The bot has not joined it yet: the day it was asked to.
+        ("Weekly sync", None, "Meeting · Weekly sync · {asked}"),
+        # A long name is cut, never its day: that is what tells weeks apart.
+        ("W" * 300, JOINED, "Meeting · " + "W" * 232 + " · 2026-11-16"),
+    ],
+)
+async def test_a_run_is_called_by_its_question_and_says_which_meeting_asked(
+    async_db_session: AsyncSession, called: str | None, joined: datetime, source: str
+) -> None:
+    """Where runs are listed, a reader sees the question and its meeting
+    (by what its calendar calls it and its day, since a meeting held every
+    week is called the same each time; else by its number, as its own page
+    heads it), not the moment's id."""
+    from app.services.meetings.models import Meeting
+
+    meeting_id, moment_id = await asked_a_question(async_db_session)
+    meeting = await async_db_session.get_one(Meeting, meeting_id)
+    meeting.title, meeting.joined_at = called, joined
+    await async_db_session.flush()
+
+    run = await ask(async_db_session, moment_id, "agent", owner_user_id=None)
+
+    assert run.title == "Can the CSV export ship this week?"
+    asked = f"{meeting.created_at:%Y-%m-%d}"
+    assert run.source == source.format(id=meeting_id, asked=asked)
+
+
+async def test_a_run_about_a_card_with_a_topic_is_called_by_it(
+    async_db_session: AsyncSession,
+) -> None:
+    _, moment_id = await asked_a_question(async_db_session)
+    await topic(async_db_session, [moment_id], "CSV export")
+
+    run = await ask(async_db_session, moment_id, "agent", owner_user_id=None)
+
+    assert run.title == "CSV export"
+
+
+@pytest.mark.parametrize(
+    ("result", "state", "tone"),
+    [("Yes.", "Answered on laptop", "ok"), ("", "No answer on laptop", "warn")],
+)
+async def test_an_answer_that_is_back_says_whether_it_had_anything_to_say(
+    async_db_session: AsyncSession, result: str, state: str, tone: str
+) -> None:
+    """As Overseer's Runner page says it (``outcome``): a command that
+    succeeded and said nothing is not an answer."""
+    meeting_id, moment_id = await asked_a_question(async_db_session)
+    run = await ask(async_db_session, moment_id, "agent", owner_user_id=None)
+    await claim(async_db_session, None, ["agent"], runner="laptop")
+    await finish(async_db_session, run.id or 0, None, result, ok=True, runner="laptop")
+
+    (moment,) = await moments_of(async_db_session, meeting_id)
+
+    (back,) = moment.runs
+    assert (back.state, back.tone) == (state, tone)
 
 
 async def test_asking_again_while_it_runs_is_the_same_run(

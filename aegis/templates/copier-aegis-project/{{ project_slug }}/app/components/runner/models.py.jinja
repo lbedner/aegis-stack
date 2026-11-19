@@ -12,6 +12,16 @@ from app.core.time import utcnow
 ASKED, CLAIMED, DONE, FAILED = "asked", "claimed", "done", "failed"
 # A run not back yet: asked, or claimed by what runs it.
 GOING = (ASKED, CLAIMED)
+# How a status reads where a run is shown (a badge's tone).
+TONES = {ASKED: "muted", CLAIMED: "accent", DONE: "ok", FAILED: "error"}
+# And in a word, for a reader.
+LABELS = {ASKED: "Waiting", CLAIMED: "Running", DONE: "Done", FAILED: "Failed"}
+# How one answer that is back reads: with something to say, or nothing.
+ANSWERED, NO_ANSWER = ("Answered", "ok"), ("No answer", "warn")
+# The most a run keeps of what its agent is doing.
+MOST_ACTIVITY = 255
+# And of what its asker calls it.
+MOST_TITLE = 255
 
 # An owner column references ``user.id`` only when the stack has auth (a
 # deleted user takes their runs and tokens with them); without it the owner
@@ -19,11 +29,37 @@ GOING = (ASKED, CLAIMED)
 _OWNER_FK: str | None = {% if include_auth %}"user.id"{% else %}None{% endif %}
 
 
+def outcome(status: str, branch: str | None, back: bool) -> tuple[str, str]:
+    """How a run went, in a word and its tone: where it stands (``LABELS``,
+    ``TONES``; a status neither knows reads as itself), but one answer that
+    is over says whether anything came ``back`` (its command succeeding is
+    not that). Work on a ``branch`` is done, not an answer."""
+    if status == DONE and not branch:
+        return ANSWERED if back else NO_ANSWER
+    return LABELS.get(status, status), TONES.get(status, "muted")
+
+
 class RunnerRun(SQLModel, table=True):
     """One action asked about a subject (a kind and an id, its asker's:
     a meeting's moment): asked, claimed by what runs it (a runner on
     another machine, or its asker in the app), then done or failed with
-    what it came back with."""
+    what it came back with. Its asker says what a reader calls it
+    (``title``: the question, the issue's name) and where it was asked,
+    as a reader would say it (``source``: ``Meeting · Weekly sync ·
+    2026-11-16``, ``acme/app``; a list folds the runs that say the same
+    one); a run with neither reads as its subject.
+
+    A run that is work rather than one answer names a ``branch``: its
+    worktree stays, on that branch, where its runner keeps them
+    (``worktree``, known from the moment it is claimed). Its ``session_id``
+    is the agent's session, chosen when it is asked (or, asked in none,
+    when it is claimed), so it can be picked up from a terminal and a later
+    run can resume it. ``cost`` is what the run
+    added to what its session has cost, in dollars: a session's cost is
+    the sum of its runs'. A run still claimed at ``overdue_at`` (twice what
+    its runner gives a command) is never coming back. ``activity`` is what
+    its agent last said it was doing (``hooks``), and when: nothing once
+    the agent ended its turn, the last step for a run that was stopped."""
 
     __tablename__ = "runner_run"
     __table_args__ = (Index("ix_runner_run_subject", "subject_kind", "subject_id"),)
@@ -35,6 +71,8 @@ class RunnerRun(SQLModel, table=True):
     subject_kind: str = Field(max_length=32)
     subject_id: str = Field(max_length=255)
     action: str = Field(max_length=64)
+    title: str | None = Field(default=None, max_length=MOST_TITLE)
+    source: str | None = Field(default=None, max_length=MOST_TITLE)
     prompt: str = Field(sa_type=Text)
     status: str = Field(default=ASKED, max_length=16, index=True)
     result: str | None = Field(default=None, sa_type=Text)
@@ -42,6 +80,13 @@ class RunnerRun(SQLModel, table=True):
     asked_at: datetime = Field(default_factory=utcnow)
     claimed_at: datetime | None = None
     finished_at: datetime | None = None
+    branch: str | None = Field(default=None, max_length=255)
+    session_id: str | None = Field(default=None, max_length=64, index=True)
+    worktree: str | None = Field(default=None, max_length=1024)
+    cost: float | None = None
+    overdue_at: datetime | None = None
+    activity: str | None = Field(default=None, max_length=MOST_ACTIVITY)
+    activity_at: datetime | None = None
 
 
 class RunnerToken(SQLModel, table=True):

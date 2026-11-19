@@ -880,7 +880,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
     ),
     ComponentNames.RUNNER: ComponentSpec(
         readme=ReadmeWiring(
-            reach="/api/v1/runner and the `runner` CLI",
+            reach="/api/v1/runner and the `runner` CLI; Overseer > Runner",
             cli_groups=["runner"],
         ),
         name=ComponentNames.RUNNER,
@@ -897,9 +897,8 @@ COMPONENTS: dict[str, ComponentSpec] = {
             "questions of it; any service can."
         ),
         required_components=[ComponentNames.BACKEND, ComponentNames.DATABASE],
-        # Its dev service (``runner``) is not listed as an agent yet: an
-        # agent shows on its part's Overseer page, and the runner has none
-        # until it has a health check, so the rows would link nowhere.
+        # Its dev service: on the runner's Overseer page and in its logs.
+        agents=["runner"],
         migrations=[RUNNER_MIGRATION],
         marker_path="app/components/runner",
         files=FileManifest(
@@ -909,12 +908,26 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/components/backend/startup/runner_recovery.py",
                 "app/components/backend/shutdown/runner_recovery.py",
                 "app/cli/runner.py",
+                "app/components/frontend/dashboard/cards/runner_card.py",
+                "app/components/frontend/dashboard/modals/runner_modal.py",
                 "tests/_runner.py",
                 "tests/components/test_runner.py",
                 "tests/components/test_runner_runs.py",
                 "tests/components/test_runner_tokens.py",
+                "tests/components/test_runner_hooks.py",
+                "tests/components/test_runner_health.py",
+                "tests/components/frontend/test_runner_modal.py",
                 "tests/api/test_runner_endpoints.py",
             ],
+            # The Overseer page, where the htmx frontend is.
+            extras={
+                AnswerKeys.HTMX: [
+                    "app/components/web_frontend/overseer_runner.py",
+                    "app/components/web_frontend/routes/partials/overseer_runner.py",
+                    "app/components/web_frontend/templates/pages/overseer/runner",
+                    "tests/web/test_overseer_runner.py",
+                ],
+            },
         ),
     ),
 }

@@ -33,7 +33,7 @@ from tests._fake_runtime import REDIS, SERVER, FakeRuntime, use_runtime
         ("ollama", "inference"),
         ("socket-proxy", None),
         ("deploy-agent", "deployments"),
-        ("runner", None),
+        ("runner", "runner"),
     ],
 )
 def test_each_compose_service_maps_to_its_overseer_page(

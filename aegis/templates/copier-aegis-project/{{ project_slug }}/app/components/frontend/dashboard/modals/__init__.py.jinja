@@ -62,6 +62,9 @@ from .mcp_modal import McpDetailDialog
 {%- if include_browser %}
 from .browser_modal import BrowserDetailDialog
 {%- endif %}
+{%- if include_runner %}
+from .runner_modal import RunnerDetailDialog
+{%- endif %}
 {%- if ollama_mode != "none" %}
 from .inference_modal import InferenceDetailDialog
 {%- endif %}
@@ -130,6 +133,9 @@ __all__ = [
 {%- endif %}
 {%- if include_browser %}
     "BrowserDetailDialog",
+{%- endif %}
+{%- if include_runner %}
+    "RunnerDetailDialog",
 {%- endif %}
 {%- if ollama_mode != "none" %}
     "InferenceDetailDialog",

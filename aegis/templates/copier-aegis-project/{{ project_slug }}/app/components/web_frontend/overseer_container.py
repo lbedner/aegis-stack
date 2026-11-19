@@ -211,7 +211,7 @@ async def overview(
     state = map_state(query or {})
     view = state["view"]
     entries = [
-        (entry, ui_runtime.page_of(entry.name) if group == "components" else None)
+        (entry, ui_runtime.own_page(entry.name) if group == "components" else None)
         for group in ("components", "services")
         for entry in navigation[group]
     ]

@@ -9,7 +9,12 @@ from typing import Any
 
 import flet as ft
 
-from app.components.frontend.controls import PrimaryText, SecondaryText, status_dot
+from app.components.frontend.controls import (
+    ErrorText,
+    PrimaryText,
+    SecondaryText,
+    status_dot,
+)
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.snack_bar import SuccessSnackBar
 from app.components.frontend.theme import TONE_COLORS
@@ -168,8 +173,10 @@ def _button(moment_id: int, choice: dict[str, Any], ask: Ask, copy: Copy) -> ft.
 
 def _run(run: dict[str, Any]) -> ft.Control:
     lines: list[ft.Control] = [SecondaryText(f"{run['label']} · {run['state']}")]
-    if run.get("result"):
-        lines.append(ft.Markdown(run["result"], selectable=True))
+    if result := run.get("result"):
+        # A failure is shown as it was said: markdown eats an error's stars.
+        failed = run["tone"] == "error"
+        lines.append((ErrorText if failed else ft.Markdown)(result, selectable=True))
     return ft.Container(
         ft.Column(lines, spacing=2),
         padding=ft.padding.only(left=Theme.Spacing.SM),

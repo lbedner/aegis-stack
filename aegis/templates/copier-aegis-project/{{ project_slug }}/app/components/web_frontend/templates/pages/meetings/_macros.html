@@ -3,6 +3,7 @@
 {% from "components/macros/feedback.html" import empty_state %}
 {% import "components/macros/layout.html" as layout %}
 {% from "components/macros/layout.html" import badge, chart_dot %}
+{% from "pages/overseer/runner/_macros.html" import result as run_result %}
 
 {# Where the bot is with the call, and how long it was in. #}
 {% macro status_line(status, length) %}
@@ -180,8 +181,7 @@
     {% for run in moment.runs %}
     <div data-run="{{ run.status }}" class="grid gap-1 border-l-2 pl-3 {{ edges[run.tone] }}">
       <p class="text-xs text-aegis-muted">{% if run.going %}<span class="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-aegis-teal align-middle" aria-hidden="true"></span>{% endif %}{{ run.label }} · {{ run.state }}</p>
-      {% if run.result and run.status == 'failed' %}<p class="text-sm text-error whitespace-pre-wrap" data-answer>{{ run.result }}</p>
-      {% elif run.result %}<div class="{{ layout.prose }}" data-answer>{{ run.result|markdown }}</div>{% endif %}
+      {% if run.result %}{{ run_result(run.result, run.tone) }}{% endif %}
     </div>
     {% endfor %}
     </div>

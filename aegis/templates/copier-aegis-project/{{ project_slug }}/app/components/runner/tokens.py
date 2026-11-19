@@ -67,6 +67,18 @@ async def listening(db: AsyncSession, owner_user_id: int | None) -> bool:
     return await queries.used_since(db, owner_user_id, utcnow() - LISTENING)
 
 
+async def unanswered(db: AsyncSession) -> int:
+    """How many asked runs no listening runner takes: none is running for
+    their owner (a runner claims its token's owner's runs, or every
+    owner's).
+
+    ponytail: a runner on one step longer than ``LISTENING`` that posts
+    nothing reads as gone while more waits; keep the token that claimed a
+    run on it if that misleads.
+    """
+    return await queries.unanswered(db, utcnow() - LISTENING)
+
+
 async def live(db: AsyncSession, owner_user_id: int | None) -> list[RunnerToken]:
     """The owner's tokens not revoked, newest first."""
     return await queries.live_tokens(db, owner_user_id)

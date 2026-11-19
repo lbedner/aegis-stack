@@ -139,6 +139,14 @@ def _optional_pages() -> dict[tuple[str, str], SectionedPage]:
     except ImportError:  # no mcp component in this project
         pass
     try:
+        from . import overseer_runner
+
+        pages[("components", ComponentName.RUNNER)] = SectionedPage(
+            "runner", overseer_runner.SECTIONS, overseer_runner.section_context
+        )
+    except ImportError:  # no runner component in this project
+        pass
+    try:
         from . import overseer_inference
 
         pages[("components", ComponentName.OLLAMA)] = SectionedPage(

@@ -90,6 +90,55 @@
   its requests and how long each line took. `my-app inference speech`,
   `speak` and `speech-model`, and `/api/v1/inference/speech`, do the same.
 
+- **The runner is in Overseer.** Overseer > Runner lists the newest runs,
+  each by what was asked: how long it took, what it cost and how it went
+  (Waiting, Running with what its agent is doing, Answered, No answer,
+  Done, Failed), under how the queue stands and what the last 7 days
+  cost. Runs asked in one place of one action fold into a row that holds
+  them (a meeting's questions; `data_table` rows that unfold can sit
+  beside `flat` ones that do not). A run opens in a drawer with what came back,
+  the worktree and session to pick it up with, and the prompt it was sent.
+  Whatever asks a run says what a reader calls it (`runs.ask(title=...,
+  source=...)`, two new columns on `runner_run`); meetings passes the
+  question and its meeting, and the runner's revision names the runs
+  meetings asked before, so an updated stack lists them by question too. `data_table`'s `status` cell takes
+  a `sub` line, as a link does (`status_cell(sub=)`), and `rendering.chips` builds
+  a filter's chip row. The component has a health check (runs
+  waiting, runs a runner has, whether a runner is listening; a warning when
+  a run waits and no runner that takes its owner's runs is listening) and
+  the dashboard card and modal that go with it.
+
+- **A run says what it is doing.** While a run of the runner component is
+  going, the app keeps the agent's last step on it (`activity`,
+  `activity_at`): the tool about to run and what it is on, or that the
+  agent waits on someone; nothing once the agent ends its turn. Claude
+  Code's hooks post each step to `POST /api/v1/runner/runs/activity`,
+  signed with the runner's token, and the app finds the run by the agent's
+  session, which every claimed run now has. The runner fills the hooks in
+  where its command says `{hooks}` (the dev runner's defaults do), and
+  `runner hooks` prints them for a session picked up in a terminal.
+- **Runner tokens are an operator's to make on a stack without auth.**
+  Making or revoking one over the API is let through only where an
+  operator's change is (the local dev build), as MCP's tokens already were;
+  both routes take the one rule (`get_token_holder`). The CLI is unchanged,
+  and with auth a token is still its maker's own.
+- **A run that is work: a worktree that stays, a session to pick up, and
+  what it cost.** A run of the runner component can be asked on a branch and
+  in a session (`runs.ask(..., branch=, session_id=runs.new_session())`). Its
+  runner keeps the worktree on that branch (`<repo>-worktrees/<branch>`, or
+  `--worktrees`), and the run says where from the moment it is claimed; the
+  app knows the agent's session before the agent answers, so the work can be
+  taken over from a terminal (`claude --resume <session>`); and a later run
+  of the same session continues it (`--resume-command`). A command that
+  answers with Claude Code's JSON result says what its session has cost, and
+  each run keeps what it added (`cost` on the run). A command is given
+  `--timeout` seconds (15 minutes by default) and is then stopped with
+  everything it started; a claimed run is waited for twice that. The dev
+  runner's default command names the session and asks for that result, so
+  every answer has a cost; it still only reads (`--permission-mode plan`),
+  and `RUNNER_COMMAND` with `RUNNER_RESUME_COMMAND` give a runner whose runs
+  change code. What the runner and the app say to each other is declared
+  once (`app/components/runner/protocol.py`).
 - **A runner component: work the app sends out to a coding agent.** The
   queue of runs, the runner that answers them and its tokens were part of
   the meetings service; they are a component of their own (`aegis add
@@ -102,11 +151,22 @@
   updated across the change keeps its runs and tokens (the migration carries
   them into `runner_run` and `runner_token`), and its dev service (now
   `runner`) still reads `.env.meetings-runner` and the `MEETINGS_RUNNER_*`
-  names until they are moved to `.env.runner`. Overseer no longer lists the
-  dev service's container and logs (they were on the Meetings page): the
-  runner has no Overseer page of its own yet.
+  names until they are moved to `.env.runner`. The dev service's container
+  and logs moved from the Meetings page to Overseer > Runner.
 
 ### Fixed
+
+- **A link in a model's answer leads to a page or a mailbox, or nowhere.**
+  Markdown a model wrote (a chat reply, a meeting answer, what a run came
+  back with) kept a link's address whatever it was, so a `javascript:` or
+  `data:` address would run as whoever clicked it. Those now render with
+  no address; `http`, `https`, `mailto` and the site's own paths are kept.
+- **The app keeps a page's worth of what a run came back with**, whoever
+  posts it: the runner cut a long result before posting, but the app
+  stored whatever it was sent.
+- **A failed run reads as it was said in the dashboard's meetings pane.**
+  It was rendered as markdown, which ate an error's stars and underscores;
+  the web already showed it plain. (#2111)
 
 - **Models.** A model that refuses `temperature` is retried once without it
   and never sent one again, on every provider; a local engine gets a

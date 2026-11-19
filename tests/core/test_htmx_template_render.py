@@ -449,6 +449,7 @@ class TestWebFrontendScaffolding:
             "table.html": {
                 "_cell",
                 "_code",
+                "_sub",
                 "_tone",
                 "data_table",
                 "pager",

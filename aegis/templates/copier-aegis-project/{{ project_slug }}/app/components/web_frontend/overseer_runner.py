@@ -38,6 +38,8 @@ from app.core.formatting import (
 from app.core.time import utcnow
 from app.services.system.models import ComponentStatus
 
+from .assets import static_url
+from .file_icons import FOLDER as ICONS
 from .filters import loudness
 from .overseer_nav import SectionRequest, page_url
 from .rendering import chips, drawer_state, status_cell, with_query
@@ -57,6 +59,8 @@ COLUMNS = [
         "kind": "link",
         "target": "#overseer-main",
         "wrap": True,
+        # The agent that ran it (``_mark``), before what was asked.
+        "mark": True,
     },
     {"key": "took", "label": "Took", "align": "right"},
     {"key": "cost", "label": "Cost", "align": "right"},
@@ -67,6 +71,19 @@ COLUMNS = [
 LATELY = timedelta(days=7)
 NO_RUNS = "No runs yet. A run shows here once something asks one."
 NO_RUN = "There is no run by that id."
+# The icon of each agent the page knows, by the program a runner starts
+# (lowercased), as a static file: one of the icons the web frontend ships
+# for files, or a mark of the page's own where those draw the agent's maker
+# and not the agent. What starts an agent (``python``, ``npx``) is not one,
+# though those icons draw it.
+AGENT_ICONS = {
+    "claude": "marks/claude-code.svg",
+    "gemini": f"{ICONS}/gemini-ai.svg",
+    "opencode": f"{ICONS}/opencode.svg",
+    "cline": f"{ICONS}/cline.svg",
+}
+# The mark of a run whose agent is none of those, or that says none.
+PLAIN_AGENT = f"{ICONS}/robot.svg"
 CUT = "The newest {runs}. Older ones are not listed."
 # The newest runs the page lists (folded, fewer rows than that).
 SHOWN = 200
@@ -79,6 +96,11 @@ def drawer_url(run_id: int | str) -> str:
 
 def _about(run: RunnerRun) -> str:
     return f"{run.subject_kind} {run.subject_id}"
+
+
+def _mark(agent: str | None) -> str:
+    """Where the agent's icon is, by its program's name (``claude``)."""
+    return static_url(AGENT_ICONS.get((agent or "").lower(), PLAIN_AGENT))
 
 
 def _called(run: RunnerRun) -> str:
@@ -124,6 +146,7 @@ def _row(
         # is the drawer's.
         "status": _status(run, back, run.activity if run.status == CLAIMED else None),
         "when": format_relative_time(run.asked_at),
+        "icon_url": _mark(run.agent),
         "flat": not folded,
     }
 
@@ -139,6 +162,8 @@ def _fold(
     look first. It opens by itself while one of them does: still going,
     failed since ``lately``, or the run the drawer shows (``wanted``)."""
     newest = members[0][0]
+    # One still waiting has no agent yet: the rest say whose the fold is.
+    agents = {run.agent for run, _ in members} - {None}
     went = Counter(outcome(run.status, run.branch, back) for run, back in members)
     loud = sorted(went, key=lambda said: loudness(said[1]))
     took = [seconds for run, _ in members if (seconds := _seconds(run)) is not None]
@@ -154,6 +179,8 @@ def _fold(
             ", ".join(f"{went[said]} {said[0]}" for said in loud), loud[0][1]
         ),
         "when": format_relative_time(newest.asked_at),
+        # Its runs' agent, where they share one.
+        "icon_url": _mark(next(iter(agents)) if len(agents) == 1 else None),
         "runs": [_row(run, back, action, folded=True) for run, back in members],
         "open": any(
             str(run.id) == wanted
@@ -265,7 +292,8 @@ async def drawer_context(db: Any, run_id: int) -> dict[str, Any] | None:
             ("Asked", format_relative_time(run.asked_at)),
             ("From", run.source),
             ("Action", run.action),
-            ("Runner", run.runner),
+            # Its runner, and the agent that runner runs.
+            ("Runner", " · ".join(filter(None, (run.runner, run.agent)))),
             ("Took", format_span(_seconds(run))),
             ("Cost", _cost(run)),
             # What a run that is over was doing is where it stopped.

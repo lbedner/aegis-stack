@@ -93,6 +93,7 @@ async def claim(
         runner=token.name,
         timeout=body.timeout,
         worktrees=body.worktrees,
+        agent=body.agent,
     )
     if run is None:
         return Response(status_code=status.HTTP_204_NO_CONTENT)

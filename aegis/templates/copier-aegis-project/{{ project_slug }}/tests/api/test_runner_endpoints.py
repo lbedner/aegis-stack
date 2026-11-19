@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.components.runner import hooks, tokens
+from app.components.runner import hooks, runs, tokens
 from app.components.runner.models import RunnerToken
 from app.components.runner.protocol import RUNS
 from app.core.config import settings
@@ -50,6 +50,22 @@ async def test_a_runner_with_a_token_claims_a_run_and_posts_its_result(
     assert finished.status_code == 200, finished.text
     assert finished.json()["status"] == "done"
     assert again.status_code == 404
+
+
+async def test_a_runner_that_says_its_agent_marks_the_run_it_claims(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    run = await asked(async_db_session, owner_user_id=acting_owner_user_id)
+    runner = await signed(async_db_session, acting_owner_user_id)
+
+    authenticated_client.post(
+        f"{RUNS}/claim", json={"actions": ["agent"], "agent": "claude"}, headers=runner
+    )
+
+    kept = await runs.one(async_db_session, run.id or 0)
+    assert kept is not None and kept.agent == "claude"
 
 
 async def test_a_run_on_a_branch_is_claimed_and_finished_as_work(

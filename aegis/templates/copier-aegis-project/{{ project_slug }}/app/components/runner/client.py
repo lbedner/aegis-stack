@@ -38,7 +38,15 @@ import httpx
 from app.core.log import logger
 
 from . import hooks
-from .protocol import RUNS, TIMEOUT_SECONDS, Answer, ClaimedRun, ClaimRequest, kept
+from .protocol import (
+    MOST_AGENT,
+    RUNS,
+    TIMEOUT_SECONDS,
+    Answer,
+    ClaimedRun,
+    ClaimRequest,
+    kept,
+)
 
 PLACEHOLDER = "{prompt}"
 SESSION = "{session}"
@@ -68,6 +76,15 @@ class Runner:
     # Where kept worktrees go, each under its branch's name; beside the
     # repository (``<repo>-worktrees``) unless said.
     worktrees: Path | None = None
+
+    @property
+    def agent(self) -> str | None:
+        """The agent this runner runs: the program its command starts, by
+        name (``claude``), cut to what a run keeps of it.
+
+        ponytail: a command that starts something else first (``npx``,
+        ``sh -c``) names that; an ``--agent`` of its own when one does."""
+        return Path(self.command[0]).name[:MOST_AGENT] if self.command else None
 
     @property
     def home(self) -> Path | None:
@@ -101,6 +118,7 @@ async def run_once(
     """Claim one run and answer it; False when none waits."""
     asking = ClaimRequest(
         actions=runner.actions,
+        agent=runner.agent,
         worktrees=str(runner.home) if runner.home else None,
         timeout=runner.timeout_seconds,
     )

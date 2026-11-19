@@ -508,3 +508,15 @@ async def test_a_command_is_given_the_hooks_that_say_what_its_run_is_doing() -> 
     given, token = done.result.splitlines()
     assert json.loads(given) == hooks.settings("http://app")
     assert token == "rnr_test"
+
+
+async def test_a_runner_says_which_agent_it_runs() -> None:
+    """The program its command starts with, by name: what a list of runs
+    marks each run with."""
+    asked: list[dict[str, Any]] = []
+    claude = ["/usr/local/bin/claude", "-p", "{prompt}"]
+
+    await _posted(_runner(None, claude), asked=asked)
+
+    assert asked[0]["agent"] == "claude"
+    assert _runner(None, []).agent is None  # nothing to name

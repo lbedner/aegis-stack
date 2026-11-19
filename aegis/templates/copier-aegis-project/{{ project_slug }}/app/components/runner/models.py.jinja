@@ -8,6 +8,8 @@ from sqlmodel import Field, SQLModel
 
 from app.core.time import utcnow
 
+from .protocol import MOST_AGENT
+
 # Where a run stands: asked, claimed by what runs it, then done or failed.
 ASKED, CLAIMED, DONE, FAILED = "asked", "claimed", "done", "failed"
 # A run not back yet: asked, or claimed by what runs it.
@@ -43,7 +45,9 @@ class RunnerRun(SQLModel, table=True):
     """One action asked about a subject (a kind and an id, its asker's:
     a meeting's moment): asked, claimed by what runs it (a runner on
     another machine, or its asker in the app), then done or failed with
-    what it came back with. Its asker says what a reader calls it
+    what it came back with. A runner says which agent it runs (``agent``:
+    the program its command starts, ``claude``); a run its asker takes in
+    the app says none. Its asker says what a reader calls it
     (``title``: the question, the issue's name) and where it was asked,
     as a reader would say it (``source``: ``Meeting · Weekly sync ·
     2026-11-16``, ``acme/app``; a list folds the runs that say the same
@@ -77,6 +81,7 @@ class RunnerRun(SQLModel, table=True):
     status: str = Field(default=ASKED, max_length=16, index=True)
     result: str | None = Field(default=None, sa_type=Text)
     runner: str | None = Field(default=None, max_length=255)
+    agent: str | None = Field(default=None, max_length=MOST_AGENT)
     asked_at: datetime = Field(default_factory=utcnow)
     claimed_at: datetime | None = None
     finished_at: datetime | None = None

@@ -18,8 +18,13 @@ _RUN = (
     "id INTEGER PRIMARY KEY, owner_user_id INTEGER, subject_kind VARCHAR(32), "
     "subject_id VARCHAR(255), action VARCHAR(64), title VARCHAR(255), "
     "source VARCHAR(255), prompt TEXT, status VARCHAR(16), result TEXT, "
-    "runner VARCHAR(255), asked_at DATETIME, claimed_at DATETIME, "
-    "finished_at DATETIME"
+    "runner VARCHAR(255), agent VARCHAR(64), asked_at DATETIME, "
+    "claimed_at DATETIME, finished_at DATETIME"
+)
+_TOKEN = (
+    "id INTEGER PRIMARY KEY, owner_user_id INTEGER, name VARCHAR(255), "
+    "digest VARCHAR(64), hint VARCHAR(16), created_at DATETIME, "
+    "last_used_at DATETIME, revoked_at DATETIME"
 )
 _MEETINGS = (
     "CREATE TABLE meeting (id INTEGER PRIMARY KEY, owner_user_id INTEGER, "
@@ -38,7 +43,11 @@ _MEETINGS = (
 
 def _database(*statements: str) -> sa.Connection:
     conn = sa.create_engine("sqlite://").connect()
-    for statement in (f"CREATE TABLE runner_run ({_RUN})", *statements):
+    made = (
+        f"CREATE TABLE runner_run ({_RUN})",
+        f"CREATE TABLE runner_token ({_TOKEN})",
+    )
+    for statement in (*made, *statements):
         conn.exec_driver_sql(statement)
     return conn
 
@@ -104,3 +113,21 @@ def test_a_stack_without_meetings_is_left_alone() -> None:
     )
 
     assert _named(conn) == [("7", None, None)]
+
+
+def test_runs_a_runner_took_before_runners_said_their_agent_are_claudes() -> None:
+    """Nothing recorded which agent ran them; the command a runner is
+    given unless told otherwise runs ``claude``, so that is what they are
+    taken to be. One whose runner did say keeps it, and one its asker took
+    in the app (no runner's token is called that) says none."""
+    conn = _database(
+        "INSERT INTO runner_token (id, name) VALUES (1, 'laptop')",
+        "INSERT INTO runner_run (id, subject_kind, subject_id, runner, agent) VALUES "
+        "(1, 'issue', '7', 'laptop', NULL), (2, 'issue', '8', 'laptop', 'codex'), "
+        "(3, 'issue', '9', 'app', NULL), (4, 'issue', '10', NULL, NULL)",
+    )
+
+    run_data_after(conn, RUNNER_MIGRATION.data_after)
+
+    agents = conn.exec_driver_sql("SELECT agent FROM runner_run ORDER BY id")
+    assert [agent for (agent,) in agents] == ["claude", "codex", None, None]

@@ -151,6 +151,18 @@ class TestCellKinds:
         code = one(render(columns, [{"key": "/code/app/cli/ai/chat.py"}]), "td code")
         assert "[overflow-wrap:anywhere]" in code.get("class")
 
+    def test_a_marked_links_second_line_stays_under_its_label(self) -> None:
+        """Beside the mark with the label, not back under the mark."""
+        columns = [{"key": "name", "label": "Name", "kind": "link", "mark": True}]
+        row = {"name": {"label": "Fix it", "sub": "agent"}, "icon_url": "/claude.svg"}
+        cell = one(render(columns, [row]), "tbody td")
+
+        (beside,) = cell.getchildren()
+        mark, words = beside.getchildren()
+        assert one(mark, "img").get("src") == "/claude.svg"
+        assert text(words) == "Fix itagent"
+        assert text(one(words, "[data-sub]")) == "agent"
+
     def test_a_file_is_drawn_by_its_type(self) -> None:
         """As VS Code's Material Icon Theme draws it, by the theme's own map:
         a whole name first, then the longest extension, else a plain file."""

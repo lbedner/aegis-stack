@@ -925,6 +925,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                     "app/components/web_frontend/overseer_runner.py",
                     "app/components/web_frontend/routes/partials/overseer_runner.py",
                     "app/components/web_frontend/templates/pages/overseer/runner",
+                    "app/components/web_frontend/static/marks/claude-code.svg",
                     "tests/web/test_overseer_runner.py",
                 ],
             },

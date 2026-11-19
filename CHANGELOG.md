@@ -90,6 +90,17 @@
   its requests and how long each line took. `my-app inference speech`,
   `speak` and `speech-model`, and `/api/v1/inference/speech`, do the same.
 
+- **A run says which agent ran it.** A runner says which agent it runs
+  when it claims (the program its command starts, `claude`), the run keeps
+  it (`runner_run.agent`), and Overseer > Runner marks each run, and each fold whose
+  runs share one, with that agent's icon; the drawer names it beside its
+  runner. `claude`, `gemini`, `opencode` and `cline` have an icon of their
+  own (Claude Code's mark, the rest from the icons the web frontend ships);
+  any other program, and a
+  run answered in the app, get a plain mark.
+  Runs a runner took before this recorded no agent: the update marks them
+  `claude`, what the command a runner is given by default runs.
+
 - **The runner is in Overseer.** Overseer > Runner lists the newest runs,
   each by what was asked: how long it took, what it cost and how it went
   (Waiting, Running with what its agent is doing, Answered, No answer,

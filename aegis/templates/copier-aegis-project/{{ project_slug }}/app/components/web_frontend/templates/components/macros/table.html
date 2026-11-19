@@ -45,7 +45,7 @@
 {% macro _code(text) %}<code class="font-mono text-xs whitespace-normal [overflow-wrap:anywhere]">{{ text }}</code>{% endmacro %}
 
 {# A cell's muted second line (a link's, a status's ``sub``). #}
-{% macro _sub(value) %}{% if value.sub %}<div class="text-xs text-aegis-muted">{{ value.sub }}</div>{% endif %}{% endmacro %}
+{% macro _sub(value) %}{% if value.sub %}<div data-sub class="text-xs text-aegis-muted">{{ value.sub }}</div>{% endif %}{% endmacro %}
 
 {% macro _cell(row, col) -%}
 {%- set value = row[col.key] if row is mapping or col.key is number else row|attr(col.key) -%}
@@ -73,9 +73,14 @@
 {%- set link -%}{% if value.url %}<a href="{{ value.url }}" {{ hx_replace(value.url, col.target or "#app-content") }} class="text-aegis-text hover:text-aegis-teal">{{ value.label }}</a>{% else %}{{ value.label }}{% endif %}{%- endset -%}
 {%- if col.mark -%}
 {%- set icon_url = row["icon_url"] if row is mapping and "icon_url" in row else row|attr("icon_url") -%}
-<span class="inline-flex items-center gap-2">{{ avatar(value.label, icon_url if icon_url is string else None) }}{{ link }}</span>
-{%- else -%}{{ link }}{%- endif -%}
-{{- _sub(value) -}}
+{%- set mark = avatar(value.label, icon_url if icon_url is string else None) -%}
+{#- A second line stays under the label, beside the mark. -#}
+{%- if value.sub -%}
+<div class="flex items-start gap-2">{{ mark }}<div class="min-w-0">{{ link }}{{ _sub(value) }}</div></div>
+{%- else -%}
+<span class="inline-flex items-center gap-2">{{ mark }}{{ link }}</span>
+{%- endif -%}
+{%- else -%}{{ link }}{{ _sub(value) }}{%- endif -%}
 {%- else -%}
 {{ value }}
 {%- endif -%}

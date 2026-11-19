@@ -2324,6 +2324,39 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-run-that-is-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A run that is work
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-a-run-is-doing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a run is doing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-overseer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In Overseer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#running-one" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7176,6 +7209,39 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-run-that-is-work" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A run that is work
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-a-run-is-doing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a run is doing
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-overseer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In Overseer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#running-one" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7270,46 +7336,122 @@
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>                       POST /runner/runs/{id}/finish &lt;-- posts what it printed
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>                       run: done | failed
 </span></code></pre></div>
-<p>Only one runner takes a run, and only the runner that took it finishes it. A run whose runner stopped before it answered fails after 30 minutes.</p>
-<h2 id="running-one">Running one</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>my-app<span class="w"> </span>runner<span class="w"> </span>token<span class="w"> </span>create<span class="w"> </span>laptop
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">RUNNER_TOKEN</span><span class="o">=</span>rnr_...
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>my-app<span class="w"> </span>runner<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>--url<span class="w"> </span>https://my-app.example.com<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>--repo<span class="w"> </span>~/code/my-service<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span>--command<span class="w"> </span><span class="s1">&#39;claude -p {prompt} --permission-mode plan&#39;</span>
+<p>Only one runner takes a run, and only the runner that took it finishes it. A run whose runner went quiet fails once twice the runner's own time limit has passed (30 minutes by default).</p>
+<h2 id="a-run-that-is-work">A run that is work</h2>
+<p>A question is answered once, from a worktree that is thrown away. Work is different: you want the changes kept, the agent to remember what it did, and to be able to take over yourself. A run asked on a branch and in a session does that.</p>
+<ul>
+<li><strong>The worktree stays.</strong> The runner makes it under <code>&lt;repo&gt;-worktrees/&lt;branch&gt;</code> (or <code>--worktrees</code>) and leaves it there: on the branch as the repository or its remote has it, or on a new one cut from <code>--ref</code>. The run says where it is from the moment a runner takes it.</li>
+<li><strong>The app names the agent's session</strong> when the run is asked (a run asked in none is given one when it is claimed). With the worktree, that is how you pick the work up: <code>cd &lt;worktree&gt; &amp;&amp; claude --resume &lt;session&gt;</code>.</li>
+<li><strong>A later run of the same session continues it</strong>, in the same worktree, with the resume form of the command.</li>
+<li><strong>The run says what it cost.</strong> An agent reports what its whole session has cost so far; each run keeps what it added, so a session's cost is the sum of its runs'. That holds while the session stays on one machine: started afresh on another, the agent counts from zero again, and those runs keep no cost until it passes what was already counted. How long it took is the time between claimed and finished.</li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.components.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">runs</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">session</span> <span class="o">=</span> <span class="n">runs</span><span class="o">.</span><span class="n">new_session</span><span class="p">()</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">run</span> <span class="o">=</span> <span class="k">await</span> <span class="n">runs</span><span class="o">.</span><span class="n">ask</span><span class="p">(</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">db</span><span class="p">,</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="n">owner_user_id</span><span class="o">=</span><span class="n">owner</span><span class="p">,</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;issue&quot;</span><span class="p">,</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="n">subject_id</span><span class="o">=</span><span class="s2">&quot;acme/app#12&quot;</span><span class="p">,</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="n">action</span><span class="o">=</span><span class="s2">&quot;agent&quot;</span><span class="p">,</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">title</span><span class="o">=</span><span class="s2">&quot;The export times out&quot;</span><span class="p">,</span>  <span class="c1"># what a list of runs calls it</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="n">source</span><span class="o">=</span><span class="s2">&quot;acme/app&quot;</span><span class="p">,</span>  <span class="c1"># and where it was asked</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;Fix the export timing out.&quot;</span><span class="p">,</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="n">branch</span><span class="o">=</span><span class="s2">&quot;issue-12-export&quot;</span><span class="p">,</span>
+</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>    <span class="n">session_id</span><span class="o">=</span><span class="n">session</span><span class="p">,</span>
+</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="p">)</span>
+</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="c1"># Later, in the same session and worktree:</span>
+</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="k">await</span> <span class="n">runs</span><span class="o">.</span><span class="n">ask</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="o">...</span><span class="p">,</span> <span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;Now add a test.&quot;</span><span class="p">,</span> <span class="n">branch</span><span class="o">=</span><span class="s2">&quot;issue-12-export&quot;</span><span class="p">,</span> <span class="n">session_id</span><span class="o">=</span><span class="n">session</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Any headless agent works (<code>codex exec {prompt}</code>, <code>aider --message {prompt}</code>). Start more runners to answer more at once.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>--command<span class="w"> </span>CMD<span class="w">    </span><span class="c1"># Required: the command each run runs; {prompt} is its prompt (stdin without it)</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>--repo<span class="w"> </span>PATH<span class="w">      </span><span class="c1"># Answer from a fresh worktree of this repository</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>--ref<span class="w"> </span>REF<span class="w">        </span><span class="c1"># What each worktree checks out (origin/main)</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>--action<span class="w"> </span>NAME<span class="w">    </span><span class="c1"># An action this runner answers (agent); repeat for more</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>--url<span class="w"> </span>URL<span class="w">        </span><span class="c1"># The app (API_BASE_URL by default)</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>--token<span class="w"> </span>TOKEN<span class="w">    </span><span class="c1"># Its runner token (or RUNNER_TOKEN)</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>--once<span class="w">           </span><span class="c1"># Answer one waiting run and stop</span>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>--poll<span class="w"> </span>SECONDS<span class="w">   </span><span class="c1"># How often it looks while idle</span>
+<p><strong>The dev runner only reads.</strong> Its default command runs the agent in plan mode, so a work run under <code>make serve</code> thinks and answers but changes nothing. To let runs change code, give the runner a command that may, and its resume form with it (see <a href="#in-the-dev-stack">In the dev stack</a>): a command set without its resume form cannot continue a session, and the second run of one fails.</p>
+<p>Things to know:</p>
+<ul>
+<li><strong>One driver at a time.</strong> Do not drive a session from the runner and from your terminal at once: wait for the run to finish, or the two lose each other's turns.</li>
+<li><strong>A session lives where it began:</strong> on the machine whose runner started it, in its worktree. With more than one runner, give work runs an action only one of them answers (<code>--action</code>).</li>
+<li><strong>Start or continue is the agent's to say.</strong> The runner tries what the app expects and, if the agent refuses at once, the other form. So a run that timed out or was stopped does not leave its session stuck, and a command that worked for a while before failing is not run twice. Where both forms are refused, the run fails with what each said.</li>
+<li><strong>A branch is only a branch name</strong> (<code>git check-ref-format</code>), and its worktree only a place under the worktrees folder; anything else fails the run before git is asked. A kept worktree that has been moved off its branch is not worked in.</li>
+<li><strong>Time.</strong> A command is given 15 minutes (<code>--timeout</code>), then stopped with everything it started. Stopping the runner (Ctrl-C) stops its command the same way. Work usually wants longer.</li>
+<li><strong>Cleaning up is yours.</strong> A kept worktree stays until you remove it (<code>git worktree remove</code>).</li>
+<li><strong>On Linux</strong>, the dev runner's container runs as root, so the worktrees and session files it makes are root-owned on the host.</li>
+</ul>
+<h2 id="what-a-run-is-doing">What a run is doing</h2>
+<p>While a run is going, the app knows the agent's last step: <code>Edit app/core/tokens.py</code>, <code>Bash Run the tests</code>, or that it is waiting on you. It is on the run (<code>activity</code>, and when, <code>activity_at</code>).</p>
+<ul>
+<li><strong>It is for now.</strong> Once the agent ends its turn the run is doing nothing, and <code>activity</code> is empty. A run that was stopped or ran out of time keeps the step it was on.</li>
+<li><strong>A command is shown in the agent's words</strong> for it where it gives any (<code>Bash Run the tests</code>), not as the command line, which can hold a secret. A file is shown by its place in the worktree, an address without its query.</li>
+</ul>
+<p>The agent says so itself. Claude Code's hooks post each step to the app, signed with the runner's token, and the app finds the run by the agent's session. The runner fills the hooks in where its command says <code>{hooks}</code>:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>--command<span class="w"> </span><span class="s1">&#39;claude -p {prompt} --session-id {session} --settings {hooks} ...&#39;</span>
+</span></code></pre></div>
+<p>The dev runner's default commands have it. A command of your own without <code>{hooks}</code> runs as before and reports nothing.</p>
+<p>A session you pick up in your terminal reports only if you give it the same hooks and the runner's token. From the project folder on that machine:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>my-app<span class="w"> </span>runner<span class="w"> </span>hooks<span class="w"> </span>&gt;<span class="w"> </span>~/runner-hooks.json
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nb">cd</span><span class="w"> </span>&lt;worktree&gt;
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nv">RUNNER_TOKEN</span><span class="o">=</span>rnr_...<span class="w"> </span>claude<span class="w"> </span>--resume<span class="w"> </span>&lt;session&gt;<span class="w"> </span>--settings<span class="w"> </span>~/runner-hooks.json
+</span></code></pre></div>
+<p><code>runner hooks</code> prints them for the app as that machine reaches it (<code>--url</code> for another address). Its steps show on the latest run a runner took in the session. A step the app cannot be told about never holds the agent for more than a couple of seconds, and never fails it.</p>
+<h2 id="in-overseer">In Overseer</h2>
+<p><strong>Overseer &gt; Runner</strong> lists the newest 200 runs of every owner, newest first, and says so when older ones are left out. Each reads as what was asked, in its asker's words (<code>title</code>, and <code>source</code> for where it was asked; a run given neither reads as its subject), with how long it took, what it cost and how it went: Waiting, Running (with what its agent is doing), Answered, No answer (its command succeeded and said nothing), Done (work on a branch) or Failed. Runs asked in one place of one action fold into a row that holds them (a meeting's questions): how many, how long and how much together, and how they went. It unfolds to the runs, and opens by itself while one is going or failed in the last 7 days. A place is the run's <code>source</code>, so give runs that belong together the same one. Over the list: how many runs wait, how many a runner has, and what failed and what was spent in the last 7 days. The cost counts the runs still kept: a run replaced by asking the same thing again takes its cost with it, and a run that was stopped or timed out never said what it cost, so what was spent is at least that figure. Where runs of more than one action are listed, a chip keeps the list and the figures to one. Click a run to open it: what came back, who ran it, the worktree and session to pick it up with, and the prompt it was sent, folded. Reload the page for the next step.</p>
+<p>The update that brings <code>title</code> and <code>source</code> names the runs meetings had already asked, in the same revision: each gets its question and its meeting.</p>
+<p>The runner's health check counts the runs waiting and the runs a runner has, and says whether a runner is listening. A run waiting while no runner that takes its owner's runs is listening is a warning: nothing will answer it. The dashboard's Runner card shows the same counts, and Overseer's home shows them on the Runner card there.</p>
+<p>The dev stack's <code>runner</code> service shows on that page too, under <strong>Container</strong> and <strong>Logs</strong>.</p>
+<h2 id="running-one">Running one</h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>my-app<span class="w"> </span>runner<span class="w"> </span>token<span class="w"> </span>create<span class="w"> </span>laptop
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nb">export</span><span class="w"> </span><span class="nv">RUNNER_TOKEN</span><span class="o">=</span>rnr_...
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>my-app<span class="w"> </span>runner<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--url<span class="w"> </span>https://my-app.example.com<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>--repo<span class="w"> </span>~/code/my-service<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span>--command<span class="w"> </span><span class="s1">&#39;claude -p {prompt} --session-id {session} --output-format json --permission-mode plan --settings {hooks}&#39;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span>--resume-command<span class="w"> </span><span class="s1">&#39;claude -p {prompt} --resume {session} --output-format json --permission-mode plan --settings {hooks}&#39;</span>
+</span></code></pre></div>
+<p>Any headless agent works (<code>codex exec {prompt}</code>, <code>aider --message {prompt}</code>); one that answers with Claude Code's JSON result says what the run cost. The command above only reads (<code>--permission-mode plan</code>): a runner whose runs change code is given a command that may, and answers the actions that ask for it. Start more runners to answer more at once.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>--command<span class="w"> </span>CMD<span class="w">         </span><span class="c1"># Required: the command each run runs; {prompt} is its prompt</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">                      </span><span class="c1"># (stdin without it), {session} the agent&#39;s session id,</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">                      </span><span class="c1"># {hooks} the settings that make it say what it is doing</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>--resume-command<span class="w"> </span>CMD<span class="w">  </span><span class="c1"># The command that continues a session; --command without it</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>--repo<span class="w"> </span>PATH<span class="w">           </span><span class="c1"># Answer from a worktree of this repository</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>--ref<span class="w"> </span>REF<span class="w">             </span><span class="c1"># What a new worktree checks out (origin/main)</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>--worktrees<span class="w"> </span>DIR<span class="w">       </span><span class="c1"># Where a branch&#39;s worktree is kept (&lt;repo&gt;-worktrees)</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>--timeout<span class="w"> </span>SECONDS<span class="w">     </span><span class="c1"># What a command is given before it is stopped (900)</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>--action<span class="w"> </span>NAME<span class="w">         </span><span class="c1"># An action this runner answers (agent); repeat for more</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>--url<span class="w"> </span>URL<span class="w">             </span><span class="c1"># The app (API_BASE_URL by default)</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>--token<span class="w"> </span>TOKEN<span class="w">         </span><span class="c1"># Its runner token (or RUNNER_TOKEN)</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>--once<span class="w">                </span><span class="c1"># Answer one waiting run and stop</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>--poll<span class="w"> </span>SECONDS<span class="w">        </span><span class="c1"># How often it looks while idle</span>
 </span></code></pre></div>
 <p>A token made with <code>--owner</code> claims that owner's runs only; one without claims every owner's.</p>
 <h2 id="in-the-dev-stack">In the dev stack</h2>
 <p><code>make serve</code> starts a <code>runner</code> service beside the app. It answers nothing until <code>.env.runner</code> has a token:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">RUNNER_TOKEN</span><span class="o">=</span>rnr_...
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">CLAUDE_CODE_OAUTH_TOKEN</span><span class="o">=</span>...<span class="w">        </span><span class="c1"># the agent&#39;s login (claude setup-token)</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nv">RUNNER_REPO</span><span class="o">=</span>/Users/you/code/my-service
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="nv">RUNNER_COMMAND</span><span class="o">=</span>claude<span class="w"> </span>-p<span class="w"> </span><span class="o">{</span>prompt<span class="o">}</span><span class="w"> </span>--permission-mode<span class="w"> </span>plan
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nv">RUNNER_TOKEN</span><span class="o">=</span>rnr_...
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="nv">CLAUDE_CODE_OAUTH_TOKEN</span><span class="o">=</span>...<span class="w">        </span><span class="c1"># the agent&#39;s login (claude setup-token)</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="nv">RUNNER_REPO</span><span class="o">=</span>/Users/you/code/my-service
+</span></code></pre></div>
+<p>That is all it needs. Its command is Claude Code's, in a session, saying what it cost, and read-only:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># The defaults, as if set:</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="c1"># RUNNER_COMMAND=claude -p {prompt} --session-id {session} --output-format json --permission-mode plan --settings {hooks}</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="c1"># RUNNER_RESUME_COMMAND=claude -p {prompt} --resume {session} --output-format json --permission-mode plan --settings {hooks}</span>
+</span></code></pre></div>
+<p>For runs that change code, set both forms to a command that may (here Claude Code accepting its own edits), and give work the room it needs:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nv">RUNNER_COMMAND</span><span class="o">=</span>claude<span class="w"> </span>-p<span class="w"> </span><span class="o">{</span>prompt<span class="o">}</span><span class="w"> </span>--session-id<span class="w"> </span><span class="o">{</span>session<span class="o">}</span><span class="w"> </span>--output-format<span class="w"> </span>json<span class="w"> </span>--permission-mode<span class="w"> </span>acceptEdits<span class="w"> </span>--settings<span class="w"> </span><span class="o">{</span>hooks<span class="o">}</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nv">RUNNER_RESUME_COMMAND</span><span class="o">=</span>claude<span class="w"> </span>-p<span class="w"> </span><span class="o">{</span>prompt<span class="o">}</span><span class="w"> </span>--resume<span class="w"> </span><span class="o">{</span>session<span class="o">}</span><span class="w"> </span>--output-format<span class="w"> </span>json<span class="w"> </span>--permission-mode<span class="w"> </span>acceptEdits<span class="w"> </span>--settings<span class="w"> </span><span class="o">{</span>hooks<span class="o">}</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nv">RUNNER_TIMEOUT</span><span class="o">=</span><span class="m">3600</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="nv">RUNNER_WORKTREES</span><span class="o">=</span>/Users/you/code/worktrees/my-service
 </span></code></pre></div>
 <p>The service sees your home directory at the same path, so a repository path reads as it does on your machine. <code>.env</code> never reaches it, so the agent does not hold the app's secrets.</p>
 <h2 id="asking-a-run-from-your-own-service">Asking a run from your own service</h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.components.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">runs</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">run</span> <span class="o">=</span> <span class="k">await</span> <span class="n">runs</span><span class="o">.</span><span class="n">ask</span><span class="p">(</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">db</span><span class="p">,</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">owner_user_id</span><span class="o">=</span><span class="n">owner</span><span class="p">,</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;ticket&quot;</span><span class="p">,</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="n">subject_id</span><span class="o">=</span><span class="s2">&quot;42&quot;</span><span class="p">,</span>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="n">action</span><span class="o">=</span><span class="s2">&quot;agent&quot;</span><span class="p">,</span>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>    <span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;Why does the export time out?&quot;</span><span class="p">,</span>
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="p">)</span>
-</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="n">later</span> <span class="o">=</span> <span class="k">await</span> <span class="n">runs</span><span class="o">.</span><span class="n">about</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="s2">&quot;ticket&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;42&quot;</span><span class="p">])</span>  <span class="c1"># its runs, oldest first</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.components.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">runs</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="n">run</span> <span class="o">=</span> <span class="k">await</span> <span class="n">runs</span><span class="o">.</span><span class="n">ask</span><span class="p">(</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="n">db</span><span class="p">,</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    <span class="n">owner_user_id</span><span class="o">=</span><span class="n">owner</span><span class="p">,</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;ticket&quot;</span><span class="p">,</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>    <span class="n">subject_id</span><span class="o">=</span><span class="s2">&quot;42&quot;</span><span class="p">,</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>    <span class="n">action</span><span class="o">=</span><span class="s2">&quot;agent&quot;</span><span class="p">,</span>
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>    <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Why does the export time out?&quot;</span><span class="p">,</span>  <span class="c1"># what a list of runs calls it</span>
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>    <span class="n">source</span><span class="o">=</span><span class="s2">&quot;Support&quot;</span><span class="p">,</span>  <span class="c1"># and where it was asked</span>
+</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>    <span class="n">prompt</span><span class="o">=</span><span class="s2">&quot;Why does the export time out?&quot;</span><span class="p">,</span>
+</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="p">)</span>
+</span><span id="__span-10-13"><a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a><span class="n">later</span> <span class="o">=</span> <span class="k">await</span> <span class="n">runs</span><span class="o">.</span><span class="n">about</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="s2">&quot;ticket&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;42&quot;</span><span class="p">])</span>  <span class="c1"># its runs, oldest first</span>
 </span></code></pre></div>
 <p>A runner answers the actions it was started with (<code>--action</code>, <code>agent</code> by default).</p>
 <h2 id="api">API</h2>
@@ -7324,11 +7466,15 @@
 <tbody>
 <tr>
 <td><code>POST /api/v1/runner/runs/claim</code></td>
-<td><code>{"actions": [...]}</code>: the oldest waiting run of those actions among the token's owner's, now the runner's, with its prompt; <code>204</code> when there is none</td>
+<td><code>{"actions": [...]}</code>: the oldest waiting run of those actions among the token's owner's, now the runner's, with its prompt, its <code>session_id</code>, its <code>branch</code> where it has one, and whether to <code>resume</code> the session; <code>204</code> when there is none. The runner may say where it keeps worktrees (<code>worktrees</code>) and how long it gives a command (<code>timeout</code>)</td>
 </tr>
 <tr>
 <td><code>POST /api/v1/runner/runs/{id}/finish</code></td>
-<td><code>{"ok": ..., "result": ...}</code>: what the run came back with; <code>404</code> for a run this runner did not claim</td>
+<td><code>{"ok": ..., "result": ..., "cost": ..., "worktree": ...}</code>: what the run came back with, what the agent says its session has cost so far and where its work is kept; <code>404</code> for a run this runner did not claim</td>
+</tr>
+<tr>
+<td><code>POST /api/v1/runner/runs/activity</code></td>
+<td>An agent's hook event, as the agent sends it: what the latest run a runner took in its session is doing, or nothing once it ends its turn. <code>204</code>, also for an event that says neither</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/runner/tokens</code></td>
@@ -7344,6 +7490,7 @@
 </tr>
 </tbody>
 </table>
+<p>With auth, a token is its maker's. Without, every token is the operator's and claims every run, so making and revoking one over the API is an operator's change: let through on the local dev build only (<code>403</code> elsewhere), as MCP's tokens are. The CLI makes one anywhere it can run.</p>
 <h2 id="coming-from-meetings">Coming from meetings</h2>
 <p>The queue, the runner and its tokens were part of the meetings service. A stack updated across that change keeps its runs and tokens (the migration carries them over), and its dev stack keeps answering from <code>.env.meetings-runner</code> and the <code>MEETINGS_RUNNER_*</code> names until you move them to <code>.env.runner</code>. The commands moved: <code>meetings runner</code> is <code>runner run</code>, and <code>meetings runner-token</code> is <code>runner token</code>.</p>
 

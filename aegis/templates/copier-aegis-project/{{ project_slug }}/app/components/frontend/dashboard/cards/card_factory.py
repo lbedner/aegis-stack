@@ -114,14 +114,14 @@ class CardFactory:
                         label,
                         size=12,
                         weight=ft.FontWeight.W_600,
-                        color=ft.Colors.GREY_600,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
                     ft.Container(
                         content=ft.ProgressBar(
                             value=value / 100.0,
                             height=8,
                             color=color,
-                            bgcolor=ft.Colors.GREY_300,
+                            bgcolor=ft.Colors.OUTLINE,
                             border_radius=4,
                         ),
                         margin=ft.margin.only(top=4, bottom=4),
@@ -137,7 +137,7 @@ class CardFactory:
                             ft.Text(
                                 details,
                                 size=14,
-                                color=ft.Colors.GREY_600,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
                             ),
                         ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -212,7 +212,9 @@ class CardFactory:
         """
         section_content = [
             PrimaryText(title),
-            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+            ft.Divider(
+                height=1,
+            ),
         ]
         section_content.extend(content)
 

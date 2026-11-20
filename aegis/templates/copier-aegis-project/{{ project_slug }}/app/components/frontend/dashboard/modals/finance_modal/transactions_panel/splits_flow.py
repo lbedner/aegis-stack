@@ -86,10 +86,10 @@ class SplitsFlowMixin(TransactionsPanelState):
                 remainder_line.value = (
                     f"{_usd(remainder)} unassigned - stays as {parent_category}"
                 )
-                remainder_line.color = Theme.Colors.TEXT_SECONDARY
+                remainder_line.color = ft.Colors.ON_SURFACE_VARIANT
             elif remainder == 0:
                 remainder_line.value = "Fully allocated."
-                remainder_line.color = Theme.Colors.TEXT_SECONDARY
+                remainder_line.color = ft.Colors.ON_SURFACE_VARIANT
             else:
                 remainder_line.value = (
                     f"Over by {_usd(-remainder)} - lines exceed the transaction."
@@ -137,7 +137,7 @@ class SplitsFlowMixin(TransactionsPanelState):
                     ft.IconButton(
                         icon=ft.Icons.CLOSE,
                         icon_size=16,
-                        icon_color=Theme.Colors.TEXT_SECONDARY,
+                        icon_color=ft.Colors.ON_SURFACE_VARIANT,
                         tooltip="Remove this line",
                         on_click=_drop,
                     ),

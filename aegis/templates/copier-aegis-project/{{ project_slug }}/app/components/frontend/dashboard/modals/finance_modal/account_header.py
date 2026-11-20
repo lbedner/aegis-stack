@@ -93,7 +93,7 @@ def _account_detail_header(
                 [
                     H3Text(
                         account.get("name", ""),
-                        color=Theme.Colors.TEXT_PRIMARY,
+                        color=ft.Colors.ON_SURFACE,
                     ),
                     Tag(
                         text=_type_label(account.get("account_type")),
@@ -106,7 +106,7 @@ def _account_detail_header(
             SecondaryText(
                 meta,
                 size=Theme.Typography.CAPTION,
-                color=Theme.Colors.TEXT_SECONDARY,
+                color=ft.Colors.ON_SURFACE_VARIANT,
             ),
         ],
         spacing=Theme.Spacing.XS,

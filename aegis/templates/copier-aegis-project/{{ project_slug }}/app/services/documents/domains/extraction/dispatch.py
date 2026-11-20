@@ -56,6 +56,21 @@ async def start_extraction(
     return job_id
 
 
+async def read_quietly(document_id: int, *, owner_user_id: int | None) -> None:
+    """Read the pages on the worker without anybody asking, and never let
+    that fail the thing that filed the document.
+
+    Never forced: a page is read once, and re-filing paper already on
+    file must not pay to read it twice. Guarded, because the BYTES are
+    the valuable thing - a worker that is down loses the reading, never
+    the document, and the reading is offered again from the document.
+    """
+    try:
+        await start_extraction(document_id, owner_user_id=owner_user_id, force=False)
+    except Exception:
+        logger.exception("documents.extract.not_started", document_id=document_id)
+
+
 async def extract_and_wait(
     document_id: int, *, owner_user_id: int | None, force: bool
 ) -> dict[str, Any]:

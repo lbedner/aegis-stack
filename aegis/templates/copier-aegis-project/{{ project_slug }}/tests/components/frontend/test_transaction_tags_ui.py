@@ -36,7 +36,7 @@ class TestRowChips:
     def test_a_tag_color_is_worn_and_the_default_is_accent(self) -> None:
         chips = transaction_tag_chips([FLAGGED, TAX])
         tags = [n for chip in chips for n in _walk(chip) if isinstance(n, Tag)]
-        assert tags[0].border.top.color == Theme.Colors.ACCENT
+        assert tags[0].border.top.color == Theme.Colors.PRIMARY
         assert tags[1].border.top.color == "#F5A623"
 
     def test_the_cap_folds_the_tail_into_a_count(self) -> None:

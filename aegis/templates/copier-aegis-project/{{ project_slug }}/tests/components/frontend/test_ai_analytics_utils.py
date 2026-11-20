@@ -65,9 +65,9 @@ class TestGetSuccessRateColor:
         assert _get_success_rate_color(100.0) == Theme.Colors.SUCCESS
 
     def test_medium_success_rate(self) -> None:
-        """Should return ORANGE for 80-94%."""
-        assert _get_success_rate_color(80.0) == ft.Colors.ORANGE
-        assert _get_success_rate_color(94.9) == ft.Colors.ORANGE
+        """Should return WARNING color for 80-94%."""
+        assert _get_success_rate_color(80.0) == Theme.Colors.WARNING
+        assert _get_success_rate_color(94.9) == Theme.Colors.WARNING
 
     def test_low_success_rate(self) -> None:
         """Should return ERROR color for <80%."""

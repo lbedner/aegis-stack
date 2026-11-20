@@ -406,7 +406,7 @@ class VoiceEditor(ft.Column):
                 SecondaryText("What gets sent"),
                 ft.Container(
                     BodyText(view["instructions"], size=12, selectable=True),
-                    border=ft.border.all(1, Theme.Colors.BORDER_DEFAULT),
+                    border=ft.border.all(1, ft.Colors.OUTLINE),
                     border_radius=4,
                     padding=Theme.Spacing.SM,
                 ),

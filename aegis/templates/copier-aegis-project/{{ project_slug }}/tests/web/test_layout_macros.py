@@ -359,9 +359,10 @@ def test_a_filled_button_is_the_pages_one_action() -> None:
         '{{ primary_button("Make it", filled=True) }}{{ primary_button("Save") }}'
     )
     made, save = (set((b.get("class") or "").split()) for b in select(html, "button"))
-    assert "bg-aegis-teal" in made and "bg-aegis-teal" not in save
-    assert {c for c in made if c.startswith(("py-", "px-", "text-xs"))} == {
-        c for c in save if c.startswith(("py-", "px-", "text-xs"))
+    assert "btn-primary" in made and "btn-outline" not in made
+    assert "btn-outline" in save
+    assert {c for c in made if c.startswith(("btn-xs", "btn-sm"))} == {
+        c for c in save if c.startswith(("btn-xs", "btn-sm"))
     }
 
 

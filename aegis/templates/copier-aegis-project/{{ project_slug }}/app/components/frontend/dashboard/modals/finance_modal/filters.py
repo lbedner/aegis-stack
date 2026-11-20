@@ -154,7 +154,7 @@ class AccountFilterButton(Dropdown):
                 width=10,
                 height=10,
                 border_radius=5,
-                bgcolor=Theme.Colors.ACCENT if selected else None,
+                bgcolor=Theme.Colors.PRIMARY if selected else None,
                 border=None if selected else ft.border.all(1.5, ft.Colors.OUTLINE),
             )
 
@@ -186,7 +186,7 @@ class AccountFilterButton(Dropdown):
                 content=SecondaryText(
                     text,
                     size=Theme.Typography.CAPTION,
-                    color=Theme.Colors.TEXT_SECONDARY,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
                     weight=ft.FontWeight.W_600,
                 ),
                 padding=ft.padding.only(
@@ -208,7 +208,9 @@ class AccountFilterButton(Dropdown):
                 "Remove all",
                 remove_all,
             ),
-            ft.Divider(height=1, color=Theme.Colors.BORDER_SUBTLE),
+            ft.Divider(
+                height=1,
+            ),
         ]
         # Same buckets, same order as the Accounts sidebar - the picker
         # should read like a compact copy of the page it filters.
@@ -249,7 +251,7 @@ class AccountFilterButton(Dropdown):
                     ft.Icon(
                         ft.Icons.FILTER_ALT if active else ft.Icons.FILTER_ALT_OUTLINED,
                         size=16,
-                        color=Theme.Colors.ACCENT
+                        color=Theme.Colors.PRIMARY
                         if active
                         else ft.Colors.ON_SURFACE_VARIANT,
                     ),

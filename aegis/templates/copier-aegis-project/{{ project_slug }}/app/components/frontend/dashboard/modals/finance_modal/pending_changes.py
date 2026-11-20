@@ -139,18 +139,18 @@ class PendingChangesBanner(ft.Container):
     ) -> None:
         super().__init__(visible=False)
         self.page = page
-        self._label = SecondaryText("", color=Theme.Colors.TEXT_PRIMARY)
+        self._label = SecondaryText("", color=ft.Colors.ON_SURFACE)
         hint = "Review and approve"
         self.content = ft.Row(
             [
                 ft.Icon(
                     ft.Icons.FACT_CHECK_OUTLINED,
                     size=16,
-                    color=Theme.Colors.ACCENT,
+                    color=Theme.Colors.PRIMARY,
                 ),
                 self._label,
                 ft.Container(expand=True),
-                SecondaryText(hint, color=Theme.Colors.ACCENT),
+                SecondaryText(hint, color=Theme.Colors.PRIMARY),
             ],
             spacing=Theme.Spacing.SM,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -159,7 +159,7 @@ class PendingChangesBanner(ft.Container):
             horizontal=Theme.Spacing.MD, vertical=Theme.Spacing.SM
         )
         self.border_radius = Theme.Components.CARD_RADIUS
-        self.bgcolor = ft.Colors.with_opacity(0.12, Theme.Colors.ACCENT)
+        self.bgcolor = ft.Colors.with_opacity(0.12, Theme.Colors.PRIMARY)
         if on_open_review is not None:
             self.ink = True
             self.tooltip = "Open Review > Approvals"

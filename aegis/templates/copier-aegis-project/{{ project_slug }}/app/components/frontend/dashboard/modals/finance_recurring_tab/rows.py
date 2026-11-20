@@ -158,7 +158,7 @@ class RowsMixin(RecurringTabState):
         if stream.get("is_muted"):
             status_control = status_dot(
                 "Muted",
-                Theme.Colors.TEXT_SECONDARY,
+                ft.Colors.ON_SURFACE_VARIANT,
                 "Silenced. This stream raises no insights until unmuted.",
             )
         elif stream_is_paused(stream):
@@ -166,7 +166,7 @@ class RowsMixin(RecurringTabState):
             note = stream.get("pause_note")
             status_control = status_dot(
                 "Paused",
-                Theme.Colors.TEXT_SECONDARY,
+                ft.Colors.ON_SURFACE_VARIANT,
                 f"Paused {pause_label(until)}."
                 + (f" Why: {note}" if note else "")
                 + " Out of the forecast, the Bills total and every nag "
@@ -178,7 +178,7 @@ class RowsMixin(RecurringTabState):
             # the Bills total (the card's swipes already counted there).
             status_control = status_dot(
                 "Payment",
-                Theme.Colors.ACCENT,
+                Theme.Colors.PRIMARY,
                 "A card or loan payment. Confirm it (and pin the amount) "
                 "and the cash forecast will charge it; it never counts in "
                 "the Bills total, because the card's own charges already "
@@ -278,7 +278,7 @@ class RowsMixin(RecurringTabState):
             name_cell,
             SecondaryText(_category_leaf(stream.get("category_name") or "") or "—"),
             SecondaryText(stream.get("account_name") or "—"),
-            NumericText(_usd(amount), color=Theme.Colors.TEXT_PRIMARY),
+            NumericText(_usd(amount), color=ft.Colors.ON_SURFACE),
             SecondaryText(cadence),
             date_cell(stream.get("next_expected_date"), SecondaryText),
             health_cell,

@@ -17,7 +17,7 @@ from typing import Any, Callable, Literal
 import flet as ft
 
 from app.components.frontend.controls.text import BodyText
-from app.components.frontend.styles import PULSE_BUTTON_MUTED_STYLE, PulseColors
+from app.components.frontend.styles import PULSE_BUTTON_MUTED_STYLE
 from app.core.log import logger
 
 Provider = Literal["github", "google"]
@@ -68,13 +68,13 @@ class OAuthButton(ft.OutlinedButton):
         if icon_b64:
             icon = ft.Image(src_base64=icon_b64, width=16, height=16)
         else:
-            icon = ft.Icon(ft.Icons.LOGIN, color=PulseColors.TEXT, size=16)
+            icon = ft.Icon(ft.Icons.LOGIN, color=ft.Colors.ON_SURFACE, size=16)
 
         super().__init__(
             content=ft.Row(
                 controls=[
                     icon,
-                    BodyText(label, color=PulseColors.TEXT, size=13),
+                    BodyText(label, color=ft.Colors.ON_SURFACE, size=13),
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
                 spacing=10,

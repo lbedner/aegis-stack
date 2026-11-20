@@ -59,7 +59,7 @@ class ObservabilityDetailDialog(BaseDetailPopup):
                 EmptyStatePlaceholder(
                     "Add LOGFIRE_READ_TOKEN to enable trace analytics"
                 ),
-                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                ft.Divider(height=1),
                 ConfigurationSection(component_data, page),
             ]
 

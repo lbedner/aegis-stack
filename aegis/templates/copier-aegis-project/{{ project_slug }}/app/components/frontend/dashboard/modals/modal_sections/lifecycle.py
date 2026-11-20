@@ -26,14 +26,14 @@ class FlowConnector(ft.Container):
                 ft.Container(
                     width=3,
                     height=30,
-                    bgcolor=Theme.Colors.BORDER_DEFAULT,
+                    bgcolor=ft.Colors.OUTLINE,
                     border_radius=2,
                 ),
                 # Arrow icon
                 ft.Icon(
                     ft.Icons.ARROW_DROP_DOWN,
                     size=20,
-                    color=Theme.Colors.BORDER_DEFAULT,
+                    color=ft.Colors.OUTLINE,
                 ),
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -163,12 +163,12 @@ class LifecycleInspector(ft.Container):
         # Update badge
         if badge_text:
             self._badge_container.content = LabelText(
-                badge_text, color=Theme.Colors.BADGE_TEXT
+                badge_text, color=ft.Colors.ON_PRIMARY
             )
             self._badge_container.padding = ft.padding.symmetric(
                 horizontal=6, vertical=2
             )
-            self._badge_container.bgcolor = badge_color or ft.Colors.AMBER
+            self._badge_container.bgcolor = badge_color or Theme.Colors.WARNING
             self._badge_container.border_radius = 4
             self._badge_container.visible = True
         else:
@@ -257,7 +257,7 @@ class LifecycleCard(ft.Container):
         self._raw_name = name  # Keep original for code reference
         self._details = details or {}
         self._badge_text = badge
-        self._badge_color = badge_color or ft.Colors.AMBER
+        self._badge_color = badge_color or Theme.Colors.WARNING
         self._inspector = inspector
         self._is_selected = False
 
@@ -268,7 +268,7 @@ class LifecycleCard(ft.Container):
         if self._badge_text:
             header_row_content.append(
                 ft.Container(
-                    content=LabelText(self._badge_text, color=Theme.Colors.BADGE_TEXT),
+                    content=LabelText(self._badge_text, color=ft.Colors.ON_PRIMARY),
                     padding=ft.padding.symmetric(horizontal=6, vertical=2),
                     bgcolor=self._badge_color,
                     border_radius=4,
@@ -302,9 +302,7 @@ class LifecycleCard(ft.Container):
         if self._is_selected:
             return  # Don't change hover state when selected
         if e.data == "true":
-            self.card_header.bgcolor = ft.Colors.with_opacity(
-                0.08, ft.Colors.ON_SURFACE
-            )
+            self.card_header.bgcolor = Theme.Colors.SURFACE_3
         else:
             self.card_header.bgcolor = None
         if e.control.page:
@@ -320,7 +318,7 @@ class LifecycleCard(ft.Container):
         """Update visual state for selection."""
         self._is_selected = selected
         if selected:
-            self.border = ft.border.all(2, Theme.Colors.ACCENT)
+            self.border = ft.border.all(2, Theme.Colors.PRIMARY)
             self.bgcolor = ft.Colors.with_opacity(0.12, ft.Colors.ON_SURFACE)
         else:
             self.border = ft.border.all(1, ft.Colors.OUTLINE)
@@ -353,11 +351,11 @@ class FlowSection(ft.Container):
                 [
                     ft.Container(
                         content=SecondaryText(f"{step_number:02d}", size=10),
-                        bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE),
+                        bgcolor=Theme.Colors.SURFACE_3,
                         border_radius=4,
                         padding=ft.padding.symmetric(horizontal=6, vertical=2),
                     ),
-                    ft.Icon(icon, size=18, color=Theme.Colors.TEXT_SECONDARY),
+                    ft.Icon(icon, size=18, color=ft.Colors.ON_SURFACE_VARIANT),
                     H3Text(title),
                     ft.Container(
                         content=SecondaryText(f"({len(cards)})"),

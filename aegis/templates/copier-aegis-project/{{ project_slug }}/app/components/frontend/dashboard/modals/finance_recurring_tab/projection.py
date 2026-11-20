@@ -171,7 +171,7 @@ class ProjectionPanel(FinancePanel):
         def _delta_color(cents: int) -> str:
             if cents < 0:
                 return Theme.Colors.ERROR
-            return Theme.Colors.SUCCESS if cents > 0 else Theme.Colors.TEXT_PRIMARY
+            return Theme.Colors.SUCCESS if cents > 0 else ft.Colors.ON_SURFACE
 
         self._cards.controls = [
             headline_stat(
@@ -270,7 +270,7 @@ class ProjectionPanel(FinancePanel):
                 NumericText(
                     _usd_signed(p.get("balance", 0)),
                     color=(
-                        Theme.Colors.TEXT_PRIMARY
+                        ft.Colors.ON_SURFACE
                         if p.get("balance", 0) >= 0
                         else Theme.Colors.ERROR
                     ),

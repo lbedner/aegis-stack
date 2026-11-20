@@ -503,7 +503,7 @@ class DataTable(ft.Container):
             text.color = (
                 ft.Colors.ON_SURFACE
                 if hovered or is_active
-                else Theme.Colors.TEXT_SECONDARY
+                else ft.Colors.ON_SURFACE_VARIANT
             )
             icon.color = (
                 ft.Colors.ON_SURFACE
@@ -596,7 +596,7 @@ class DataTable(ft.Container):
             padding=ft.padding.symmetric(
                 horizontal=Theme.Spacing.MD, vertical=self._row_padding + 2
             ),
-            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
+            bgcolor=Theme.Colors.SURFACE_2,
             border=(
                 ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE))
                 if self._show_header_border

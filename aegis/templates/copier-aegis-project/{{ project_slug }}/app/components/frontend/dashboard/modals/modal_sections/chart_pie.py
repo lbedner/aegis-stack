@@ -10,24 +10,14 @@ from app.components.frontend.controls import (
     PrimaryText,
     SecondaryText,
 )
+from app.components.frontend.theme import SERIES
 from app.components.frontend.theme import AegisTheme as Theme
-from app.components.frontend.theme import DarkColorPalette
 
-PIE_CHART_COLORS = [
-    DarkColorPalette.ACCENT,  # Teal
-    "#22C55E",  # Green
-    "#F5A623",  # Orange/Amber
-    "#A855F7",  # Purple
-    "#3B82F6",  # Blue
-    "#EC4899",  # Pink
-    "#6366F1",  # Indigo
-    "#14B8A6",  # Cyan
-    "#84CC16",  # Lime
-    "#F97316",  # Deep orange
-]
+PIE_CHART_COLORS = list(SERIES)
 
 
-PIE_CHART_TAIL_COLOR = "#64748B"
+# The folded "everything else" slice: muted, whatever the mode.
+PIE_CHART_TAIL_COLOR = ft.Colors.ON_SURFACE_VARIANT
 
 
 class PieChartCard(ft.Container):

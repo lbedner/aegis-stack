@@ -6,8 +6,8 @@ Modern tag UI control based on ee-toolset design.
 
 import flet as ft
 
-from app.components.frontend.styles import FontConfig
 from app.components.frontend.theme import AegisTheme as Theme
+from app.components.frontend.theme import FontConfig
 from app.services.system.models import ComponentStatusType
 
 
@@ -19,7 +19,7 @@ class Tag(ft.Container):
     """
 
     def __init__(
-        self, text: str, color: str = ft.Colors.AMBER, *, compact: bool = False
+        self, text: str, color: str = Theme.Colors.WARNING, *, compact: bool = False
     ) -> None:
         # Compact is for dense table cells: tighter padding and a smaller
         # face, so the pill hugs a short word instead of overflowing it.
@@ -35,7 +35,7 @@ class Tag(ft.Container):
                 weight=ft.FontWeight.W_700,
                 color=color,
                 font_family=FontConfig.FAMILY_PRIMARY,
-                size=10 if compact else FontConfig.SIZE_TERTIARY,
+                size=10 if compact else Theme.Typography.BODY_SMALL,
                 text_align=ft.TextAlign.CENTER,
                 no_wrap=True,
                 overflow=ft.TextOverflow.ELLIPSIS,
@@ -68,9 +68,9 @@ class StatusTag(ft.Container):
         # Determine styling based on status severity
         if status == ComponentStatusType.UNHEALTHY:
             # CRITICAL: Filled background, white text - maximum attention
-            dot_color = ft.Colors.WHITE
-            text_color = ft.Colors.WHITE
-            detail_color = ft.Colors.with_opacity(0.8, ft.Colors.WHITE)
+            dot_color = ft.Colors.ON_ERROR
+            text_color = ft.Colors.ON_ERROR
+            detail_color = ft.Colors.with_opacity(0.8, ft.Colors.ON_ERROR)
             bg_color = Theme.Colors.ERROR
             text = text or "UNHEALTHY"
             font_weight = ft.FontWeight.W_700
@@ -78,7 +78,7 @@ class StatusTag(ft.Container):
             # WARNING: Amber tint background
             dot_color = Theme.Colors.WARNING
             text_color = Theme.Colors.WARNING
-            detail_color = ft.Colors.with_opacity(0.7, Theme.Colors.WARNING)
+            detail_color = ft.Colors.ON_SURFACE_VARIANT
             bg_color = ft.Colors.with_opacity(0.15, Theme.Colors.WARNING)
             text = text or "Warning"
             font_weight = ft.FontWeight.W_600
@@ -86,7 +86,7 @@ class StatusTag(ft.Container):
             # INFO: Blue tint background
             dot_color = Theme.Colors.INFO
             text_color = Theme.Colors.INFO
-            detail_color = ft.Colors.with_opacity(0.7, Theme.Colors.INFO)
+            detail_color = ft.Colors.ON_SURFACE_VARIANT
             bg_color = ft.Colors.with_opacity(0.15, Theme.Colors.INFO)
             text = text or "Info"
             font_weight = ft.FontWeight.W_600
@@ -94,7 +94,7 @@ class StatusTag(ft.Container):
             # HEALTHY: Minimal - just dot and text, no background
             dot_color = Theme.Colors.SUCCESS
             text_color = Theme.Colors.SUCCESS
-            detail_color = ft.Colors.with_opacity(0.7, Theme.Colors.SUCCESS)
+            detail_color = ft.Colors.ON_SURFACE_VARIANT
             bg_color = None
             text = text or "Healthy"
             font_weight = ft.FontWeight.W_500
@@ -115,7 +115,7 @@ class StatusTag(ft.Container):
                     weight=font_weight,
                     color=text_color,
                     font_family=FontConfig.FAMILY_PRIMARY,
-                    size=FontConfig.SIZE_TERTIARY,
+                    size=Theme.Typography.BODY_SMALL,
                 ),
             ],
             spacing=6,

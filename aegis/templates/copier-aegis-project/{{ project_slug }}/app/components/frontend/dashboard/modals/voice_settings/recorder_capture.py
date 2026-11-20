@@ -52,7 +52,7 @@ class RecordingCaptureMixin(RecorderState):
             self._record_button.icon_color = Theme.Colors.ERROR
             self._record_button.tooltip = "Click to stop recording"
             self._status_text.value = "Waiting for microphone..."
-            self._status_text.color = ft.Colors.ORANGE
+            self._status_text.color = Theme.Colors.WARNING
             self._visualizer.start_animation()
 
             # Hide previous cards

@@ -138,12 +138,7 @@ class UserFactEditPopup(BasePopup):
             border=ft.border.all(1, ft.Colors.OUTLINE),
             border_radius=Theme.Components.CARD_RADIUS,
             bgcolor=ft.Colors.SURFACE,
-            shadow=ft.BoxShadow(
-                spread_radius=0,
-                blur_radius=20,
-                color=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
-                offset=ft.Offset(0, 4),
-            ),
+            shadow=Theme.Components.POPUP_SHADOW,
         )
 
     async def _handle_cancel(self) -> None:

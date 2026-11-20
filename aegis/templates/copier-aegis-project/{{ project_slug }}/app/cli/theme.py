@@ -6,8 +6,8 @@ tokens on ``--help`` — and nothing else. Visual hierarchy comes from
 and chrome, and a single accent (teal) for the thing that matters. Two colors,
 three brightnesses. Color is wayfinding, not decoration.
 
-The hex values mirror the frontend theme ACCENT (#17CCBF) so the CLI and the
-app it drives share one identity. Call sites express intent
+The colours are the app palette's dark mode (``app/core/palette.json``, which
+both frontends read), so the CLI and the app it drives share one identity. Call sites express intent
 (``theme.good(...)``, ``theme.label(...)``) rather than raw colors, so the
 palette is defined here exactly once. The constants are plain hex strings so
 they also work directly in Rich markup (``f"[{theme.ACCENT}]...[/]"``) and Rich
@@ -19,13 +19,15 @@ from typing import Any, NoReturn
 
 import typer
 
-ACCENT = "#17CCBF"
+from app.core.appearance import PALETTE
+
+ACCENT = PALETTE["dark"]["primary"]
 """Teal — healthy/good state, success, and emphasis (the one accent)."""
 
-WARNING = "#F5A623"
+WARNING = PALETTE["dark"]["warning"]
 """Amber — a warning: degraded or attention-worthy, but not broken."""
 
-ERROR = "#E23E3E"
+ERROR = PALETTE["dark"]["error"]
 """Red — an error or failed state."""
 
 

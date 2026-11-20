@@ -17,7 +17,6 @@ import flet as ft
 
 from app.components.frontend.controls.auth.branding_panel import BrandingPanel
 from app.components.frontend.controls.brand_mark import BrandMark
-from app.components.frontend.styles import PulseColors
 
 
 class AuthShell(ft.ResponsiveRow):
@@ -53,7 +52,7 @@ class AuthShell(ft.ResponsiveRow):
                 spacing=0,
             ),
             col={"xs": 12, "md": 5, "lg": 5, "xl": 4},
-            bgcolor=PulseColors.BG,
+            bgcolor=ft.Colors.SURFACE,
             padding=ft.padding.symmetric(horizontal=64, vertical=48),
             expand=True,
         )
@@ -63,7 +62,7 @@ class AuthShell(ft.ResponsiveRow):
                 project_name=project_name, tagline=project_tagline
             ),
             col={"xs": 0, "md": 7, "lg": 7, "xl": 8},
-            bgcolor=PulseColors.BG,
+            bgcolor=ft.Colors.SURFACE,
             expand=True,
         )
 

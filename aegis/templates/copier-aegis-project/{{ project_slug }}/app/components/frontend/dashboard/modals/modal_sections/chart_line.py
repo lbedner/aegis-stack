@@ -40,13 +40,13 @@ class LineChartCard(ft.Container):
             series=[
                 LineSeries(
                     label="Clones",
-                    color="#2563eb",
+                    color=SERIES[3],
                     points=[(i, d.clones) for i, d in enumerate(daily)],
                     tooltips=[f"Clones: {d.clones:,}" for d in daily],
                 ),
                 LineSeries(
                     label="Unique Cloners",
-                    color="#7c3aed",
+                    color=SERIES[1],
                     points=[(i, d.unique_cloners) for i, d in enumerate(daily)],
                 ),
             ],
@@ -243,14 +243,14 @@ class LineChartCard(ft.Container):
             bottom_axis=ft.ChartAxis(labels_size=24, labels=bottom_labels),
             horizontal_grid_lines=ft.ChartGridLines(
                 interval=step,
-                color=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE),
+                color=Theme.Colors.SURFACE_3,
                 width=1,
             ),
             **chart_tooltip_kwargs(),
             tooltip_show_on_top_of_chart_box_area=True,
             point_line_start=0,
             point_line_end=float("inf"),
-            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+            border=ft.border.all(1, ft.Colors.OUTLINE),
             interactive=True,
             min_y=min_y,
             max_y=max_y,
@@ -370,10 +370,11 @@ class LineChartCard(ft.Container):
             kwargs["point"] = False
         elif s.stroke_width > 0:
             kwargs["curved"] = True
+            # A curve may not swing past its points: a spline between a
+            # zero month and a rise otherwise draws spending below $0.
+            kwargs["prevent_curve_over_shooting"] = True
             kwargs["stroke_cap_round"] = True
-            kwargs["point"] = ChartPoint.dot(
-                s.color if s.fill else ft.Colors.ON_SURFACE
-            )
+            kwargs["point"] = ChartPoint.dot(s.color)
             if s.fill and split_fraction is not None:
                 # Two-sided fill meeting at the split: below-line down to
                 # the split tints the positive area, above-line up to the

@@ -14,7 +14,7 @@ from __future__ import annotations
 import flet as ft
 
 from app.components.frontend.controls.text import BodyText
-from app.components.frontend.styles import PulseColors
+from app.components.frontend.theme import AegisTheme as Theme
 from app.core.config import settings
 
 
@@ -34,12 +34,12 @@ class BrandMark(ft.Row):
                 ft.Container(
                     width=dot_size,
                     height=dot_size,
-                    bgcolor=PulseColors.TEAL,
+                    bgcolor=Theme.Colors.PRIMARY,
                     border_radius=dot_size / 2,
                 ),
                 BodyText(
                     f"Overseer · {name}",
-                    color=PulseColors.TEXT,
+                    color=ft.Colors.ON_SURFACE,
                     weight=ft.FontWeight.W_600,
                 ),
             ],

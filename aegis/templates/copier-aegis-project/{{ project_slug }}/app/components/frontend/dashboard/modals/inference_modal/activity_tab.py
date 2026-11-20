@@ -37,7 +37,7 @@ ACTIVITY_EVENT_LABELS = {
 ACTIVITY_EVENT_COLORS = {
     "loaded": Theme.Colors.SUCCESS,
     "unloaded": Theme.Colors.WARNING,
-    "evicted": Theme.Colors.TEXT_SECONDARY,
+    "evicted": ft.Colors.ON_SURFACE_VARIANT,
 }
 
 
@@ -99,7 +99,7 @@ class ActivitySection(ft.Container):
                         ACTIVITY_EVENT_LABELS[event.action],
                         color=ACTIVITY_EVENT_COLORS[event.action],
                     ),
-                    NumericText(vram_display, color=Theme.Colors.TEXT_SECONDARY),
+                    NumericText(vram_display, color=ft.Colors.ON_SURFACE_VARIANT),
                     SecondaryText("Server" if event.detected else "App"),
                     when_text,
                 ]

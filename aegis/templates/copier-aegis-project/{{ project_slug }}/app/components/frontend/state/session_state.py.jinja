@@ -15,15 +15,13 @@ something needs page-bound behavior, it belongs here or in a
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import flet as ft
 
+from app.components.frontend.theme_manager import ThemeManager
 from app.core.client import APIClient
 from app.core.log import logger
-
-if TYPE_CHECKING:
-    from app.components.frontend.theme_manager import ThemeManager
 
 _SESSION_KEY = "session_state"
 
@@ -38,13 +36,17 @@ class SessionState:
 
     page: ft.Page
     api_client: APIClient
-    theme_manager: "ThemeManager | None" = None
+    theme_manager: ThemeManager = field(init=False)
+    """The page's light/dark mode, from the first screen (sign-in included)."""
     {% if include_auth -%}
     current_user: dict[str, Any] | None = None
     """The currently signed-in user payload, or ``None`` until login."""
     {%- endif %}
     _data: dict[str, Any] = field(default_factory=dict)
     """Bag for ad-hoc session-scoped values keyed by string."""
+
+    def __post_init__(self) -> None:
+        self.theme_manager = ThemeManager(self.page)
 
     def get(self, key: str, default: Any = None) -> Any:
         """Read an ad-hoc session value."""
@@ -73,7 +75,6 @@ def init_session_state(
     page: ft.Page,
     *,
     api_client: APIClient,
-    theme_manager: "ThemeManager | None" = None,
 ) -> SessionState:
     """Construct and attach the SessionState to ``page.data``."""
     if page.data is None:
@@ -81,7 +82,6 @@ def init_session_state(
     state = SessionState(
         page=page,
         api_client=api_client,
-        theme_manager=theme_manager,
     )
     page.data[_SESSION_KEY] = state
     logger.info("session_state.initialized", session_id=page.session_id)

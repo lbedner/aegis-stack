@@ -7,6 +7,8 @@ title, subtitle, and status tag.
 
 import flet as ft
 
+from app.components.frontend.theme import AegisTheme as Theme
+
 from .tag import Tag
 from .text import H3Text, SecondaryText
 
@@ -26,8 +28,8 @@ class TechBadge(ft.Container):
         title: str,
         subtitle: str,
         badge_text: str | None = None,
-        badge_color: str = ft.Colors.AMBER,
-        primary_color: str = ft.Colors.GREEN,
+        badge_color: str = Theme.Colors.WARNING,
+        primary_color: str = Theme.Colors.PRIMARY,
         width: int | None = 200,
     ) -> None:
         """

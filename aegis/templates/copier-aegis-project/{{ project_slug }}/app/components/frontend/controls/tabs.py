@@ -13,7 +13,7 @@ from app.components.frontend.theme import AegisTheme as Theme
 
 # Matches the DateRangeChips / PulseButton selected state: the accent
 # marks WHICH ONE, and nothing else in the bar competes with it.
-_INDICATOR_COLOR = Theme.Colors.ACCENT
+_INDICATOR_COLOR = Theme.Colors.PRIMARY
 _ANIMATION_MS = 200
 # The first tab of a record's pane, and of a modal given none of its own.
 OVERVIEW = "Overview"

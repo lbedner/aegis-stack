@@ -61,7 +61,7 @@ class MetricCardSection(ft.Container):
         Args:
             title: Section title
             metrics: List of metric dicts with keys: label, value, color
-                     Example: [{"label": "Total", "value": "42", "color": "#00ff00"}]
+                     Example: [{"label": "Total", "value": "42", "color": Theme.Colors.SUCCESS}]
         """
         super().__init__()
 

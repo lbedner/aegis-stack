@@ -117,8 +117,8 @@ class SearchPreviewSection(ft.Container):
             border_radius=Theme.Components.INPUT_RADIUS,
             bgcolor=ft.Colors.SURFACE,
             border_color=ft.Colors.OUTLINE,
-            focused_border_color=ft.Colors.PRIMARY,
-            cursor_color=ft.Colors.PRIMARY,
+            focused_border_color=Theme.Colors.PRIMARY,
+            cursor_color=Theme.Colors.PRIMARY,
             text_size=13,
             on_submit=self._on_search_submit,
         )
@@ -132,7 +132,7 @@ class SearchPreviewSection(ft.Container):
             border_radius=Theme.Components.INPUT_RADIUS,
             bgcolor=ft.Colors.SURFACE,
             border_color=ft.Colors.OUTLINE,
-            focused_border_color=ft.Colors.PRIMARY,
+            focused_border_color=Theme.Colors.PRIMARY,
             text_size=13,
         )
 

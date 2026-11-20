@@ -84,14 +84,14 @@ class LinesTabMixin(BudgetPanelState):
                     ft.Container(expand=True),
                     SecondaryText(
                         "Hide bills" if self._show_commitments else "Show bills",
-                        color=Theme.Colors.ACCENT,
+                        color=Theme.Colors.PRIMARY,
                     ),
                     ft.Icon(
                         ft.Icons.EXPAND_LESS
                         if self._show_commitments
                         else ft.Icons.EXPAND_MORE,
                         size=18,
-                        color=Theme.Colors.ACCENT,
+                        color=Theme.Colors.PRIMARY,
                     ),
                 ],
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,

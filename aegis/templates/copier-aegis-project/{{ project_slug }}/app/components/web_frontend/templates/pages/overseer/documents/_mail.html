@@ -1,0 +1,23 @@
+{# What came in by mail, by the day it arrived: who sent it, its subject
+   opening the letter it became, its attachments, and what it became.
+   Above, the mailbox the app pulls and how its last pull went. #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% macro _papers(papers) %}{% for p in papers %}<a href="{{ p.url }}" {{ hx_replace(p.url, "#overseer-main") }} class="text-aegis-text hover:text-aegis-teal">{{ p.label }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% endmacro %}
+<div id="mail-arrivals" class="space-y-4">
+  {% if mailbox %}<p data-mailbox class="text-xs text-aegis-muted">Pulling {{ mailbox.label }}: <span class="{{ 'text-error' if mailbox.error }}">{{ pulled }}</span></p>{% endif %}
+  {% for day in days %}
+  {% call card(day.date|short_date, id="mail-day-" ~ day.date.isoformat()) %}
+    {{ data_table([
+      {"key": "sender", "label": "From"},
+      {"key": "subject", "label": "Subject", "kind": "link", "target": "#overseer-main"},
+      {"key": "attachments", "label": "Attachments", "render": _papers},
+      {"key": "became", "label": "Became", "wrap": True},
+      {"key": "via", "label": "Via"},
+    ], day.rows) }}
+  {% endcall %}
+  {% else %}
+  {{ empty_state("No mail yet", "Drop a .mbox or .eml on the Documents upload, or name a mailbox in Secrets to pull it every half hour.") }}
+  {% endfor %}
+</div>

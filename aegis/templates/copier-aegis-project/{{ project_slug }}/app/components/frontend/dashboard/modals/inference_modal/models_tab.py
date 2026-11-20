@@ -237,7 +237,7 @@ class ModelsSection(ft.Container):
             total_value = NumericText(
                 f"{total_vram_gb:.1f}G",
                 weight=Theme.Typography.WEIGHT_BOLD,
-                color=Theme.Colors.TEXT_SECONDARY,
+                color=ft.Colors.ON_SURFACE_VARIANT,
             )
             # Empty cells for alignment; only the VRAM column carries a
             # total, since it is the one figure that sums across rows.

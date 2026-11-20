@@ -35,7 +35,7 @@ class BasePopup(ft.Container):
             content=my_content,
             width=900,
             height=700,
-            border=ft.border.all(2, ft.Colors.PRIMARY),
+            border=ft.border.all(2, Theme.Colors.PRIMARY),
         )
 
         # Add to page's overlay
@@ -66,7 +66,7 @@ class BasePopup(ft.Container):
             content: The content to display in the popup
             width: Popup width in pixels
             height: Popup height in pixels
-            border: Border configuration (e.g., ft.border.all(1, ft.Colors.PRIMARY))
+            border: Border configuration (e.g., ft.border.all(1, Theme.Colors.PRIMARY))
             border_radius: Border radius for rounded corners
             bgcolor: Background color
             shadow: BoxShadow for elevation effect
@@ -82,7 +82,7 @@ class BasePopup(ft.Container):
         # Semi-transparent backdrop overlay
         self.overlay = ft.Container(
             content=None,  # Just background
-            bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.BLACK),
+            bgcolor=ft.Colors.with_opacity(0.5, ft.Colors.SCRIM),
             visible=False,
             expand=True,
             on_click=self._handle_backdrop_click,
@@ -232,10 +232,5 @@ class OverlayStyledDialog(BasePopup):
             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             border=ft.border.all(1, ft.Colors.OUTLINE),
             border_radius=Theme.Components.CARD_RADIUS,
-            shadow=ft.BoxShadow(
-                spread_radius=0,
-                blur_radius=20,
-                color=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
-                offset=ft.Offset(0, 4),
-            ),
+            shadow=Theme.Components.POPUP_SHADOW,
         )

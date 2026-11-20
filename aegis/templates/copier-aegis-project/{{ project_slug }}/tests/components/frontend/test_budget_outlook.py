@@ -7,6 +7,8 @@ what comes in, what the bills take, what the budgets take, and the
 signed remainder.
 """
 
+import flet as ft
+
 from app.components.frontend.dashboard.modals.finance_modal import (
     budget_stats_cells,
     outlook_chip,
@@ -53,7 +55,7 @@ class TestTheCells:
         cells = {c[0]: c for c in budget_stats_cells(STATS)}
         _label, value, _caption, color = cells["This month"]
         assert value == "+$1,300.00"
-        assert color == Theme.Colors.ACCENT
+        assert color == Theme.Colors.PRIMARY
 
     def test_a_negative_month_is_red_and_says_so(self) -> None:
         stats = {**STATS, "month_net": -50_000}
@@ -154,7 +156,7 @@ class TestTheMonthPager:
         cells = outlook_stats_cells({**self.ENTRY, "month_net": 166_590})
         verdict = cells[3]
         assert verdict[1] == "+$1,665.90"
-        assert verdict[3] == Theme.Colors.ACCENT
+        assert verdict[3] == Theme.Colors.PRIMARY
 
     def test_chips_carry_the_ending_balance_not_the_rate(self) -> None:
         """The chip answers "can I pay that month" - the projected cash
@@ -165,7 +167,7 @@ class TestTheMonthPager:
         assert color == Theme.Colors.ERROR
         label, color = outlook_chip({**self.ENTRY, "end_balance": 124_000})
         assert label == "Oct $1,240"
-        assert color == Theme.Colors.TEXT_SECONDARY
+        assert color == ft.Colors.ON_SURFACE_VARIANT
 
     def test_the_verdict_caption_names_the_landing(self) -> None:
         cells = outlook_stats_cells(self.ENTRY)

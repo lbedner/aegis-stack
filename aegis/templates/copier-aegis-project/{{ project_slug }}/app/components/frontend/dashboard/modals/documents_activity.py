@@ -122,7 +122,7 @@ class ActivityTab(ft.Container):
         if row.queued:
             # The bar is a claim that work is under way. Nothing is under
             # way until a worker says so.
-            return status_dot("Queued", Theme.Colors.TEXT_SECONDARY, row.detail)
+            return status_dot("Queued", ft.Colors.ON_SURFACE_VARIANT, row.detail)
         if row.running:
             return ft.Row(
                 [
@@ -136,4 +136,4 @@ class ActivityTab(ft.Container):
             return status_dot("Failed", Theme.Colors.ERROR, row.detail)
         if row.incomplete:
             return status_dot(row.detail, Theme.Colors.WARNING, row.detail)
-        return status_dot(row.detail, Theme.Colors.ACCENT, row.detail)
+        return status_dot(row.detail, Theme.Colors.PRIMARY, row.detail)

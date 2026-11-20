@@ -9,9 +9,8 @@ from typing import Any
 
 import flet as ft
 
-from ..styles import FontConfig
 from ..theme import AegisTheme as Theme
-from ..theme import DarkColorPalette
+from ..theme import FontConfig
 
 
 class NumericText(ft.Text):  # type: ignore[misc]
@@ -31,7 +30,7 @@ class NumericText(ft.Text):  # type: ignore[misc]
             "font_family": FontConfig.FAMILY_NUMERIC,
             "size": Theme.Typography.BODY,
             "weight": Theme.Typography.WEIGHT_REGULAR,
-            "color": DarkColorPalette.TEXT_PRIMARY_DEFAULT,
+            "color": ft.Colors.ON_SURFACE,
             "selectable": False,
         }
         defaults.update(kwargs)
@@ -74,7 +73,7 @@ class SecondaryText(ft.Text):  # type: ignore[misc]
             "font_family": "Roboto",
             "size": Theme.Typography.BODY,
             "weight": Theme.Typography.WEIGHT_REGULAR,
-            "color": DarkColorPalette.TEXT_SECONDARY_DEFAULT,
+            "color": ft.Colors.ON_SURFACE_VARIANT,
             "selectable": False,
         }
         defaults.update(kwargs)
@@ -273,7 +272,7 @@ class AccentText(ft.Text):  # type: ignore[misc]
         defaults = {
             "size": Theme.Typography.BODY,
             "weight": Theme.Typography.WEIGHT_MEDIUM,
-            "color": Theme.Colors.ACCENT,
+            "color": Theme.Colors.PRIMARY,
             "font_family": "Roboto",
             "selectable": False,
         }

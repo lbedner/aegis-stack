@@ -54,6 +54,7 @@ class DashboardChrome:
 def build_chrome(
     page: ft.Page,
     on_project_change: Callable[[], Awaitable[None]],
+    theme_manager: ThemeManager,
 ) -> DashboardChrome:
     """Build the header row and everything sitting in it."""
     # Brand mark: the same teal-dot + "Overseer · <project>" chip the
@@ -67,11 +68,10 @@ def build_chrome(
     # Theme toggle button. ``on_click`` is bound by the caller, once
     # the dashboard exists to answer "is the page still connected".
     theme_button = ft.IconButton(
-        icon=ft.Icons.DARK_MODE,
-        tooltip="Switch to Dark Mode",
         icon_size=24,
-        icon_color=Theme.Colors.TEXT_SECONDARY,
+        icon_color=ft.Colors.ON_SURFACE_VARIANT,
     )
+    offer_other_mode(theme_button, theme_manager)
 
     # View toggle button - cycle between Stack, Cards, and Diagram views.
     # ``DashboardViews`` binds ``on_click`` when the containers exist.
@@ -79,7 +79,7 @@ def build_chrome(
         icon=ft.Icons.VIEW_LIST,
         tooltip="Switch to Cards View",
         icon_size=24,
-        icon_color=Theme.Colors.TEXT_SECONDARY,
+        icon_color=ft.Colors.ON_SURFACE_VARIANT,
     )
 
     # Overseer > Logs and Overseer > Deployments, as popups.
@@ -87,14 +87,14 @@ def build_chrome(
         icon=ft.Icons.RECEIPT_LONG,
         tooltip="Logs",
         icon_size=24,
-        icon_color=Theme.Colors.TEXT_SECONDARY,
+        icon_color=ft.Colors.ON_SURFACE_VARIANT,
         on_click=lambda _: LogsPopup.open_on(page),
     )
     deployment_button = ft.IconButton(
         icon=ft.Icons.ROCKET_LAUNCH_OUTLINED,
         tooltip="Deployments",
         icon_size=24,
-        icon_color=Theme.Colors.TEXT_SECONDARY,
+        icon_color=ft.Colors.ON_SURFACE_VARIANT,
         on_click=lambda _: DeploymentsPopup.open_on(page),
     )
 
@@ -116,7 +116,7 @@ def build_chrome(
         icon=ft.Icons.LOGOUT,
         tooltip="Sign out",
         icon_size=24,
-        icon_color=Theme.Colors.TEXT_SECONDARY,
+        icon_color=ft.Colors.ON_SURFACE_VARIANT,
         on_click=handle_logout,
     )
     {%- endif %}
@@ -138,7 +138,7 @@ def build_chrome(
     uptime_text = ft.Text(
         value=_format_uptime(session_start),
         size=Theme.Typography.CAPTION,
-        color=Theme.Colors.TEXT_SECONDARY,
+        color=ft.Colors.ON_SURFACE_VARIANT,
         weight=ft.FontWeight.W_400,
         opacity=0.7,
     )
@@ -210,6 +210,16 @@ def build_chrome(
     )
 
 
+def offer_other_mode(theme_button: ft.IconButton, theme_manager: ThemeManager) -> None:
+    """The toggle shows, and names, the mode it switches to."""
+    if theme_manager.is_dark_mode:
+        theme_button.icon = ft.Icons.LIGHT_MODE
+        theme_button.tooltip = "Switch to Light Mode"
+    else:
+        theme_button.icon = ft.Icons.DARK_MODE
+        theme_button.tooltip = "Switch to Dark Mode"
+
+
 async def toggle_theme(
     theme_manager: ThemeManager,
     theme_button: ft.IconButton,
@@ -219,19 +229,12 @@ async def toggle_theme(
 ) -> None:
     """Toggle theme and update button icon.
 
-    The old per-image logo swap is gone: ``BrandMark`` reads its
-    colors from ``PulseColors`` which the ``ThemeManager`` already
-    retargets on toggle, so the chip recolors itself with the rest
-    of the chrome.
+    Every colour on the page names a theme role, so the mode flip
+    repaints the chrome (``BrandMark`` included) with everything else.
     """
     try:
         await theme_manager.toggle_theme()
-        if theme_manager.is_dark_mode:
-            theme_button.icon = ft.Icons.LIGHT_MODE
-            theme_button.tooltip = "Switch to Light Mode"
-        else:
-            theme_button.icon = ft.Icons.DARK_MODE
-            theme_button.tooltip = "Switch to Dark Mode"
+        offer_other_mode(theme_button, theme_manager)
 
         if is_page_connected():
             try:

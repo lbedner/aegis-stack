@@ -20,6 +20,7 @@ Durable storage for the paper an application accumulates: scans, statements, let
 - **Dedupe that is enforced, not hoped for** - uploading the same bytes twice returns the existing document with `200` instead of creating a second one, and a partial unique index makes that true under concurrency.
 - **A lifecycle** - a new version supersedes its predecessor rather than overwriting it, `protected` refuses deletion, and delete is a soft delete that frees the hash for re-filing later.
 - **Page-addressed extraction** - each page is read once and stored with how it was read, so a claim made from a document can cite the page and the method. See [Extraction](extraction.md).
+- **Mail** - a service of its own (`app/services/mail`), part of documents. See [Mail](#mail).
 - **Free-form tags** - `GET /tags` returns them with counts. Tags rather than a taxonomy: what counts as a category differs per application.
 - **An Overseer surface** - a Documents card and a three-tab modal (Documents, Activity, Tags) with a detail pane, a page strip, and a full-size page viewer with the transcript beside it.
 - **A health check** - document and page counts, storage backend, and whether anything is waiting to be read.
@@ -81,6 +82,34 @@ The service never touches a filesystem or a bucket directly. It calls the `Objec
 
 Adding the [storage component](../../components/storage/index.md) switches the default and adds the dev container. Because keys are hashes, switching backends is a copy of objects, not a migration of rows.
 
+## Mail
+
+Mail arrives two ways and is read one way. Each message is kept once, by its Message-ID, whatever file or pull brought it; its body is filed as a `letter` whose page is already read (the mail is text), and each attachment as a document of its own through the same store, deduplicated like any other upload (`source="mail"`, `channel="email"`). New paper is then handed to extraction; a reader that cannot start never fails the import.
+
+- **A dropped file** - a `.mbox` (a mailbox export) or `.eml` (one saved message) on the Overseer Documents upload is read as a job, on the worker where the stack has one. The same file twice is answered by the batch that already read it.
+- **An IMAP pull** - every 30 minutes the scheduler pulls the mailbox the secrets name, with an app password rather than OAuth. Read-only: the folder is EXAMINEd and bodies PEEKed, nothing is flagged, moved or deleted. It reads from now on: the first pull of a folder only notes where it ends, and each pull after asks for the UIDs above the last one seen, starting over when the server renumbers (a new UIDVALIDITY). A refused sign-in or an unreachable host is one line on the mailbox, never the password or the server's own words.
+- **Arrivals** - what came in and what each message became ("letter + 1 attachment", or why nothing), by the day it arrived: the **Mail** section of the Overseer Documents page (with the mailbox and how its last pull went), and the `arrivals` tool, which read the same rows.
+
+The pull's four settings are secrets, set in `.env` or on the Overseer Secrets page under *Mail (IMAP)*; the app password is checked with one sign-in before it is stored:
+
+| Secret | What |
+|--------|------|
+| `MAIL_IMAP_HOST` | the IMAP server, e.g. `imap.example.com` |
+| `MAIL_IMAP_USER` | the mailbox address |
+| `MAIL_IMAP_FOLDER` | the folder or label to read; `INBOX` when unset |
+| `MAIL_IMAP_PASSWORD` | an app password for that mailbox |
+
+**Who a sender is** is not the mail service's question. After a batch's messages are filed, ingest hands the new `MailMessage` rows (`from_address` is the sender) to every hook registered with `register_messages_filed(hook)`, each `async (db, messages, owner_user_id)` in a session of its own; one that raises is logged, never the import's failure. A contacts service plugs in there. The template registers nothing.
+
+```python
+from app.services.mail.ingest import register_messages_filed
+
+async def match_senders(db, messages, owner_user_id):
+    ...  # look the addresses up in one query, stage what you file on db
+
+register_messages_filed(match_senders)
+```
+
 ## Generated Files
 
 ```
@@ -103,6 +132,17 @@ my-app/
 │   ├── cards/documents_card.py
 │   └── modals/documents_modal.py, documents_detail_pane.py,
 │       documents_pages.py, documents_activity.py
+├── app/services/mail/
+│   ├── parse.py              # bytes to messages, stdlib only
+│   ├── ingest.py             # messages to rows and documents; the seam
+│   ├── jobs.py               # a dropped file's import as a job
+│   ├── pull.py               # the IMAP pull and its secrets
+│   ├── arrivals.py           # what came in, for the page and the tool
+│   ├── tools.py              # the arrivals tool
+│   ├── scheduled_jobs.py     # the pull, every 30 minutes
+│   ├── models.py             # mail_batch, mail_message, mail_attachment, mail_mailbox
+│   ├── queries.py
+│   └── settings.py
 └── tests/services/test_documents_service.py, test_document_extraction.py
     tests/api/test_documents_endpoints.py, test_document_pages.py
 ```
@@ -112,7 +152,11 @@ my-app/
 ```bash
 STORAGE_BACKEND=filesystem     # or s3, set for you by the storage component
 STORAGE_ROOT=storage_data      # filesystem backend only
+MAIL_IMPORT_MAX_BYTES=104857600   # the largest mail file the upload takes
+MAIL_IMPORT_MAX_MESSAGES=2000     # messages read from one file; the rest skipped with a warning
 ```
+
+The IMAP pull's settings are secrets; see [Mail](#mail).
 
 The S3 settings (`S3_ENDPOINT_URL`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`) belong to the storage component and are documented with it.
 

@@ -6,16 +6,17 @@ future route-centric tabs) can use the same color scheme.
 
 import flet as ft
 
+from app.components.frontend.theme import SERIES
 from app.components.frontend.theme import AegisTheme as Theme
 
 from .text import LabelText
 
 METHOD_COLORS: dict[str, str] = {
-    "GET": ft.Colors.BLUE,
-    "POST": ft.Colors.GREEN,
-    "PUT": ft.Colors.ORANGE,
-    "PATCH": ft.Colors.PURPLE,
-    "DELETE": ft.Colors.RED,
+    "GET": SERIES[3],
+    "POST": SERIES[5],
+    "PUT": SERIES[6],
+    "PATCH": SERIES[1],
+    "DELETE": Theme.Colors.ERROR,
 }
 
 
@@ -24,7 +25,7 @@ class MethodBadge(ft.Container):
 
     def __init__(self, method: str) -> None:
         super().__init__(
-            content=LabelText(method, color=Theme.Colors.BADGE_TEXT),
+            content=LabelText(method, color=ft.Colors.ON_PRIMARY),
             padding=ft.padding.symmetric(horizontal=6, vertical=2),
             bgcolor=METHOD_COLORS.get(method, ft.Colors.ON_SURFACE_VARIANT),
             border_radius=4,

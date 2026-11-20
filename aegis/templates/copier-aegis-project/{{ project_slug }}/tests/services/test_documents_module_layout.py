@@ -39,14 +39,15 @@ OWNERS = {
         "VisionReader",
     ],
     "app.services.documents.domains.extraction.pdf": ["PdfPages", "encode_png"],
-    "app.services.documents.domains.extraction.dispatch": [
-        "start_extraction",
-        "start_extraction_in_process",
-    ],
     "app.services.documents.domains.extraction.jobs": [
         "run_extraction",
         # The worker's entry, only where a worker runs it.
         *(["run_extraction_job"] if importlib.util.find_spec(WORKER) else []),
+    ],
+    "app.services.documents.domains.extraction.dispatch": [
+        "start_extraction",
+        "start_extraction_in_process",
+        "read_quietly",
     ],
 }
 

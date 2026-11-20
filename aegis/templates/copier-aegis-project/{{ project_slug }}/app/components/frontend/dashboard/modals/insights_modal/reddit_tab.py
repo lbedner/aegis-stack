@@ -18,6 +18,7 @@ from app.components.frontend.dashboard.modals.insights_modal.charts import (
     _pretty_date,
 )
 from app.core.config import settings
+from app.components.frontend.theme import SERIES
 
 
 # Event type → chip border/highlight color
@@ -80,9 +81,9 @@ class RedditTab(ft.Container):
                             [
                                 ft.Container(
                                     content=LabelText(
-                                        f"r/{subreddit}", color=Theme.Colors.BADGE_TEXT
+                                        f"r/{subreddit}", color=ft.Colors.ON_PRIMARY
                                     ),
-                                    bgcolor="#FF5722",
+                                    bgcolor=SERIES[6],
                                     padding=ft.padding.symmetric(
                                         horizontal=6, vertical=2
                                     ),
@@ -96,7 +97,7 @@ class RedditTab(ft.Container):
                                     f"{upvotes:,}",
                                     size=13,
                                     weight=ft.FontWeight.W_700,
-                                    color="#FF5722",
+                                    color=SERIES[6],
                                 ),
                                 SecondaryText("upvotes", size=Theme.Typography.CAPTION),
                                 ft.Container(width=8),
@@ -142,7 +143,7 @@ class RedditTab(ft.Container):
                     spacing=6,
                 ),
                 padding=ft.padding.all(10),
-                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                border=ft.border.all(1, ft.Colors.OUTLINE),
                 border_radius=8,
             )
 

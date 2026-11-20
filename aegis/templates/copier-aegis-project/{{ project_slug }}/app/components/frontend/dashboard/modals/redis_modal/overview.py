@@ -116,7 +116,9 @@ class PerformanceSection(ft.Container):
                 metric_row("Memory Usage", f"{used_memory_human} / {maxmemory_human}"),
                 metric_row("Memory Fragmentation", f"{mem_fragmentation:.2f}"),
                 metric_row("Operations/Sec", str(ops_per_sec)),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
+                ft.Divider(
+                    height=20,
+                ),
                 metric_row("Cache Hits", str(keyspace_hits)),
                 metric_row("Cache Misses", str(keyspace_misses)),
                 metric_row("Evicted Keys", str(evicted_keys)),

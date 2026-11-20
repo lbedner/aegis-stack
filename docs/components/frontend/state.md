@@ -19,7 +19,7 @@ here. If it can be re-fetched from the backend on demand, it does not.
 class SessionState:
     page: ft.Page
     api_client: APIClient
-    theme_manager: ThemeManager | None = None
+    theme_manager: ThemeManager  # built with the session (__post_init__)
     current_user: dict[str, Any] | None = None   # when auth is enabled
     _data: dict[str, Any] = field(default_factory=dict)
 
@@ -31,7 +31,7 @@ class SessionState:
 | --- | --- |
 | `page` | Backref to the Flet `ft.Page`. Convenient for helpers that take a `SessionState`. |
 | `api_client` | The per-session [API client](api-client.md). One instance per Flet session. |
-| `theme_manager` | The session's `ThemeManager` (theme tokens, dark/light, custom palette). |
+| `theme_manager` | The session's `ThemeManager`: its light/dark mode, the one htmx stores (the dashboard page copies it across). |
 | `current_user` | The signed-in user payload, populated by `is_authenticated()`. `None` until login. |
 | `_data` / `get` / `set` | A typed-loose bag for ad-hoc session values that do not deserve a real field. Use sparingly. |
 
@@ -40,10 +40,11 @@ class SessionState:
 `SessionState` lives on `page.data["session_state"]` for the lifetime of
 the Flet session. Two helpers manage it:
 
-- **`init_session_state(page, *, api_client, theme_manager=None)`** is
-  called once during the per-session bootstrap in
-  `app/components/frontend/main.py`. It constructs the `SessionState`,
-  stashes it on `page.data`, and returns it.
+- **`init_session_state(page, *, api_client)`** is called once during
+  the per-session bootstrap in `app/components/frontend/main.py`. It
+  constructs the `SessionState`, stashes it on `page.data`, and returns
+  it; the bootstrap then opens the page in the stored mode
+  (`theme_manager.initialize_themes()`), before the first screen.
 - **`get_session_state(page)`** is what views and controls call. It
   raises `RuntimeError` if the bootstrap never ran, which is the right
   failure mode: anything calling this expects a session to exist.

@@ -54,24 +54,23 @@ class CallDetail(ft.Column):
         if found is None:
             self.controls = [SecondaryText("This call is no longer kept.")]
         else:
-            dark = self.page is None or self.page.theme_mode == ft.ThemeMode.DARK
             failed = found["error"]
             self.controls = [
-                _block("Arguments", found["args"], found["args_lang"], dark),
-                _block("Error", failed, None, dark)
+                _block("Arguments", found["args"], found["args_lang"]),
+                _block("Error", failed, None)
                 if failed
-                else _block("Response", found["response"], found["response_lang"], dark),
+                else _block("Response", found["response"], found["response_lang"]),
                 *build_field_blocks([("Caller", found["facts"])]),
             ]
         if self.page is not None:
             self.update()
 
 
-def _block(label: str, text: str | None, lang: str | None, dark: bool) -> ft.Control:
+def _block(label: str, text: str | None, lang: str | None) -> ft.Control:
     """One part of a call, highlighted in ``lang``, its copy button taking
     the text itself; empty, not recorded."""
     body: ft.Control = (
-        copyable_markdown(f"````{lang or ''}\n{text}\n````", copy_text=text, dark=dark)
+        copyable_markdown(f"````{lang or ''}\n{text}\n````", copy_text=text)
         if text
         else SecondaryText("Not recorded")
     )
@@ -133,7 +132,7 @@ class McpDetailDialog(BaseDetailPopup):
     def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         metadata = component_data.metadata or {}
         tokens: list[ft.Control] = (
-            [ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT), McpTokensSection(page)]
+            [ft.Divider(height=1), McpTokensSection(page)]
             if ui_mcp.has_tokens()
             else []
         )
@@ -144,7 +143,7 @@ class McpDetailDialog(BaseDetailPopup):
             subtitle_text=get_component_subtitle(ui_mcp.NAME, metadata),
             sections=[
                 metric_row(counts(metadata)),
-                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                ft.Divider(height=1),
                 McpSection(),
                 *tokens,
             ],

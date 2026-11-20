@@ -73,7 +73,7 @@ class EmailTab(EditableConfigTab):
             header_controls.append(
                 ft.IconButton(
                     icon=ft.Icons.EDIT,
-                    icon_color=Theme.Colors.TEXT_SECONDARY,
+                    icon_color=ft.Colors.ON_SURFACE_VARIANT,
                     icon_size=16,
                     tooltip="Edit configuration",
                     on_click=self._toggle_edit_mode,
@@ -150,9 +150,13 @@ class EmailTab(EditableConfigTab):
                             ft.Container(height=Theme.Spacing.SM),
                             api_key_row,
                             from_address_row,
-                            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
+                            ft.Divider(
+                                height=20,
+                            ),
                             status_row,
-                            ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
+                            ft.Divider(
+                                height=20,
+                            ),
                             DomainsSection(),
                         ],
                         spacing=Theme.Spacing.SM,

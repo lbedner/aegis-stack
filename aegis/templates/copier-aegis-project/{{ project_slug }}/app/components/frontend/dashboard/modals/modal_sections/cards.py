@@ -180,7 +180,7 @@ class MilestoneCard(ft.Container):
         label: str,
         value: str,
         date: str,
-        accent_color: str = "#9CA3AF",
+        accent_color: str = ft.Colors.ON_SURFACE_VARIANT,
     ) -> None:
         super().__init__()
 

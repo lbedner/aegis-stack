@@ -143,7 +143,7 @@ def _balance_color(cents: int | None) -> str:
         return Theme.Colors.SUCCESS  # brand teal
     if value < 0:
         return Theme.Colors.ERROR
-    return Theme.Colors.TEXT_SECONDARY
+    return ft.Colors.ON_SURFACE_VARIANT
 
 
 def _month_label(month_key: str) -> str:
@@ -180,7 +180,7 @@ def _amount_cell(cents: int, *, excluded: bool = False) -> ft.Control:
     """
     return NumericText(
         _usd(cents),
-        color=Theme.Colors.TEXT_SECONDARY if excluded else ledger_amount_color(cents),
+        color=ft.Colors.ON_SURFACE_VARIANT if excluded else ledger_amount_color(cents),
         size=Theme.Typography.BODY_SMALL,
         weight=ft.FontWeight.W_500,
         text_align=ft.TextAlign.RIGHT,

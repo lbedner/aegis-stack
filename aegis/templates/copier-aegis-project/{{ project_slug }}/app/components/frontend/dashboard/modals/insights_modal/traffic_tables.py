@@ -63,7 +63,7 @@ class TrafficTable(ft.Column):
         super().__init__()
         self.controls = [
             H3Text(title),
-            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+            ft.Divider(height=1),
             DataTable(columns=TRAFFIC_COLUMNS, rows=rows, empty_message=empty_message),
         ]
         self.spacing = 6

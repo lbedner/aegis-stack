@@ -23,6 +23,7 @@ from app.components.frontend.controls import (
     MethodBadge,
     SecondaryText,
 )
+from app.components.frontend.theme import SERIES
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.config import settings
 from app.core.formatting import format_relative_time
@@ -130,7 +131,7 @@ class LoadTestsTab(ft.Container):
             MetricCard(
                 value=str(total_runs),
                 label="Runs",
-                color=ft.Colors.BLUE,
+                color=SERIES[3],
             ),
             MetricCard(
                 value=f"{avg_throughput:.0f}",
@@ -140,12 +141,12 @@ class LoadTestsTab(ft.Container):
             MetricCard(
                 value=f"{avg_p95:.1f}",
                 label="Avg p95 ms",
-                color=ft.Colors.AMBER,
+                color=Theme.Colors.WARNING,
             ),
             MetricCard(
                 value=str(failures),
                 label="Total failures",
-                color=ft.Colors.ERROR if failures else ft.Colors.GREY,
+                color=Theme.Colors.ERROR if failures else ft.Colors.ON_SURFACE_VARIANT,
             ),
         ]
 

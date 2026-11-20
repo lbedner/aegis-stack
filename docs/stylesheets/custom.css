@@ -61,7 +61,7 @@
 }
 
 /* Dark mode: replace Material's default slate-navy with Overseer's
-   off-black surfaces (DarkColorPalette in app/components/frontend/theme.py).
+   off-black surfaces (the dark palette in app/core/palette.json).
    Body text stays near-white for long-read comfort; teal is reserved for
    accents (links, headings, admonition borders) — set above. */
 [data-md-color-scheme="slate"] {

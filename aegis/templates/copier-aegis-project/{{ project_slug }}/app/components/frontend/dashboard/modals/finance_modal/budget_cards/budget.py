@@ -60,7 +60,7 @@ def budget_stats_cells(
         verdict_caption = "Left over at these settings"
         # The verdict cell colours in both directions - red when short,
         # accent teal when clear. It's the month's answer, not decoration.
-        verdict_color = Theme.Colors.ACCENT
+        verdict_color = Theme.Colors.PRIMARY
     else:
         verdict = _usd(net)
         verdict_caption = (
@@ -167,7 +167,7 @@ def outlook_stats_cells(
             outlook_month_label(entry.get("period_month", 0)),
             f"+{_usd(net)}" if net >= 0 else _usd(net),
             f"at these settings · ends around {_usd(entry.get('end_balance', 0))}",
-            Theme.Colors.ACCENT if net >= 0 else Theme.Colors.ERROR,
+            Theme.Colors.PRIMARY if net >= 0 else Theme.Colors.ERROR,
         ),
     ]
 
@@ -181,7 +181,7 @@ def outlook_chip(entry: dict[str, Any]) -> tuple[str, str]:
     month = _MONTH_NAMES[entry.get("period_month", 0) % 100 - 1][:3]
     dollars = round(balance / 100)
     label = f"{month} {'-' if balance < 0 else ''}${abs(dollars):,}"
-    return label, Theme.Colors.ERROR if balance < 0 else Theme.Colors.TEXT_SECONDARY
+    return label, Theme.Colors.ERROR if balance < 0 else ft.Colors.ON_SURFACE_VARIANT
 
 
 def budget_lines_grid(rows: list[ft.Control]) -> ft.ResponsiveRow:
@@ -223,7 +223,7 @@ def compact_budget_row(
         if status == "critical"
         else Theme.Colors.WARNING
         if status == "warn"
-        else Theme.Colors.TEXT_SECONDARY
+        else ft.Colors.ON_SURFACE_VARIANT
     )
     return ft.Column(
         [

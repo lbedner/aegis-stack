@@ -20,7 +20,7 @@ Example::
 
 import flet as ft
 
-from app.components.frontend.styles import PulseColors
+from app.components.frontend.theme import AegisTheme as Theme
 
 
 def busy_bar(*, width: int | None = None) -> ft.ProgressBar:
@@ -36,7 +36,7 @@ def busy_bar(*, width: int | None = None) -> ft.ProgressBar:
     """
     return ft.ProgressBar(
         width=width,
-        color=PulseColors.TEAL,
-        bgcolor=PulseColors.BORDER,
+        color=Theme.Colors.PRIMARY,
+        bgcolor=ft.Colors.OUTLINE,
         bar_height=4,
     )

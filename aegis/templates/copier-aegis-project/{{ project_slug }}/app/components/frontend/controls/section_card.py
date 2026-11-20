@@ -64,7 +64,7 @@ class SectionCard(ft.Container):
             padding=ft.padding.symmetric(
                 horizontal=Theme.Spacing.MD, vertical=header_padding_v
             ),
-            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
+            bgcolor=Theme.Colors.SURFACE_2,
             border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
         )
 

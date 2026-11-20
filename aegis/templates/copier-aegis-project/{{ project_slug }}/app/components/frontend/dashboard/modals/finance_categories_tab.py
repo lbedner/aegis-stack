@@ -149,9 +149,9 @@ class CategoriesTab(ft.Container):
 
         used = [i for i in items if i.get("transaction_count")]
         self._stats.controls = [
-            headline_stat("Groups", f"{len(groups):,}", Theme.Colors.TEXT_PRIMARY),
-            headline_stat("Categories", f"{len(items):,}", Theme.Colors.TEXT_PRIMARY),
-            headline_stat("Used in range", f"{len(used):,}", Theme.Colors.TEXT_PRIMARY),
+            headline_stat("Groups", f"{len(groups):,}", ft.Colors.ON_SURFACE),
+            headline_stat("Categories", f"{len(items):,}", ft.Colors.ON_SURFACE),
+            headline_stat("Used in range", f"{len(used):,}", ft.Colors.ON_SURFACE),
         ]
 
         # Busiest group first: the taxonomy's shape is more useful than
@@ -238,7 +238,7 @@ class CategoriesTab(ft.Container):
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
             SecondaryText(""),
-            NumericText(f"{count:,}", color=Theme.Colors.TEXT_SECONDARY),
+            NumericText(f"{count:,}", color=ft.Colors.ON_SURFACE_VARIANT),
             NumericText(_usd(net), color=ledger_amount_color(net)),
             SecondaryText(""),
         ]
@@ -248,9 +248,7 @@ class CategoriesTab(ft.Container):
         # taxonomy the import carried over, and seeing it is how you know
         # there is something to prune.
         unused = not child.get("transaction_count")
-        name_color = (
-            Theme.Colors.TEXT_SECONDARY if unused else Theme.Colors.TEXT_PRIMARY
-        )
+        name_color = ft.Colors.ON_SURFACE_VARIANT if unused else ft.Colors.ON_SURFACE
         return [
             ft.Container(
                 content=BodyText(child.get("_leaf") or "", color=name_color),
@@ -259,7 +257,7 @@ class CategoriesTab(ft.Container):
             SecondaryText(child.get("classification") or ""),
             NumericText(
                 f"{child.get('transaction_count', 0):,}",
-                color=Theme.Colors.TEXT_SECONDARY,
+                color=ft.Colors.ON_SURFACE_VARIANT,
             ),
             NumericText(
                 _usd(child.get("total")),

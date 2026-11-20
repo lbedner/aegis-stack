@@ -2,14 +2,16 @@
 
 Steward's documents surface in the Overseer: everything on file narrowed
 by search, kind and tag, a row opening its document in the drawer with
-each page as extraction stored it; every extraction run; and the tags. Reads go through ``DocumentService`` on the request's session, as
+each page as extraction stored it; every extraction run; the tags; and
+the mail that came in, with what each message became. Reads go through ``DocumentService`` on the request's session, as
 the operator (every owner's documents). Registered only in projects with
 the documents service (see ``overseer_sections``).
 """
 
+from collections.abc import AsyncIterator
 from typing import Any
 
-from app.core.formatting import format_bytes, format_relative_time
+from app.core.formatting import counted, format_bytes, format_relative_time
 from app.services.documents.service import (
     DOCUMENT_KINDS,
     Document,
@@ -18,16 +20,27 @@ from app.services.documents.service import (
     document_id_of,
     pages_for,
 )
+from app.services.mail.arrivals import Arrival, arrivals
+from app.services.mail.pull import mailbox_status
 from app.services.system.jobs import get_job_runner
 from app.services.system.models import ComponentStatus
 
 from .filters import short_date
+from .overseer_live import job_frames, job_state
 from .overseer_nav import SectionRequest, page_url
-from .rendering import drawer_state, ranked, status_cell, with_query
+from .rendering import drawer_state, hx_replace, ranked, status_cell, with_query
 
 SECTIONS = (
     (None, {"overview": "Overview"}),
-    ("Library", {"documents": "Documents", "activity": "Activity", "tags": "Tags"}),
+    (
+        "Library",
+        {
+            "documents": "Documents",
+            "activity": "Activity",
+            "tags": "Tags",
+            "mail": "Mail",
+        },
+    ),
 )
 
 PAGE = page_url("services", "documents")
@@ -39,6 +52,8 @@ LIST_SIZE = 200
 
 
 DRAWER_PARAM = "document"
+# The mail import the list follows, by job id (``mail_job_view``).
+MAIL_JOB_PARAM = "mail_job"
 
 
 def document_url(document_id: int, **filters: str | None) -> str:
@@ -75,6 +90,35 @@ def _row(
     }
 
 
+def mail_job_url(job_id: str) -> str:
+    """The list, following a mail import as it runs."""
+    return with_query(f"{PAGE}/documents", **{MAIL_JOB_PARAM: job_id})
+
+
+def mail_job_view(job: dict[str, Any]) -> dict[str, Any]:
+    """A mail import as the list shows it (``job_state``): ended, how many
+    messages it filed and what they carried."""
+
+    def ended(done: dict[str, Any]) -> dict[str, Any]:
+        said = (
+            f"{counted(done.get('messages_new', 0), 'message')} filed "
+            f"({done.get('messages_duplicate', 0):,} already on file): "
+            f"{counted(done.get('letters_filed', 0), 'letter')}, "
+            f"{counted(done.get('attachments_filed', 0), 'attachment')}."
+        )
+        return {"label": said, "tone": "muted"}
+
+    events = f"{PARTIALS}/mail/jobs/{job['job_id']}/events"
+    return job_state(job, events, "Importing mail", ended)
+
+
+def mail_job_events(job_id: str) -> AsyncIterator[str]:
+    """A mail import over SSE (``job_frames``), the last state loading the
+    list again so the documents it filed show."""
+    reload = hx_replace(f"{PAGE}/documents", "#documents-list")
+    return job_frames(job_id, mail_job_view, reload)
+
+
 async def _overview(service: DocumentService) -> dict[str, Any]:
     summary = await service.summary()
     by_kind = summary.by_kind
@@ -108,6 +152,8 @@ async def _documents(
     filters = {"q": q, "kind": kind, "tag": tag}
     raw = query.get(DRAWER_PARAM) or ""
     shown = await service.get(int(raw)) if raw.isdigit() else None
+    followed = query.get(MAIL_JOB_PARAM)
+    mail_job = await get_job_runner().lookup(followed) if followed else None
     return drawer_state(
         DRAWER_PARAM, drawer_url(shown.id) if shown and shown.id else None
     ) | {
@@ -117,6 +163,7 @@ async def _documents(
         "q": q,
         "path": path,
         "upload_url": f"{PARTIALS}/upload",
+        "mail_job": mail_job_view(mail_job.as_dict()) if mail_job else None,
     }
 
 
@@ -194,6 +241,47 @@ async def _activity(service: DocumentService) -> dict[str, Any]:
     }
 
 
+def _arrival_row(arrival: Arrival) -> dict[str, Any]:
+    """One message as the Mail table draws it: its subject opens the
+    letter it became, each attachment its document."""
+    letter = arrival.letter_id
+    return {
+        "sender": arrival.sender,
+        "subject": {
+            "label": arrival.subject,
+            "url": document_url(letter) if letter else None,
+        },
+        "attachments": [
+            {"label": a.filename, "url": document_url(a.document_id)}
+            for a in arrival.attachments
+        ]
+        or None,
+        "became": arrival.became,
+        "via": arrival.via,
+    }
+
+
+async def _mail(service: DocumentService) -> dict[str, Any]:
+    """The mailbox the app pulls and how its last pull went, then what came
+    in by day: the rows the ``arrivals`` tool reads."""
+    mailbox = await mailbox_status(service.db)
+    pulled = None
+    if mailbox is not None:
+        pulled = mailbox.error or (
+            f"last pulled {format_relative_time(mailbox.pulled_at)}"
+            if mailbox.pulled_at
+            else "nothing pulled yet"
+        )
+    return {
+        "mailbox": mailbox,
+        "pulled": pulled,
+        "days": [
+            {"date": day.date, "rows": [_arrival_row(m) for m in day.messages]}
+            for day in await arrivals(service.db, owner_user_id=None)
+        ],
+    }
+
+
 async def section_context(
     section: str, documents: ComponentStatus, req: SectionRequest
 ) -> dict[str, Any]:
@@ -209,4 +297,6 @@ async def section_context(
         return context | await _documents(service, dict(req.query), req.path)
     if section == "activity":
         return context | await _activity(service)
+    if section == "mail":
+        return context | await _mail(service)
     return context | {"tags": await service.tag_counts()}

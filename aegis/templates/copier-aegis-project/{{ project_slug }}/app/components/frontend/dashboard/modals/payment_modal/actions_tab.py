@@ -7,7 +7,6 @@ session for the selected product, and renders the resulting link.
 from typing import Any
 
 import flet as ft
-from app.components.frontend import styles
 from app.components.frontend.controls import (
     BodyText,
     H3Text,
@@ -289,7 +288,7 @@ class ActionsTab(ft.Container):
                         content=ft.Text(
                             checkout_url,
                             size=Theme.Typography.BODY_SMALL,
-                            color=styles.PulseColors.TEAL,
+                            color=Theme.Colors.PRIMARY,
                             weight=ft.FontWeight.W_500,
                             style=ft.TextStyle(
                                 decoration=ft.TextDecoration.UNDERLINE,

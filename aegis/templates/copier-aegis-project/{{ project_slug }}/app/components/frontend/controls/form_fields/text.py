@@ -11,7 +11,6 @@ from app.components.frontend.controls.form_fields.shared import (
     _input_kwargs,
 )
 from app.components.frontend.controls.text import LabelText
-from app.components.frontend.styles import PulseColors
 from app.components.frontend.theme import AegisTheme as Theme
 
 # cannot reflow it - see FormTextField.__init__.
@@ -267,7 +266,7 @@ class FormTextField(ft.Container):
         self._error = error
         if self._variant == "pulse":
             self._text_field.border_color = (
-                _PULSE_ERROR_BORDER if error else PulseColors.BORDER
+                _PULSE_ERROR_BORDER if error else ft.Colors.OUTLINE
             )
         else:
             self._text_field.border_color = (

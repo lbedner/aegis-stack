@@ -15,9 +15,7 @@ from app.services.system import ui_database
 from app.services.system.models import ComponentStatus
 
 
-def _build_migration_expanded_content(
-    migration: dict, is_dark_mode: bool
-) -> ft.Control:
+def _build_migration_expanded_content(migration: dict) -> ft.Control:
     """Build expanded content for a migration showing the code."""
     content = migration["content"]
     file_path = migration["file_path"]
@@ -31,14 +29,13 @@ def _build_migration_expanded_content(
             copyable_markdown(
                 f"```python\n{content}\n```",
                 copy_text=content,
-                dark=is_dark_mode,
             ),
         ],
         spacing=0,
     )
 
 
-def _build_migration_row(migration: dict, is_dark_mode: bool) -> ExpandableRow:
+def _build_migration_row(migration: dict) -> ExpandableRow:
     """Build expandable row for a single migration."""
     revision_color = Theme.Colors.SUCCESS if migration["current"] else None
 
@@ -50,18 +47,17 @@ def _build_migration_row(migration: dict, is_dark_mode: bool) -> ExpandableRow:
 
     return ExpandableRow(
         cells=cells,
-        expanded_content=_build_migration_expanded_content(migration, is_dark_mode),
+        expanded_content=_build_migration_expanded_content(migration),
     )
 
 
 class MigrationsTab(ft.Container):
     """Migrations tab with expandable migration history."""
 
-    def __init__(self, database_component: ComponentStatus, page: ft.Page) -> None:
+    def __init__(self, database_component: ComponentStatus) -> None:
         super().__init__()
         metadata = database_component.metadata or {}
         migrations = ui_database.migrations(metadata)
-        is_dark_mode = page.theme_mode == ft.ThemeMode.DARK
 
         columns = [
             DataTableColumn("Revision", width=140),
@@ -69,7 +65,7 @@ class MigrationsTab(ft.Container):
             DataTableColumn("Description"),
         ]
 
-        rows = [_build_migration_row(m, is_dark_mode) for m in migrations]
+        rows = [_build_migration_row(m) for m in migrations]
 
         table = ExpandableDataTable(
             columns=columns,

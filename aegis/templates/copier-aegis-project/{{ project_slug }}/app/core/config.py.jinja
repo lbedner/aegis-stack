@@ -16,6 +16,7 @@ from app.core.settings_base import SettingsBase
 {% set speech = ("voice_settings", "VoiceSettings") if include_ai and ai_voice else ("speech_settings", "SpeechServerSettings") if ollama_mode != "none" else none %}{% if speech %}from app.core.{{ speech[0] }} import {{ speech[1] }}{% endif %}
 {% if include_browser %}from app.components.browser.settings import BrowserSettings{% endif %}
 {% if include_meetings %}from app.services.meetings.settings import MeetingsSettings{% endif %}
+{% if include_documents %}from app.services.mail.settings import MailSettings{% endif %}
 {% if include_worker %}from app.core.queue_workers import DEFAULT_QUEUES, QueueWorker{% endif %}
 {%- for p in _plugins | default([]) %}
 {%- for s in p.wiring.settings_mixins %}
@@ -42,13 +43,11 @@ class Settings(
     {{ speech[1] }},
 {%- endif %}{%- if include_browser %}
     BrowserSettings,{%- endif %}{%- if include_meetings %}
-    MeetingsSettings,{%- endif %}
+    MeetingsSettings,{%- endif %}{%- if include_documents %}
+    MailSettings,{%- endif %}
     SettingsBase,
 ):
-    """
-    Defines application settings.
-    `model_config` is used to specify that settings should be loaded from a .env file.
-    """
+    """The application's settings, loaded from ``.env`` (``model_config``)."""
 
     # Project identity
     PROJECT_NAME: str = "{{ project_slug }}"

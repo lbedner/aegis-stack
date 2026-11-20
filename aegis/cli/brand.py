@@ -16,16 +16,16 @@ from typing import Any
 import typer
 
 AEGIS_TEAL = "#17CCBF"
-"""Primary teal/cyan — the brand standard accent (and success state)."""
+"""Primary teal: the generated app's ``primary`` (and success state)."""
 
 AEGIS_TEAL_DARK = "#248F87"
 """Darker teal — secondary accent."""
 
-AEGIS_WARNING = "#F5A623"
-"""Warning amber — matches the frontend theme's ``ACCENT_WARNING``."""
+AEGIS_WARNING = "#F59E0B"
+"""Warning amber: the generated app's ``warning`` (``app/core/palette.json``)."""
 
-AEGIS_ERROR = "#E23E3E"
-"""Error red — mirrors the theme's ``ACCENT_STOP``."""
+AEGIS_ERROR = "#EF4444"
+"""Error red: the generated app's ``error`` (``app/core/palette.json``)."""
 
 
 def _rgb(hex_color: str) -> tuple[int, int, int]:

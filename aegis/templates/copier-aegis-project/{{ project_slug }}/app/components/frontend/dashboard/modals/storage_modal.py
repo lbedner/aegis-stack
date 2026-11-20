@@ -80,7 +80,7 @@ class StorageDetailDialog(BaseDetailPopup):
             subtitle_text=get_component_subtitle(ComponentName.STORAGE, metadata),
             sections=[
                 OverviewSection(component_data),
-                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                ft.Divider(height=1),
                 connection,
             ],
             width=900,

@@ -145,7 +145,9 @@ class ActiveConnectionsSection(ft.Container):
                 H3Text("Active Connections"),
                 ft.Container(height=Theme.Spacing.SM),
                 header_row,
-                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                ft.Divider(
+                    height=1,
+                ),
                 ft.Column(
                     client_rows if client_rows else [BodyText("No active connections")],
                     spacing=0,
@@ -191,7 +193,9 @@ class ConnectionsTab(ft.Container):
                 ft.Container(height=Theme.Spacing.SM),
                 info_row("Host", f"{host}:{port}"),
                 info_row("URL", redis_url),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
+                ft.Divider(
+                    height=20,
+                ),
                 info_row("Connected Clients", str(connected_clients)),
                 info_row("Blocked Clients", str(blocked_clients)),
                 info_row("Total Connections", str(total_connections)),

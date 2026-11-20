@@ -183,7 +183,7 @@ def _split_lines_block(
             ft.Text(
                 _usd(split.get("amount", 0)),
                 size=Theme.Typography.BODY_SMALL,
-                color=Theme.Colors.TEXT_PRIMARY,
+                color=ft.Colors.ON_SURFACE,
             ),
         ]
         if split.get("memo"):
@@ -238,7 +238,7 @@ def transaction_tag_chips(
     for tag in shown:
         chip: ft.Control = Tag(
             tag.get("name", ""),
-            color=tag.get("color") or Theme.Colors.ACCENT,
+            color=tag.get("color") or Theme.Colors.PRIMARY,
             compact=compact,
         )
         if on_tap is not None:
@@ -254,7 +254,7 @@ def transaction_tag_chips(
                     ft.IconButton(
                         icon=ft.Icons.CLOSE,
                         icon_size=14,
-                        icon_color=Theme.Colors.TEXT_SECONDARY,
+                        icon_color=ft.Colors.ON_SURFACE_VARIANT,
                         tooltip=remove_tooltip,
                         on_click=lambda _e, t=tag: on_remove(t),
                         style=ft.ButtonStyle(padding=0),

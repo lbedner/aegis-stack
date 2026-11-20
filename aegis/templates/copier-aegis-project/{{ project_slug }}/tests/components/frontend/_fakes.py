@@ -22,6 +22,26 @@ def tap(
     )
 
 
+class FakeStorage:
+    """``page.client_storage``: the browser's localStorage, as a dict.
+    ``removed`` lists what was removed, in order."""
+
+    def __init__(self, stored: dict[str, Any] | None = None) -> None:
+        self.stored = dict(stored or {})
+        self.removed: list[str] = []
+
+    async def get_async(self, key: str) -> Any:
+        return self.stored.get(key)
+
+    async def set_async(self, key: str, value: Any) -> bool:
+        self.stored[key] = value
+        return True
+
+    async def remove_async(self, key: str) -> None:
+        self.removed.append(key)
+        self.stored.pop(key, None)
+
+
 class FakePage:
     """Just enough page for a component test.
 
@@ -37,6 +57,7 @@ class FakePage:
         self.updates = 0
         self.tasks: list[Any] = []
         self.overlay: list[Any] = []
+        self.client_storage = FakeStorage()
 
     def update(self, *controls: Any) -> None:
         self.updates += 1

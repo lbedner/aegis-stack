@@ -17,7 +17,7 @@ from .shaping import _format_relative_time
 
 SENTIMENT_COLORS: dict[str, str] = {
     "positive": Theme.Colors.SUCCESS,
-    "neutral": ft.Colors.BLUE_GREY_300,
+    "neutral": ft.Colors.ON_SURFACE_VARIANT,
     "negative": Theme.Colors.WARNING,
     "frustrated": Theme.Colors.ERROR,
 }
@@ -30,7 +30,7 @@ def sentiment_chart_sections(sentiment: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {
             "value": count,
-            "color": SENTIMENT_COLORS.get(value, ft.Colors.BLUE_GREY_300),
+            "color": SENTIMENT_COLORS.get(value, ft.Colors.ON_SURFACE_VARIANT),
             "label": f"{value.title()} ({count / total * 100:.0f}%)",
         }
         for value, count in distribution.items()

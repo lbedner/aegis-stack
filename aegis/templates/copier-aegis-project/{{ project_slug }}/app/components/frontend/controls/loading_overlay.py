@@ -27,7 +27,7 @@ import httpx
 from app.components.frontend.controls.busy_bar import busy_bar
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.text import BodyText, SecondaryText
-from app.components.frontend.styles import ColorPalette, PulseColors
+from app.components.frontend.theme import AegisTheme as Theme
 
 # SSE waits between events can be arbitrarily long (a cold local model
 # loads for minutes before its first status change), so the job stream
@@ -43,15 +43,17 @@ class LoadingOverlay(ft.Container):
         self._page = page
         self.visible = False
         self.expand = True
-        self.bgcolor = ft.Colors.with_opacity(0.6, ft.Colors.BLACK)
+        self.bgcolor = ft.Colors.with_opacity(0.6, ft.Colors.SCRIM)
         self.alignment = ft.alignment.center
         # Swallow clicks so nothing underneath is reachable while shown.
         self.on_click = lambda _e: None
-        self._label = BodyText("", color=PulseColors.TEXT, weight=ft.FontWeight.W_600)
+        self._label = BodyText(
+            "", color=ft.Colors.ON_SURFACE, weight=ft.FontWeight.W_600
+        )
         self._panel = ft.Container(
             padding=24,
-            bgcolor=PulseColors.CARD,
-            border=ft.border.all(1, PulseColors.BORDER),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            border=ft.border.all(1, ft.Colors.OUTLINE),
             border_radius=8,
             width=460,
         )
@@ -110,11 +112,11 @@ class LoadingOverlay(ft.Container):
         into a bug report or terminal.
         """
         icon_circle = ft.Container(
-            content=ft.Icon(ft.Icons.ERROR_OUTLINE, color=ft.Colors.WHITE, size=16),
+            content=ft.Icon(ft.Icons.ERROR_OUTLINE, color=ft.Colors.ON_ERROR, size=16),
             width=28,
             height=28,
             border_radius=14,
-            bgcolor=ColorPalette.ACCENT_STOP,
+            bgcolor=Theme.Colors.ERROR,
             alignment=ft.alignment.center,
         )
         self._panel.content = ft.Column(
@@ -123,7 +125,9 @@ class LoadingOverlay(ft.Container):
                     [
                         icon_circle,
                         BodyText(
-                            title, color=PulseColors.TEXT, weight=ft.FontWeight.W_600
+                            title,
+                            color=ft.Colors.ON_SURFACE,
+                            weight=ft.FontWeight.W_600,
                         ),
                     ],
                     spacing=12,
@@ -135,7 +139,9 @@ class LoadingOverlay(ft.Container):
                     content=ft.Column(
                         [
                             SecondaryText(
-                                message, color=PulseColors.MUTED, selectable=True
+                                message,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
+                                selectable=True,
                             )
                         ],
                         scroll=ft.ScrollMode.AUTO,

@@ -43,7 +43,7 @@ class LifecycleTab(ft.Container):
                     section=section,
                     details=entry["details"] or None,
                     badge="Security" if entry["security"] else None,
-                    badge_color=ft.Colors.AMBER if entry["security"] else None,
+                    badge_color=Theme.Colors.WARNING if entry["security"] else None,
                     inspector=self.inspector,
                 )
                 for entry in steps[key]

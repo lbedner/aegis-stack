@@ -7,7 +7,6 @@ from typing import Any, Literal
 import flet as ft
 
 from app.components.frontend.controls.text import LabelText
-from app.components.frontend.styles import PulseColors
 from app.components.frontend.theme import AegisTheme as Theme
 
 FormVariant = Literal["default", "pulse"]
@@ -19,7 +18,7 @@ _CLEAR_ICON_SIZE = 16
 _CLEAR_HIT_SIZE = 24
 
 # Error-state border for the pulse variant (matches the web frontend).
-_PULSE_ERROR_BORDER = "#E94E77"
+_PULSE_ERROR_BORDER = Theme.Colors.ERROR
 _PULSE_LABEL_STYLE = ft.TextStyle(letter_spacing=1.6)
 
 
@@ -28,7 +27,7 @@ def _build_label(text: str, variant: FormVariant) -> ft.Control:
     if variant == "pulse":
         return LabelText(
             text.upper(),
-            color=PulseColors.MUTED,
+            color=ft.Colors.ON_SURFACE_VARIANT,
             size=10,
             weight=ft.FontWeight.W_500,
             style=_PULSE_LABEL_STYLE,
@@ -48,12 +47,12 @@ def _input_kwargs(
     """
     if variant == "pulse":
         return {
-            "border_color": PulseColors.BORDER if not error else _PULSE_ERROR_BORDER,
-            "focused_border_color": PulseColors.TEAL,
-            "cursor_color": PulseColors.TEAL,
-            "bgcolor": PulseColors.CARD,
-            "text_style": ft.TextStyle(color=PulseColors.TEXT, size=14),
-            "hint_style": ft.TextStyle(color=PulseColors.MUTED, size=14),
+            "border_color": ft.Colors.OUTLINE if not error else _PULSE_ERROR_BORDER,
+            "focused_border_color": Theme.Colors.PRIMARY,
+            "cursor_color": Theme.Colors.PRIMARY,
+            "bgcolor": ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            "text_style": ft.TextStyle(color=ft.Colors.ON_SURFACE, size=14),
+            "hint_style": ft.TextStyle(color=ft.Colors.ON_SURFACE_VARIANT, size=14),
             "border_radius": 4,
             "filled": True,
             "content_padding": ft.padding.symmetric(horizontal=12, vertical=10),

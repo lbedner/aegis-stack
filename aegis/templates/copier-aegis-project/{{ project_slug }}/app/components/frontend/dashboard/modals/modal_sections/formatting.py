@@ -19,7 +19,7 @@ def headline_stat_color(cents: int) -> str:
     coloured, colour stops meaning anything and the one number in trouble
     no longer stands out.
     """
-    return Theme.Colors.ERROR if cents < 0 else Theme.Colors.TEXT_PRIMARY
+    return Theme.Colors.ERROR if cents < 0 else ft.Colors.ON_SURFACE
 
 
 def date_cell(
@@ -61,7 +61,7 @@ def health_dot(component_data: ComponentStatus, tooltip: str) -> StatusDot:
     healthy = component_data.status == ComponentStatusType.HEALTHY
     return status_dot(
         component_data.message,
-        Theme.Colors.ACCENT if healthy else Theme.Colors.ERROR,
+        Theme.Colors.PRIMARY if healthy else Theme.Colors.ERROR,
         tooltip,
     )
 
@@ -74,4 +74,4 @@ def ledger_amount_color(cents: int) -> str:
     tinting nearly every row points at nothing. Money coming IN is the
     exception, and that is what teal marks.
     """
-    return Theme.Colors.SUCCESS if cents > 0 else Theme.Colors.TEXT_PRIMARY
+    return Theme.Colors.SUCCESS if cents > 0 else ft.Colors.ON_SURFACE

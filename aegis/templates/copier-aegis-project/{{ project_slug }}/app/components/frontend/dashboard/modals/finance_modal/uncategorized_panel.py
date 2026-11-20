@@ -261,11 +261,11 @@ class UncategorizedPanel(
         # Indeterminate (value=None -> looping, not a fake percentage - the
         # sweep is one request/response, there's no real progress fraction
         # to report) - shown only while Auto-categorize is in flight. Same
-        # teal as the tab indicator (Theme.Colors.ACCENT, controls/tabs.py).
+        # teal as the tab indicator (Theme.Colors.PRIMARY, controls/tabs.py).
         self._progress = ft.ProgressBar(
             value=None,
-            color=Theme.Colors.ACCENT,
-            bgcolor=ft.Colors.with_opacity(0.15, Theme.Colors.ACCENT),
+            color=Theme.Colors.PRIMARY,
+            bgcolor=ft.Colors.with_opacity(0.15, Theme.Colors.PRIMARY),
             visible=False,
         )
         self._save_button = PulseButton(

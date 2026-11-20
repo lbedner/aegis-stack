@@ -423,7 +423,7 @@ class OverviewLoadMixin:
                 SecondaryText(
                     "By group",
                     size=Theme.Typography.CAPTION,
-                    color=Theme.Colors.TEXT_SECONDARY,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
                     weight=ft.FontWeight.W_600,
                 )
             )
@@ -437,7 +437,7 @@ class OverviewLoadMixin:
                 SecondaryText(
                     "Spending · last 30 days",
                     size=Theme.Typography.CAPTION,
-                    color=Theme.Colors.TEXT_SECONDARY,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
                     weight=ft.FontWeight.W_600,
                 )
             )

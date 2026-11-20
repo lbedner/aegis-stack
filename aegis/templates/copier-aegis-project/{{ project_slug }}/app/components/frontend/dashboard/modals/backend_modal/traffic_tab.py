@@ -17,6 +17,7 @@ from app.components.frontend.controls.expandable_data_table import (
     ExpandableDataTable,
     ExpandableRow,
 )
+from app.components.frontend.theme import SERIES
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system import ui_backend
 from app.services.system.models import ComponentStatus
@@ -98,17 +99,17 @@ class TrafficTab(ft.Container):
             MetricCard(
                 value=f"{total:,}",
                 label=f"Requests / {window_hours}h",
-                color=ft.Colors.BLUE,
+                color=SERIES[3],
             ),
             MetricCard(
                 value=str(len(sources)),
                 label="Source IPs",
-                color=ft.Colors.GREEN,
+                color=SERIES[5],
             ),
             MetricCard(
                 value=backend,
                 label="Store",
-                color=ft.Colors.PURPLE if backend == "redis" else ft.Colors.GREY,
+                color=SERIES[1] if backend == "redis" else ft.Colors.ON_SURFACE_VARIANT,
             ),
         ]
 
@@ -120,7 +121,7 @@ class TrafficTab(ft.Container):
                     content=ft.Row(
                         [
                             ft.Icon(
-                                ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.WHITE
+                                ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.ON_ERROR
                             ),
                             BodyText(ui_backend.dominant_source_message(dominant)),
                         ],

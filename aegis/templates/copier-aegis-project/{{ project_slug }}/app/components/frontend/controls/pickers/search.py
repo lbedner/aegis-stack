@@ -91,7 +91,9 @@ class SearchPickerButton(Dropdown):
                     content=self._search,
                     padding=ft.padding.symmetric(horizontal=Theme.Spacing.SM),
                 ),
-                ft.Divider(height=1, color=Theme.Colors.BORDER_SUBTLE),
+                ft.Divider(
+                    height=1,
+                ),
                 ft.Container(content=self._rows_column, height=_ROWS_HEIGHT),
             ],
             spacing=Theme.Spacing.SM,
@@ -161,7 +163,7 @@ class SearchPickerButton(Dropdown):
                 self._row(
                     f'+ Create "{typed}"',
                     lambda _e, text=typed: self._create(text),
-                    Theme.Colors.ACCENT,
+                    Theme.Colors.PRIMARY,
                 )
             )
         rows.extend(
@@ -172,7 +174,7 @@ class SearchPickerButton(Dropdown):
             rows = [
                 ft.Container(
                     content=ft.Text(
-                        "No matches", size=13, color=Theme.Colors.TEXT_SECONDARY
+                        "No matches", size=13, color=ft.Colors.ON_SURFACE_VARIANT
                     ),
                     padding=ft.padding.symmetric(
                         vertical=Theme.Spacing.SM, horizontal=Theme.Spacing.MD

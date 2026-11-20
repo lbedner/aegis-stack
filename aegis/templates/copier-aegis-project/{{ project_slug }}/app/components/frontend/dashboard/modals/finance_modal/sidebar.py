@@ -70,8 +70,8 @@ class AccountsSidebar(ft.Container):
         self.page = page
         self._on_select = on_select
         self.width = _SIDEBAR_WIDTH
-        self.bgcolor = Theme.Colors.SURFACE_1
-        self.border = ft.border.only(right=ft.BorderSide(1, Theme.Colors.BORDER_SUBTLE))
+        self.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
+        self.border = ft.border.only(right=ft.BorderSide(1, ft.Colors.OUTLINE))
         self.padding = ft.padding.symmetric(vertical=Theme.Spacing.SM)
         self._list = ft.Column(spacing=3, scroll=ft.ScrollMode.AUTO, expand=True)
         # One row, setup order: create a manual account, link a provider,
@@ -153,7 +153,7 @@ class AccountsSidebar(ft.Container):
                     SecondaryText(
                         text,
                         size=Theme.Typography.CAPTION,
-                        color=Theme.Colors.TEXT_SECONDARY,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
                         weight=ft.FontWeight.W_600,
                         expand=True,
                     ),
@@ -187,7 +187,7 @@ class AccountsSidebar(ft.Container):
         name = PrimaryText(
             label,
             size=Theme.Typography.BODY_SMALL,
-            color=Theme.Colors.TEXT_PRIMARY,
+            color=ft.Colors.ON_SURFACE,
             weight=ft.FontWeight.W_600 if bold else ft.FontWeight.W_400,
             no_wrap=True,
             overflow=ft.TextOverflow.ELLIPSIS,
@@ -200,7 +200,7 @@ class AccountsSidebar(ft.Container):
                     SecondaryText(
                         subtitle,
                         size=Theme.Typography.CAPTION,
-                        color=Theme.Colors.TEXT_SECONDARY,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
                         no_wrap=True,
                         overflow=ft.TextOverflow.ELLIPSIS,
                     ),
@@ -223,7 +223,7 @@ class AccountsSidebar(ft.Container):
         elif balance is not None and balance < 0:
             balance_color = Theme.Colors.ERROR
         else:
-            balance_color = Theme.Colors.TEXT_PRIMARY
+            balance_color = ft.Colors.ON_SURFACE
         bal = NumericText(
             _usd(balance) if balance is not None else "",
             size=Theme.Typography.BODY_SMALL,

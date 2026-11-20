@@ -214,7 +214,7 @@ class RecordDetailDialog(StyledAlertDialog):
             # reason the hero exists: a flat 1px OUTLINE panel on the
             # page's near-black background had no depth of its own.
             on_close=self._close,
-            accent_color=Theme.Colors.ACCENT,
+            accent_color=Theme.Colors.PRIMARY,
             width=600,
         )
 
@@ -247,7 +247,7 @@ class RecordDetailDialog(StyledAlertDialog):
             )
         ]
         if hero.chip_text:
-            rows.append(Tag(hero.chip_text, color=Theme.Colors.ACCENT))
+            rows.append(Tag(hero.chip_text, color=Theme.Colors.PRIMARY))
         return ft.Column(rows, spacing=Theme.Spacing.SM, tight=True)
 
     async def _close(self) -> None:

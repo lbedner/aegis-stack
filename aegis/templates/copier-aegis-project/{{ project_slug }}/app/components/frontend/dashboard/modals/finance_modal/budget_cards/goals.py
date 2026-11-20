@@ -114,7 +114,7 @@ def savings_goal_card(
     the same way a limit's bar opens its dial."""
     paused = goal.get("status") == "paused"
     progress = min(1.0, max(0.0, float(goal.get("progress") or 0)))
-    bar_color = Theme.Colors.TEXT_SECONDARY if paused else _budget_status_color("good")
+    bar_color = ft.Colors.ON_SURFACE_VARIANT if paused else _budget_status_color("good")
     body = ft.Column(
         [
             ft.Row(
@@ -124,7 +124,7 @@ def savings_goal_card(
                             [
                                 TableNameText(str(goal.get("name", ""))),
                                 *(
-                                    [Tag("linked", color=Theme.Colors.TEXT_SECONDARY)]
+                                    [Tag("linked", color=ft.Colors.ON_SURFACE_VARIANT)]
                                     if goal.get("funding") == "linked"
                                     else []
                                 ),
@@ -137,7 +137,7 @@ def savings_goal_card(
                     NumericText(
                         f"{progress * 100:.0f}%",
                         size=Theme.Typography.BODY_SMALL,
-                        color=Theme.Colors.TEXT_SECONDARY,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
                 ],
                 spacing=Theme.Spacing.SM,

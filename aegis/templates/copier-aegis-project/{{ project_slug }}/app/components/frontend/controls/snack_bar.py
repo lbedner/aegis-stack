@@ -22,13 +22,13 @@ from typing import ClassVar
 import flet as ft
 
 from app.components.frontend.controls.text import BodyText, SecondaryText
-from app.components.frontend.styles import ColorPalette, PulseColors
+from app.components.frontend.theme import AegisTheme as Theme
 
 
 class BaseSnackBar(ft.SnackBar):
     """Base for Pulse-styled snackbars. Subclass to set accent + icon + title."""
 
-    accent: ClassVar[str] = PulseColors.MUTED
+    accent: ClassVar[str] = ft.Colors.ON_SURFACE_VARIANT
     icon: ClassVar[str] = ft.Icons.INFO_OUTLINE
     title: ClassVar[str] = "Notice"
 
@@ -44,7 +44,7 @@ class BaseSnackBar(ft.SnackBar):
         accent = self.accent
 
         icon_circle = ft.Container(
-            content=ft.Icon(self.icon, color=ft.Colors.WHITE, size=16),
+            content=ft.Icon(self.icon, color=ft.Colors.SURFACE, size=16),
             width=28,
             height=28,
             border_radius=14,
@@ -54,8 +54,8 @@ class BaseSnackBar(ft.SnackBar):
 
         body = ft.Column(
             controls=[
-                BodyText(title, color=PulseColors.TEXT, weight=ft.FontWeight.W_600),
-                SecondaryText(message, color=PulseColors.MUTED, size=12),
+                BodyText(title, color=ft.Colors.ON_SURFACE, weight=ft.FontWeight.W_600),
+                SecondaryText(message, color=ft.Colors.ON_SURFACE_VARIANT, size=12),
             ],
             spacing=2,
             tight=True,
@@ -71,12 +71,12 @@ class BaseSnackBar(ft.SnackBar):
                 vertical_alignment=ft.CrossAxisAlignment.START,
             ),
             padding=ft.padding.symmetric(horizontal=14, vertical=12),
-            bgcolor=PulseColors.CARD,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             border=ft.border.only(
                 left=ft.BorderSide(width=2, color=accent),
-                top=ft.BorderSide(width=1, color=PulseColors.BORDER),
-                right=ft.BorderSide(width=1, color=PulseColors.BORDER),
-                bottom=ft.BorderSide(width=1, color=PulseColors.BORDER),
+                top=ft.BorderSide(width=1, color=ft.Colors.OUTLINE),
+                right=ft.BorderSide(width=1, color=ft.Colors.OUTLINE),
+                bottom=ft.BorderSide(width=1, color=ft.Colors.OUTLINE),
             ),
             border_radius=8,
         )
@@ -85,7 +85,7 @@ class BaseSnackBar(ft.SnackBar):
             content=card,
             duration=duration,
             show_close_icon=True,
-            close_icon_color=PulseColors.MUTED,
+            close_icon_color=ft.Colors.ON_SURFACE_VARIANT,
             bgcolor=ft.Colors.TRANSPARENT,
             elevation=0,
             padding=0,
@@ -102,7 +102,7 @@ class BaseSnackBar(ft.SnackBar):
 class SuccessSnackBar(BaseSnackBar):
     """Teal accent, check icon. Confirmations and successful actions."""
 
-    accent = PulseColors.TEAL
+    accent = Theme.Colors.PRIMARY
     icon = ft.Icons.CHECK_CIRCLE_OUTLINE
     title = "Success"
 
@@ -110,7 +110,7 @@ class SuccessSnackBar(BaseSnackBar):
 class ErrorSnackBar(BaseSnackBar):
     """Red accent, error icon. Failures the user should notice."""
 
-    accent = ColorPalette.ACCENT_STOP
+    accent = Theme.Colors.ERROR
     icon = ft.Icons.ERROR_OUTLINE
     title = "Error"
 
@@ -118,7 +118,7 @@ class ErrorSnackBar(BaseSnackBar):
 class WarningSnackBar(BaseSnackBar):
     """Amber accent, warning icon. Recoverable issues / cautions."""
 
-    accent = PulseColors.AMBER
+    accent = Theme.Colors.WARNING
     icon = ft.Icons.WARNING_AMBER_OUTLINED
     title = "Warning"
 
@@ -126,6 +126,6 @@ class WarningSnackBar(BaseSnackBar):
 class InfoSnackBar(BaseSnackBar):
     """Muted accent, info icon. Non-critical notices."""
 
-    accent = PulseColors.MUTED
+    accent = ft.Colors.ON_SURFACE_VARIANT
     icon = ft.Icons.INFO_OUTLINE
     title = "Notice"

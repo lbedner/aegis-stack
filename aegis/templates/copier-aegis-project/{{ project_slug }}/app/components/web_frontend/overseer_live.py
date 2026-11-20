@@ -103,7 +103,7 @@ def frame(event: str, html: str) -> str:
 # which closes the stream; each state rendered in ``JOB_TEMPLATE``.
 JOB_EVENT = "job"
 JOB_DONE = "job-done"
-JOB_TEMPLATE = "pages/overseer/ai/_job.html"
+JOB_TEMPLATE = "pages/overseer/_job.html"
 
 
 def job_state(

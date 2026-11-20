@@ -18,6 +18,7 @@ from app.components.frontend.controls.expandable_data_table import (
     ExpandableDataTable,
     ExpandableRow,
 )
+from app.components.frontend.theme import SERIES
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system import ui_backend
 from app.services.system.models import ComponentStatus
@@ -113,7 +114,7 @@ class PerformanceTab(ft.Container):
             MetricCard(
                 value=str(total_requests),
                 label="Total Requests",
-                color=ft.Colors.BLUE,
+                color=SERIES[3],
             ),
             MetricCard(
                 value=str(summary.get("tracked_endpoints", 0)),
@@ -123,12 +124,12 @@ class PerformanceTab(ft.Container):
             MetricCard(
                 value=f"{float(summary.get('avg_ms', 0.0) or 0.0):.1f}",
                 label="Avg ms",
-                color=ft.Colors.PURPLE,
+                color=SERIES[1],
             ),
             MetricCard(
                 value=f"{float(summary.get('p95_ms', 0.0) or 0.0):.1f}",
                 label="p95 ms",
-                color=ft.Colors.AMBER,
+                color=Theme.Colors.WARNING,
             ),
         ]
 

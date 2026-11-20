@@ -1,6 +1,7 @@
 """Actions for the Overseer Documents page: the drawer for one document
-and its page previews, upload, save a document's details, tag and untag,
-read its pages, download it, and retire it.
+and its page previews, upload (a mailbox export there is an import,
+followed as it runs), save a document's details, tag and untag, read its
+pages, download it, and retire it.
 Mounted by ``routes/pages.py`` at ``overseer_documents.PARTIALS``; every
 write goes through ``DocumentService`` on the request's session.
 """
@@ -9,12 +10,15 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from app.components.backend.api.documents.pages import page_image
 from app.components.web_frontend import overseer_documents
+from app.components.web_frontend.overseer_live import event_stream, heartbeat
 from app.components.web_frontend.rendering import dialog, go_to, toast_response
-from app.core.formatting import safe_filename
+from app.core.config import settings
+from app.core.formatting import format_bytes, safe_filename
+from app.core.storage import get_storage
 from app.services.documents.deps import get_document_service
 from app.services.documents.service import (
     DocumentPage,
@@ -23,6 +27,8 @@ from app.services.documents.service import (
     page_for,
     start_extraction,
 )
+from app.services.mail.jobs import start_mail_import
+from app.services.mail.parse import is_mail_export
 
 router = APIRouter(prefix=overseer_documents.PARTIALS)
 
@@ -92,8 +98,13 @@ async def upload(
     kind: Annotated[str, Form()] = "other",
     service: DocumentService = Depends(get_document_service),
 ) -> Response:
-    """File the bytes (the same bytes are filed once), then open the document."""
+    """File the bytes (the same bytes are filed once), then open the document.
+
+    A mailbox export is not a document: it is a job that files many. The
+    bytes go to storage and the list follows the import as it runs."""
     name = safe_filename(file.filename or "", fallback="document")
+    if is_mail_export(file.filename):
+        return await _import_mail(file, name)
     document = await service.ingest(
         await file.read(), title=name, kind=kind, media_type=file.content_type
     )
@@ -102,6 +113,28 @@ async def upload(
         f"Filed {document.title}",
         target="#overseer-main",
     )
+
+
+async def _import_mail(file: UploadFile, name: str) -> Response:
+    """Store the export (refused past ``MAIL_IMPORT_MAX_BYTES``, read no
+    further than one byte past it) and start reading it."""
+    cap = settings.MAIL_IMPORT_MAX_BYTES
+    data = await file.read(cap + 1)
+    if len(data) > cap:
+        return toast_response(f"{name} is larger than {format_bytes(cap)}.", "error")
+    key = await get_storage().put(data, content_type=file.content_type)
+    job_id = await start_mail_import(key, file_name=name, owner_user_id=None)
+    return go_to(
+        overseer_documents.mail_job_url(job_id),
+        f"Importing {name}...",
+        target="#overseer-main",
+    )
+
+
+@router.get("/mail/jobs/{job_id}/events")
+async def mail_job_events(job_id: str) -> StreamingResponse:
+    """A mail import, pushed to the list as it changes."""
+    return event_stream(heartbeat(overseer_documents.mail_job_events(job_id)))
 
 
 @router.post("/{document_id}")

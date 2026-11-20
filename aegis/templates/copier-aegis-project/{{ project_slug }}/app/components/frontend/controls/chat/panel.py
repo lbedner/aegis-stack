@@ -119,7 +119,7 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
                     ft.Icon(
                         ft.Icons.ARROW_DROP_DOWN,
                         size=16,
-                        color=Theme.Colors.TEXT_SECONDARY,
+                        color=ft.Colors.ON_SURFACE_VARIANT,
                     ),
                 ],
                 spacing=2,

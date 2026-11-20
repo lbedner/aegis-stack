@@ -59,11 +59,9 @@ class TestTheCompactRow:
         assert bars[0].height == 4
 
     def test_a_healthy_line_wears_no_accent_on_its_percent(self) -> None:
-        from app.components.frontend.theme import AegisTheme as Theme
-
         row = self._row(status="good")
         pct = next(c for c in _walk(row) if getattr(c, "value", None) == "29%")
-        assert pct.color == Theme.Colors.TEXT_SECONDARY
+        assert pct.color == ft.Colors.ON_SURFACE_VARIANT
 
     def test_trouble_colors_the_percent(self) -> None:
         from app.components.frontend.theme import AegisTheme as Theme

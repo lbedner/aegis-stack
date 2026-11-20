@@ -17,6 +17,7 @@ from app.components.worker.tasks.eval_tasks import (
     generate_evals_task,
     run_evals_task,
 )
+from app.components.worker.tasks.mail_tasks import mail_import_task
 from app.components.worker.tasks.rag_tasks import embed_files_task
 from app.components.worker.tasks.service_jobs import service_job_tasks
 from app.components.worker.tasks.simple_system_tasks import (
@@ -47,6 +48,9 @@ class WorkerSettings:
         # A picture shared in chat, read into its paste index.
         if present("app.services.ai.domains.chat.pastes"):
             functions.append(read_photo_task)
+    if present("app.services.mail"):
+        # A mailbox export, read into documents.
+        functions.append(mail_import_task)
     if present("app.services.ai.domains.chat.summary"):
         # A long conversation's turns out of view, folded into its summary.
         functions.append(fold_conversation_task)

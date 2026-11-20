@@ -13,7 +13,6 @@ from app.components.frontend.controls import (
 from app.components.frontend.dashboard.activity_feed.grouping import (
     EventGroup,
 )
-from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.activity import ActivityEvent
 
 from ..cards.card_utils import get_status_color
@@ -86,7 +85,7 @@ class ExpandableActivityRow(ft.Container):
             self._expand_icon = ft.Icon(
                 ft.Icons.EXPAND_MORE,
                 size=16,
-                color=Theme.Colors.TEXT_SECONDARY,
+                color=ft.Colors.ON_SURFACE_VARIANT,
             )
             header_content.controls.append(self._expand_icon)
 
@@ -153,7 +152,7 @@ class GroupedActivityRow(ft.Container):
         self._expand_icon = ft.Icon(
             ft.Icons.EXPAND_MORE,
             size=16,
-            color=Theme.Colors.TEXT_SECONDARY,
+            color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
         # Component display name (capitalize first letter)

@@ -59,7 +59,7 @@ class UseModelControl(ft.Container):
         """Switch the app to this model, then refresh the table."""
         from app.components.frontend.state.session_state import get_session_state
 
-        self.content = SecondaryText("Switching...", color=Theme.Colors.ACCENT)
+        self.content = SecondaryText("Switching...", color=Theme.Colors.PRIMARY)
         self.update()
 
         api = get_session_state(self._page).api_client
@@ -134,7 +134,7 @@ class ModelActionButton(ft.Container):
             [
                 ft.ProgressRing(width=16, height=16, stroke_width=2),
                 SecondaryText(
-                    f"{self._action.capitalize()}ing...", color=Theme.Colors.ACCENT
+                    f"{self._action.capitalize()}ing...", color=Theme.Colors.PRIMARY
                 ),
             ],
             spacing=4,

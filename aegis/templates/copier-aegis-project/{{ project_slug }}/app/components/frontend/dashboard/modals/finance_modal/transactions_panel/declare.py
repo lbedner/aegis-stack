@@ -182,7 +182,7 @@ class DeclareMixin(DeclareFollowupMixin):
                         "Separate bill. "
                         f"{group.get('existing_bill_name') or 'An existing bill'} "
                         "keeps its own transactions.",
-                        color=Theme.Colors.ACCENT,
+                        color=Theme.Colors.PRIMARY,
                     )
                 )
             sections.append(

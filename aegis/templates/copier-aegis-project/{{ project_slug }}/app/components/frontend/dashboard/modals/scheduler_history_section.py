@@ -38,7 +38,7 @@ COL_WIDTH_STARTED = 150
 COL_WIDTH_STATUS = 80
 
 _STATUS_FILTER_OPTIONS: list[FilterOption] = [
-    ("All", "all", Theme.Colors.ACCENT),
+    ("All", "all", Theme.Colors.PRIMARY),
     ("Success", "success", Theme.Colors.SUCCESS),
     ("Failed", "failed", Theme.Colors.ERROR),
     ("Running", "running", Theme.Colors.INFO),
@@ -138,7 +138,7 @@ class SchedulerHistorySection(PaginatedHistorySection):
                 "status": FilterSpec(
                     icon=ft.Icons.FILTER_LIST,
                     options=_STATUS_FILTER_OPTIONS,
-                    dot_color=Theme.Colors.ACCENT,
+                    dot_color=Theme.Colors.PRIMARY,
                 ),
             },
         )

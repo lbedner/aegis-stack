@@ -141,7 +141,9 @@ class OverviewTab(OverviewLoadMixin, OverviewDrilldownMixin, FinancePanel):
                 # Separates the headline banner from the charts below, so
                 # the figures read as a summary OF the page rather than as
                 # a caption on the first card.
-                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                ft.Divider(
+                    height=1,
+                ),
                 self._body,
             ],
             spacing=Theme.Spacing.MD,

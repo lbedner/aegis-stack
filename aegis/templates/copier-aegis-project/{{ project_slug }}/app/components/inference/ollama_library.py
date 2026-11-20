@@ -11,6 +11,8 @@ file. It runs on the host, where both live (``inference link-ollama``).
 import json
 import os
 from pathlib import Path
+import shutil
+import subprocess
 
 GGUF_LAYER = "application/vnd.ollama.image.model"
 REGISTRY = "registry.ollama.ai"  # names on it drop the host, and "library/"
@@ -22,6 +24,28 @@ def _is_gguf(blob: Path) -> bool:
             return f.read(4) == b"GGUF"
     except OSError:
         return False
+
+
+def llama_reads(blob: Path) -> bool:
+    """Whether the llama.cpp installed here loads ``blob``.
+
+    Ollama writes some GGUF files in a form llama.cpp rejects (gpt-oss's
+    architecture under its own name, qwen3.6's rope sections one short),
+    and which ones changes with each release of either. So llama.cpp says:
+    its ``llama-fit-params`` reads a model's settings as a load does, without
+    its weights, in about a tenth of a second. Where llama.cpp is not
+    installed, nothing can be checked and the file is taken.
+    """
+    tool = shutil.which("llama-fit-params")
+    if tool is None:
+        return True
+    try:
+        done = subprocess.run(
+            [tool, "-m", str(blob), "-c", "512"], capture_output=True, timeout=60
+        )
+    except subprocess.TimeoutExpired:
+        return False
+    return done.returncode == 0
 
 
 def _name(host: str, repo: list[str], tag: str) -> str:
@@ -68,18 +92,26 @@ def link_ollama(models_dir: Path, ollama_dir: Path) -> list[str]:
 
     A name already there (the user's own file, or an earlier link) stays as
     it is, and a file already there under another name is not listed a
-    second time. A link to a blob Ollama no longer has is removed: the
-    router would list a model it cannot load.
+    second time. A link into Ollama's blobs that is none of these models
+    (Ollama removed it, or llama.cpp cannot load it: ``llama_reads``) is removed: the router
+    would list a model it cannot load.
     """
     models_dir.mkdir(parents=True, exist_ok=True)
     blobs = (ollama_dir / "blobs").resolve()
+    models = {
+        name: blob
+        for name, blob in ollama_models(ollama_dir).items()
+        if llama_reads(blob)
+    }
+    kept = {blob.resolve() for blob in models.values()}
     for entry in models_dir.iterdir():
-        if entry.is_symlink() and not entry.exists():
-            if Path(os.readlink(entry)).resolve().parent == blobs:
+        if entry.is_symlink():
+            target = Path(os.readlink(entry)).resolve()
+            if target.parent == blobs and target not in kept:
                 entry.unlink()
     present = {entry.resolve() for entry in models_dir.iterdir()}
     linked = []
-    for name, blob in ollama_models(ollama_dir).items():
+    for name, blob in models.items():
         link = models_dir / f"{name.replace('/', '--')}.gguf"
         if link.exists() or link.is_symlink() or blob.resolve() in present:
             continue

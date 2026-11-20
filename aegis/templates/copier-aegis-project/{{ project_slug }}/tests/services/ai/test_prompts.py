@@ -59,3 +59,27 @@ class TestMemoryContext:
         prompt = build_system_prompt()
 
         assert "## Saved User Memory" not in prompt
+
+
+class TestThePersonaKeepsHerShort:
+    """A local model followed every "say more" line at once and called a
+    tool per part (2026-11-19): the plain answer has a size, and the tool
+    for a question is named."""
+
+    def test_a_plain_answer_has_a_size(self) -> None:
+        assert "120 words" in DEFAULT_SYSTEM_PROMPT
+
+    def test_the_tool_for_a_question_is_named(self) -> None:
+        section = DEFAULT_SYSTEM_PROMPT.split("## Which tool I reach for")[1]
+        section = section.split("\n## ")[0]
+
+        assert "one ontology call" in section and "not also" in section
+        assert "a list of ids" in section
+
+    def test_health_takes_the_parts_name_not_its_map_id(self) -> None:
+        """The map's ids (``component:worker``) are the ontology's; the
+        health tool wants the bare name, and a model shown only the id
+        passed ``component:backend`` to it (eval, 2026-11-20)."""
+        section = DEFAULT_SYSTEM_PROMPT.split("## Which tool I reach for")[1]
+
+        assert '``component="backend"``' in section

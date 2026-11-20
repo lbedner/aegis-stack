@@ -17,6 +17,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.tools import RunContext
 
+from app.core.config import settings as app_settings
 from app.services.ai.domains.llm.base import (
     ProviderError,
     require_api_key,
@@ -174,6 +175,11 @@ def _model_settings(config: Any) -> ModelSettings:
     }
     if _supports_custom_temperature(config.model):
         kwargs["temperature"] = config.temperature
+    # llama-server's cap on a reply's thinking, which it writes no faster
+    # than the answer; no other server reads the field.
+    budget = getattr(app_settings, "LLAMACPP_THINKING_TOKENS", -1)
+    if budget >= 0 and getattr(config, "provider", None) == AIProvider.LLAMACPP:
+        kwargs["extra_body"] = {"thinking_budget_tokens": budget}
     # Effort is an Anthropic-only knob (thinking depth / token spend). Lazy
     # import mirrors ``_get_model_class``: the anthropic extra may not be
     # installed when another provider is configured.

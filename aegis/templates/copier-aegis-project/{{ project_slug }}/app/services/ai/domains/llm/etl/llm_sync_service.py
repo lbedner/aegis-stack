@@ -311,6 +311,7 @@ class LLMSyncService(UpsertMixin):
                 logger.warning(error_msg)
                 result.errors.append(error_msg)
                 continue
+        self._retire_unserved(vendor, {m.model_id for m in models}, result, dry_run)
 
         if not dry_run:
             self.session.commit()
@@ -323,6 +324,23 @@ class LLMSyncService(UpsertMixin):
         )
 
         return result
+
+    def _retire_unserved(
+        self, vendor: LLMOrg, served: set[str], result: SyncResult, dry_run: bool
+    ) -> None:
+        """Turn off the engine's models it no longer serves (removed, or one
+        it cannot load), so the picker stops offering them; serving one
+        again turns it back on (``_sync_local_model``)."""
+        for model in self._model_cache.values():
+            if (
+                model.served_by_org_id == vendor.id
+                and model.model_id not in served
+                and model.enabled
+            ):
+                model.enabled = False
+                if not dry_run:
+                    self.session.add(model)
+                result.models_updated += 1
 
     def _sync_local_model(
         self,
@@ -367,6 +385,7 @@ class LLMSyncService(UpsertMixin):
                     self._update_if_changed(existing, "title", title),
                     self._update_if_changed(existing, "description", description),
                     self._update_if_changed(existing, "served_by_org_id", vendor.id),
+                    self._update_if_changed(existing, "enabled", True),
                     bool(context_window)
                     and self._update_if_changed(
                         existing, "context_window", context_window

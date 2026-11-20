@@ -11,6 +11,15 @@ from tests._cli import invoke
 from tests._fake_ollama import SPEECH_READY, speaking
 
 
+@pytest.fixture(autouse=True)
+def llama_reads_all(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The fake models here are none llama.cpp would load, where it is
+    installed (``ollama_library.llama_reads`` has its own tests)."""
+    from app.components.inference import ollama_library
+
+    monkeypatch.setattr(ollama_library, "llama_reads", lambda blob: True)
+
+
 def test_speech_says_what_the_server_reports(monkeypatch: pytest.MonkeyPatch) -> None:
     closed = SPEECH_READY.model_copy(
         update={"closed": ["ALLOW_DEV_UNLOAD"], "threads": 12}
@@ -153,3 +162,5 @@ def test_llama_without_ollama_serves_the_folder_alone(
 
     assert invoke(["inference", "llama"]).exit_code == 0
     assert (tmp_path / "models").is_dir() and became
+    # Unset, it still starts with what chat needs of it.
+    assert type(settings).model_fields["LLAMACPP_ARGS"].default == "-fa on -np 2 -kvu"

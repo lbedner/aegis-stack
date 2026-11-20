@@ -399,6 +399,49 @@ class TestLocalModelPatience:
         assert client.call_args.kwargs["max_retries"] == 0
 
 
+def _budget(monkeypatch: pytest.MonkeyPatch, tokens: int) -> None:
+    """The thinking budget the app is set to, with or without the setting."""
+    from types import SimpleNamespace
+
+    from app.services.ai.domains.llm import model_factory
+
+    monkeypatch.setattr(
+        model_factory, "app_settings", SimpleNamespace(LLAMACPP_THINKING_TOKENS=tokens)
+    )
+
+
+class TestLlamaCppThinkingBudget:
+    """A local model writes its thinking at the speed it writes its answer,
+    and unbounded it was most of a turn: llama-server takes a budget per
+    request (``thinking_budget_tokens``), which only it is sent. The setting
+    is the inference component's, so a stack without it sets none."""
+
+    def test_llamacpp_thinks_within_the_budget(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _budget(monkeypatch, 256)
+        config = AIServiceConfig(provider=AIProvider.LLAMACPP, model="qwen")
+
+        assert _model_settings(config)["extra_body"] == {"thinking_budget_tokens": 256}
+
+    @pytest.mark.parametrize(
+        ("provider", "budget"),
+        [
+            (AIProvider.LLAMACPP, -1),
+            (AIProvider.OLLAMA, 256),
+            (AIProvider.OPENAI, 256),
+        ],
+    )
+    def test_no_budget_set_or_another_server_sends_none(
+        self, monkeypatch: pytest.MonkeyPatch, provider: AIProvider, budget: int
+    ) -> None:
+        _budget(monkeypatch, budget)
+
+        assert "extra_body" not in _model_settings(
+            AIServiceConfig(provider=provider, model="m")
+        )
+
+
 class TestCliHints:
     """A hint names the command a person types: the project's own CLI."""
 

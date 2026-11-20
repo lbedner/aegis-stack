@@ -9,15 +9,19 @@ transaction on an engine and catches lock failures; ``recent`` reads what
 was recorded, for the Database pages. SQLite cannot say who holds its lock
 either, so each process keeps its own open transactions and publishes the
 ones held past ``SHOWN_AFTER``, refreshed while held, gone once they end
-or their process stops refreshing them. Records go through the shared cache
-(Redis when the stack has it, so the webserver sees what the worker and
-scheduler recorded; this process's memory otherwise) and expire after an
-hour. Each is also logged, so a process without an event loop to write the
+or their process stops refreshing them. Records go on one list in the
+shared cache (Redis when the stack has it, so the webserver sees what the
+worker and scheduler recorded; this process's memory otherwise), each with
+its container's host and who owns its code, as a log line is owned; kept
+for ``DATABASE_ACTIVITY_RETENTION_SECONDS`` and read by window (``recent``,
+over ``windows``); ``grouped`` sums them by the code behind them, and
+``summary`` is the last hour so, small enough for Illiana's ``health``.
+Each is also logged, so a process without an event loop to write the
 record from still leaves one.
 """
 
 import asyncio
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Coroutine, Iterator
 from datetime import UTC, datetime
 import socket
 import sys
@@ -25,21 +29,28 @@ import threading
 import time
 from types import FrameType
 from typing import Any
-import uuid
 from weakref import WeakKeyDictionary
 
 from sqlalchemy import Engine, event
 from sqlalchemy.sql.util import find_tables
 
-from app.core import edges, frames
+from app.core import edges, frames, series
 from app.core.cache import get_cache
 from app.core.concurrency import background
 from app.core.config import settings
 from app.core.log import logger
+from app.core.log_attribution import owners
 
-PREFIX = "db_activity:"
-KEEP_SECONDS = 3600
-SHOWN = 50
+KEY = "db_activity"
+# ponytail: the newest this many, whatever the retention; a busier week
+# loses its oldest first. Each is a few hundred bytes.
+KEEP = 5000
+# How many of the newest ``recent`` reads first; it reads four times as
+# many each time the window reaches further back.
+FIRST_READ = 250
+# The summary ``health`` carries: the last hour's costliest code sites.
+SUMMARY_SECONDS = 3600
+SUMMARY_TOP = 8
 # The tables each compiled statement touches, worked out once a statement.
 _tables_of: WeakKeyDictionary[Any, list[str]] = WeakKeyDictionary()
 DATABASE_LAYER = ("app/core/db.py", "app/core/db_activity.py")
@@ -143,20 +154,41 @@ def _tables(context: Any) -> list[str]:
 
 
 def _record(kind: str, seconds: float | None) -> None:
-    entry = {
-        "kind": kind,
-        "seconds": seconds,
-        "process": frames.process(),
-        "caller": _caller(frames.frames()),
-        "at": datetime.now(UTC).isoformat(),
-    }
+    entry = describe(kind, seconds, frames.process(), _caller(frames.frames()))
     logger.warning("Database activity", **entry)
     try:
         asyncio.get_running_loop()
     except RuntimeError:  # no loop to write from: the log line is the record
         return
-    key = f"{PREFIX}{entry['at']}:{uuid.uuid4().hex[:8]}"
-    background(get_cache().set(key, entry, KEEP_SECONDS))
+    background(store(entry))
+
+
+def describe(
+    kind: str,
+    seconds: float | None,
+    process: str,
+    caller: str,
+    at: datetime | None = None,
+) -> dict[str, Any]:
+    """One record: what, for how long, where (the process and its
+    container's host), the code behind it and who owns that code, and when."""
+    app_service, app_component = owners(caller.partition(":")[0])
+    return {
+        "kind": kind,
+        "seconds": seconds,
+        "process": process,
+        "host": HOST,
+        "caller": caller,
+        "app_service": app_service,
+        "app_component": app_component,
+        "at": (at or datetime.now(UTC)).isoformat(timespec="seconds"),
+    }
+
+
+def store(entry: dict[str, Any]) -> Coroutine[Any, Any, Any]:
+    """Keep a record for the retention, the newest ``KEEP`` of them."""
+    keep = settings.DATABASE_ACTIVITY_RETENTION_SECONDS
+    return get_cache().push(KEY, entry, KEEP, keep)
 
 
 def _waits_on_itself(conn: Any) -> None:
@@ -253,10 +285,62 @@ async def held() -> list[dict[str, Any]]:
     )
 
 
-async def recent() -> list[dict[str, Any]]:
-    """What was recorded in the last hour, newest first."""
-    found = await get_cache().values_with_prefix(PREFIX)
-    return sorted(found.values(), key=lambda e: e["at"], reverse=True)[:SHOWN]
+def windows() -> tuple[tuple[int, str], ...]:
+    """The container charts' windows (``series.HISTORY_WINDOWS``) the
+    retention keeps."""
+    keep = settings.DATABASE_ACTIVITY_RETENTION_SECONDS
+    return tuple(w for w in series.HISTORY_WINDOWS if w[0] <= keep)
+
+
+async def recent(seconds: float) -> list[dict[str, Any]]:
+    """What was recorded in the last ``seconds``, newest first: read back
+    only as far as the window reaches, as the list keeps a week and health
+    asks for the hour."""
+    keep = settings.DATABASE_ACTIVITY_RETENTION_SECONDS
+    since = datetime.now(UTC).timestamp() - min(seconds, keep)
+    newest = FIRST_READ
+    while True:
+        read = await get_cache().listed(KEY, newest)
+        found = [
+            e for e in read if datetime.fromisoformat(e["at"]).timestamp() >= since
+        ]
+        if len(found) < len(read) or len(read) < newest or newest >= KEEP:
+            return found
+        newest *= 4
+
+
+def grouped(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """``events`` by the code behind them, the longest held in all first:
+    how many, the seconds held in all and at most, the latest, and the
+    kinds and processes (by name, not pid) among them."""
+    by_code: dict[str, list[dict[str, Any]]] = {}
+    for entry in events:
+        by_code.setdefault(entry["caller"], []).append(entry)
+    groups = [
+        {
+            "code": code,
+            "count": len(found),
+            "held_s": round(sum(e["seconds"] or 0 for e in found), 2),
+            "longest_s": max((e["seconds"] or 0 for e in found), default=0),
+            "last": max(e["at"] for e in found),
+            "kinds": sorted({e["kind"] for e in found}),
+            "processes": sorted({frames.role_of(e["process"]) for e in found}),
+        }
+        for code, found in by_code.items()
+    ]
+    return sorted(groups, key=lambda g: (-g["held_s"], -g["count"], g["code"]))
+
+
+async def summary() -> dict[str, Any]:
+    """The last hour by code, its costliest ``SUMMARY_TOP``: what the
+    database health carries, so Illiana reads it whole however busy."""
+    groups = grouped(await recent(SUMMARY_SECONDS))
+    return {
+        "window_s": SUMMARY_SECONDS,
+        "slow_after_s": settings.DATABASE_SLOW_TRANSACTION_SECONDS,
+        "code_sites": len(groups),
+        "by_code": groups[:SUMMARY_TOP],
+    }
 
 
 def _caller(frames: Iterator[FrameType]) -> str:

@@ -226,12 +226,14 @@ class CacheService:
         self._store[key] = (kept[-keep:], time.time() + ttl)
         return kept[:-keep]
 
-    async def listed(self, key: str) -> list[Any]:
-        """The list ``push`` keeps at ``key``, newest first; an entry
-        another build pickled, and this one cannot read, is left out."""
+    async def listed(self, key: str, newest: int | None = None) -> list[Any]:
+        """The list ``push`` keeps at ``key``, newest first, or only its
+        ``newest`` entries; an entry another build pickled, and this one
+        cannot read, is left out."""
+        start = -newest if newest else 0
         if self._redis is not None:
-            return _readable(key, await self._redis.lrange(key, 0, -1))[::-1]
-        return list(reversed(await self._lookup(key) or []))
+            return _readable(key, await self._redis.lrange(key, start, -1))[::-1]
+        return list(reversed((await self._lookup(key) or [])[start:]))
 
     @property
     def backend_name(self) -> str:

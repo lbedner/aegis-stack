@@ -303,6 +303,11 @@ def _volume(kept: list[_Row], since: datetime | None) -> list[dict[str, Any]]:
     return bars
 
 
+def picks(query: Mapping[str, str]) -> dict[str, list[str]]:
+    """What the Services picker ticks, as a link or a stream carries it."""
+    return {key: listed(query, key) for key in PICKS}
+
+
 def listed(query: Mapping[str, str], key: str) -> list[str]:
     """Every value ``query`` gives ``key`` (a multi-select's picks)."""
     getlist = getattr(query, "getlist", None)
@@ -354,6 +359,11 @@ def _narrowed(
     picked = set(listed(query, "container"))
     narrowed = {page for page, name in names if name in picked}
     return [(p, n) for p, n in names if p not in narrowed or n in picked]
+
+
+async def every_source() -> list[dict[str, Any]]:
+    """Every page's ``sources``: what the Services picker offers."""
+    return sources(await containers())
 
 
 def sources(found: Containers) -> list[dict[str, Any]]:

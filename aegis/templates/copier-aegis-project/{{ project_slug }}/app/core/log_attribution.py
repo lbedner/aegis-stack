@@ -17,7 +17,7 @@ ORIGIN_ATTRIBUTE = "_aegis_error_service"
 Owners = tuple[str | None, str | None]
 
 
-def _owners(pathname: str) -> Owners:
+def owners(pathname: str) -> Owners:
     """Who owns a file, wherever the app is deployed: its service or its
     component (``ownership.owner``), each None if not that kind."""
     found = owner(pathname)
@@ -27,7 +27,7 @@ def _owners(pathname: str) -> Owners:
 
 
 def service_from_path(pathname: str) -> str | None:
-    return _owners(pathname)[0]
+    return owners(pathname)[0]
 
 
 def _deepest(trace: TracebackType | None) -> Owners:
@@ -35,7 +35,7 @@ def _deepest(trace: TracebackType | None) -> Owners:
     in ``trace``: each frame's owner looked up once."""
     service = component = None
     while trace is not None:
-        here, there = _owners(trace.tb_frame.f_code.co_filename)
+        here, there = owners(trace.tb_frame.f_code.co_filename)
         service, component = here or service, there or component
         trace = trace.tb_next
     return service, component
@@ -81,7 +81,7 @@ def add_service_attribution(
     logger: Any, method_name: str, event_dict: dict[str, Any]
 ) -> dict[str, Any]:
     """A processor shared by structlog and standard-library logging."""
-    emitter, emitting_component = _owners(str(event_dict.get("pathname", "")))
+    emitter, emitting_component = owners(str(event_dict.get("pathname", "")))
     if emitter:
         event_dict["emitting_service"] = emitter
     error = event_dict.get("exc_info")

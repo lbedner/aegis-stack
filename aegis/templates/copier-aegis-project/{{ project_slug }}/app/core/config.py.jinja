@@ -356,6 +356,7 @@ class Settings(
 {% if include_database %}
     # Database settings
     DATABASE_SLOW_TRANSACTION_SECONDS: Annotated[float, Configurable(ComponentName.DATABASE, "A transaction held this long is recorded on the Database page, seconds (0: off)")] = 2.0
+    DATABASE_ACTIVITY_RETENTION_SECONDS: Annotated[int, Configurable(ComponentName.DATABASE, "How long slow transactions and lock failures are kept, seconds")] = 7 * 86400
 {% if database_engine == "postgres" %}
     DATABASE_URL: str = "postgresql://postgres:postgres@postgres:5432/{{ project_slug }}"
     DATABASE_URL_LOCAL: str | None = None  # Manual override for local CLI usage

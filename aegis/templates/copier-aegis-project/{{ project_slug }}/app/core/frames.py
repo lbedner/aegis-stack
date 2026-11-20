@@ -71,6 +71,11 @@ def process() -> str:
     return f"{role}:{os.getpid()}"
 
 
+def role_of(process: str) -> str:
+    """A ``process()`` name without its pid: ``worker:12`` is ``worker``."""
+    return process.partition(":")[0]
+
+
 @cache
 def app_path(filename: str) -> str | None:
     """``filename`` from the project's root when it is the app's own code,

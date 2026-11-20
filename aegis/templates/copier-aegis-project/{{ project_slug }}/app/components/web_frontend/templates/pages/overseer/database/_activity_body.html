@@ -1,0 +1,48 @@
+{# Slow & locked's results (overseer_database.activity): by code, the
+   longest held in all first, then the newest rows; read like Logs as
+   Transactions is: the code cut at the edge, a click opens it, a copy
+   takes it whole. #}
+{% from "pages/overseer/_macros.html" import opens_rows, row_cell, rows_head, subheading %}
+{% from "pages/overseer/database/_macros.html" import copy_cell %}
+{% set cell = row_cell("whitespace-nowrap truncate") %}
+{% if activity %}
+<div id="database-activity-groups">
+  {{ subheading("By code", first=True) }}
+  <table class="w-full text-xs table-fixed">
+    <colgroup><col class="w-16"><col class="w-20"><col class="w-20"><col class="w-28"><col class="w-40"><col></colgroup>
+    {{ rows_head(["Count", "Held", "Longest", "Last", "Process", "Code"]) }}
+    <tbody {{ opens_rows() }}>
+      {% for group in activity_groups %}
+      <tr class="log-row">
+        <td class="{{ cell }}">{{ group.count }}</td>
+        <td class="{{ cell }}">{{ group.held }}</td>
+        <td class="{{ cell }}">{{ group.longest }}</td>
+        <td class="{{ cell }} text-aegis-muted">{{ group.last }}</td>
+        {{ copy_cell(group.processes, "process") }}
+        {{ copy_cell(group.code, "code", opens=True) }}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div id="database-activity-rows">
+  {{ subheading("Each, newest first") }}
+  <table class="w-full text-xs table-fixed">
+    <colgroup><col class="w-32"><col class="w-32"><col class="w-40"><col></colgroup>
+    {{ rows_head(["When", "What", "Process", "Code"]) }}
+    <tbody {{ opens_rows() }}>
+      {% for row in activity %}
+      <tr class="log-row">
+        <td class="{{ cell }} text-aegis-muted">{{ row.when }}</td>
+        <td class="{{ cell }}">{{ row.what }}</td>
+        {{ copy_cell(row.process, "process") }}
+        {{ copy_cell(row.caller, "code", opens=True) }}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if activity_more %}<p class="mt-2 text-xs text-aegis-muted">The newest {{ activity|length }}; {{ activity_more }} more are counted above.</p>{% endif %}
+</div>
+{% else %}
+<p class="text-sm text-aegis-muted">{{ activity_none }}</p>
+{% endif %}

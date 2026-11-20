@@ -11,8 +11,9 @@ means restarting that container. Past ``DATABASE_SLOW_TRANSACTION_SECONDS``
 a transaction is trouble. No UI framework imports.
 """
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NamedTuple
 
 from sqlalchemy import text
 
@@ -54,17 +55,18 @@ async def current() -> dict[str, Any]:
 
 async def _sqlite() -> list[dict[str, Any]]:
     held = await db_activity.held()
-    containers = await _containers() if held else {}
+    by_host = await containers() if held else {}
     now = datetime.now(UTC)
     rows = []
     for entry in held:
         seconds = (now - datetime.fromisoformat(entry["began"])).total_seconds()
+        found = container_of(by_host, entry["host"])
         rows.append(
             {
                 "pid": None,
                 "process": entry["process"],
                 "code": entry["caller"],
-                "container": containers.get(entry["host"][:12]),
+                "container": found.name if found else None,
                 "state": "Holds the write lock"
                 if entry.get("locks")
                 else "Open (locks once it writes)",
@@ -78,15 +80,31 @@ async def _sqlite() -> list[dict[str, Any]]:
     return rows
 
 
-async def _containers() -> dict[str, str]:
-    """Each container's name by its hostname (Docker's: its id, short)."""
+class SampledContainer(NamedTuple):
+    """A container as the sampler last saw it: the Overseer page it shows
+    on, and its name."""
+
+    page: str
+    name: str
+
+
+async def containers() -> dict[str, SampledContainer]:
+    """Each container by its hostname (``container_of``)."""
     tables = await series.latest(ui_runtime.SAMPLER) or {}
     return {
-        row["id"][:12]: row["name"]
-        for view in tables.values()
+        row["id"][:12]: SampledContainer(page, row["name"])
+        for page, view in tables.items()
         for row in view["rows"]
         if row.get("id")
     }
+
+
+def container_of(
+    by_host: Mapping[str, SampledContainer], host: str
+) -> SampledContainer | None:
+    """The container a process ran in, by its hostname: Docker's is the
+    container's id, short."""
+    return by_host.get(host[:12])
 
 
 async def _pg_activity() -> list[dict[str, Any]]:

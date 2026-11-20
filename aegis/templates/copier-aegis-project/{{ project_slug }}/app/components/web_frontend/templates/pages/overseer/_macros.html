@@ -82,6 +82,8 @@
 {% macro cell_copy(value) %}{{ copy_icon(value, "ml-1.5 align-middle text-aegis-muted hover:text-aegis-text opacity-0 group-hover/cell:opacity-100 focus:opacity-100") }}{% endmacro %}
 {# Their header, over them as they scroll: a caps label a column, the
    ``right`` ones set right, ``actions`` an unnamed column after. #}
+{# A heading over one of several tables stacked in a section. #}
+{% macro subheading(label, first=False) %}<h3 class="text-sm font-semibold text-aegis-text {{ 'mb-2' if first else 'mt-6 mb-2' }}">{{ label }}</h3>{% endmacro %}
 {% macro rows_head(labels, right=(), actions=False) %}
 <thead class="sticky top-0 bg-aegis-bg text-xxs text-aegis-muted caps border-b border-aegis-border">
   <tr>{% for label in labels %}<th scope="col" class="px-3 py-1.5 font-medium {{ 'text-right' if label in right else 'text-left' }}">{{ label }}</th>{% endfor %}{% if actions %}<th scope="col"><span class="sr-only">Actions</span></th>{% endif %}</tr>

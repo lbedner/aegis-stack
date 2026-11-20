@@ -1,28 +1,14 @@
-{# Slow transactions and lock failures from the last hour
-   (app.core.db_activity), each with the process and the app code behind
-   it, read like Logs as Transactions is: the code cut at the edge, a
-   click opens it, a copy takes it whole. #}
-{% from "pages/overseer/_macros.html" import opens_rows, row_cell, rows_head %}
-{% from "pages/overseer/database/_macros.html" import copy_cell %}
-{% set cell = row_cell("whitespace-nowrap truncate") %}
+{# Slow & locked (overseer_database.activity_page): the filters
+   (db_activity_search.ActivitySearch) and what they keep, kept live over
+   SSE as filtered. #}
+{% from "components/macros/form.html" import checklist, range_chips, search_input %}
 <div id="database-activity" class="space-y-3">
-  <p class="text-xs text-aegis-muted">Transactions held longer than {{ threshold }} s, and statements that found the database locked, in the last hour, with the code behind each.</p>
-  {% if activity %}
-  <table class="w-full text-xs table-fixed">
-    <colgroup><col class="w-32"><col class="w-32"><col class="w-40"><col></colgroup>
-    {{ rows_head(["When", "What", "Process", "Code"]) }}
-    <tbody {{ opens_rows() }}>
-      {% for row in activity %}
-      <tr class="log-row">
-        <td class="{{ cell }} text-aegis-muted">{{ row.when }}</td>
-        <td class="{{ cell }}">{{ row.what }}</td>
-        {{ copy_cell(row.process, "process") }}
-        {{ copy_cell(row.caller, "code", opens=True) }}
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="text-sm text-aegis-muted">Nothing slow or locked in the last hour</p>
-  {% endif %}
+  <p class="text-xs text-aegis-muted">Transactions held longer than {{ threshold }} s, and statements that found the database locked, with the code behind each.</p>
+  <form action="{{ request.url.path }}" method="get" hx-trigger="submit, change" {{ hx_replace(request.url.path, "#database-activity") }} class="flex flex-wrap items-center gap-3">
+    {{ range_chips(activity_windows, activity_window, field="window", aria="Window") }}
+    {{ checklist("activity-kinds", "kind", "Kinds", activity_kinds) }}
+    {{ checklist("activity-services", "service", "Services", activity_services) }}
+    {{ search_input("q", activity_q, placeholder="Code or process") }}
+  </form>
+  <div hx-ext="sse" sse-connect="{{ activity_events }}"><div sse-swap="{{ activity_event }}" hx-target="this">{% include "pages/overseer/database/_activity_body.html" %}</div></div>
 </div>

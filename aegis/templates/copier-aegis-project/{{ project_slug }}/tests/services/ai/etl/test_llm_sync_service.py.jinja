@@ -880,6 +880,55 @@ class TestLocalSync:
         ).one()
         assert model.context_window == 32768
         assert sync_db_session.get(LLMOrg, model.served_by_org_id).name == "llamacpp"
+
+    async def test_a_model_the_engine_stopped_serving_leaves_the_picker(
+        self, sync_db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The picker lists enabled models: one its engine no longer has
+        (removed, or one it cannot load) is turned off, and on again when
+        it comes back. Another engine's models are not its to turn off."""
+        import httpx
+
+        from app.components.inference.llamacpp import LlamaCppEngine
+        from app.services.ai.domains.llm.etl import llm_sync_service
+        from tests import _fake_llamacpp
+        from tests._fake_ollama import serving
+
+        engine = LlamaCppEngine(
+            "http://llamacpp:8080",
+            transport=httpx.MockTransport(serving(_fake_llamacpp.ROUTES)),
+        )
+        monkeypatch.setattr(llm_sync_service, "get_inference_engine", lambda: engine)
+
+        async def nothing(*args: object) -> None:
+            """Labs and marks fetch from outside (their own tests)."""
+
+        monkeypatch.setattr(llm_sync_service, "attach_labs", nothing)
+        monkeypatch.setattr(llm_sync_service, "attach_provider_marks", nothing)
+        service = LLMSyncService(sync_db_session)
+        TestCatalogStats._served_model(service, "llamacpp", "gpt-oss:20b")
+        TestCatalogStats._served_model(service, "ollama", "qwen3:8b-mlx")
+        TestCatalogStats._served_model(service, "llamacpp", _fake_llamacpp.MODEL)
+        back = sync_db_session.exec(
+            select(LargeLanguageModel).where(
+                LargeLanguageModel.model_id == _fake_llamacpp.MODEL
+            )
+        ).one()
+        back.enabled = False
+        sync_db_session.add(back)
+        sync_db_session.commit()
+
+        await LLMSyncService(sync_db_session).sync(source="local")
+
+        enabled = {
+            m.model_id: m.enabled
+            for m in sync_db_session.exec(select(LargeLanguageModel)).all()
+        }
+        assert enabled == {
+            "gpt-oss:20b": False,
+            _fake_llamacpp.MODEL: True,
+            "qwen3:8b-mlx": True,
+        }
 {%- endif %}
 
 {% else %}

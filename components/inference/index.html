@@ -7398,7 +7398,7 @@
 <tbody>
 <tr>
 <td><code>host</code></td>
-<td>No container. Run it yourself (<a href="../../services/ai/voice/#a-speech-server">how</a>).</td>
+<td>No container. Run it yourself, with <code>make kokoro</code> (below).</td>
 <td><code>http://host.docker.internal:8880/v1</code> from containers, <code>localhost:8880</code> from the host</td>
 </tr>
 <tr>
@@ -7421,8 +7421,9 @@
 <li><strong>The health check</strong> carries it under the inference check (<code>my-app health status</code>, <code>/health/detailed</code>).</li>
 <li><strong><code>ai[voice]</code></strong> offers it as the Kokoro-FastAPI provider, with every voice it lists (<a href="../../services/ai/voice/#a-speech-server">Voice</a>).</li>
 </ul>
-<p>A server with OpenAI's speech API alone shows its voices, its models and the app's own timings. Kokoro-FastAPI reports its version always, and the rest only with its flags on. A server you run yourself needs them set, or the page names the ones missing:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nv">ALLOW_DEV_UNLOAD</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="nv">ENABLE_DEBUG_ENDPOINTS</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>./start-gpu_mac.sh
+<p>A server with OpenAI's speech API alone shows its voices, its models and the app's own timings. Kokoro-FastAPI reports its version always, and the rest only with its flags on. A server you run yourself needs them set, or the page names the ones missing. <code>make kokoro</code> (<code>my-app inference kokoro</code>) sets them and runs the start script of a checkout at <code>SPEECH_SERVER_DIR</code> (default <code>~/Kokoro-FastAPI</code>): on its GPU where it has one (a Mac, or an NVIDIA card with <code>nvidia-smi</code> on the PATH), the CPU one elsewhere, and on Windows the <code>.ps1</code> one through PowerShell (which serves on 8880 whatever <code>SPEECH_BASE_URL</code> says). It runs in the foreground: Ctrl-C stops it.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/remsky/Kokoro-FastAPI<span class="w"> </span>~/Kokoro-FastAPI
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>make<span class="w"> </span>kokoro
 </span></code></pre></div>
 <table>
 <thead>

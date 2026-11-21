@@ -7979,12 +7979,13 @@ an OpenAI or Gemini voice. Usage is recorded at no cost.</p>
 way Ollama is. <a href="https://github.com/remsky/Kokoro-FastAPI">Kokoro-FastAPI</a>
 serves Kokoro-82M (Apache-2.0) on port 8880. On a Mac, run it natively so
 it speaks on the GPU (MPS); in Docker it has none:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/remsky/Kokoro-FastAPI<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>Kokoro-FastAPI
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="nv">ALLOW_DEV_UNLOAD</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="nv">ENABLE_DEBUG_ENDPOINTS</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>./start-gpu_mac.sh
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="c1"># .env</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="nv">SPEECH_BASE_URL</span><span class="o">=</span>http://host.docker.internal:8880/v1
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="nv">TTS_PROVIDER</span><span class="o">=</span>local_server<span class="w">   </span><span class="c1"># its voice defaults to local_server:af_heart</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/remsky/Kokoro-FastAPI<span class="w"> </span>~/Kokoro-FastAPI
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>make<span class="w"> </span>kokoro<span class="w">   </span><span class="c1"># with the inference component; else, in the checkout:</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="c1"># ALLOW_DEV_UNLOAD=true ENABLE_DEBUG_ENDPOINTS=true ./start-gpu_mac.sh</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="c1"># .env</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="nv">SPEECH_BASE_URL</span><span class="o">=</span>http://host.docker.internal:8880/v1
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="nv">TTS_PROVIDER</span><span class="o">=</span>local_server<span class="w">   </span><span class="c1"># its voice defaults to local_server:af_heart</span>
 </span></code></pre></div>
 <p>With the inference component, <code>inference[kokoro_fastapi]</code> sets that
 address for you, or ships the server as a container, and Overseer &gt;

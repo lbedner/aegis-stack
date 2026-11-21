@@ -153,8 +153,126 @@ async def test_drawn_it_is_stored_staged_and_says_why_when_it_cannot_be(
 
     monkeypatch.setattr(path_card.staged_paths, "route", route)
     with memory_user("0", conversation_id="conv-1", admin=True), card_stage():
-        drawn = result_data(await draw_card("path", {"title": "Me", "route": "GET /me"}))
-        refused = result_data(await draw_card("path", {"title": "x", "route": "GET /nope"}))
+        drawn = result_data(
+            await draw_card("path", {"title": "Me", "route": "GET /me"})
+        )
+        refused = result_data(
+            await draw_card("path", {"title": "x", "route": "GET /nope"})
+        )
     stored = await async_db_session.get(ChatCard, drawn["id"])
     assert stored is not None and stored.payload["path"]["path"] == KEPT.path
     assert "GET /nope" in refused["error"]
+
+
+def test_a_services_wiring_leaves_out_what_its_sub_services_hold() -> None:
+    """The AI service's wiring drew 110 boxes: with its own lines, every
+    line of each sub-service, their tools and tables too, a level further
+    than asked (2026-11-16). What a sub-service reaches outside the service
+    is the service's wiring (Auth's sessions call Stripe); what it holds is
+    the service's insides (``inside``). A component still draws what it
+    holds: Redis, its queues."""
+    from app.core.ontology.graph import wiring
+    from app.core.ontology.model import Kind, PartNode
+    from app.core.parts import Category
+
+    ai, chat, finance, db, tool = (
+        "service:ai",
+        "service:ai.chat",
+        "service:finance",
+        "component:database",
+        "object:agent",
+    )
+    model = model_of(
+        [
+            node_of(ai),
+            PartNode(
+                kind=Kind.SERVICE, name="ai.chat", owner=ai, category=Category.APP
+            ),
+            *(node_of(k) for k in (finance, db, tool)),
+        ],
+        [
+            edge_of(ai, chat, EdgeKind.CONTAINS),
+            edge_of(ai, db),
+            edge_of(chat, finance),  # out of the service: its wiring
+            edge_of(chat, tool, EdgeKind.CONTAINS),  # in it: its insides
+        ],
+    )
+
+    drawn = {(e.source, e.target) for e in wiring(model, ai)}
+    assert drawn == {(ai, chat), (ai, db), (chat, finance)}
+
+
+def _on_the_system_queue() -> SystemModel:
+    """AI holds its own task on the system queue, which the queue holds
+    beside another service's task; two tasks of others call AI."""
+    from app.core.ontology.model import QueueNode, TaskNode
+
+    def task(name: str, owner: str) -> TaskNode:
+        return TaskNode(name=name, queue="system", owner=owner)
+
+    ai, queue, system = "service:ai", "component:queue", "queue:system"
+    return model_of(
+        [
+            *(node_of(k) for k in (ai, queue, "service:finance", "component:worker")),
+            QueueNode(name="system", owner=queue),
+            task("sync_job", ai),
+            *(task(name, "component:worker") for name in ("backup", "health", "photo")),
+        ],
+        [
+            edge_of(ai, "task:sync_job", EdgeKind.CONTAINS),
+            edge_of(ai, queue),
+            edge_of(queue, system, EdgeKind.CONTAINS),
+            *(
+                edge_of(system, f"task:{t}")
+                for t in ("sync_job", "backup", "health", "photo")
+            ),
+            edge_of("task:backup", "service:finance"),
+            edge_of("task:health", ai),
+            edge_of("task:photo", ai),
+        ],
+    )
+
+
+def test_a_queue_is_opened_up_only_where_it_is_held() -> None:
+    """The AI service's wiring drew the system queue's every task, backups
+    and finance jobs among them (2026-11-20): its own task is on that queue,
+    and a queue in the drawing was opened up whatever brought it. A queue's
+    tasks are its holder's to draw (Redis), not every part that uses it."""
+    from app.core.ontology.graph import wiring
+
+    ends = {
+        end
+        for e in wiring(_on_the_system_queue(), "service:ai")
+        for end in (e.source, e.target)
+    }
+    assert "task:backup" not in ends
+    assert "service:finance" not in ends
+
+
+def test_tasks_calling_a_part_are_drawn_as_their_queue() -> None:
+    """Seven tasks calling AI were seven lines fanned into one box; drawn
+    from their queue, they are one. Its own task stays itself."""
+    from app.core.ontology.graph import wiring
+
+    drawn = {(e.source, e.target) for e in wiring(_on_the_system_queue(), "service:ai")}
+    assert ("queue:system", "service:ai") in drawn
+    assert not {("task:health", "service:ai"), ("task:photo", "service:ai")} & drawn
+    assert ("queue:system", "task:sync_job") in drawn
+
+
+async def test_a_services_insides_name_a_service_that_opens_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Kept as the service alone, drawn as the map opens it when the card
+    is; one with no pieces of its own to open is refused by name."""
+    from app.services.system import service_pieces
+
+    monkeypatch.setattr(
+        service_pieces,
+        "held",
+        lambda subject: ["piece"] if subject == "service:ai" else [],
+    )
+    card = await path_card.prepare(PathAsk(title="Inside AI", inside="service:ai"))
+    assert card == PathCard(title="Inside AI", inside="service:ai")
+    with pytest.raises(ValueError, match="service:secrets"):
+        await path_card.prepare(PathAsk(title="x", inside="service:secrets"))

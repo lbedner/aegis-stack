@@ -35,7 +35,7 @@ from tests._ontology import dry_walk, edge_of, model_of, node_of
 from tests._replays import kept
 from tests.web.dom import none, one, select, text
 from tests.web.overseer import CACHE, page_html
-from tests.web.zoomed import DB, auth_opens, zoomable
+from tests.web.zoomed import DB, PIECES, auth_opens, zoomable
 
 CARDS = f"{OVERSEER.path}/cards"
 INGRESS = ComponentStatus(name="ingress", message="Routing", metadata={})
@@ -373,3 +373,21 @@ async def test_opened_larger_a_wiring_is_still_a_map(
     one(opened, '[data-link][data-from="backend"][data-to="service_auth"]')
     none(opened, '[data-link][data-from="service_auth"][data-to="backend"]')
     none(opened, "[data-player]")
+
+
+async def test_a_services_insides_are_drawn_as_the_map_opens_it(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Asked what is inside the AI service she drew its wiring, its lines
+    to other parts (2026-11-16). Its insides are the map's own zoom into
+    it: every lane, each piece in its lane; still, nothing to play."""
+    client = zoomable(app, monkeypatch, INGRESS)
+    auth_opens(monkeypatch)
+    card_id = await _card(PathCard(title="Inside Auth", inside="service:auth"))
+    html = _opened(client, card_id)
+
+    assert len(select(html, "[data-lane]")) == 6
+    for piece in PIECES:
+        one(html, f'[data-node="{piece.key}"]')
+    assert "Inside · Auth" in text(one(html, "[data-card=path]"))
+    none(html, "[data-play-badge]")

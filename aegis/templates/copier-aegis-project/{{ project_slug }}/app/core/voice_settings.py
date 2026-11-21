@@ -19,7 +19,7 @@ LIVE_IDLE_MAX_SECONDS = 600
 # How a spoken reply is heard, and what plays while the assistant works: the values
 # the settings, a profile and its form all take.
 Reply = Literal["live", "answer"]
-WorkingSound = Literal["typing", "none"]
+WorkingSound = Literal["typing", "papers", "desk", "none"]
 
 
 class VoiceSettings(SpeechServerSettings):

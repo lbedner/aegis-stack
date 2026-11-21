@@ -69,6 +69,13 @@ to ask - say a short goodbye, then call end_call and say nothing more."""
 # length itself: the instructions are that, and a walk-through runs long.
 REPLY_CAP = 2_400
 
+# GPT-Live's voice speaks for itself and hands the work to its backend: the
+# manners replace its default, which is what says when to.
+LIVE_HANDS_OFF = (
+    "When they ask for something you cannot answer from this conversation "
+    "alone, delegate it."
+)
+
 # Every default LIVE_CALL_INSTRUCTIONS has had, by digest: an engine still
 # holding one was never edited, so it takes the current default. Add the
 # old one here whenever the default changes.

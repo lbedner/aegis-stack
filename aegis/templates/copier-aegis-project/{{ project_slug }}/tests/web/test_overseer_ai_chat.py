@@ -436,6 +436,7 @@ def test_the_hooks_the_scripts_read_are_the_ones_the_markup_emits(
             "chat-stage",
             "chat-stage-front",
             "chat-stage-strip",
+            "data-card-size",
             "data-countdown",
             "data-call-voice",
             "data-call-thinking",

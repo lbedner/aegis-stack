@@ -33,7 +33,7 @@ from starlette.websockets import WebSocketDisconnect
 from app.components.web_frontend import chat_surface, overseer_access
 from app.components.web_frontend.chat_surface import ChatSurface
 from app.components.web_frontend.overseer_ai_chat import OVERSEER
-from app.components.web_frontend.routes.partials import chat_live
+from app.components.web_frontend.routes.partials import chat_live, chat_live_lines
 from app.core.tools import current_owner_user_id, current_subject
 from app.services.ai.domains.chat.page_actions import page_action
 from app.services.ai.domains.voice import realtime_calls
@@ -281,6 +281,35 @@ class TestTheStage:
         one(page, "template#chat-live-card")
         assert 'id="chat-thread"' not in page
 
+    def test_a_card_on_the_stage_is_drawn_large(self, client: TestClient) -> None:
+        """The card in front is the one the dialog opens, not the thread's
+        small one (2026-11-16: a pie the size of a thumbnail with the
+        screen empty around it); voice.js asks for that size."""
+        front = one(client.get(STAGE).text, "#chat-stage-front")
+        assert front.get("data-card-size") == "large"
+
+    def test_the_strip_lists_every_card_the_shown_one_underlined(
+        self, client: TestClient
+    ) -> None:
+        """A new card swapped places with the one up, which dropped into
+        the strip (2026-11-16: awkward). The cards are the app's own tabs
+        (``tabbed``, app.js ``showTab``): each a panel in the front and a
+        tab in the strip below, the one up underlined; stage.js adds them."""
+        page = client.get(STAGE).text
+        stage = one(page, "#chat-stage")
+        assert stage.get("data-tabs")
+        assert one(page, "#chat-stage #chat-stage-strip").get("role") == "tablist"
+        tab = one(page, "template#chat-stage-tab button")
+        assert tab.get("role") == "tab"
+        assert "tab" in tab.get("class", "").split()
+        assert one(page, 'script[src*="js/stage"]') is not None  # hashed name
+
+    def test_she_has_a_line_for_what_she_is_saying(self, client: TestClient) -> None:
+        """Once a card is up she steps aside as a speaker tile: her name
+        and the line she is saying, the card the subject (voice.js)."""
+        page = client.get(STAGE).text
+        one(page, "#chat-stage #chat-stage-line")
+
     def test_it_carries_on_the_conversation_the_chat_had_open(
         self, client: TestClient
     ) -> None:
@@ -315,8 +344,9 @@ class TestTheCall:
     ) -> None:
         with client.websocket_connect(SOCKET) as ws:
             ready = ws.receive_json()
+            voice = ws.receive_bytes()  # she has started speaking
             ws.send_bytes(b"\x10\x20")
-            heard, told = _hear(ws, "saved")
+            _, told = _hear(ws, "saved")
             ws.close()
             assert ended.wait(5)
 
@@ -324,9 +354,9 @@ class TestTheCall:
         assert (ready["input_rate"], ready["output_rate"]) == (16_000, 24_000)
         assert ready["conversation_id"]  # a call without one starts one
         assert ready["engine"] == {"label": "Gemini 3.8 Live"}
-        assert heard == [VOICE]  # its voice, as the model spoke it
+        assert voice == VOICE  # its voice, as the model spoke it
         assert gemini.live.audio == [b"\x10\x20"]  # yours, as the page sent it
-        assert gemini.live.sent == [chat_live.GREETING]  # it speaks first
+        assert gemini.live.sent == [chat_live_lines.GREETING]  # it speaks first
         # You were heard from your first word to your last: Gemini reports
         # no onset of speech, so no quiet is counted in between.
         assert told[0] == {"type": "hearing"}
@@ -337,6 +367,26 @@ class TestTheCall:
         # It ended the call: the page hangs up once the goodbye has played.
         assert {"type": "hang_up"} in told
         assert told[-1]["type"] == "saved"  # the thread reloads
+
+    def test_you_are_not_heard_until_she_has_started_her_opening(
+        self, client: TestClient, gemini: FakeRealtime, ended: threading.Event
+    ) -> None:
+        """An "um" heard before its greeting began GPT-Live's voice
+        answered itself, then it said the greeting too, twice over
+        (2026-11-16). Until her first word, what
+        the page sends goes on as silence of the same length."""
+        gemini.live.speaks_after_audio = True
+        with client.websocket_connect(SOCKET) as ws:
+            ws.receive_json()  # ready
+            ws.send_bytes(b"\x10\x20")  # before she has said a word
+            while not ws.receive().get("bytes"):  # until her first word
+                pass
+            ws.send_bytes(b"\x30\x40")
+            _hear(ws, "saved")
+            ws.close()
+            assert ended.wait(5)
+
+        assert gemini.live.audio == [b"\x00\x00", b"\x30\x40"]
 
     def test_the_page_cues_its_check_in_and_goodbye(
         self, client: TestClient, gemini: FakeRealtime, ended: threading.Event
@@ -352,7 +402,10 @@ class TestTheCall:
             ws.send_json({"type": "cue", "line": "anything else"})
             ws.close()
             assert ended.wait(5)
-        assert gemini.live.sent[1:] == [chat_live.CHECK_IN, chat_live.GOODBYE]
+        assert gemini.live.sent[1:] == [
+            chat_live_lines.CHECK_IN,
+            chat_live_lines.GOODBYE,
+        ]
 
     def test_a_picture_shown_on_the_call_is_looked_at_and_spoken_of(
         self,
@@ -373,13 +426,13 @@ class TestTheCall:
             assert ended.wait(5)
 
         (turn,) = turns
-        assert turn["message"] == chat_live.SHOWN
+        assert turn["message"] == chat_live_lines.SHOWN
         assert turn["hand_over"] is False  # a look does not take the thread
         assert turn["conversation_id"] == ready["conversation_id"]
         assert [(a.media_type, a.decoded()) for a in turn["attachments"]] == [
             ("image/png", b"shot")
         ]
-        assert chat_live.SAW.format(seen="A transfer screen.") in gemini.live.sent
+        assert chat_live_lines.SAW.format(seen="A transfer screen.") in gemini.live.sent
         assert told[-1] == {"type": "looked"}
 
     def test_a_file_that_is_not_a_picture_still_ends_the_look(
@@ -416,7 +469,7 @@ class TestTheCall:
             ws.close()
             assert ended.wait(5)
         assert told[-1] == {"type": "looked"}
-        assert gemini.live.sent[-1] == chat_live.NOT_SEEN
+        assert gemini.live.sent[-1] == chat_live_lines.NOT_SEEN
 
     def test_the_call_bar_has_the_calls_cost_and_its_thinking(
         self,
@@ -640,8 +693,8 @@ class TestABoundedCall:
         with _calls(mount).websocket_connect(SOCKET) as ws:
             _, told = _hear(ws, "ended")
             assert heard.get(timeout=5) == "limit"
-        assert told[-1] == {"type": "ended", "reason": chat_live.TIME_UP}
-        assert gemini.live.sent[-1] == chat_live.WRAP_UP  # she says it first
+        assert told[-1] == {"type": "ended", "reason": chat_live_lines.TIME_UP}
+        assert gemini.live.sent[-1] == chat_live_lines.WRAP_UP  # she says it first
 
     def test_a_check_that_refuses_mid_call_ends_it_after_the_turn(
         self,
@@ -693,9 +746,12 @@ def test_a_call_into_a_conversation_does_not_meet_them_again() -> None:
     """A call into a conversation under way greets them as someone it
     knows; a first call greets; nothing to pick up is not a resume."""
     under_way = SimpleNamespace(messages=[SimpleNamespace(role="user", metadata={})])
-    assert chat_live.opening(under_way) == chat_live.CONTINUING
-    assert chat_live.opening(None) == chat_live.GREETING
-    assert chat_live.opening(SimpleNamespace(messages=[])) == chat_live.GREETING
+    assert chat_live_lines.opening(under_way) == chat_live_lines.CONTINUING
+    assert chat_live_lines.opening(None) == chat_live_lines.GREETING
+    assert (
+        chat_live_lines.opening(SimpleNamespace(messages=[]))
+        == chat_live_lines.GREETING
+    )
 
 
 @pytest.mark.skipif(
@@ -716,7 +772,7 @@ def test_a_cue_that_is_not_one_says_nothing() -> None:
     """Whatever the page sends that is not a cue by name is no line: a
     malformed message does not end the call either."""
     assert chat_live._cue(chat_live._said('{"line": "check_in"}')) == (
-        chat_live.CHECK_IN
+        chat_live_lines.CHECK_IN
     )
     assert chat_live._said("not json") == {}
     assert chat_live._said('["check_in"]') == {}

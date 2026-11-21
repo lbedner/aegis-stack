@@ -230,12 +230,15 @@ document.addEventListener('click', (event) => {
 // hides the others. The one picked is remembered by the tabs' name, so a
 // view that re-reads itself (a meeting while the bot is in) keeps it.
 const pickedTabs = {};
+// A tabs' own tabs or panels: anywhere in it (the stage's strip and front
+// sit apart), never a tabs' nested in one of its panels.
+const ownOf = (tabs, selector) => [...tabs.querySelectorAll(selector)].filter((el) => el.closest('[data-tabs]') === tabs);
 function showTab(tabs, key) {
   pickedTabs[tabs.dataset.tabs] = key;
-  for (const tab of tabs.querySelectorAll(':scope > [role="tablist"] [data-tab]')) {
+  for (const tab of ownOf(tabs, '[role="tablist"] [data-tab]')) {
     tab.setAttribute('aria-selected', String(tab.dataset.tab === key));
   }
-  for (const panel of tabs.querySelectorAll(':scope > [data-tab-panel]')) {
+  for (const panel of ownOf(tabs, '[data-tab-panel]')) {
     panel.hidden = panel.dataset.tabPanel !== key;
   }
 }
@@ -247,7 +250,7 @@ function restoreTabs(root) {
   const all = [...(root.matches?.('[data-tabs]') ? [root] : []), ...root.querySelectorAll('[data-tabs]')];
   for (const tabs of all) {
     const picked = pickedTabs[tabs.dataset.tabs];
-    if (picked && tabs.querySelector(`:scope > [data-tab-panel="${picked}"]`)) showTab(tabs, picked);
+    if (picked && ownOf(tabs, `[data-tab-panel="${picked}"]`).length) showTab(tabs, picked);
   }
 }
 // A fold (``<details data-fold="name">``) remembers whether it was opened or

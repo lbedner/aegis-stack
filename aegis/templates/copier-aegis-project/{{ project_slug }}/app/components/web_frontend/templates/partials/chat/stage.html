@@ -1,35 +1,47 @@
 {# The stage: a call, full screen (``chat_router``'s /stage). Her figure
    is the phone, on the chat's own socket, and draws what the call is
-   doing (voice.js sets data-state); a card she draws lands at the front,
-   newest first, the oldest of the row moving down to the strip; any one
-   opens larger (its frame's own click). The call saves into the
-   conversation the chat had open: the thread stays the record.
+   doing (voice.js sets data-state). Until she shows something she is the
+   middle of it; once a card is up (``data-showing``) she steps aside as a
+   speaker tile, her name and the line she is saying, and the card takes
+   the stage, one at a time: each card is a tab (stage.js), the strip below
+   naming every one she drew, the one up underlined. The call saves into the conversation the
+   chat had open: the thread stays the record.
    Needs: ``chat_surface.stage_context``. #}
 {% extends "base.html" %}
 {% from "components/macros/form.html" import button_classes %}
 {% from "components/macros/chat.html" import conversation_field %}
+{% from "components/macros/layout.html" import tab_bar %}
 {% from "partials/chat/_call.html" import call_bar, mic_states, phone, phone_states with context %}
 {% block title %}{{ assistant }}{% endblock %}
 {% block navbar %}{% endblock %}
 {% block page_body %}
-<main id="chat-stage" class="h-screen flex flex-col px-6 py-4 gap-4">
+<main id="chat-stage" data-tabs="stage" class="group/stage h-screen flex flex-col px-4 md:px-6 py-4 gap-4">
   {{ conversation_field(conversation_id) }}
-  <div class="flex items-center justify-between">
+  <div class="flex items-center justify-between gap-3">
     <button type="button" onclick="history.back()" class="{{ button_classes('default') }}">Back to the chat</button>
     {{ call_bar(attach=False, box="w-full max-w-md") }}
   </div>
-  <div class="flex-1 min-h-0 flex flex-col items-center justify-center gap-6">
-    {% call phone("shrink-0 flex flex-col items-center gap-3 text-aegis-teal") %}
-      <img src="{{ static('illiana.png') }}" alt="{{ assistant }}" width="160" height="160"
-           class="w-40 h-40 rounded-full ring-4 ring-aegis-border transition duration-300 group-aria-pressed:ring-aegis-teal/40 group-data-[state=speaking]:ring-aegis-teal group-data-[state=speaking]:scale-105 group-data-[state=working]:animate-pulse">
-      <span class="relative h-6 flex items-center">{{ phone_states("w-6 h-6") }}</span>
-    {% endcall %}
-    <p id="chat-mic-status" class="text-sm text-aegis-muted empty:hidden" aria-live="polite"></p>
-    <div id="chat-stage-front" class="w-full flex-1 min-h-0 flex justify-center items-start gap-4 overflow-hidden"></div>
+  <div class="flex-1 min-h-0 flex flex-col items-center justify-center gap-6 group-data-[showing]/stage:items-stretch group-data-[showing]/stage:justify-start group-data-[showing]/stage:gap-4 md:group-data-[showing]/stage:flex-row">
+    <div class="shrink-0 flex flex-col items-center gap-3 group-data-[showing]/stage:flex-row group-data-[showing]/stage:items-center md:group-data-[showing]/stage:flex-col md:group-data-[showing]/stage:items-start md:group-data-[showing]/stage:w-56">
+      {% call phone("shrink-0 flex flex-col items-center gap-3 text-aegis-teal") %}
+        <img src="{{ static('illiana.png') }}" alt="{{ assistant }}" width="160" height="160"
+             class="[view-transition-name:stage-speaker] w-40 h-40 transition duration-300 group-data-[state=speaking]:scale-105 group-data-[state=working]:animate-pulse group-data-[showing]/stage:w-16 group-data-[showing]/stage:h-16 group-data-[showing]/stage:group-data-[state=speaking]:animate-pulse">
+        <span class="relative h-6 flex items-center group-data-[showing]/stage:hidden">{{ phone_states("w-6 h-6") }}</span>
+      {% endcall %}
+      <div class="hidden min-w-0 group-data-[showing]/stage:block">
+        <div class="text-sm font-medium text-aegis-text">{{ assistant }}</div>
+        <p id="chat-stage-line" class="text-sm text-aegis-muted line-clamp-3 empty:hidden"></p>
+      </div>
+      <p id="chat-mic-status" class="text-sm text-aegis-muted empty:hidden" aria-live="polite"></p>
+    </div>
+    <div id="chat-stage-front" data-card-size="large" class="hidden [view-transition-name:stage-front] min-w-0 min-h-0 flex-1 overflow-auto group-data-[showing]/stage:flex justify-center items-start"></div>
   </div>
-  <div id="chat-stage-strip" class="shrink-0 flex gap-3 overflow-x-auto empty:hidden [&>*]:flex-none [&>*]:w-64"></div>
+  {% call tab_bar("Cards", id="chat-stage-strip", attrs="hidden") %}{% endcall %}
 </main>
 {# A drawn card's place here, as the thread has its own (voice.js). #}
-<template id="chat-live-card"><div class="min-w-0 flex-1 max-w-xl" data-live-card></div></template>
+<template id="chat-live-card"><div class="w-full max-w-5xl"></div></template>
+{# A card's tab in the strip, named by its title (stage.js). #}
+<template id="chat-stage-tab"><button type="button" role="tab" class="tab max-w-64 truncate"></button></template>
+<script src="{{ static('js/stage.js') }}"></script>
 {{ mic_states() }}
 {% endblock %}

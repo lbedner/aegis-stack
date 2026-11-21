@@ -6,7 +6,9 @@ as ``requests`` lists them: its replay), a route (``route``: its code
 path, every hop its code can take, read without running it), a flow's
 stops (``stops``, model node ids, joined along the lines the running
 model declares) or a node (``node``: its wiring, the edges the ontology
-answers for it on the map, drawn when the card is). Every hop is the
+answers for it on the map, drawn when the card is) or a service's
+insides (``inside``: its pieces in their lanes, as the map opens it up,
+drawn when the card is). Every hop is the
 app's own, run, read or declared; none is guessed. The server stages
 it once, when it is drawn (``prepare``), into the hops a replay plays
 (``RequestHops``), so the card plays after the request is no longer
@@ -19,10 +21,10 @@ from pydantic import BaseModel, model_validator
 
 from app.core.ontology.observed import running
 from app.services.shared.deps import caller_is_admin
-from app.services.system import kept_requests, staged_paths
+from app.services.system import kept_requests, service_pieces, staged_paths
 from app.services.system.kept_requests import RequestHops
 
-SOURCES = ("request_id", "route", "stops", "node")
+SOURCES = ("request_id", "route", "stops", "node", "inside")
 
 
 class PathAsk(BaseModel):
@@ -33,6 +35,7 @@ class PathAsk(BaseModel):
     route: str | None = None  # "GET /api/v1/...": its code path
     stops: list[str] | None = None  # node ids in order, at least two
     node: str | None = None  # a node id: its wiring
+    inside: str | None = None  # a service's id: its pieces, lane by lane
 
     @model_validator(mode="after")
     def _one_source(self) -> PathAsk:
@@ -42,7 +45,8 @@ class PathAsk(BaseModel):
                 "name one of request_id (a kept request: its replay), route "
                 "('METHOD /path': its code path, drawn for you), stops (two "
                 "or more node ids such as service:auth, for a flow no request "
-                "or route shows) or node (one node id: how it is wired); got "
+                "or route shows), node (one node id: how it is wired) or "
+                "inside (a service id such as service:ai: what is inside it); got "
                 f"{', '.join(given) or 'none'}"
             )
         if self.stops is not None and len(self.stops) < 2:
@@ -52,11 +56,12 @@ class PathAsk(BaseModel):
 
 class PathCard(BaseModel):
     """What is kept: the path as hops (a request's as it ran, or staged),
-    or the node whose wiring it draws."""
+    the node whose wiring it draws, or the service whose insides it does."""
 
     title: str
     path: RequestHops | None = None
     node: str | None = None
+    inside: str | None = None
 
 
 async def prepare(ask: PathAsk) -> PathCard:
@@ -80,6 +85,13 @@ async def prepare(ask: PathAsk) -> PathCard:
                 "service), or say it in words."
             )
         return PathCard(title=ask.title, node=ask.node)
+    if ask.inside is not None:
+        if not service_pieces.held(ask.inside):
+            raise ValueError(
+                f"{ask.inside} does not open up: only a service with pieces of "
+                "its own has insides to draw. Draw its wiring (node) instead."
+            )
+        return PathCard(title=ask.title, inside=ask.inside)
     if ask.route is not None:
         staged = await staged_paths.route(ask.route)
     else:

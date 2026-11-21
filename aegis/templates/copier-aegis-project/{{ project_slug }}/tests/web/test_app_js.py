@@ -366,12 +366,14 @@ const { revealTab } = require(APP_JS);
 // A view's tabs (layout.html's ``tabbed``): its buttons and its panels.
 const view = (shown) => {
   const tabs = { dataset: { tabs: 'meeting' }, matches: () => true };
+  // Each button and panel is this view's own: no tabs nested between.
+  const inTabs = (sel) => (sel === '[data-tabs]' ? tabs : null);
   const buttons = ['notes', 'transcript'].map((key) => {
     const attrs = {};
-    return { dataset: { tab: key }, attrs, setAttribute: (k, v) => { attrs[k] = v; } };
+    return { dataset: { tab: key }, attrs, setAttribute: (k, v) => { attrs[k] = v; }, closest: inTabs };
   });
   const panels = ['notes', 'transcript'].map((key) => (
-    { dataset: { tabPanel: key }, hidden: key !== shown, parentElement: tabs }));
+    { dataset: { tabPanel: key }, hidden: key !== shown, parentElement: tabs, closest: inTabs }));
   tabs.querySelectorAll = (sel) => (sel.includes('tablist') ? buttons : sel === '[data-tabs]' ? [] : panels);
   tabs.querySelector = (sel) => panels.find((p) => sel.includes(`"${p.dataset.tabPanel}"`));
   return { tabs, buttons, panels };

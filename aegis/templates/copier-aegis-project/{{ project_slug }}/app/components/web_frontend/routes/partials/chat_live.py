@@ -60,79 +60,32 @@ from app.services.ai.service import (
 from app.services.ai.service.trace import record_tool_call
 from app.services.shared.deps import get_optional_owner_user_id
 
-# Sent the moment the call is up, so the assistant speaks first: a cue
-# rather than a line, so the greeting varies.
-GREETING = (
-    "The call just connected. Greet them warmly in a few words and ask "
-    "what they would like to talk about."
+from .chat_live_lines import (
+    CUES,
+    NOT_SEEN,
+    SAW,
+    SEEN_CHARS,
+    SHOWN,
+    TIME_UP,
+    WRAP_UP,
+    opening,
 )
-# A call into a conversation already under way: no introductions.
-CONTINUING = (
-    "The call just connected, in a conversation you are already having with "
-    "them (it is above). Greet them briefly as someone you know - no "
-    "introductions - and ask what is next."
-)
-# A call soon after one dropped mid-answer picks it up.
-RESUMING = (
-    "The call just reconnected. It dropped while you were answering them; "
-    'they had asked: "{asked}". Say in a few words that you got cut off, '
-    "then pick that answer up."
-)
-
-# Into the quiet: no provider ends a call on silence, so the page counts it
-# (call-state.js) and names one of these; the assistant says it. Cues, not
-# scripts, so the words vary. The check-in is a question they can tell
-# apart: "I'm ready when you are" went unnoticed as one.
-CHECK_IN = (
-    'It has gone quiet on the call. Ask them "Are you still there?" and nothing else.'
-)
-GOODBYE = (
-    "It is still quiet; they seem to have stepped away. Say a short goodbye "
-    "and end the call."
-)
-CUES = {"check_in": CHECK_IN, "goodbye": GOODBYE}
-
-# A picture shown mid-call: what the turn is asked with it (nothing was
-# said, the picture is the question), and the cue the assistant says what
-# it saw from, in its own voice. A look that failed is said too: the page
-# waits on it.
-SHOWN = "(showing you this on the call)"
-SAW = (
-    "They just showed you a picture on the call and you looked at it. Tell "
-    'them what you saw, in your own words: "{seen}"'
-)
-NOT_SEEN = (
-    "They just showed you a picture on the call, but you could not look at "
-    "it. Say so in a sentence and ask them to try again."
-)
-# What of the look is spoken: a few sentences, not the whole transcription.
-SEEN_CHARS = 1_000
 
 # A mount's longest call (``ChatSurface.longest_call``): this long before
 # it, the assistant is cued to wrap up; at it, the call ends and the page
 # is told why.
 WRAP_UP_SECONDS = 20.0
-WRAP_UP = (
-    "The call is nearly out of time. Tell them so in a sentence and say a "
-    "short goodbye."
-)
-TIME_UP = "The call reached its time limit. You can carry on by typing."
+# Until she starts her opening, the caller goes on as silence: GPT-Live's
+# voice answered an "um" heard before its greeting began, then said the
+# greeting too (2026-11-16). Heard past this however it went, so a lost
+# opening never leaves the call deaf.
+DEAF_UNTIL_OPENED_SECONDS = 15.0
 
 # How a call the gate let through ended (``ChatSurface.on_call_end``): as
 # ``drive`` says (the page or the provider hung up, it failed), or the
 # server ended it, at its longest or refused by the mount's ``call_check``
 # mid-call. A quiet call's goodbye is the page hanging up.
 CallEnded = realtime_calls.CallEnd | Literal["limit", "refused"]
-
-
-def opening(conversation: Any) -> str:
-    """How the call opens: picking up a dropped one, carrying on a
-    conversation, or a first greeting."""
-    if conversation is None:
-        return GREETING
-    if asked := realtime_calls.resumed(conversation):
-        return RESUMING.format(asked=asked)
-    return CONTINUING if conversation.messages else GREETING
 
 
 async def _engine_now() -> tuple[LiveEngine | None, dict[str, Any] | None]:
@@ -262,9 +215,20 @@ async def _carry(
         }
     )
 
+    # Her first word ends it early (``DEAF_UNTIL_OPENED_SECONDS``).
+    deaf_until = asyncio.get_running_loop().time() + DEAF_UNTIL_OPENED_SECONDS
+
     async def speak() -> None:
+        nonlocal deaf_until
         async for chunk in session.stream_audio():
+            deaf_until = 0.0
             await ws.send_bytes(chunk)
+
+    def heard(audio: bytes) -> bytes:
+        """What the caller sent, or silence as long while she opens."""
+        if asyncio.get_running_loop().time() > deaf_until:
+            return audio
+        return bytes(len(audio))
 
     looks: set[asyncio.Task[None]] = set()
 
@@ -274,7 +238,7 @@ async def _carry(
             if message["type"] == "websocket.disconnect":
                 return
             if message.get("bytes"):
-                await session.send_audio(message["bytes"])
+                await session.send_audio(heard(message["bytes"]))
                 continue
             if not message.get("text"):
                 continue

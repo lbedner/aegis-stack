@@ -161,6 +161,14 @@ async def wiring(node_id: str) -> dict[str, Any]:
     }
 
 
+async def inside(service_id: str) -> dict[str, Any]:
+    """A path card's insides (its ``inside``): the service opened up as the
+    map opens it, its pieces in their lanes; still, nothing to play."""
+    key = registry_of(service_id)
+    scene = await _drawn(current_navigation(), key, None)
+    return {"path_steps": [], "path_scenes": [scene], "path_inside": title_of(key)}
+
+
 def listed(recording: RequestHops) -> dict[str, Any]:
     """``recording``'s hops in a list (``LIST_VIEW``), in the order they
     ran: what each went through, its timing as a bar on the request's, and
@@ -227,6 +235,19 @@ async def _scene(
         list(dict.fromkeys(pair for keys in ways for pair in pairwise(keys))),
         seen,
     )
+    return await _drawn(navigation, key, path, at, ms, lead)
+
+
+async def _drawn(
+    navigation: dict[str, list[NavItem]],
+    key: str,
+    path: Path | None,
+    at: float = 0.0,
+    ms: float = 0.0,
+    lead: float = 0.0,
+) -> dict[str, Any]:
+    """The map at ``key``'s level as a scene, drawing ``path`` alone, or
+    all of it (none: as the map page opens it)."""
     query = {"view": overseer_container.MAP_VIEW, "zoom": key}
     view = await overseer_container.overview(navigation, query, path=path)
     return {

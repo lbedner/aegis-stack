@@ -20,8 +20,9 @@ card's ghost behind it. An agent with its camera off gives Meet no
 picture at all. The script runs in the page itself, never in the frames
 Meet opens inside it, and carries no picture: its initials stand until
 the page has loaded and the picture is handed over (``open_meet``). While
-the agent works on a request and has said nothing, its mic carries soft
-key taps (``taps``, the chat's own), not it saying what it looks up.
+the agent works on a request and has said nothing, its mic carries its
+voice's working sound (``sound``, the chat's own: keys, papers, or both),
+not it saying what it looks up.
 """
 
 import asyncio
@@ -88,8 +89,9 @@ class Start(BaseModel):
     name: str
     image: str | None = None
     camera: bool = True
-    # Key taps while it works (the voice's ``VOICE_WORKING_SOUND`` "typing").
-    taps: bool = False
+    # What plays while it works (the voice's ``VOICE_WORKING_SOUND``; a
+    # str, as a stack with meetings may have no voice settings).
+    sound: str = "none"
 
 
 def put_to(text: str, name: str) -> str:
@@ -337,8 +339,8 @@ def initials(name: str) -> str:
 # Defines ``window.__meetingCard`` and answers getUserMedia before the
 # page's own scripts run (``card.js``, ``__START__`` the card as it joins).
 CARD = (Path(__file__).parent / "card.js").read_text()
-# The chat's key taps (``window.keyTaps``), where the stack has the web
-# frontend that keeps them; without, the card is quiet while it works.
+# The chat's working sounds (``window.workingSound``), where the stack has
+# the web frontend that keeps them; without, the card is quiet while it works.
 TAPS = Path(__file__).parents[4] / "components/web_frontend/static/js/taps.js"
 
 
@@ -354,9 +356,10 @@ def script(start: Start) -> str:
         "focus": None,
         "pills": [],
     }
-    if start.taps and not TAPS.exists():
-        logger.warning("No key taps: this stack has no web frontend's taps.js")
-    taps = TAPS.read_text() if start.taps and TAPS.exists() else ""
+    sounds = start.sound != "none"
+    if sounds and not TAPS.exists():
+        logger.warning("No working sound: this stack has no web frontend's taps.js")
+    taps = TAPS.read_text() if sounds and TAPS.exists() else ""
     return taps + CARD.replace("__START__", json.dumps(card))
 
 

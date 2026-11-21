@@ -32,6 +32,7 @@ from app.services.ai.domains.chat.readings import reading_stage
 from app.services.ai.domains.chat.user_memory import memory_user
 from app.services.ai.domains.spend import calls
 from app.services.ai.domains.voice import live_engines
+from app.services.ai.domains.voice.call_turns import save_turn
 from app.services.ai.domains.voice.catalog import GEMINI_PREBUILT, get_voice
 from app.services.ai.domains.voice.live_engines import is_gpt_live
 from app.services.ai.domains.voice.models import TTSProvider
@@ -125,42 +126,6 @@ class TurnLog:
         return heard, said, trace
 
 
-async def save_turn(
-    ai: Any,
-    conversation_id: str,
-    heard: str,
-    said: str,
-    trace: list[dict[str, Any]],
-    *,
-    model: str,
-    provider: str,
-    usage: dict[str, Any] | None = None,
-    interrupted: bool = False,
-) -> None:
-    """The turn into the conversation, as a typed turn is kept: ``usage``
-    is its share of the call (tokens and cost), for its footer. A turn the
-    call dropped in the middle of is ``interrupted``, and keeps what was
-    asked so the next call can pick it up (``resumed``)."""
-    conversation = await ai.get_conversation(conversation_id)
-    if conversation is None:
-        return
-    if heard:
-        conversation.add_message(MessageRole.USER, heard)
-    metadata: dict[str, Any] = {
-        "conversation_id": conversation_id,
-        "provider": provider,
-        "model": model,
-        "stream_complete": True,
-    }
-    if trace:
-        metadata["tool_trace"] = trace
-    metadata.update(usage or {})
-    if interrupted:
-        metadata.update(interrupted=True, asked=heard)
-    conversation.add_message(MessageRole.ASSISTANT, said, metadata=metadata)
-    await ai.conversation_manager.save_conversation(conversation)
-
-
 def call_voice(model: str, voice: str | None) -> str | None:
     """The voice a call on ``model`` speaks: the profile's ``voice`` where
     the engine's provider has it (one voice for the agent's calls and
@@ -190,8 +155,9 @@ def _model_settings(
     if model.startswith("openai:"):
         settings["openai_voice"] = speaks
         if is_gpt_live(model):
-            # GPT-Live takes the call manners as its own instructions; the
-            # agent's prompt is the backend's. It has no token limit and
+            # GPT-Live's voice takes the call manners, when to hand off and
+            # the thread so far (``realtime_for``); the agent's prompt is the
+            # backend's. It has no token limit and
             # transcribes itself.
             if instructions:
                 settings["openai_live_instructions"] = instructions
@@ -242,8 +208,12 @@ async def call_instructions(agent: Any, history: str) -> str:
     never its system prompt, so the prompt is read back off the agent: the
     very prompt a typed turn sends."""
     parts = await agent.system_prompt_parts()
-    prompt = "\n\n".join(part.content for part in parts)
-    return f"{prompt}\n\n{history}" if history else prompt
+    return _and_history("\n\n".join(part.content for part in parts), history)
+
+
+def _and_history(text: str, history: str) -> str:
+    """``text``, then the conversation so far, when there is one."""
+    return f"{text}\n\n{history}" if history else text
 
 
 async def realtime_for(
@@ -274,13 +244,14 @@ async def realtime_for(
     model speaks on each engine."""
     from app.services.ai.service.chat import held_agent
 
-    manners = (instructions, pronunciation_instructions())
+    hands_off = live_engines.LIVE_HANDS_OFF if is_gpt_live(model) else None
+    manners = (instructions, pronunciation_instructions(), hands_off)
     instructions = "\n\n".join(filter(None, manners))
     # A call answers as its agent without taking the thread: typed turns
     # after it would answer as the voice model.
     config = await held_agent(conversation, agent_slug, hand_over=False)
     slug = config.slug
-    # GPT-Live takes the call manners as its own (``_model_settings``).
+    # GPT-Live's voice takes the call manners as its own (``_model_settings``).
     if not is_gpt_live(model):
         config = config.led_by(instructions)
     setup = await ai._build_turn(
@@ -292,6 +263,10 @@ async def realtime_for(
         admin=admin,
     )
     agent, history = setup.agent, setup.conversation_context
+    if is_gpt_live(model):
+        # Its voice hears the thread as every other engine does: told only
+        # the manners, it made answers up (2026-11-16).
+        instructions = _and_history(instructions, history)
     realtime = agent.realtime(
         model,
         instructions=await call_instructions(agent, history),

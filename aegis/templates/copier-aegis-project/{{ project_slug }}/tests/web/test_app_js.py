@@ -804,19 +804,25 @@ GONE_HARNESS = (
 let closed = false;
 const toasts = [];
 window.dispatchEvent = (e) => toasts.push(e.detail && e.detail.text);
-document.getElementById = (id) => (id === 'drawer' ? { close: () => { closed = true; } } : null);
+const drawer = { open: true, dataset: {}, querySelector: () => null,
+                 show() { this.open = true; }, close() { this.open = false; closed = true; } };
+document.getElementById = (id) => (id === 'drawer' ? drawer : null);
 require(APP_JS);
 const failed = (target, status) => fire('htmx:responseError',
   { detail: { elt: { dataset: {} }, target: { id: target }, xhr: { status } } });
-failed('drawer-body', 404);
+// htmx resolves its promise on any status, after the error event.
+htmx.ajax = () => { failed('drawer-body', 404); return Promise.resolve(); };
+const link = { dataset: { drawerParam: 'run', drawerUrl: '/overseer/runner/runs/9' } };
+fire('htmx:load', { detail: { elt: { querySelector: () => link } } });
 failed('overseer-main', 500);
-console.log(JSON.stringify({ closed, toasts }));
+setTimeout(() => console.log(JSON.stringify({ closed, open: drawer.open, toasts })), 0);
 """
 )
 
 
 def test_a_drawer_for_an_item_no_longer_there_closes() -> None:
     """Deleted from that very drawer, or a stale link: the drawer closes
-    (its parameter leaves the address), no error; any other failure says so."""
+    (its parameter leaves the address) and stays closed once the load is
+    over, no error; any other failure says so."""
     out = run(GONE_HARNESS, APP_JS=APP_JS)
-    assert out == {"closed": True, "toasts": ["Request failed (500)"]}
+    assert out == {"closed": True, "open": False, "toasts": ["Request failed (500)"]}

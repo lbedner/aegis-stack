@@ -8,7 +8,6 @@ code), named by its node. Read from the source index, never imported.
 Optional parts (a router, jobs) are inventory, counted on the strip; only
 the rules are findings."""
 
-import ast
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import cached_property
@@ -22,6 +21,7 @@ from app.core.ontology.model import node_id, parse_node_id
 from app.core.ontology.parts import node_of, service_folders
 from app.core.source_index import Index, Module, within
 from app.services.system import facade_reach, pattern_findings, patterns
+from app.services.system.exec_calls import exec_lines
 from app.services.system.facade_reach import DOMAINS, Import
 from app.services.system.file_budget import (
     DECLARATION_LINES,
@@ -95,23 +95,13 @@ def _modules(index: Index, package: str) -> list[Module]:
     ]
 
 
-def _execs(index: Index, module: Module) -> list[int]:
-    """The lines ``module`` runs a query on: each ``.exec(`` call (parsed
-    only where its text has one)."""
+def _execs(index: Index, module: Module, *, writes: bool = True) -> list[int]:
+    """The lines ``module`` runs a query on: each ``.exec(`` call, its
+    writes left out unless ``writes`` (parsed only where its text has one)."""
     if not any(".exec(" in line for line in module.lines):
         return []
     tree = index.tree(module.name)
-    if tree is None:
-        return []
-    return sorted(
-        {
-            node.func.end_lineno or node.lineno
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "exec"
-        }
-    )
+    return exec_lines(tree, writes=writes) if tree is not None else []
 
 
 def place_note(check: str, path: str, line: int, index: Index) -> str:
@@ -177,12 +167,13 @@ class Folder:
 
     @cached_property
     def reads(self) -> list[str]:
-        """Each ``.exec(`` outside a queries module (a loader's aside)."""
+        """Each ``.exec(`` of a read outside a queries module (a loader's
+        aside): a ``delete``, ``update`` or ``insert`` is a write."""
         return [
             f"{m.path}:{n}"
             for m in self.modules
             if not {"queries", *LOADERS} & set(self.words(m))
-            for n in _execs(self.index, m)
+            for n in _execs(self.index, m, writes=False)
         ]
 
     @cached_property
@@ -383,7 +374,7 @@ PARTS = Pattern(
             "reads-in-queries",
             "Reads live in queries",
             "Reads belong to a package's queries module; domain modules own "
-            "writes and orchestration. A .exec( anywhere else is a read the "
+            "writes and orchestration. A read's .exec( anywhere else is one the "
             "next N+1 audit cannot find.",
             lambda f: not f.reads,
             enforced=True,

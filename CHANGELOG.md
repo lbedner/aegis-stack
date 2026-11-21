@@ -191,6 +191,51 @@
 
 ### Fixed
 
+- **`aegis deploy` keeps a server's own files.** The deploy ships the
+  tracked tree with `rsync --delete`, so an untracked `secrets/` on the
+  server was wiped on every deploy. `secrets/` is now kept, as `.env` is;
+  `server.keep` in `.aegis/deploy.yml` names any other server-only paths;
+  and the deploy and `aegis deploy rollback` list whatever `--delete`
+  removed. A rollback spares the same server-only paths (it still restores
+  `.env` and `data/`). Deploy output streams as rsync runs. `secrets/` is
+  in the generated `.dockerignore`. (#2124)
+- **`aegis remove` and `remove-service` refuse a part an installed one
+  still requires**, naming it (`aegis remove runner` with meetings
+  installed, or a service a plugin requires); `--force` removes it with a
+  warning. Components, services and plugins share one check. The worker
+  still takes its redis. (#2104)
+- **`aegis add`, `remove` and `update` read a project's answers the same
+  way.** An add on a project older than a question no longer saves the
+  template's default as its answer (a pre-split meetings project kept
+  `include_runner: false`); `update --dry-run` previews the answers the
+  update will use; and every one of them turns on what an installed part
+  requires, options included (`ai[sqlite]` brings the database; htmx turns
+  deploy on, which adds the socket proxy), saying so. (#2106)
+- **Switching a component's option on an older project brings its files.**
+  `aegis add inference[llamacpp]` on a project generated before the engine
+  files existed took them for deletions and brought none; it now lists the
+  template at the project's own commit (from GitHub when `aegis` is
+  installed from PyPI). An add no longer deletes an empty `app/main.py`
+  (or any empty file it did not render). (#2127)
+- **A model that points at the user table loads it.** Every process loads
+  the app's full model metadata on its first ORM use, so `runner token
+  create`, the change queue and MCP tokens no longer fail with
+  `NoReferencedTableError` when the command imported only their own
+  models. The runner's paths have one home in `protocol.py` for the
+  router, the client and its hooks. (#2136)
+- **Insights retries a passing ClickHouse 5xx**, three tries 5 and 10
+  seconds apart; the PyPI collector's own copy of the query is gone, so it
+  retries too. (#2125)
+- **Postgres gets 256 MB of shared memory** (`shm_size`), so parallel
+  vacuum and parallel queries no longer fail on Docker's 64 MB. The next
+  deploy recreates the Postgres container once. (#2020)
+- **An Overseer drawer opened on an item that is gone stays closed**
+  instead of reopening empty. (#2110)
+- **Illiana's known debt survives a template rename, and writes are not
+  reads.** A finding on a renamed function's `def` line matches its known
+  entry, so a template update no longer flags it as new; `reads-in-queries`
+  leaves out `delete`, `update` and `insert`. (#2019)
+
 - **A link in a model's answer leads to a page or a mailbox, or nowhere.**
   Markdown a model wrote (a chat reply, a meeting answer, what a run came
   back with) kept a link's address whatever it was, so a `javascript:` or

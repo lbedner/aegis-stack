@@ -11,6 +11,7 @@ import pytest
 
 from aegis.core.components import COMPONENTS, CORE_COMPONENTS
 from aegis.core.copier_manager import load_copier_answers
+from aegis.core.plugins.spec import PluginKind, PluginSpec
 
 from .test_utils import format_file_like_regen, run_aegis_command
 
@@ -275,6 +276,111 @@ class TestRemoveCommand:
         # so dependency sync might fail. We just verify the command succeeds
         # and that worker removal is mentioned in the output.
         assert "worker" in result.stdout.lower() or "removed" in result.stdout.lower()
+
+
+class TestRemoveRequiredComponent:
+    """A component an installed service requires is not removed silently."""
+
+    def test_remove_refuses_component_a_service_requires(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        project_path = project_factory("base_with_auth_service")
+
+        result = run_aegis_command(
+            "remove", "database", "--project-path", str(project_path), "--yes"
+        )
+
+        assert not result.success
+        assert "auth" in result.stderr
+        assert load_copier_answers(project_path).get("include_database") is True
+        assert (project_path / "app" / "core" / "db.py").exists()
+
+    def test_remove_force_removes_required_component(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        project_path = project_factory("base_with_auth_service")
+
+        result = run_aegis_command(
+            "remove",
+            "database",
+            "--project-path",
+            str(project_path),
+            "--yes",
+            "--force",
+        )
+
+        assert result.success, result.stderr
+        assert "auth" in result.stdout
+        assert load_copier_answers(project_path).get("include_database") is False
+
+    def test_remove_worker_still_takes_its_redis(
+        self, project_factory: "ProjectFactory"
+    ) -> None:
+        """Redis is required by the worker being removed, so it goes too."""
+        project_path = project_factory("base_with_worker")
+
+        result = run_aegis_command(
+            "remove", "worker", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success, result.stderr
+        answers = load_copier_answers(project_path)
+        assert answers.get("include_worker") is False
+        assert answers.get("include_redis") is False
+
+
+@pytest.fixture
+def auth_required_by_a_plugin(
+    project_factory: "ProjectFactory", monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """An auth project with an installed plugin ``dash`` that requires auth."""
+    project_path = project_factory("base_with_auth_service")
+    answers_file = project_path / ".copier-answers.yml"
+    answers_file.write_text(answers_file.read_text() + "include_dash: true\n")
+    dash = PluginSpec(
+        name="dash",
+        kind=PluginKind.SERVICE,
+        description="",
+        required_services=["auth"],
+    )
+    monkeypatch.setattr("aegis.commands.remove.discover_plugins", lambda: [dash])
+    return project_path
+
+
+class TestRemoveRequiredService:
+    """A service an installed part requires is not removed silently."""
+
+    @pytest.mark.parametrize("command", ["remove", "remove-service"])
+    def test_remove_refuses_service_a_plugin_requires(
+        self, auth_required_by_a_plugin: Path, command: str
+    ) -> None:
+        project_path = auth_required_by_a_plugin
+
+        result = run_aegis_command(
+            command, "auth", "--project-path", str(project_path), "--yes"
+        )
+
+        assert not result.success
+        assert "dash" in result.stderr
+        assert load_copier_answers(project_path).get("include_auth") is True
+
+    def test_remove_force_removes_required_service(
+        self, auth_required_by_a_plugin: Path
+    ) -> None:
+        project_path = auth_required_by_a_plugin
+
+        result = run_aegis_command(
+            "remove-service",
+            "auth",
+            "--project-path",
+            str(project_path),
+            "--yes",
+            "--force",
+        )
+
+        assert result.success, result.stderr
+        assert "dash" in result.stdout
+        assert load_copier_answers(project_path).get("include_auth") is False
 
 
 class TestRemoveCommandIntegration:
@@ -677,6 +783,6 @@ class TestRemoveHtmxComponent:
 
         assert flet_main.read_text() == before
         assert (
-            "app.mount(DASHBOARD_PATH, flet_app)"
+            "app.mount(DASHBOARD_PATH, "
             in (project_path / "app" / "integrations" / "main.py").read_text()
         )

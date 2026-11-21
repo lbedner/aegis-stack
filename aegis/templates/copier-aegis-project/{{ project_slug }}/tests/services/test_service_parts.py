@@ -131,6 +131,25 @@ def test_a_read_outside_queries_is_flagged_but_a_seed_is_not(project: Path) -> N
     assert _evidence(project, "reads-in-queries") == ["app/services/notes/store.py:2"]
 
 
+def test_a_write_outside_queries_is_no_read(project: Path) -> None:
+    """``.exec(`` of a ``delete``, ``update`` or ``insert`` (directly, or
+    the name it was assigned to) writes; only the ``select`` reads."""
+    _write(
+        project,
+        "app/services/notes/store.py",
+        """
+        async def prune(session):
+            await session.exec(delete(Note).where(Note.old))
+            await session.exec(update(Note).values(seen=True))
+            await session.exec(sa.insert(Note).values(x=1))
+            stmt = delete(Note)
+            await session.exec(stmt)
+            return await session.exec(select(Note))
+        """,
+    )
+    assert _evidence(project, "reads-in-queries") == ["app/services/notes/store.py:8"]
+
+
 def test_logic_outside_a_standard_file_belongs_in_a_domain(project: Path) -> None:
     """The standard names a service's top-level files (``PIECES``); any
     other module or package is a subsystem, which lives under domains/."""

@@ -3,7 +3,10 @@ in ``.patterns-baseline.json`` (``check``).
 
 Each place a finding shows (one ``path:line`` of its evidence) is known by
 its rule, its part, its file and the text on that line, not the line's
-number: code added above known debt does not make it new. Illiana gives
+number: code added above known debt does not make it new. A function's
+finding shows on its ``def``, whose text a rename changes: there a known
+entry of the same rule, part and file whose text is gone stands for it.
+``update`` rewrites the known ones under their text now. Illiana gives
 the verdict, last: blocked when a new place breaks a rule that holds a
 change (an enforced or a gated one, ``Finding.blocking``), else clear.
 The exit code is 0 unless ``strict`` and blocked.
@@ -24,6 +27,7 @@ from app.services.system.errors.fingerprint import digest
 from app.services.system.pattern_findings import Finding, place, text_at
 
 BASELINE = ".patterns-baseline.json"
+DEFINES = ("def ", "async def ", "class ")
 
 
 class Spot(NamedTuple):
@@ -33,6 +37,7 @@ class Spot(NamedTuple):
     path: str
     line: int
     key: str
+    defines: bool = False  # its line a ``def`` or ``class``: renamed in place
 
     @property
     def at(self) -> str:
@@ -53,13 +58,14 @@ def check(
     every place when there is none, else only the known ones still there."""
     env, baseline = env or {}, index.root / BASELINE
     here, before = _spots(found, index), _known(index)
+    fresh = _new(here, before)
     if update:
-        now = Counter(s.key for s in here)
-        keep = now & before if baseline.exists() else now
+        keep = Counter(s.key for s in here)
+        if baseline.exists():
+            keep -= Counter(s.key for s in fresh)
         body = {"tool": "patterns", "known": sorted(keep.elements())}
         baseline.write_text(json.dumps(body, indent=2) + "\n")
         return f"{BASELINE}: {keep.total()} known", 0
-    fresh = _new(here, before)
     blocked = sum(s.finding.blocking for s in fresh)
     lines = [
         _annotation(s) if env.get("GITHUB_ACTIONS") else f"{s.at}: {_line(s)}"
@@ -130,19 +136,36 @@ def _spots(found: Iterable[Finding], index: Index) -> list[Spot]:
     placed = []
     for f in found:
         for path, line in map(place, f.evidence):
-            text = digest([text_at(index, path, line)])[:12]
-            placed.append(Spot(f, path, line, f"{f.check} {f.subject} {path} {text}"))
+            said = text_at(index, path, line)
+            key = f"{f.check} {f.subject} {path} {digest([said])[:12]}"
+            defines = said.startswith(DEFINES)
+            placed.append(Spot(f, path, line, key, defines))
     return placed
 
 
 def _new(here: list[Spot], before: Counter[str]) -> list[Spot]:
+    """The spots ``before`` does not know: by key, then a definition by a
+    known entry of its rule, part and file whose text is gone (the same
+    function renamed: a rename changes its line, not its debt)."""
     left, fresh = Counter(before), []
     for spot in here:
         if left[spot.key]:
             left[spot.key] -= 1
         else:
             fresh.append(spot)
-    return fresh
+    return [s for s in fresh if not (s.defines and _renamed(s, left))]
+
+
+def _renamed(spot: Spot, left: Counter[str]) -> bool:
+    """Whether a known entry still left stands for ``spot``: its rule,
+    part and file the same. It is used up."""
+    where = spot.key.rpartition(" ")[0]
+    same = next(
+        (k for k, n in left.items() if n and k.rpartition(" ")[0] == where), None
+    )
+    if same is not None:
+        left[same] -= 1
+    return same is not None
 
 
 def _line(spot: Spot) -> str:

@@ -126,9 +126,7 @@ class TestAddRemovePluginRoundTrip:
         from aegis.core.file_manifest import FileManifest
 
         shared = "app/services/test_plugin/py.typed"
-        monkeypatch.setattr(
-            ManualUpdater, "_aegis_template_paths", lambda self: {shared}
-        )
+        monkeypatch.setattr(ManualUpdater, "_aegis_template_paths", frozenset({shared}))
         # A manifest that forgets most of what the tree renders.
         spec = replace(
             get_spec(),

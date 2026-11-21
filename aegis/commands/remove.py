@@ -5,6 +5,7 @@ Removes components from an existing Aegis Stack project using manual file deleti
 """
 
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -40,8 +41,7 @@ def _uninstall_plugin(
     """Run the full ``aegis remove <plugin>`` flow for an external plugin.
 
     Mirrors the component remove flow's structure but routes through
-    ``ManualUpdater.remove_plugin`` and adds a reverse-dependency check
-    that the existing ``remove-service`` lacks.
+    ``ManualUpdater.remove_plugin``.
     """
     # The module name locates the plugin's template tree, so remove can
     # take out everything add rendered, not only what the manifest lists.
@@ -52,33 +52,7 @@ def _uninstall_plugin(
     plugin_spec, plugin_module_name = resolved
 
     answers = load_copier_answers(target_path)
-
-    # Reverse-dep check: refuse to remove a plugin that other installed
-    # specs depend on. ``--force`` bypasses (escape hatch for known
-    # situations the user has already reasoned about). Candidates span
-    # services, components, and external plugins — components can
-    # carry ``required_plugins`` too, so leaving them out would let a
-    # silent-broken removal slip through.
-    candidates: list = (
-        list(SERVICES.values()) + list(COMPONENTS.values()) + list(discover_plugins())
-    )
-    dependents = reverse_dependents(plugin_spec.name, candidates, answers)
-    if dependents and not force:
-        brand.error(
-            f"Cannot remove {plugin_spec.name!r}: still required by "
-            f"{', '.join(repr(d) for d in dependents)}",
-            err=True,
-        )
-        typer.echo(
-            "   Remove dependents first, or pass --force to override.",
-            err=True,
-        )
-        raise typer.Exit(1)
-    if dependents and force:
-        brand.warn(
-            f"Forcing removal despite reverse dependents: "
-            f"{', '.join(repr(d) for d in dependents)}"
-        )
+    refuse_dependents([plugin_spec.name], answers, force, dependency_candidates())
 
     typer.echo(f"\n{t('remove.plugin_removing', name=plugin_spec.name)}")
     if not yes and not typer.confirm(
@@ -101,6 +75,51 @@ def _uninstall_plugin(
             "dropped; adding the plugin again restores them. A deployed "
             "database does the same when it applies the new revision."
         )
+
+
+def dependency_candidates() -> list[Any]:
+    """Every spec that can require another: services, components, plugins.
+
+    Components carry ``required_plugins`` too, so leaving any kind out
+    would let a removal that breaks an installed part slip through.
+    """
+    return (
+        list(SERVICES.values()) + list(COMPONENTS.values()) + list(discover_plugins())
+    )
+
+
+def _remaining_dependents(
+    name: str, removing: list[str], answers: dict[str, Any], candidates: list[Any]
+) -> list[str]:
+    """Installed services, components and plugins requiring ``name`` that stay."""
+    return [
+        d for d in reverse_dependents(name, candidates, answers) if d not in removing
+    ]
+
+
+def refuse_dependents(
+    removing: list[str],
+    answers: dict[str, Any],
+    force: bool,
+    candidates: list[Any],
+) -> None:
+    """Refuse removing a part something staying installed requires.
+
+    ``--force`` removes it anyway, with a warning naming what still needs it.
+    """
+    for name in removing:
+        dependents = _remaining_dependents(name, removing, answers, candidates)
+        if not dependents:
+            continue
+        names = ", ".join(repr(d) for d in dependents)
+        if force:
+            brand.warn(t("remove.forcing_required", name=repr(name), dependents=names))
+            continue
+        brand.error(
+            t("remove.still_required", name=repr(name), dependents=names), err=True
+        )
+        typer.echo(f"   {t('remove.still_required_hint')}", err=True)
+        raise typer.Exit(1)
 
 
 def _translated_desc(name: str, fallback: str) -> str:
@@ -263,6 +282,8 @@ def remove_command(
         brand.success(t("remove.nothing_to_remove"))
         raise typer.Exit(0)
 
+    candidates = dependency_candidates()
+
     # Auto-remove redis if worker is being removed (redis has no standalone functionality)
     # Don't remove redis if cache component is using it
     if (
@@ -272,9 +293,14 @@ def remove_command(
         and not existing_answers.get(
             AnswerKeys.CACHE
         )  # Future: cache component may use redis
+        and not _remaining_dependents(
+            ComponentNames.REDIS, components_to_remove, existing_answers, candidates
+        )
     ):
         components_to_remove.append(ComponentNames.REDIS)
         typer.echo(t("remove.auto_remove_redis"))
+
+    refuse_dependents(components_to_remove, existing_answers, force, candidates)
 
     # Check for scheduler with sqlite backend - warn about persistence
     if ComponentNames.SCHEDULER in components_to_remove:

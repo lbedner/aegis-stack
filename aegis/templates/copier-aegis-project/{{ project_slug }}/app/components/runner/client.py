@@ -39,8 +39,9 @@ from app.core.log import logger
 
 from . import hooks
 from .protocol import (
+    CLAIM,
+    FINISH,
     MOST_AGENT,
-    RUNS,
     TIMEOUT_SECONDS,
     Answer,
     ClaimedRun,
@@ -128,7 +129,7 @@ async def run_once(
         transport=transport,
         timeout=30.0,
     ) as api:
-        claimed = await api.post(f"{RUNS}/claim", json=asking.model_dump())
+        claimed = await api.post(CLAIM, json=asking.model_dump())
         claimed.raise_for_status()
         if claimed.status_code == 204:
             return False
@@ -137,7 +138,7 @@ async def run_once(
         answer = await _answer(runner, run)
         said = kept(answer.result, answer.ok)
         finished = await api.post(
-            f"{RUNS}/{run.id}/finish",
+            FINISH.format(run_id=run.id),
             json=answer.model_copy(update={"result": said}).model_dump(),
         )
         finished.raise_for_status()

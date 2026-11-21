@@ -516,9 +516,10 @@ function syncDrawer(root) {
     if (drawer.open) drawer.close();
     return;
   }
+  // A real swap opens the drawer (``htmx:afterSwap``); htmx resolves this
+  // on any status, so opening it here would reopen one a 404 just closed.
   htmx.ajax('GET', url, { target: '#drawer-body', swap: 'innerHTML' })
     .then(() => {
-      if (!drawer.open) drawer.show();
       // Opened at one line (a search hit's ``data-hit``): bring it into view.
       const hit = drawer.querySelector('[data-hit]');
       revealTab(hit);

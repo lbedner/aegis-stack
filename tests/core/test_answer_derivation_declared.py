@@ -32,9 +32,11 @@ from typing import Any
 import pytest
 import yaml
 
-from aegis.commands.update import _detect_existing_features
 from aegis.constants import AnswerKeys
 from aegis.core.components import COMPONENTS
+from aegis.core.feature_detection import (
+    detect_existing_features as _detect_existing_features,
+)
 from aegis.core.services import SERVICES
 
 REPO = Path(__file__).parents[2]

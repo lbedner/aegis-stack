@@ -11,6 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 # Where a runner, and its agent's hooks, reach the app's runs.
 RUNS = "/api/v1/runner/runs"
+# Where a runner claims a run, and posts what one came back with (the
+# route's own template: ``FINISH.format(run_id=...)``).
+CLAIM = f"{RUNS}/claim"
+FINISH = f"{RUNS}/{{run_id}}/finish"
 # What a runner gives a command where it is told nothing else, in seconds.
 TIMEOUT_SECONDS = 900.0
 # The most a run keeps of what came back.

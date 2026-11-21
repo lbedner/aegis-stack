@@ -10,6 +10,7 @@ project had deleted, because it copied the service's whole footprint again.
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -163,3 +164,34 @@ def test_a_memory_ai_moves_to_a_database(project_factory: ProjectFactory) -> Non
     assert "ai_providers: openai" in answers
     assert (project / f"{AI}/models/evals/run.py").exists()
     assert (project / f"{AI}/domains/evals/runner.py").exists()
+
+
+ENGINE = "app/components/inference/engine.py"
+LLAMACPP = "app/components/inference/llamacpp.py"
+
+
+def test_an_engine_switch_on_an_older_project_brings_the_engine(
+    project_factory: ProjectFactory,
+) -> None:
+    """A project generated before the engine interface never had its files:
+    they are not the project's deletions, so the switch to llama.cpp brings
+    them. An empty module of the project's own, which no template renders,
+    is left alone."""
+    project = project_factory(components=["inference[ollama]"])
+    for rel in (ENGINE, LLAMACPP):
+        (project / rel).unlink()
+    own = project / "app/main.py"
+    own.write_text("")
+
+    def older(updater: ManualUpdater) -> set[str]:
+        return set(updater._aegis_template_paths) - {ENGINE, LLAMACPP}
+
+    with patch.object(ManualUpdater, "_paths_at_project_commit", property(older)):
+        result = ManualUpdater(project).add_component(
+            "inference", {"inference_engine": "llamacpp"}, run_post_gen=False
+        )
+
+    assert result.success, result.error_message
+    assert (project / ENGINE).exists()
+    assert "llama" in (project / LLAMACPP).read_text().lower()
+    assert own.exists()

@@ -53,7 +53,9 @@ def test_updating_a_meetings_stack_from_before_it_brings_it(tmp_path: Path) -> N
     on disk and no answer for the runner: an update reads that it has it,
     or it would render meetings without what it now imports. Only that:
     what else a part requires is not switched on behind a project's back."""
-    from aegis.commands.update import _detect_existing_features
+    from aegis.core.feature_detection import (
+        detect_existing_features as _detect_existing_features,
+    )
 
     (tmp_path / "app/services/meetings").mkdir(parents=True)
     (tmp_path / "app/components/web_frontend").mkdir(parents=True)

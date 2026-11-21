@@ -74,11 +74,17 @@ docker:
 | `server.host` | Server IP address or hostname |
 | `server.user` | SSH user (default: `root`) |
 | `server.path` | Application directory on the server (default: `/opt/{project-name}`) |
+| `server.keep` | Extra server-only paths a deploy never syncs or deletes, as rsync patterns (`[uploads/, certs/client.pem]`). Added to the built-in ones: `.env`, `.env.deploy`, `data/`, `backups/`, `traefik/acme/` and `secrets/` |
 | `docker.context` | Docker context name (used by the generated Makefile's `deploy-*` targets) |
 
 The `backup` and `health_check` settings are on
 [Backups and restore](backups.md#settings). Every field is optional beyond
 `server.host`; a missing one takes its default.
+
+A deploy ships what git tracks with `rsync --delete`, so anything else in
+`server.path` is removed unless one of those excludes names it. The deploy's
+output lists each path it removed, so a server-only file that needs
+`server.keep` shows up at deploy time.
 
 !!! tip "Git-ignore deploy config"
     Add `.aegis/` to your `.gitignore` to keep deployment config out of version control. `deploy-init` will remind you if it's missing.

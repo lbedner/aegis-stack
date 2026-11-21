@@ -40,6 +40,28 @@ def test_known_debt_stays_known_when_code_moves_above_it(tmp_path: Path) -> None
     assert f"{STORE}:3" in out and f"{STORE}:2" not in out
 
 
+def test_known_debt_on_a_function_stays_known_when_it_is_renamed(
+    tmp_path: Path,
+) -> None:
+    """A function's finding shows on its ``def``; a rename changes that
+    line's text, not the debt: the known entry in its file stands for it,
+    and ``--update`` keeps it under the new text. A second one is new."""
+    write_tree(tmp_path, {STORE: "async def render_memory(session=None):\n    pass\n"})
+    check([_finding(f"{STORE}:1")], _at(tmp_path), update=True)
+    renamed = "async def render_context(session=None):\n    pass\n"
+    write_tree(tmp_path, {STORE: renamed})
+    out, code = check([_finding(f"{STORE}:1")], _at(tmp_path), strict=True)
+    assert code == 0 and STORE not in out
+    assert check([_finding(f"{STORE}:1")], _at(tmp_path), update=True)[0].endswith(
+        ": 1 known"
+    )
+    write_tree(
+        tmp_path, {STORE: renamed + "async def other(session=None):\n    pass\n"}
+    )
+    out, _ = check([_finding(f"{STORE}:1"), _finding(f"{STORE}:3")], _at(tmp_path))
+    assert f"{STORE}:3" in out and f"{STORE}:1" not in out
+
+
 def test_the_baseline_only_shrinks(tmp_path: Path) -> None:
     write_tree(tmp_path, {STORE: "a = 1\nb = 2\n"})
     check([_finding(f"{STORE}:1")], _at(tmp_path), update=True)

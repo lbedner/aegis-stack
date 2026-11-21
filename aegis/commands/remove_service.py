@@ -21,6 +21,7 @@ from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES
 from ..core.version_compatibility import validate_version_compatibility
 from ..i18n import lazy_t, t
+from .remove import dependency_candidates, refuse_dependents
 
 
 def _translated_service_desc(name: str, fallback: str) -> str:
@@ -166,6 +167,10 @@ def remove_service_command(
     if not services_to_remove:
         brand.success(t("remove_service.nothing_to_remove"))
         raise typer.Exit(0)
+
+    refuse_dependents(
+        services_to_remove, existing_answers, force, dependency_candidates()
+    )
 
     # Show what will be removed
     brand.warn(f"\n{t('remove_service.services_to_remove')}")

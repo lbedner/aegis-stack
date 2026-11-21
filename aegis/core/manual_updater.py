@@ -7,9 +7,11 @@ and copies files to the target project.
 """
 
 import json
+import logging
 import re
 import shutil
 import subprocess
+from collections.abc import Iterable
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -43,10 +45,18 @@ from .component_files import (
     get_template_path,
     group_on,
     is_binary_asset,
+    project_path_for,
     shows_services_card,
 )
 from .component_utils import extract_base_service_name
 from .copier_manager import is_copier_project, load_copier_answers
+from .copier_updater import (
+    get_current_template_commit,
+    template_repo_url,
+    template_tree_args,
+    template_tree_at_remote,
+)
+from .feature_detection import detect_existing_features, fill_answers
 from .file_manifest import apply_cleanup_path
 from .plugins.composer import PLUGINS_ANSWER_KEY
 from .plugins.template_resolver import plugin_tree_files
@@ -56,6 +66,8 @@ from .verbosity import verbose_print
 
 if TYPE_CHECKING:  # import cycle at runtime; see _spec_for
     from .plugins.spec import PluginSpec
+
+logger = logging.getLogger(__name__)
 
 # Constants
 COPIER_ANSWERS_HEADER = (
@@ -178,7 +190,7 @@ def comment_out_env_keys(env_path: Path, keys: set[str], note: str) -> list[str]
     return done
 
 
-def sweep_empty_stubs(project_path: Path) -> list[str]:
+def sweep_empty_stubs(project_path: Path, only: set[str] | None = None) -> list[str]:
     """Delete 0-byte / whitespace-only ``.py`` files under ``project_path``.
 
     Whole-file Jinja gates (``{% if include_X %}...{% endif %}``) render
@@ -194,6 +206,10 @@ def sweep_empty_stubs(project_path: Path) -> list[str]:
     there), and snapshot directories. Removes any parent directory that
     becomes empty as a result.
 
+    ``only`` limits the sweep to those project-relative paths: an add passes
+    what its templates can produce, so an empty module of the project's own
+    (an older stack's ``app/main.py``) is not taken for a stub.
+
     Returns the list of deleted paths, relative to ``project_path``.
     """
     deleted: list[str] = []
@@ -207,13 +223,16 @@ def sweep_empty_stubs(project_path: Path) -> list[str]:
             part in _SWEEP_SKIP_DIRS for part in path.relative_to(project_path).parts
         ):
             continue
+        rel = path.relative_to(project_path).as_posix()
+        if only is not None and rel not in only:
+            continue
         if not _is_empty_stub(path):
             continue
         try:
             path.unlink()
         except OSError:
             continue
-        deleted.append(str(path.relative_to(project_path)))
+        deleted.append(rel)
         affected_parents.add(path.parent)
 
     # Walk parents bottom-up; an emptied dir may empty its own parent.
@@ -285,37 +304,6 @@ class UpdateResult(BaseModel):
     )
 
 
-# The module that registers a project's insight collectors, newest layout
-# first. The older path stays so a project generated before the insights
-# restructure still detects its sources when it updates.
-INSIGHTS_COLLECTION_PATHS = (
-    "app/services/insights/adapters/collectors/collection.py",
-    "app/services/insights/collector_service.py",
-)
-
-
-def detect_insights_sources(project_path: Path) -> dict[str, bool] | None:
-    """Which insight sources the project has wired up, by sub-flag key.
-
-    The collector files alone are no signal: older templates shipped
-    them all unconditionally. What counts is whether the collection
-    module registers the collector. None when the project has no
-    insights service.
-    """
-    for rel in INSIGHTS_COLLECTION_PATHS:
-        path = project_path / rel
-        if not path.is_file():
-            continue
-        src = path.read_text()
-        return {
-            AnswerKeys.INSIGHTS_GITHUB: "GitHubTrafficCollector" in src,
-            AnswerKeys.INSIGHTS_PYPI: "PyPICollector" in src,
-            AnswerKeys.INSIGHTS_PLAUSIBLE: "PlausibleCollector" in src,
-            AnswerKeys.INSIGHTS_REDDIT: "RedditCollector" in src,
-        }
-    return None
-
-
 class ManualUpdater:
     """
     Manual project updater that bypasses Copier's update mechanism.
@@ -351,28 +339,18 @@ class ManualUpdater:
         # from older projects) cause Jinja2 conditionals to inject unrelated
         # component code. See: #504
         copier_defaults = get_copier_defaults()
-        self.answers = {**copier_defaults, **load_copier_answers(project_path)}
+        persisted = load_copier_answers(project_path)
+        self.answers = {**copier_defaults, **persisted}
 
         # Heal answer-file drift before any shared-file regen consumes
-        # ``self.answers``. Without this, a project whose
-        # ``.copier-answers.yml`` is missing flags for an already-
-        # installed service (e.g. ``include_insights``) regenerates
-        # ``app/core/config.py`` with the wrong shape and drops env-
-        # bound Settings fields. See issue #686 — Failure B.
-        #
-        # Only fill keys that are absent from the *persisted* answers
-        # file. An explicit ``include_database: false`` written by
-        # Copier must not be flipped to True just because the project
-        # happens to have an ``alembic/`` dir hanging around — that
-        # would over-promote and break the normal add-component path.
-        persisted_keys = set(load_copier_answers(project_path).keys())
-        reconciled = {
-            k: v
-            for k, v in self.reconcile_answers_from_disk().items()
-            if k not in persisted_keys
-        }
-        if reconciled:
-            self.answers = {**self.answers, **reconciled}
+        # ``self.answers``, reading the project as ``aegis update`` does
+        # (``fill_answers``): a question the *persisted* file never
+        # answered is read off disk (an installed ``include_insights``,
+        # issue #686 Failure B), an explicit answer stands, and a part an
+        # installed one requires is switched on with a warning.
+        filled = fill_answers(persisted, self.reconcile_answers_from_disk())
+        if filled != persisted:
+            self.answers = {**copier_defaults, **filled}
             self._save_answers(self.answers)
 
         # Template files are at: template/{{ project_slug }}/... — the env
@@ -400,7 +378,7 @@ class ManualUpdater:
         ``ManualUpdater``'s lifetime. Owned files on disk whose content
         depends on the operated spec join per call (``get_cross_spec_scope``).
         """
-        return get_shared_scope(self._render_diff_engine.discover_paths())
+        return get_shared_scope(self._aegis_template_paths)
 
     def add_component(
         self,
@@ -495,7 +473,7 @@ class ManualUpdater:
                     if f not in before
                     or (
                         not (self.project_path / f).exists()
-                        and not self._renders(f, self.answers)
+                        and (self._predates(f) or not self._renders(f, self.answers))
                     )
                 ]
 
@@ -612,7 +590,12 @@ class ManualUpdater:
             # turn a previously-empty file into a populated one (e.g.
             # auth's deps.py going from gated-off to gated-on). See
             # issue #686 — Failure A.
-            files_deleted = sweep_empty_stubs(self.project_path)
+            from .post_gen_tasks import with_rendered_names
+
+            files_deleted = sweep_empty_stubs(
+                self.project_path,
+                only=with_rendered_names(set(self._aegis_template_paths)),
+            )
 
             # The template baselines the known repeated queries of the code
             # this add just wrote (and kept); the project's own baseline has not seen it.
@@ -1105,7 +1088,7 @@ class ManualUpdater:
             fresh = written or set()
             installed = get_installed_owned_paths(updated_answers)
             scope += get_cross_spec_scope(
-                self._render_diff_engine.discover_paths(),
+                self._aegis_template_paths,
                 lambda rel: rel not in fresh
                 and self._belongs_in_project(rel, installed),
                 operated,
@@ -1672,9 +1655,55 @@ class ManualUpdater:
                 error_message=str(e),
             )
 
-    def _aegis_template_paths(self) -> set[str]:
-        """Every path aegis's own templates can produce."""
-        return set(self._render_diff_engine.discover_paths())
+    @cached_property
+    def _paths_at_project_commit(self) -> set[str] | None:
+        """Project paths the template had at the project's recorded commit.
+
+        Read from this CLI's template when it is a git checkout holding the
+        commit, else from the remote ``aegis update`` resolves against (an
+        installed wheel). ``None`` when neither can: no commit recorded,
+        offline, or a commit the remote does not have.
+        """
+        from .post_gen_tasks import with_rendered_names
+
+        commit = get_current_template_commit(self.project_path)
+        if commit is None:
+            return None
+        try:
+            listing: Iterable[str] = subprocess.run(
+                ["git", *template_tree_args(commit)],
+                cwd=self.template_path,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.split("\0")
+        except (OSError, subprocess.CalledProcessError):
+            repo_url = template_repo_url(self.answers)
+            try:
+                listing = template_tree_at_remote(commit, repo_url)
+            except (OSError, subprocess.SubprocessError) as e:
+                logger.warning(
+                    "Template at %s not readable from %s (%s): a missing "
+                    "component file counts as deleted",
+                    commit[:8],
+                    repo_url,
+                    e,
+                )
+                return None
+        paths = {path for p in listing if (path := project_path_for(p))}
+        return with_rendered_names(paths)
+
+    def _predates(self, rel_path: str) -> bool:
+        """True when the project's template version never had ``rel_path``,
+        so its absence is not the project's deletion."""
+        had = self._paths_at_project_commit
+        return had is not None and rel_path not in had
+
+    @cached_property
+    def _aegis_template_paths(self) -> frozenset[str]:
+        """Every path aegis's own templates can produce. Cached: the walk
+        covers thousands of files and the tree never changes mid-update."""
+        return frozenset(self._render_diff_engine.discover_paths())
 
     def _plugin_tree_paths(self, plugin_module_name: str | None) -> list[str]:
         """Every path the plugin's tree renders that aegis's own templates don't.
@@ -1689,7 +1718,7 @@ class ManualUpdater:
         tree = plugin_tree_files(plugin_module_name)
         if tree is None:
             return []
-        shared = self._aegis_template_paths()
+        shared = self._aegis_template_paths
         return [str(out) for _, out, _ in tree[1] if str(out) not in shared]
 
     def add_plugin(
@@ -1923,16 +1952,17 @@ class ManualUpdater:
         fields, which causes Pydantic ``extra_forbidden`` crashes on
         boot. See issue #686 — Failure B.
 
-        This method walks well-known marker paths and returns a dict
-        of flags to set ``True`` (or, for ``auth_level``, the inferred
-        level). It only ever **promotes** — never demotes a flag that
-        is already ``True`` in answers — because file presence is a
-        strong "installed" signal but absence isn't a reliable "not
-        installed" signal (a service could have been partially removed
-        manually).
+        Starts from :func:`detect_existing_features`, what ``aegis update``
+        reads off the project, and adds the legacy markers it lacks
+        (database, observability, ingress, auth level, OAuth). The result
+        carries what the project states either way (an insights source it
+        does not register, a finance provider set ``False``, ``ollama_mode``)
+        and otherwise only flags to set ``True``: file presence is a strong
+        "installed" signal, absence is not a reliable "not installed" one.
+        The caller fills only what the answers file never answered.
         """
         proj = self.project_path
-        inferred: dict[str, Any] = {}
+        inferred: dict[str, Any] = detect_existing_features(proj)
 
         def has_file(*relative: str) -> bool:
             full = proj
@@ -1966,26 +1996,9 @@ class ManualUpdater:
                     return path
             return None
 
-        # Services
-        if auth_module("service.py", "auth_service.py") is not None:
-            inferred[AnswerKeys.AUTH] = True
-        # Every other service by its spec's marker: one declared in the
-        # registry is inferred without a line here.
-        from .services import SERVICES
-
-        for name, spec in SERVICES.items():
-            if name != AnswerKeys.SERVICE_AUTH and has_nonstub_dir(
-                *spec.marker_path.split("/")
-            ):
-                inferred[AnswerKeys.include_key(name)] = True
-
-        # Components
+        # Components whose legacy marker differs from the spec's.
         if (proj / "alembic").is_dir() or has_nonstub_dir("app", "models"):
             inferred[AnswerKeys.DATABASE] = True
-        if has_nonstub_dir("app", "components", "scheduler"):
-            inferred[AnswerKeys.SCHEDULER] = True
-        if has_nonstub_dir("app", "components", "worker"):
-            inferred[AnswerKeys.WORKER] = True
         if has_nonstub_dir("app", "components", "backend", "observability"):
             inferred[AnswerKeys.OBSERVABILITY] = True
         if has_nonstub_dir("app", "components", "backend", "ingress"):
@@ -2023,11 +2036,6 @@ class ManualUpdater:
                     inferred[AnswerKeys.AUTH_OAUTH] = True
             except (OSError, UnicodeDecodeError):
                 pass
-
-        # Insights sub-flags
-        for key, registered in (detect_insights_sources(proj) or {}).items():
-            if registered:
-                inferred[key] = True
 
         return inferred
 

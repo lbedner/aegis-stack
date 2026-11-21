@@ -434,7 +434,7 @@ class PluginSpec:
     # "this plugin is installed". Drives ``aegis update``'s on-disk feature
     # detection (reconstructing ``include_*`` flags missing from older
     # ``.copier-answers.yml`` files) — see
-    # ``aegis.commands.update._detect_existing_features``. Pick a path the
+    # ``aegis.core.feature_detection.detect_existing_features``. Pick a path the
     # plugin unconditionally owns: a service's ``app/services/<name>``
     # directory, a component's primary module, or (when a plugin ships no
     # dedicated directory, like redis) one of its always-generated files.

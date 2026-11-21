@@ -463,6 +463,7 @@ aegis remove COMPONENTS [OPTIONS]
 - `--interactive, -i` - Use interactive component selection
 - `--project-path, -p PATH` - Path to the Aegis Stack project (default: current directory)
 - `--yes, -y` - Skip confirmation prompt
+- `--force, -f` - Remove a component an installed service still requires (warns instead of refusing)
 
 **Examples:**
 ```bash
@@ -494,6 +495,7 @@ aegis remove --interactive
 - Removing scheduler with SQLite persistence leaves `data/scheduler.db` intact
 - Shared template files are regenerated (backups created automatically)
 - Redis is auto-removed when worker is removed (no standalone functionality)
+- A component an installed service requires (the database under auth, the runner under meetings) is refused, naming the service; `--force` removes it anyway
 
 ---
 
@@ -606,6 +608,13 @@ aegis update --force --yes
 - **Always commit before updating**: `git add . && git commit -m "Pre-update checkpoint"`
 - **Test after updating**: Run `make check` to verify everything works
 - Use `--dry-run` first to preview changes
+- **Answers the project never gave are read off the project.** A question
+  added after the project was generated is filled from what is on disk (a
+  meetings stack from before the runner split has the runner), the dry run
+  included, so the preview describes the update that will run.
+- **What an installed part requires is switched on.** A project with htmx and
+  `include_deploy: false` updates with deploy on, and the update says so:
+  `htmx requires deploy: turning deploy on`.
 - **Conflicts need a real merge, not a side.** A `<<<<<<<` block only appears
   where you and the template changed the same region, so both changes usually
   have to survive. `<<<<<<< your project` is your code, `>>>>>>> new template`

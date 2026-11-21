@@ -4,7 +4,9 @@ Tests for insight collectors — BaseCollector helpers and GitHubTrafficCollecto
 
 from datetime import datetime
 
+import httpx
 import pytest
+from app.services.insights.adapters.collectors import base
 from app.services.insights.adapters.collectors.base import CollectionResult
 
 from ._collector_fixtures import collector_kwargs, seed_project_for_collector
@@ -65,6 +67,61 @@ async def _seed_github_traffic(
         metric_types[key] = mt
 
     return source, metric_types
+
+
+# ---------------------------------------------------------------------------
+# Tests: clickhouse_query (the public endpoint fails now and then with a 5xx
+# the next request does not)
+# ---------------------------------------------------------------------------
+
+ROWS = [["2026-10-01", 3]]
+
+
+def _answering(statuses: list[int]) -> tuple[httpx.AsyncClient, list[int]]:
+    """A client whose requests are answered with ``statuses`` in turn (the
+    last one from then on), and the statuses it answered."""
+    calls: list[int] = []
+
+    def answer(_request: httpx.Request) -> httpx.Response:
+        code = statuses[min(len(calls), len(statuses) - 1)]
+        calls.append(code)
+        return httpx.Response(code, json={"data": ROWS})
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(answer)), calls
+
+
+class TestClickhouseQuery:
+    @pytest.fixture(autouse=True)
+    def _waits(self, monkeypatch: pytest.MonkeyPatch) -> list[float]:
+        waited: list[float] = []
+
+        async def instant(seconds: float) -> None:
+            waited.append(seconds)
+
+        monkeypatch.setattr(base.asyncio, "sleep", instant)
+        return waited
+
+    async def test_a_passing_5xx_is_retried(self, _waits: list[float]) -> None:
+        client, calls = _answering([500, 503, 200])
+
+        assert await base.clickhouse_query(client, "SELECT 1") == ROWS
+        assert calls == [500, 503, 200]
+        assert _waits == [5.0, 10.0]
+
+    async def test_a_lasting_5xx_still_fails(self) -> None:
+        client, calls = _answering([500])
+
+        with pytest.raises(httpx.HTTPStatusError):
+            await base.clickhouse_query(client, "SELECT 1")
+        assert len(calls) == 3
+
+    async def test_a_4xx_is_not_retried(self, _waits: list[float]) -> None:
+        """A bad query stays bad; retrying it only delays the error."""
+        client, calls = _answering([400, 200])
+
+        with pytest.raises(httpx.HTTPStatusError):
+            await base.clickhouse_query(client, "SELECT 1")
+        assert (calls, _waits) == ([400], [])
 
 
 # ---------------------------------------------------------------------------

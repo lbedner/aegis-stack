@@ -546,7 +546,7 @@ def assert_db_file_structure(db_content: str) -> None:
     # Check imports
     assert "contextmanager" in db_content  # With or without asynccontextmanager
     assert "from sqlalchemy import create_engine, event" in db_content
-    assert "from sqlalchemy.orm import sessionmaker" in db_content
+    assert "SessionLocal = sessionmaker(" in db_content
     assert "from sqlmodel import Session" in db_content
 
     # Check engine creation

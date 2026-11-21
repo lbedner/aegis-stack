@@ -7,6 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.runner import tokens
 from tests._runner import someone_else
+from tests._session import flushes_alone
 
 
 async def test_a_token_is_shown_once_and_resolves_to_its_owner(
@@ -61,3 +62,18 @@ async def test_an_owner_lists_and_revokes_only_their_own(
         await tokens.revoke(async_db_session, other.id or 0, None)
     await tokens.revoke(async_db_session, mine.id or 0, None)
     assert await tokens.live(async_db_session, None) == []
+
+
+def test_a_token_row_resolves_its_owner_on_its_own() -> None:
+    """A process that loads only the runner's models (``runner token
+    create`` from the CLI) still finds the table its owner column points
+    at when it flushes a token."""
+    flushed = flushes_alone(
+        "app.components.runner.models",
+        "RunnerToken",
+        name="laptop",
+        digest="d" * 64,
+        hint="rt_abcd",
+    )
+
+    assert flushed.returncode == 0, flushed.stderr

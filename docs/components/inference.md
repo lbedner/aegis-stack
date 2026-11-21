@@ -18,11 +18,25 @@ Both sit behind one interface (`get_inference_engine()`), so the health check, t
 | Engine | What it is | Pick it for |
 |---|---|---|
 | `ollama` (default) | Pulls, loads and frees many models on request. | Trying models; switching between several. |
-| `llamacpp` | `llama-server` serving the one model it was started with: no load or unload, so the dashboards offer none. | Chat that runs long tool loops. Its prompt cache rereads a shared prefix fast: a follow-up on a 12k-token prefix takes 0.6 s, where Ollama takes 4.6 s (measured on an M4 Max, the same GGUF). |
+| `llamacpp` | `llama-server`: a router over a folder of GGUFs (`make llama`) loads and frees them on request; started on one model, it offers no load or unload. | Chat that runs long tool loops. Its prompt cache rereads a shared prefix fast: a follow-up on a 12k-token prefix takes 0.6 s, where Ollama takes 4.6 s (measured on an M4 Max, the same GGUF). |
 
 ### Running llama-server
 
-On the host, start it with the flags chat needs, and name the model with `--alias`, which is how the catalog shows it:
+On the host, `make llama` (`my-app inference llama`) serves every GGUF in `LLAMACPP_MODELS_DIR` (default `~/models`) as a router, with the flags chat needs. Ollama's models are linked in first when `OLLAMA_MODELS` (default `~/.ollama/models`) holds any, so one download serves both; `my-app inference link-ollama` links them without serving. It runs in the foreground: Ctrl-C stops it.
+
+```bash
+brew install llama.cpp
+make llama
+```
+
+| Setting | Default | |
+|---|---|---|
+| `LLAMACPP_MODELS_DIR` | `~/models` | The folder it serves. |
+| `LLAMACPP_BASE_URL` | port 8080 | Its port is the one it listens on. |
+| `LLAMACPP_CONTEXT` | `32768` | `-c`. |
+| `LLAMACPP_ARGS` | `-fa on -np 2 -kvu` | Further flags, as typed. |
+
+To serve one model instead, start it by hand, and name the model with `--alias`, which is how the catalog shows it:
 
 ```bash
 llama-server -hf ggml-org/Qwen3-1.7B-GGUF --alias qwen3:1.7b \
@@ -78,6 +92,8 @@ aegis add inference[kokoro_fastapi]          # Kokoro-FastAPI on the host
 aegis add inference[docker,kokoro_fastapi]   # a kokoro-fastapi service in the compose stack
 ```
 
+An installed inference takes one later the same way: `aegis add inference[kokoro_fastapi]` keeps its engine and placement and adds the server.
+
 | Placement | What ships | Reaches it at |
 |---|---|---|
 | `host` | No container. Run it yourself ([how](../services/ai/voice.md#a-speech-server)). | `http://host.docker.internal:8880/v1` from containers, `localhost:8880` from the host |
@@ -107,7 +123,7 @@ ALLOW_DEV_UNLOAD=true ENABLE_DEBUG_ENDPOINTS=true ./start-gpu_mac.sh
 
 ## Changing placement
 
-The placement is an answer in `.copier-answers.yml` (`inference_placement`), and the speech server another (`inference_speech`). Remove and re-add the component to switch:
+The placement is an answer in `.copier-answers.yml` (`inference_placement`), and the speech server another (`inference_speech`). A speech server is added in place (above); to change the placement, remove and re-add the component:
 
 ```bash
 aegis remove inference

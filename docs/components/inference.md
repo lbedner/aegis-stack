@@ -96,7 +96,7 @@ An installed inference takes one later the same way: `aegis add inference[kokoro
 
 | Placement | What ships | Reaches it at |
 |---|---|---|
-| `host` | No container. Run it yourself ([how](../services/ai/voice.md#a-speech-server)). | `http://host.docker.internal:8880/v1` from containers, `localhost:8880` from the host |
+| `host` | No container. Run it yourself, with `make kokoro` (below). | `http://host.docker.internal:8880/v1` from containers, `localhost:8880` from the host |
 | `docker` | A `kokoro-fastapi` service (the CPU image, 2G memory limit), started with `ALLOW_DEV_UNLOAD` and `ENABLE_DEBUG_ENDPOINTS` on. | `http://kokoro-fastapi:8880/v1` |
 
 The answer sets `SPEECH_BASE_URL`'s default; `.env` can point it anywhere. With an address set:
@@ -110,10 +110,11 @@ The answer sets `SPEECH_BASE_URL`'s default; `.env` can point it anywhere. With 
 - **The health check** carries it under the inference check (`my-app health status`, `/health/detailed`).
 - **`ai[voice]`** offers it as the Kokoro-FastAPI provider, with every voice it lists ([Voice](../services/ai/voice.md#a-speech-server)).
 
-A server with OpenAI's speech API alone shows its voices, its models and the app's own timings. Kokoro-FastAPI reports its version always, and the rest only with its flags on. A server you run yourself needs them set, or the page names the ones missing:
+A server with OpenAI's speech API alone shows its voices, its models and the app's own timings. Kokoro-FastAPI reports its version always, and the rest only with its flags on. A server you run yourself needs them set, or the page names the ones missing. `make kokoro` (`my-app inference kokoro`) sets them and runs the start script of a checkout at `SPEECH_SERVER_DIR` (default `~/Kokoro-FastAPI`): on its GPU where it has one (a Mac, or an NVIDIA card with `nvidia-smi` on the PATH), the CPU one elsewhere, and on Windows the `.ps1` one through PowerShell (which serves on 8880 whatever `SPEECH_BASE_URL` says). It runs in the foreground: Ctrl-C stops it.
 
 ```bash
-ALLOW_DEV_UNLOAD=true ENABLE_DEBUG_ENDPOINTS=true ./start-gpu_mac.sh
+git clone https://github.com/remsky/Kokoro-FastAPI ~/Kokoro-FastAPI
+make kokoro
 ```
 
 | Flag | Opens |

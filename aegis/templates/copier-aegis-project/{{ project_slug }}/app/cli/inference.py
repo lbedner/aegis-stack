@@ -9,11 +9,15 @@ inference API:
   ``--models-dir`` (``app.components.inference.ollama_library``).
 - ``inference llama`` - that folder served by a llama-server router, here
   (``make llama``).
+- ``inference kokoro`` - Kokoro-FastAPI served from its checkout, here
+  (``make kokoro``).
 """
 
 import asyncio
 import os
 from pathlib import Path
+import platform
+import shutil
 from typing import Annotated
 from urllib.parse import urlsplit
 
@@ -133,3 +137,37 @@ async def llama() -> None:
         os.execvp(argv[0], argv)
     except FileNotFoundError:
         theme.fail("llama-server is not installed: brew install llama.cpp")
+
+
+def _kokoro_start() -> list[str]:
+    """Kokoro-FastAPI's start script for this machine, on its GPU where it
+    has one: a Mac's, or an NVIDIA card's (``nvidia-smi`` on the PATH).
+    Windows' scripts serve on 8880 whatever PORT says."""
+    gpu = "gpu" if shutil.which("nvidia-smi") else "cpu"
+    if platform.system() == "Windows":
+        return ["powershell", "-ExecutionPolicy", "Bypass", "-File", f"start-{gpu}.ps1"]
+    if platform.system() == "Darwin":
+        gpu = "gpu_mac"
+    return ["bash", f"start-{gpu}.sh"]
+
+
+@app.command()
+async def kokoro() -> None:
+    """Serve Kokoro-FastAPI on this machine (make kokoro): its start script
+    in SPEECH_SERVER_DIR (on its GPU where it has one), on SPEECH_BASE_URL's
+    port, with the two flags that open its model and process to the
+    Overseer. Ctrl-C stops it."""
+    folder = Path(settings.SPEECH_SERVER_DIR).expanduser()
+    argv = _kokoro_start()
+    if not (folder / argv[-1]).is_file():
+        theme.fail(
+            f"No {speech_server.NAME} at {folder} (SPEECH_SERVER_DIR): "
+            f"git clone https://github.com/remsky/Kokoro-FastAPI {folder}"
+        )
+    port = urlsplit(speech_server.reach(settings) or "").port or 8880
+    # Its script runs uv itself: this project's venv would take its installs.
+    env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+    env |= {speech_server.DEV: "true", speech_server.DEBUG: "true", "PORT": str(port)}
+    theme.good(f"{folder / argv[-1]} on port {port}")
+    os.chdir(folder)
+    os.execvpe(argv[0], argv, env)

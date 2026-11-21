@@ -199,8 +199,9 @@ serves Kokoro-82M (Apache-2.0) on port 8880. On a Mac, run it natively so
 it speaks on the GPU (MPS); in Docker it has none:
 
 ```bash
-git clone https://github.com/remsky/Kokoro-FastAPI && cd Kokoro-FastAPI
-ALLOW_DEV_UNLOAD=true ENABLE_DEBUG_ENDPOINTS=true ./start-gpu_mac.sh
+git clone https://github.com/remsky/Kokoro-FastAPI ~/Kokoro-FastAPI
+make kokoro   # with the inference component; else, in the checkout:
+# ALLOW_DEV_UNLOAD=true ENABLE_DEBUG_ENDPOINTS=true ./start-gpu_mac.sh
 
 # .env
 SPEECH_BASE_URL=http://host.docker.internal:8880/v1

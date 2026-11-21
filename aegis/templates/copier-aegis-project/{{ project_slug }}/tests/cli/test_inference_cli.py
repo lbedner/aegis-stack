@@ -164,3 +164,74 @@ def test_llama_without_ollama_serves_the_folder_alone(
     assert (tmp_path / "models").is_dir() and became
     # Unset, it still starts with what chat needs of it.
     assert type(settings).model_fields["LLAMACPP_ARGS"].default == "-fa on -np 2 -kvu"
+
+
+@pytest.mark.parametrize(
+    ("system", "nvidia", "argv"),
+    [
+        ("Darwin", None, ["bash", "start-gpu_mac.sh"]),
+        ("Linux", "/usr/bin/nvidia-smi", ["bash", "start-gpu.sh"]),
+        ("Linux", None, ["bash", "start-cpu.sh"]),
+        (
+            "Windows",
+            "nvidia-smi.exe",
+            ["powershell", "-ExecutionPolicy", "Bypass", "-File", "start-gpu.ps1"],
+        ),
+        (
+            "Windows",
+            None,
+            ["powershell", "-ExecutionPolicy", "Bypass", "-File", "start-cpu.ps1"],
+        ),
+    ],
+)
+def test_kokoro_runs_the_checkouts_start_script(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    system: str,
+    nvidia: str | None,
+    argv: list[str],
+) -> None:
+    """``make kokoro``: from SPEECH_SERVER_DIR, the machine's own script, on
+    its GPU where it has one (a Mac's, or NVIDIA's), on SPEECH_BASE_URL's
+    port, with the two flags the Overseer reads it by; out of this project's
+    venv, which its own ``uv`` would install into."""
+    import os
+    import platform
+    import shutil
+
+    from app.core.config import settings
+
+    (tmp_path / argv[-1]).write_text("")
+    monkeypatch.setattr(settings, "SPEECH_SERVER_DIR", str(tmp_path))
+    monkeypatch.setattr(settings, "SPEECH_BASE_URL", "http://localhost:8890/v1")
+    monkeypatch.setattr(platform, "system", lambda: system)
+    monkeypatch.setattr(shutil, "which", lambda name: nvidia)
+    monkeypatch.setenv("VIRTUAL_ENV", "/project/.venv")
+    ran: list[object] = []
+    monkeypatch.setattr(os, "chdir", lambda path: ran.append(path))
+    monkeypatch.setattr(
+        os, "execvpe", lambda path, args, env: ran.extend([path, args, env])
+    )
+
+    assert invoke(["inference", "kokoro"]).exit_code == 0
+    folder, path, args, env = ran
+    assert (folder, path, args) == (tmp_path, argv[0], argv)
+    assert isinstance(env, dict) and "VIRTUAL_ENV" not in env
+    assert (env["PORT"], env[speech_server.DEV], env[speech_server.DEBUG]) == (
+        "8890",
+        "true",
+        "true",
+    )
+
+
+def test_kokoro_without_a_checkout_says_how_to_get_one(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "SPEECH_SERVER_DIR", str(tmp_path / "none"))
+
+    result = invoke(["inference", "kokoro"])
+
+    assert result.exit_code != 0
+    assert "SPEECH_SERVER_DIR" in result.output and "git clone" in result.output

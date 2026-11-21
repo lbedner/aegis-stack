@@ -73,7 +73,7 @@ class CollectionRowCard(ft.Container):
         self.files: list[dict[str, Any]] = []
 
         # Expand/collapse icon
-        self._icon = ft.Icon(ft.Icons.ARROW_RIGHT, size=16, color=ft.Colors.PRIMARY)
+        self._icon = ft.Icon(ft.Icons.ARROW_RIGHT, size=16, color=Theme.Colors.PRIMARY)
 
         # Loading indicator for files
         self._loading_indicator = ft.Container(

@@ -168,7 +168,7 @@ class BudgetPanel(
                         ft.Icon(
                             ft.Icons.INFO_OUTLINE,
                             size=16,
-                            color=Theme.Colors.TEXT_SECONDARY,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
                             tooltip=(
                                 "Your plan checked against how you actually "
                                 "spend, and where that leaves your balance "

@@ -331,7 +331,9 @@ class TestWithdrawnOutcomeSummary:
             {"id": 2, "status": "rejected", "note": "Withdrawn by x."},
             {"id": 3, "status": "rejected"},
         ]
-        assert PendingChangeBatchCard._outcome_summary(items) == "1 rejected, 2 withdrawn"
+        assert (
+            PendingChangeBatchCard._outcome_summary(items) == "1 rejected, 2 withdrawn"
+        )
 
 
 class TestResolvedCardsCollapse:
@@ -409,7 +411,7 @@ class TestTargetCategoryHighlight:
         from app.components.frontend.theme import AegisTheme as Theme
         from tests.components.frontend._tree import accent_texts
 
-        return accent_texts(card, Theme.Colors.ACCENT)
+        return accent_texts(card, Theme.Colors.PRIMARY)
 
     def test_the_single_card_target_is_teal(self) -> None:
         from app.components.frontend.controls.chat.components import (
@@ -505,7 +507,7 @@ class TestReadableDetailRows:
         from app.components.frontend.theme import AegisTheme as Theme
         from tests.components.frontend._tree import accent_texts
 
-        return accent_texts(card, Theme.Colors.ACCENT)
+        return accent_texts(card, Theme.Colors.PRIMARY)
 
     def test_the_single_card_keeps_each_split_line_separate(self) -> None:
         from app.components.frontend.controls.chat.components import (
@@ -668,7 +670,7 @@ class TestMarkerTraceExtraction:
         assert cards[0]._change_id == 7
 
     def test_a_pending_listing_redraws_every_card(self) -> None:
-        """"Show the card again" is a pending() call: its marker is a list,
+        """ "Show the card again" is a pending() call: its marker is a list,
         one entry per card the assistant still has open."""
         from app.components.frontend.controls.chat.components import (
             components_from_trace,

@@ -78,7 +78,7 @@ def _preview_metric(
     condition that rule was written against.
     """
     live = count > 0
-    color = accent if live else Theme.Colors.TEXT_SECONDARY
+    color = accent if live else ft.Colors.ON_SURFACE_VARIANT
     card = MetricCard(
         label=label,
         value=f"{count:,}",
@@ -98,7 +98,7 @@ def _preview_dot(text: str, live: bool, accent: str, tooltip: str) -> StatusDot:
     "this lands in your ledger". These do not. A zero keeps its dot and
     goes muted, so the row holds its shape either way.
     """
-    return StatusDot(text, accent if live else Theme.Colors.TEXT_SECONDARY, tooltip)
+    return StatusDot(text, accent if live else ft.Colors.ON_SURFACE_VARIANT, tooltip)
 
 
 def _preview_tag_row(kind: str, name: str, color: str) -> ft.Control:
@@ -125,7 +125,7 @@ def _preview_creates(preview: dict[str, Any]) -> list[ft.Control]:
     )
     categories = preview.get("new_categories") or []
     rows.extend(
-        _preview_tag_row("Category", name, Theme.Colors.TEXT_SECONDARY)
+        _preview_tag_row("Category", name, ft.Colors.ON_SURFACE_VARIANT)
         for name in categories[:_PREVIEW_DETAIL_CAP]
     )
     if len(categories) > _PREVIEW_DETAIL_CAP:
@@ -278,7 +278,7 @@ def import_preview_body(preview: dict[str, Any], file_name: str) -> ft.Column:
                         ),
                         *(
                             _preview_tag_row(
-                                "Account", name, Theme.Colors.TEXT_SECONDARY
+                                "Account", name, ft.Colors.ON_SURFACE_VARIANT
                             )
                             for name in removed
                         ),
@@ -367,7 +367,7 @@ def _import_count_controls(
                 have_label,
                 duplicate,
                 have_note,
-                Theme.Colors.TEXT_SECONDARY,
+                ft.Colors.ON_SURFACE_VARIANT,
                 "Matches a transaction already stored, so it is skipped.",
             ),
         ],
@@ -387,7 +387,7 @@ def _import_count_controls(
                 _preview_dot(
                     f"{ignored:,} from removed accounts",
                     True,
-                    Theme.Colors.TEXT_SECONDARY,
+                    ft.Colors.ON_SURFACE_VARIANT,
                     "You removed these accounts, so their rows stay out. "
                     "Re-add the account to opt back in.",
                 )
@@ -428,7 +428,7 @@ def _import_footnote(text: str) -> ft.Control:
     """
     return ft.Row(
         [
-            ft.Icon(ft.Icons.INFO_OUTLINE, size=14, color=Theme.Colors.TEXT_SECONDARY),
+            ft.Icon(ft.Icons.INFO_OUTLINE, size=14, color=ft.Colors.ON_SURFACE_VARIANT),
             ft.Container(
                 content=SecondaryText(text, size=Theme.Typography.BODY_SMALL),
                 expand=True,

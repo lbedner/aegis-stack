@@ -146,12 +146,7 @@ class StyledAlertDialog(ft.AlertDialog):
             border=ft.border.all(1, ft.Colors.OUTLINE),
             border_radius=Theme.Components.CARD_RADIUS,
             clip_behavior=ft.ClipBehavior.HARD_EDGE,
-            shadow=ft.BoxShadow(
-                spread_radius=0,
-                blur_radius=20,
-                color=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
-                offset=ft.Offset(0, 4),
-            ),
+            shadow=Theme.Components.POPUP_SHADOW,
         )
         super().__init__(
             # ``modal=False`` lets a click on the barrier dismiss - right

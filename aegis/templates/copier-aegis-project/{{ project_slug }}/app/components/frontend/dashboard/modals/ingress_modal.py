@@ -262,7 +262,9 @@ class RoutersSection(ft.Container):
             self.content = ft.Column(
                 [
                     header_row,
-                    ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                    ft.Divider(
+                        height=1,
+                    ),
                     ft.Column(router_rows, spacing=0),
                 ],
                 spacing=0,
@@ -363,7 +365,9 @@ class EntrypointsSection(ft.Container):
                     H3Text("Entrypoints"),
                     ft.Container(height=Theme.Spacing.SM),
                     header_row,
-                    ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                    ft.Divider(
+                        height=1,
+                    ),
                     ft.Column(ep_rows, spacing=0),
                 ],
                 spacing=0,

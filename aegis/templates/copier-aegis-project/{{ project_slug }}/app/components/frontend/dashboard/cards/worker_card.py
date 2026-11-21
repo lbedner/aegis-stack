@@ -92,7 +92,7 @@ class WorkerCard:
                 spacing=4,
             ),
             padding=ft.padding.only(bottom=8),
-            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
+            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
         )
 
         # Build queue rows
@@ -114,7 +114,7 @@ class WorkerCard:
                     if "no functions" in message.lower():
                         # No tasks defined - grey
                         status_text = "N/A"
-                        status_color = ft.Colors.GREY_600
+                        status_color = ft.Colors.ON_SURFACE_VARIANT
                         row_opacity = 0.6
                     else:
                         # Offline - red
@@ -162,7 +162,7 @@ class WorkerCard:
                                     str(failed),
                                     style=ft.TextStyle(
                                         size=12,
-                                        color=ft.Colors.ERROR
+                                        color=Theme.Colors.ERROR
                                         if failed > 0
                                         else ft.Colors.ON_SURFACE,
                                     ),
@@ -206,9 +206,9 @@ class WorkerCard:
                 [header_row] + rows,
                 spacing=0,
             ),
-            bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.GREY),
+            bgcolor=Theme.Colors.SURFACE_3,
             border_radius=8,
-            border=ft.border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.GREY)),
+            border=ft.border.all(1, ft.Colors.OUTLINE),
             padding=ft.padding.all(12),
         )
 

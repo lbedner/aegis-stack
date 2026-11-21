@@ -7,15 +7,34 @@
 
 {% from "components/macros/icons.html" import icon %}
 
-{# One button height: a primary button (Save) stands as tall as an action
-   (Read pages). Only a form's full-width submit (sign in) is larger. #}
-{%- set _button_size = "px-2.5 py-1 text-xs" -%}
-{%- set _button_shape -%}
-border border-aegis-teal rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2
-{%- endset -%}
-{%- set _primary_button_classes = "text-aegis-text bg-aegis-teal/10 hover:bg-aegis-teal/20 " ~ _button_shape -%}
-{# A page's one action (Make it), filled with the accent: one per view. #}
-{%- set _filled_button_classes = "text-aegis-bg bg-aegis-teal font-medium hover:bg-aegis-teal/90 " ~ _button_shape -%}
+{# Shared control styling: DaisyUI's control of ``kind`` (input, select,
+   textarea, checkbox, radio) in its small form; the text controls sit
+   bordered on the page surface so a bar of them reads as one. DaisyUI
+   owns focus, disabled and placeholder states; the theme owns radius and
+   color. Templates never spell a DaisyUI control class themselves. #}
+{# DaisyUI draws its own 2px outline on focus; the teal border is the focus cue here, so the outline goes. #}
+{% set _surface = "bg-aegis-bg text-aegis-text focus:border-aegis-teal focus:outline-none focus-within:outline-none [&:user-invalid]:border-error" %}
+{# Class names are spelled in full: Tailwind emits only what it can read
+   from the source, so a name built from parts would never compile. #}
+{% macro control(kind) -%}
+{{ {
+  "input": "input input-bordered input-sm " ~ _surface,
+  "select": "select select-bordered select-sm " ~ _surface,
+  "textarea": "textarea textarea-bordered textarea-sm " ~ _surface,
+  "checkbox": "checkbox checkbox-primary checkbox-xs",
+  "radio": "radio radio-primary radio-xs",
+}[kind] }}
+{%- endmacro %}
+
+{# Buttons are DaisyUI's: outline so the data stays louder than the
+   controls; ``tone`` is default (quiet: muted text and border, which
+   DaisyUI has no outline variant for), primary (teal), danger or warn;
+   ``size`` sm for a form's verbs, xs for a row's. Hover, focus, disabled
+   and the press scale come with it; the theme owns radius and color. #}
+{% macro button_classes(tone="primary", size="sm") -%}
+{% set tones = {"default": "border-aegis-border text-aegis-muted hover:border-aegis-muted hover:text-aegis-text hover:bg-aegis-border/20", "primary": "btn-primary", "danger": "btn-error", "warn": "btn-warning"} %}
+btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, tones["default"]) }}
+{%- endmacro %}
 
 
 {# Inline primary button (no loading spinner). Defaults to ``type="button"``
@@ -26,7 +45,7 @@ border border-aegis-teal rounded transition-colors disabled:opacity-50 disabled:
    is the page's one action. #}
 {% macro primary_button(label, type="button", attrs="", filled=False) %}
 <button type="{{ type }}" {{ attrs|button_attrs|safe }}
-  class="{{ _filled_button_classes if filled else _primary_button_classes }} {{ _button_size }}">{{ label }}</button>
+  class="{{ "btn btn-primary btn-xs" if filled else button_classes("primary", "xs") }}">{{ label }}</button>
 {% endmacro %}
 
 
@@ -36,7 +55,7 @@ border border-aegis-teal rounded transition-colors disabled:opacity-50 disabled:
    can't double-submit. #}
 {% macro submit_button(idle_label, loading_label) %}
 <button type="submit" :disabled="loading"
-  class="{{ _primary_button_classes }} text-sm px-4 py-1.5 w-full">
+  class="{{ button_classes() }} w-full">
   <span x-show="!loading">{{ idle_label }}</span>
   <span x-show="loading" x-cloak class="inline-flex items-center gap-2">
     {{ icon("spinner", "animate-spin w-4 h-4") }}
@@ -44,12 +63,6 @@ border border-aegis-teal rounded transition-colors disabled:opacity-50 disabled:
   </span>
 </button>
 {% endmacro %}
-
-
-{# Shared input styling; every control below uses it so the bar reads as one. #}
-{%- set _control_classes -%}
-bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-text placeholder:text-aegis-muted/50 focus:border-aegis-teal focus:outline-none transition-colors [&:user-invalid]:border-error
-{%- endset -%}
 
 
 {# A native select. ``options`` are objects or dicts with ``id`` and
@@ -60,7 +73,7 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
    full-width inside a ``field()``; ``attrs`` rides on the select. #}
 {% macro select(name, options, selected=None, blank="All", label=None, block=False, grouped=False, attrs="") %}
 {% if label %}<label class="inline-flex items-center gap-2 text-xs text-aegis-muted"><span>{{ label }}</span>{% endif %}
-<select name="{{ name }}" {{ attrs|safe }} class="{{ _control_classes }} select-caret pr-8{% if block %} block w-full mt-1{% endif %}">
+<select name="{{ name }}" {{ attrs|safe }} class="{{ control("select") }}{% if block %} block w-full mt-1{% endif %}">
   {% if blank is not none %}<option value="" {% if not selected %}selected{% endif %}>{{ blank }}</option>{% endif %}
   {% for group in (options if grouped else [{"label": none, "options": options}]) %}
   {% if group.label is not none %}<optgroup label="{{ group.label }}">{% endif %}
@@ -77,7 +90,7 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 
 {% macro date_input(name, value=None, label=None, block=False) %}
 {% if label %}<label class="inline-flex items-center gap-2 text-xs text-aegis-muted"><span>{{ label }}</span>{% endif %}
-<input type="date" name="{{ name }}" {% if value %}value="{{ value.isoformat() if value.isoformat is defined else value }}"{% endif %} class="{{ _control_classes }}{% if block %} block w-full mt-1{% endif %}">
+<input type="date" name="{{ name }}" {% if value %}value="{{ value.isoformat() if value.isoformat is defined else value }}"{% endif %} class="{{ control("input") }}{% if block %} block w-full mt-1{% endif %}">
 {% if label %}</label>{% endif %}
 {% endmacro %}
 
@@ -88,7 +101,7 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
    and lists each, removable (the ``filePicker`` component in app.js), for a
    form with its own submit. #}
 {% macro file_button(id, label, accept=None, name="file", submit=True, required=True, multiple=False) %}
-{%- set button = "inline-flex items-center cursor-pointer " ~ _button_size ~ " leading-normal rounded border border-aegis-teal text-aegis-text hover:bg-aegis-teal/10 transition-colors" -%}
+{%- set button = button_classes("primary", "xs") -%}
 {%- set input -%}<input id="{{ id }}" type="file" name="{{ name }}" {% if required %}required{% endif %} {% if multiple %}multiple{% endif %} {% if accept %}accept="{{ accept }}"{% endif %} class="sr-only" {% if submit %}@change="$el.form.requestSubmit()"{% else %}x-ref="input" @change="add()"{% endif %}>{%- endset -%}
 {%- set picker -%}{{ input }}<label for="{{ id }}" class="{{ button }}">{{ label }}</label>{%- endset -%}
 {% if submit %}
@@ -137,7 +150,7 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
     </div>
     {% for o in options %}
     <label class="flex items-center gap-2 px-2 py-1 rounded text-sm hover:bg-aegis-border/30 cursor-pointer{% if o.indent %} pl-6 text-aegis-muted{% endif %}">
-      <input type="checkbox" name="{{ o.name or name }}" value="{{ o.value }}" {% if o.checked %}checked{% endif %} class="checkbox checkbox-xs checkbox-primary">
+      <input type="checkbox" name="{{ o.name or name }}" value="{{ o.value }}" {% if o.checked %}checked{% endif %} class="{{ control("checkbox") }}">
       <span class="flex-1 truncate">{{ o.label }}</span>
       {% if o.count is defined %}<span class="text-xxs text-aegis-muted tabular-nums">{{ "{:,}".format(o.count) }}</span>{% endif %}
     </label>
@@ -155,14 +168,14 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
    leaves it out of its triggers (``change[!target.closest('[data-filter]')]``). #}
 {% macro filter_input(target, name="q", value=None, placeholder="Filter") %}
 <input type="search" name="{{ name }}" value="{{ value or '' }}" data-filter="{{ target }}" placeholder="{{ placeholder }}"
-       aria-label="{{ placeholder }}" autocomplete="off" class="{{ _control_classes }} min-w-[12rem]">
+       aria-label="{{ placeholder }}" autocomplete="off" class="{{ control("input") }} min-w-[12rem]">
 {% endmacro %}
 
 {# A stable id lets htmx restore focus when a search result replaces the form. #}
 {% macro search_input(name, value=None, placeholder="Search", autofocus=False, attrs="") %}
 <input type="search" id="search-{{ name }}" name="{{ name }}" value="{{ value or '' }}" placeholder="{{ placeholder }}"
        {% if autofocus %}autofocus{% endif %} {{ attrs|safe }}
-       aria-label="{{ placeholder }}" class="{{ _control_classes }} min-w-[12rem]">
+       aria-label="{{ placeholder }}" class="{{ control("input") }} min-w-[12rem]">
 {% endmacro %}
 
 {# A labelled field. The control comes via {% call %}; ``error`` renders
@@ -248,26 +261,26 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 {% macro text_input(name, value=None, placeholder="", required=False, autofocus=False, pattern=None, attrs="", block=True) %}
 <input type="text" name="{{ name }}" value="{{ value or '' }}" placeholder="{{ placeholder }}"
        {% if required %}required{% endif %} {% if autofocus %}autofocus{% endif %} {% if pattern %}pattern="{{ pattern }}"{% endif %} {{ attrs|safe }}
-       class="{{ _control_classes }} {{ 'w-full mt-1' if block else 'min-w-[16rem]' }}">
+       class="{{ control("input") }} {{ 'w-full mt-1' if block else 'min-w-[16rem]' }}">
 {% endmacro %}
 
 {% macro number_input(name, value=None, step=1, min=None, max=None, required=False) %}
 <input type="number" name="{{ name }}" value="{{ value if value is not none else '' }}" step="{{ step }}"
        {% if min is not none %}min="{{ min }}"{% endif %} {% if max is not none %}max="{{ max }}"{% endif %} {% if required %}required{% endif %}
-       class="{{ _control_classes }} w-full mt-1 tabular-nums">
+       class="{{ control("input") }} w-full mt-1 tabular-nums">
 {% endmacro %}
 
 {% macro money_input(name, value=None, placeholder="0.00") %}
 <div class="relative mt-1">
   <span class="absolute inset-y-0 left-2.5 flex items-center text-sm text-aegis-muted" aria-hidden="true">$</span>
   <input type="text" inputmode="decimal" name="{{ name }}" value="{{ value or '' }}" placeholder="{{ placeholder }}"
-         class="{{ _control_classes }} w-full pl-6 tabular-nums">
+         class="{{ control("input") }} w-full pl-6 tabular-nums">
 </div>
 {% endmacro %}
 
 {% macro textarea(name, value=None, rows=6, placeholder="", attrs="") %}
 <textarea name="{{ name }}" rows="{{ rows }}" placeholder="{{ placeholder }}" {{ attrs|safe }}
-          class="{{ _control_classes }} w-full mt-1 font-mono text-xs">{{ value or "" }}</textarea>
+          class="{{ control("textarea") }} w-full mt-1 font-mono text-xs">{{ value or "" }}</textarea>
 {% endmacro %}
 
 
@@ -450,8 +463,7 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
    makes it a link (a download: ``attrs`` "download"), looking the same.
    The one recipe every compact button uses. #}
 {% macro action(label, attrs, tone="default", vals=None, glyph=None, type="button", href=None) %}
-{% set tones = {"default": "border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted", "primary": "border-aegis-teal text-aegis-text hover:bg-aegis-teal/10", "danger": "border-aegis-error/40 text-error hover:border-aegis-error", "warn": "border-aegis-amber/40 text-aegis-text hover:border-aegis-amber"} %}
-{% set classes = "action " ~ _button_size ~ " rounded border whitespace-nowrap transition-colors disabled:opacity-40 disabled:pointer-events-none " ~ tones.get(tone, tones['default']) %}
+{% set classes = "action " ~ button_classes(tone, "xs") ~ " whitespace-nowrap" %}
 {% if href %}<a href="{{ href }}" {{ attrs|safe }} class="{{ classes }}">{{ label }}</a>{% else %}
 <button type="{{ type }}" {{ attrs|button_attrs|safe }} {% if vals is not none %}hx-vals='{{ vals|tojson }}'{% endif %} {% if glyph %}title="{{ label }}" {% endif %}class="{{ classes }}">{% if glyph %}{{ icon(glyph) }}<span class="sr-only">{{ label }}</span>{% else %}{{ label }}{% endif %}</button>
 {% endif %}

@@ -49,7 +49,7 @@ class ChatMessageBubble(ft.Container):
                     ft.IconButton(
                         icon=ft.Icons.REPLAY,
                         icon_size=14,
-                        icon_color=Theme.Colors.TEXT_SECONDARY,
+                        icon_color=ft.Colors.ON_SURFACE_VARIANT,
                         tooltip="Send this message again",
                         style=ft.ButtonStyle(padding=0),
                         width=22,
@@ -62,7 +62,7 @@ class ChatMessageBubble(ft.Container):
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             )
 
-        self._body = markdown_control(text, color=Theme.Colors.TEXT_PRIMARY)
+        self._body = markdown_control(text, color=ft.Colors.ON_SURFACE)
         self._footer = SecondaryText("", size=Theme.Typography.BODY_SMALL)
         # Copy the whole answer: parked by the footer, shown on hover only.
         self._copy = IconCopyButton(
@@ -116,7 +116,7 @@ class ChatMessageBubble(ft.Container):
         self.padding = Theme.Spacing.MD
         if is_user:
             self.border_radius = Theme.Components.CARD_RADIUS
-            self.bgcolor = ft.Colors.with_opacity(0.15, Theme.Colors.ACCENT)
+            self.bgcolor = ft.Colors.with_opacity(0.15, Theme.Colors.PRIMARY)
 
     def in_row(self) -> ft.Control:
         """The transcript row for this bubble: user messages pin right and

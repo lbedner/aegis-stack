@@ -26,7 +26,10 @@ if a worker is present, or `add-api-endpoint` for a synchronous route).
   belongs to.
 - `app/services/<service>/scheduled_jobs.py`: import the job function and add
   a `ServiceJob` entry to `JOBS` (function, id, name, trigger, and a
-  `timeout` if a worker should let it run past the queue's five minutes).
+  `timeout` if a worker should let it run past the queue's five minutes;
+  `server_only=True` if it reaches real banks, inboxes or storage, so a dev
+  stack never schedules it; `at_start=True` if it should also run as the
+  scheduler starts).
   Create the file if the service has none; nothing else needs editing.
 
 ## Procedure

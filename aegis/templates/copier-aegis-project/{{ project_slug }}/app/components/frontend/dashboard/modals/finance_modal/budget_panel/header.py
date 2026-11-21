@@ -154,7 +154,7 @@ class BudgetHeaderMixin(BudgetPanelState):
         for i, entry in enumerate(self._outlook):
             if i == 0:
                 label = f"Now ${round(entry.get('start_balance', 0) / 100):,}"
-                color = Theme.Colors.TEXT_SECONDARY
+                color = ft.Colors.ON_SURFACE_VARIANT
             else:
                 label, color = outlook_chip(entry)
             selected = i == self._outlook_index
@@ -170,7 +170,7 @@ class BudgetHeaderMixin(BudgetPanelState):
                     border_radius=Theme.Components.BUTTON_RADIUS,
                     border=ft.border.all(
                         1,
-                        Theme.Colors.ACCENT if selected else Theme.Colors.BORDER_SUBTLE,
+                        Theme.Colors.PRIMARY if selected else ft.Colors.OUTLINE,
                     ),
                     on_click=lambda _e, i=i: _jump(i),
                     ink=True,
@@ -214,7 +214,7 @@ class BudgetHeaderMixin(BudgetPanelState):
                     value,
                     size=22,
                     weight=Theme.Typography.WEIGHT_BOLD,
-                    color=color or Theme.Colors.TEXT_PRIMARY,
+                    color=color or ft.Colors.ON_SURFACE,
                 ),
                 SecondaryText(caption, size=Theme.Typography.BODY_SMALL),
             ],

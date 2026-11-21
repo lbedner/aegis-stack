@@ -61,7 +61,6 @@ from .overseer.loops import auto_refresh
 from .overseer.loops import WorkerStream
 {%- endif %}
 from .overseer.refresh import refresh_dashboard as refresh_once
-from .theme_manager import ThemeManager
 
 
 async def setup_dashboard(view: BaseView) -> None:
@@ -75,8 +74,7 @@ async def setup_dashboard(view: BaseView) -> None:
     router navigates away (e.g. on logout).
     """
     page = view.page
-    theme_manager = ThemeManager(page)
-    await theme_manager.initialize_themes()
+    theme_manager = get_session_state(page).theme_manager
 
     # Defined first, resolved last: the switcher and ``page.data`` both
     # need something to call before ``dashboard`` and ``api_client``
@@ -90,7 +88,9 @@ async def setup_dashboard(view: BaseView) -> None:
             chrome.session_start,
         )
 
-    chrome = build_chrome(page, on_project_change=refresh_dashboard)
+    chrome = build_chrome(
+        page, on_project_change=refresh_dashboard, theme_manager=theme_manager
+    )
     views = DashboardViews(page, view, chrome.view_toggle_button)
 
     # Create SystemDashboard with safe component references
@@ -101,7 +101,6 @@ async def setup_dashboard(view: BaseView) -> None:
         status_overview_panel=views.status_overview_panel,
         activity_feed=views.activity_feed,
         diagram_view=views.diagram_view,
-        theme_manager=theme_manager,
         page=page,
     )
     # Bound here, not in ``build_chrome``: the connection check belongs
@@ -198,7 +197,9 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
         {%- endif %}
 
         # SessionState: per-session shared resources. Owns ``page``.
-        init_session_state(page, api_client=api_client)
+        state = init_session_state(page, api_client=api_client)
+        # Before the first screen, so sign-in opens in the stored mode too.
+        await state.theme_manager.initialize_themes()
 
         # Register routes. Order doesn't matter; route_change picks the
         # right view by string match.

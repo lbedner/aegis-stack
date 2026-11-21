@@ -1,67 +1,72 @@
-"""
-Enhanced theme management for Aegis Stack dashboard.
+"""Overseer's theme: one palette, two colour schemes, tokens that follow the mode.
 
-Provides comprehensive theme system with Material3 integration,
-full light/dark mode support, and smooth theme transitions.
+The palette is ``app/core/palette.json``, the same file the htmx build
+reads (``tailwind.config.js``), so the two frontends never disagree on a
+colour. ``AegisTheme.build`` turns one mode of it into a Material 3 theme;
+the page carries both (``page.theme`` light, ``page.dark_theme`` dark) and
+``page.theme_mode`` picks.
+
+Every colour token below names a ROLE of those schemes, never a value, so
+Flutter resolves it per mode on the client: flipping the mode repaints
+every control without rebuilding one. A hex value or a Material swatch in
+a control is one mode's colour (``tests/components/frontend/
+test_theme_modes.py`` refuses them).
 """
 
 from dataclasses import dataclass
 
 import flet as ft
 
-from app.components.frontend.styles import BrandPalette, FontConfig
+from app.core.appearance import PALETTE
+
+# Categorical colours (chart series, method badges, metric tiles): the
+# palette's chart sequence.
+# ponytail: one mode's series; Flet names no theme role for an eleventh
+# colour, so the series stays the dark set in both modes (mid-tones that
+# read on either background). Mode-aware needs a repaint on toggle.
+SERIES: tuple[str, ...] = tuple(
+    PALETTE["dark"][f"--aegis-chart-{n}"] for n in range(1, 12)
+)
 
 
 @dataclass(frozen=True)
-class DarkColorPalette:
-    """Dark mode color palette - official design system colors."""
+class FontConfig:
+    """Typography configuration for consistent text styling."""
 
-    # Core colors
-    BG_PRIMARY: str = "#000000"  # Main page background (black, as htmx's)
-    BG_SECONDARY: str = "#111418"  # Card backgrounds
-    BG_SELECTED: str = "#212530"  # Secondary/selected states
-    BG_HOVER: str = "#1A1D24"  # Muted/hover backgrounds
-
-    # Text colors
-    TEXT_PRIMARY_DEFAULT: str = "#EEF1F4"  # Main text (foreground)
-    TEXT_SECONDARY_DEFAULT: str = "#7E8A9A"  # Muted/placeholder text
-
-    # Brand colors — derived from the canonical BrandPalette (styles.py)
-    ACCENT: str = BrandPalette.TEAL  # Primary teal/cyan
-    ACCENT_SECONDARY: str = BrandPalette.TEAL_DARK  # Darker teal (secondary accent)
-
-    # Semantic colors
-    ACCENT_SUCCESS: str = BrandPalette.TEAL  # Success teal (brand standard)
-    ACCENT_WARNING: str = BrandPalette.AMBER  # Warning orange/amber
-    ACCENT_STOP: str = BrandPalette.RED  # Destructive/error red
-    ERROR: str = BrandPalette.RED  # Alias for destructive
-
-    # UI elements
-    BORDER_PRIMARY: str = "#272C36"  # Borders, dividers
-    DISABLED_COLOR: str = "#7E8A9A"  # Same as muted text
-    FOCUS_COLOR: str = BrandPalette.TEAL  # Teal focus
+    FAMILY_PRIMARY: str = "Roboto"
+    # Figures only: money, counts, percentages, axis ticks.
+    #
+    # Roboto's digits are proportional, so a "1" is narrower than a "0" and a
+    # right-aligned column of amounts shifts as the digits change. A tabular
+    # (monospaced) face gives every digit the same advance width, which is
+    # what makes a column of numbers sit still and read as a column.
+    #
+    # Flet 0.28 exposes only ``font_family`` on Text, with no access to the
+    # OpenType ``tnum`` feature, so tabular figures have to come from the
+    # typeface itself rather than from a font-feature setting. ``monospace``
+    # resolves to the platform's default fixed-width face with no bundled
+    # asset and no network. To pin a specific typeface instead, drop the file
+    # in ``assets/fonts/`` and register it on the page with
+    # ``page.fonts = {"Aegis Numeric": "/fonts/<file>.ttf"}``, then set this
+    # to that name.
+    FAMILY_NUMERIC: str = "monospace"
 
 
-@dataclass(frozen=True)
-class LightColorPalette:
-    """Light mode color palette."""
+def _ink_on(fill: str) -> str:
+    """Black or white, whichever reads better on ``fill`` (a hex colour):
+    what DaisyUI derives as a colour's ``-content`` for the htmx side."""
 
-    BG_PRIMARY: str = "#FFFFFF"
-    BG_SECONDARY: str = "#FFFFFF"
-    BG_SELECTED: str = "#E3F2FD"
-    BG_HOVER: str = "#E8E8E8"
-    TEXT_PRIMARY_DEFAULT: str = "#212121"
-    TEXT_SECONDARY_DEFAULT: str = "#495057"
-    ACCENT: str = "#2563eb"
-    ACCENT_SUCCESS: str = BrandPalette.TEAL  # Success teal (brand standard)
-    ACCENT_STOP: str = "#EF4444"
-    ERROR: str = "#D32F2F"
-    BORDER_PRIMARY: str = "#E0E3E7"
-    DISABLED_COLOR: str = "#B0B0B0"
-    DIVIDER_COLOR: str = (
-        "#9E9E9E"  # Darker gray for dividers (better light mode visibility)
+    def channel(hex_pair: str) -> float:
+        c = int(hex_pair, 16) / 255
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (channel(fill[i : i + 2]) for i in (1, 3, 5))
+    luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return (
+        "#000000"
+        if (luminance + 0.05) / 0.05 > 1.05 / (luminance + 0.05)
+        else "#FFFFFF"
     )
-    FOCUS_COLOR: str = "#2563eb"
 
 
 class _PopupMenuTheme(ft.PopupMenuTheme):
@@ -80,61 +85,39 @@ class _PopupMenuTheme(ft.PopupMenuTheme):
 
 
 class AegisTheme:
-    """
-    Creates Material3 Theme objects for Aegis Stack.
+    """Overseer's design tokens, and the Material 3 theme for each mode."""
 
-    Integrates with Flet's native theme system for instant light/dark switching.
-    """
-
-    # Nested classes for backward compatibility with existing components
-    # Using ee-toolset colors for modern, dark, sleek look
     class Colors:
-        """Color palette - pure black base from ee-toolset."""
+        """What a colour means, for the colours that carry meaning.
 
-        # Background colors - PURE BLACK like ee-toolset
-        SURFACE_0 = DarkColorPalette.BG_PRIMARY  # #000000
-        SURFACE_1 = DarkColorPalette.BG_SECONDARY  # #1A1A1A
-        SURFACE_2 = DarkColorPalette.BG_HOVER  # #2A2A2A
-        SURFACE_3 = DarkColorPalette.BG_SELECTED  # #2E2E2E
+        Each names a scheme role, so Flutter resolves it per mode. Anything
+        structural names its role directly: ``ft.Colors.SURFACE`` (the page,
+        palette ``base-200``), ``SURFACE_CONTAINER_HIGHEST`` (a card,
+        ``base-100``), ``ON_SURFACE`` (text), ``ON_SURFACE_VARIANT`` (muted
+        text), ``OUTLINE`` (a border or divider), ``SHADOW``, ``SCRIM``,
+        ``ON_PRIMARY``/``ON_ERROR`` (ink on a fill). The tones live here
+        because their roles do not say what they mean: warning is
+        ``TERTIARY``, info is ``SECONDARY``.
+        """
 
-        # Text colors from ee-toolset
-        TEXT_PRIMARY = DarkColorPalette.TEXT_PRIMARY_DEFAULT  # #E5E5E5
-        TEXT_SECONDARY = DarkColorPalette.TEXT_SECONDARY_DEFAULT  # #B0B0B0
-        TEXT_TERTIARY = DarkColorPalette.TEXT_SECONDARY_DEFAULT
-        TEXT_DISABLED = DarkColorPalette.DISABLED_COLOR  # #7F7F7F
+        # Washes over a surface, in the text colour so they read in either mode.
+        SURFACE_2 = ft.Colors.with_opacity(0.04, ft.Colors.ON_SURFACE)  # hover
+        SURFACE_3 = ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE)  # selected
 
-        # Accent & Action colors
-        PRIMARY = DarkColorPalette.ACCENT  # #1A73E8
-        ACCENT = DarkColorPalette.ACCENT
-        ACCENT_GLOW = DarkColorPalette.ACCENT
-
-        # Status colors
-        SUCCESS = DarkColorPalette.ACCENT_SUCCESS  # teal (brand standard)
-        ERROR = DarkColorPalette.ERROR  # #FF6B6B
-        WARNING = ft.Colors.AMBER_400
-        INFO = ft.Colors.BLUE
-
-        # Borders from ee-toolset
-        BORDER_SUBTLE = DarkColorPalette.BORDER_PRIMARY
-        BORDER_DEFAULT = DarkColorPalette.BORDER_PRIMARY  # #444444
-        BORDER_STRONG = DarkColorPalette.BORDER_PRIMARY
-
-        # Other
-        BADGE_TEXT = ft.Colors.WHITE
-        PRIMARY_DARK = DarkColorPalette.ACCENT
-        PRIMARY_LIGHT = DarkColorPalette.ACCENT
+        PRIMARY = ft.Colors.PRIMARY
+        SUCCESS = ft.Colors.PRIMARY
+        ERROR = ft.Colors.ERROR
+        WARNING = ft.Colors.TERTIARY
+        INFO = ft.Colors.SECONDARY
 
         @classmethod
         def semantic(cls, name: str) -> str:
             """A shared semantic colour name (green, blue, yellow, red, grey, as
             ``get_status_color_name`` and ``ui_auth`` return) in this theme."""
-            return {
-                "green": cls.SUCCESS,
-                "blue": cls.INFO,
-                "yellow": cls.WARNING,
-                "red": cls.ERROR,
-                "grey": ft.Colors.ON_SURFACE_VARIANT,
-            }.get(name, cls.WARNING)
+            tone = {"green": "ok", "yellow": "warn", "red": "error", "grey": "muted"}
+            if name == "blue":
+                return cls.INFO
+            return TONE_COLORS[tone.get(name, "warn")]
 
     class Typography:
         """Typography scale and weights."""
@@ -174,99 +157,74 @@ class AegisTheme:
         BUTTON_RADIUS = 6
         INPUT_RADIUS = 6
 
-        # Elevation (shadow depth)
-        CARD_ELEVATION = 2
-        CARD_ELEVATION_HOVER = 4
-
-        # Animation Durations (ms)
-        TRANSITION_FAST = 150
-        TRANSITION_NORMAL = 200
-        TRANSITION_SLOW = 300
+        # Under every floating panel: dialogs, popups, dropdown menus.
+        POPUP_SHADOW = ft.BoxShadow(
+            spread_radius=0,
+            blur_radius=20,
+            color=ft.Colors.with_opacity(0.3, ft.Colors.SHADOW),
+            offset=ft.Offset(0, 4),
+        )
 
     @staticmethod
-    def create_dark_theme() -> ft.Theme:
-        """Create a dark theme with Aegis color palette."""
+    def build(mode: str) -> ft.Theme:
+        """The Material 3 theme for one mode (``dark`` or ``light``) of the palette."""
+        p = PALETTE[mode]
+        other = PALETTE["light" if mode == "dark" else "dark"]
+        ink, muted, card = p["base-content"], p["neutral"], p["base-100"]
         color_scheme = ft.ColorScheme(
-            # Primary colors
-            primary=DarkColorPalette.ACCENT,
-            on_primary=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            primary_container=DarkColorPalette.BG_PRIMARY,
-            on_primary_container=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            # Secondary colors
-            secondary=DarkColorPalette.TEXT_SECONDARY_DEFAULT,
-            on_secondary=DarkColorPalette.BG_SECONDARY,
-            secondary_container=DarkColorPalette.BG_SELECTED,
-            on_secondary_container=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            # Tertiary colors
-            tertiary=DarkColorPalette.ACCENT_SUCCESS,
-            on_tertiary=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            tertiary_container=DarkColorPalette.BG_SECONDARY,
-            on_tertiary_container=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            # Error colors
-            error=DarkColorPalette.ERROR,
-            on_error=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            error_container=DarkColorPalette.BG_SECONDARY,
-            on_error_container=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            # Background colors
-            background=DarkColorPalette.BG_PRIMARY,
-            on_background=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            surface=DarkColorPalette.BG_PRIMARY,
-            on_surface=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            surface_variant=DarkColorPalette.BG_SECONDARY,
-            on_surface_variant=DarkColorPalette.TEXT_SECONDARY_DEFAULT,
-            # Outline colors
-            outline=DarkColorPalette.BORDER_PRIMARY,
-            outline_variant=DarkColorPalette.DISABLED_COLOR,
-            # Other colors
-            shadow=ft.Colors.BLACK,
-            scrim=ft.Colors.BLACK,
-            inverse_surface=LightColorPalette.BG_PRIMARY,
-            on_inverse_surface=LightColorPalette.TEXT_PRIMARY_DEFAULT,
-            inverse_primary=LightColorPalette.ACCENT,
+            primary=p["primary"],
+            on_primary=_ink_on(p["primary"]),
+            primary_container=p["base-200"],
+            on_primary_container=ink,
+            secondary=p["info"],
+            on_secondary=_ink_on(p["info"]),
+            secondary_container=p["base-300"],
+            on_secondary_container=ink,
+            tertiary=p["warning"],
+            on_tertiary=_ink_on(p["warning"]),
+            tertiary_container=card,
+            on_tertiary_container=ink,
+            error=p["error"],
+            on_error=_ink_on(p["error"]),
+            error_container=card,
+            on_error_container=ink,
+            surface=p["base-200"],
+            on_surface=ink,
+            # Flutter reads ``surfaceContainerHighest`` from this: the card.
+            surface_variant=card,
+            on_surface_variant=muted,
+            surface_container=card,
+            surface_container_low=card,
+            surface_container_high=card,
+            surface_container_lowest=p["base-200"],
+            outline=p["base-300"],
+            outline_variant=p["base-300"],
+            shadow="#000000",
+            scrim="#000000",
+            surface_tint=ft.Colors.TRANSPARENT,
+            inverse_surface=other["base-100"],
+            on_inverse_surface=other["base-content"],
+            inverse_primary=other["primary"],
         )
 
-        text_theme = ft.TextTheme(
-            display_large=ft.TextStyle(
+        def face(size: int, weight: ft.FontWeight, color: str) -> ft.TextStyle:
+            return ft.TextStyle(
                 font_family=FontConfig.FAMILY_PRIMARY,
-                size=32,
-                weight=ft.FontWeight.W_300,
-                color=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            ),
-            headline_large=ft.TextStyle(
-                font_family=FontConfig.FAMILY_PRIMARY,
-                size=24,
-                weight=ft.FontWeight.W_700,
-                color=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            ),
-            headline_medium=ft.TextStyle(
-                font_family=FontConfig.FAMILY_PRIMARY,
-                size=18,
-                weight=ft.FontWeight.W_600,
-                color=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            ),
-            body_large=ft.TextStyle(
-                font_family=FontConfig.FAMILY_PRIMARY,
-                size=16,
-                weight=ft.FontWeight.W_400,
-                color=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            ),
-            body_medium=ft.TextStyle(
-                font_family=FontConfig.FAMILY_PRIMARY,
-                size=14,
-                weight=ft.FontWeight.W_400,
-                color=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            ),
-            body_small=ft.TextStyle(
-                font_family=FontConfig.FAMILY_PRIMARY,
-                size=12,
-                weight=ft.FontWeight.W_400,
-                color=DarkColorPalette.TEXT_SECONDARY_DEFAULT,
-            ),
-        )
+                size=size,
+                weight=weight,
+                color=color,
+            )
 
         theme = ft.Theme(
             color_scheme=color_scheme,
-            text_theme=text_theme,
+            text_theme=ft.TextTheme(
+                display_large=face(32, ft.FontWeight.W_300, ink),
+                headline_large=face(24, ft.FontWeight.W_700, ink),
+                headline_medium=face(18, ft.FontWeight.W_600, ink),
+                body_large=face(16, ft.FontWeight.W_400, ink),
+                body_medium=face(14, ft.FontWeight.W_400, ink),
+                body_small=face(12, ft.FontWeight.W_400, muted),
+            ),
             use_material3=True,
         )
 
@@ -276,127 +234,15 @@ class AegisTheme:
         # gives every popup the card treatment: card surface, no Material
         # tint wash, the card corner radius, primary-face text.
         theme.popup_menu_theme = _PopupMenuTheme(
-            color=DarkColorPalette.BG_SECONDARY,
+            color=card,
             surface_tint_color=ft.Colors.TRANSPARENT,
             shape=ft.RoundedRectangleBorder(radius=12),
             elevation=4,
-            text_style=ft.TextStyle(
-                font_family=FontConfig.FAMILY_PRIMARY,
-                size=13,
-                color=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            ),
+            text_style=face(13, ft.FontWeight.W_400, ink),
         )
 
-        # Instant transitions
-        theme.page_transitions = ft.PageTransitionsTheme(
-            android=ft.PageTransitionTheme.NONE,
-            ios=ft.PageTransitionTheme.NONE,
-            linux=ft.PageTransitionTheme.NONE,
-            macos=ft.PageTransitionTheme.NONE,
-            windows=ft.PageTransitionTheme.NONE,
-        )
-
-        return theme
-
-    @staticmethod
-    def create_light_theme() -> ft.Theme:
-        """Create a light theme with Aegis color palette."""
-        color_scheme = ft.ColorScheme(
-            # Primary colors
-            primary=LightColorPalette.ACCENT,
-            on_primary=ft.Colors.WHITE,
-            primary_container=LightColorPalette.BG_SECONDARY,
-            on_primary_container=LightColorPalette.TEXT_PRIMARY_DEFAULT,
-            # Secondary colors
-            secondary=LightColorPalette.TEXT_SECONDARY_DEFAULT,
-            on_secondary=ft.Colors.WHITE,
-            secondary_container=LightColorPalette.BG_SELECTED,
-            on_secondary_container=LightColorPalette.TEXT_PRIMARY_DEFAULT,
-            # Tertiary colors
-            tertiary=LightColorPalette.ACCENT_SUCCESS,
-            on_tertiary=ft.Colors.WHITE,
-            tertiary_container=LightColorPalette.BG_SECONDARY,
-            on_tertiary_container=LightColorPalette.TEXT_PRIMARY_DEFAULT,
-            # Error colors
-            error=LightColorPalette.ERROR,
-            on_error=ft.Colors.WHITE,
-            error_container=LightColorPalette.BG_SECONDARY,
-            on_error_container=LightColorPalette.TEXT_PRIMARY_DEFAULT,
-            # Background colors
-            background=LightColorPalette.BG_PRIMARY,
-            on_background=LightColorPalette.TEXT_PRIMARY_DEFAULT,
-            surface=LightColorPalette.BG_SECONDARY,
-            on_surface=LightColorPalette.TEXT_PRIMARY_DEFAULT,
-            surface_variant=LightColorPalette.BG_HOVER,
-            on_surface_variant=LightColorPalette.TEXT_SECONDARY_DEFAULT,
-            # Outline colors
-            outline=LightColorPalette.DIVIDER_COLOR,
-            outline_variant=LightColorPalette.DIVIDER_COLOR,
-            # Other colors
-            shadow=ft.Colors.BLACK38,
-            scrim=ft.Colors.BLACK54,
-            inverse_surface=DarkColorPalette.BG_PRIMARY,
-            on_inverse_surface=DarkColorPalette.TEXT_PRIMARY_DEFAULT,
-            inverse_primary=DarkColorPalette.ACCENT,
-        )
-
-        text_theme = ft.TextTheme(
-            display_large=ft.TextStyle(
-                font_family=FontConfig.FAMILY_PRIMARY,
-                size=32,
-                weight=ft.FontWeight.W_300,
-                color=LightColorPalette.TEXT_PRIMARY_DEFAULT,
-            ),
-            headline_large=ft.TextStyle(
-                font_family=FontConfig.FAMILY_PRIMARY,
-                size=24,
-                weight=ft.FontWeight.W_700,
-                color=LightColorPalette.TEXT_PRIMARY_DEFAULT,
-            ),
-            headline_medium=ft.TextStyle(
-                font_family=FontConfig.FAMILY_PRIMARY,
-                size=18,
-                weight=ft.FontWeight.W_600,
-                color=LightColorPalette.TEXT_PRIMARY_DEFAULT,
-            ),
-            body_large=ft.TextStyle(
-                font_family=FontConfig.FAMILY_PRIMARY,
-                size=16,
-                weight=ft.FontWeight.W_400,
-                color=LightColorPalette.TEXT_PRIMARY_DEFAULT,
-            ),
-            body_medium=ft.TextStyle(
-                font_family=FontConfig.FAMILY_PRIMARY,
-                size=14,
-                weight=ft.FontWeight.W_400,
-                color=LightColorPalette.TEXT_PRIMARY_DEFAULT,
-            ),
-            body_small=ft.TextStyle(
-                font_family=FontConfig.FAMILY_PRIMARY,
-                size=12,
-                weight=ft.FontWeight.W_400,
-                color=LightColorPalette.TEXT_SECONDARY_DEFAULT,
-            ),
-        )
-
-        theme = ft.Theme(
-            color_scheme=color_scheme,
-            text_theme=text_theme,
-            use_material3=True,
-        )
-
-        # Mirrors the dark theme's popup treatment (see create_dark_theme).
-        theme.popup_menu_theme = _PopupMenuTheme(
-            color=LightColorPalette.BG_SECONDARY,
-            surface_tint_color=ft.Colors.TRANSPARENT,
-            shape=ft.RoundedRectangleBorder(radius=12),
-            elevation=4,
-            text_style=ft.TextStyle(
-                font_family=FontConfig.FAMILY_PRIMARY,
-                size=13,
-                color=LightColorPalette.TEXT_PRIMARY_DEFAULT,
-            ),
-        )
+        # Every divider is a border line, without each one saying so.
+        theme.divider_theme = ft.DividerTheme(color=p["base-300"])
 
         # Instant transitions
         theme.page_transitions = ft.PageTransitionsTheme(
@@ -416,5 +262,5 @@ TONE_COLORS = {
     "ok": AegisTheme.Colors.SUCCESS,
     "warn": AegisTheme.Colors.WARNING,
     "error": AegisTheme.Colors.ERROR,
-    "muted": ft.Colors.OUTLINE,
+    "muted": ft.Colors.ON_SURFACE_VARIANT,
 }

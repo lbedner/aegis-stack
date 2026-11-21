@@ -17,6 +17,7 @@ from app.components.frontend.controls import (
     H3Text,
     SecondaryText,
 )
+from app.components.frontend.theme import SERIES
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system import ui_cache
 from app.services.system.models import CacheGroup, CacheKey, CacheView
@@ -64,7 +65,7 @@ class CacheTab(ft.Container):
         backend = view.backend
         cards = [
             MetricCard(
-                value=str(figure["value"]), label=figure["label"], color=ft.Colors.BLUE
+                value=str(figure["value"]), label=figure["label"], color=SERIES[3]
             )
             for figure in view.figures
         ]

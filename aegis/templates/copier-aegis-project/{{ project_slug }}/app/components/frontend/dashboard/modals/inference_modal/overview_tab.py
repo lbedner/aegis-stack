@@ -49,7 +49,7 @@ class OverviewSection(ft.Container):
             status_color = Theme.Colors.SUCCESS
         elif installed_count > 0:
             status_text = "Cold"
-            status_color = Theme.Colors.ACCENT
+            status_color = Theme.Colors.PRIMARY
         else:
             status_text = "No models"
             status_color = Theme.Colors.WARNING
@@ -60,12 +60,12 @@ class OverviewSection(ft.Container):
                 MetricCard(
                     "VRAM Usage",
                     f"{total_vram_gb:.1f} GB",
-                    Theme.Colors.SUCCESS if total_vram_gb > 0 else Theme.Colors.ACCENT,
+                    Theme.Colors.SUCCESS if total_vram_gb > 0 else Theme.Colors.PRIMARY,
                 ),
                 MetricCard(
                     "Models",
                     f"{running_count} / {installed_count}",
-                    Theme.Colors.ACCENT,
+                    Theme.Colors.PRIMARY,
                 ),
                 MetricCard(
                     "Status",

@@ -29,6 +29,7 @@ from app.components.frontend.auth.session import (
 from app.core.client import APIClient
 from app.core.client_session import REFRESH_COOKIE, SESSION_COOKIE
 from app.core.security import REFRESH_COOKIE_PATH
+from tests.components.frontend._fakes import FakeStorage
 
 BASE_URL = "http://backend:8000"
 
@@ -85,22 +86,6 @@ class FakeBackend:
             return httpx.Response(200, json={"ok": True})
 
         return httpx.Response(404, json={})
-
-
-class FakeStorage:
-    """``page.client_storage`` - the browser's localStorage."""
-
-    def __init__(self, stored: dict[str, Any] | None = None) -> None:
-        self.stored = dict(stored or {})
-
-    async def get_async(self, key: str) -> Any:
-        return self.stored.get(key)
-
-    async def set_async(self, key: str, value: Any) -> None:
-        self.stored[key] = value
-
-    async def remove_async(self, key: str) -> None:
-        self.stored.pop(key, None)
 
 
 class FakePage:

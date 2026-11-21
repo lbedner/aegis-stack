@@ -91,7 +91,7 @@ class ProviderCards(ft.Column):
             border_radius=8,
             border=ft.border.all(
                 1,
-                Theme.Colors.PRIMARY if card["current"] else ft.Colors.OUTLINE_VARIANT,
+                Theme.Colors.PRIMARY if card["current"] else ft.Colors.OUTLINE,
             ),
             on_click=lambda _, key=card["key"]: self._pick(key),
         )

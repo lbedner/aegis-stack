@@ -91,9 +91,21 @@ async def extract_document_task(
     return await run_extraction_job(job_id, document_id, owner_user_id, force)
 
 
+async def mail_import_task(
+    job_id: str, storage_key: str, file_name: str, owner_user_id: int | None
+) -> dict:
+    """Read a mailbox export into documents; progress lands in the shared
+    job store. The mail service is imported lazily, as documents is."""
+    from app.services.mail.jobs import run_mail_import_job
+
+    return await run_mail_import_job(job_id, storage_key, file_name, owner_user_id)
+
+
 # Registered only where the service is: elsewhere the task reaches nothing.
 if present("app.services.documents"):
     extract_document_task = broker.task(extract_document_task)
+if present("app.services.mail"):
+    mail_import_task = broker.task(mail_import_task)
 
 
 async def read_photo_task(user_id: str, key: str, media_type: str, title: str) -> dict:

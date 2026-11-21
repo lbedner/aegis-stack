@@ -285,13 +285,11 @@
     @apply bg-aegis-teal/25 text-aegis-teal;
   }
 
-  /* A native select draws its caret flush against its border; the house
-     select draws its own, inset like its text (the macro adds the room). */
-  .select-caret {
-    @apply appearance-none bg-no-repeat;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237E8A9A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-    background-position: right 0.625rem center;
-    background-size: 0.875rem;
+  /* What floats over the page (a menu, a toast): the card's fill, border
+     and radius, and one shadow. Every popover wears it instead of
+     spelling those out. */
+  .floating {
+    @apply bg-aegis-card border border-aegis-border rounded-lg shadow-2xl;
   }
 
   /* A copy icon answers a click: a clipboard write leaves no trace, so

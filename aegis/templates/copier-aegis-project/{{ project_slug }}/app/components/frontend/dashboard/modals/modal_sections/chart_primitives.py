@@ -8,62 +8,24 @@ from typing import Any
 import flet as ft
 
 from app.components.frontend.controls.status_dot import status_dot
+from app.components.frontend.theme import SERIES
 from app.components.frontend.theme import AegisTheme as Theme
 
 
 class ChartColors:
-    """Aegis chart palette.
+    """The chart palette: the htmx charts' series (--aegis-chart-1..11, in
+    order, so a series reads the same in both UIs) and the theme's signals.
 
-    The cool ramp (teal -> sky) is the data palette - primary series gets
-    teal, the second series picks the next ramp color that gives the most
-    perceptual separation. Warm signals (amber, success, error) stay
-    sparing, reserved for highlight / delta semantics.
+    Warm signals (amber, error) stay sparing, reserved for highlight and
+    delta semantics; the primary series is the brand teal.
     """
 
-    # Brand / primary
-    TEAL = "#17CCBF"
-
-    # Cool ramp - used in this order for multi-series charts
-    CYAN = "#06B6D4"
-    BLUE = "#3B82F6"
-    INDIGO = "#6366F1"
-    VIOLET = "#8B5CF6"
-    PURPLE = "#A855F7"
-    SKY = "#0EA5E9"
-
-    # Warm signals - highlight / delta only, never the default series color
-    AMBER = "#F59E0B"
-    SUCCESS = "#22C55E"
-    ERROR = "#EF4444"
-
-    # Legacy aliases - kept so any code that referenced the older pink
-    # accent for releases keeps rendering
-    PINK = "#EC4899"
-
-    # Muted fallback (also used as the secondary surface text token in
-    # the htmx side; reused here as the palette's "neutral" slot)
-    MUTED = "#7E8A9A"
-
-    EMERALD = "#10B981"
-    ORANGE = "#F97316"
-    LIME = "#84CC16"
-    FUCHSIA = "#D946EF"
-    YELLOW = "#EAB308"
-    # One colour per series on a multi-series chart, in the htmx charts'
-    # order (--aegis-chart-1..11), so a series reads the same in both UIs.
-    RAMP = (
-        TEAL,
-        VIOLET,
-        AMBER,
-        BLUE,
-        PINK,
-        EMERALD,
-        ORANGE,
-        CYAN,
-        LIME,
-        FUCHSIA,
-        YELLOW,
-    )
+    RAMP = SERIES
+    TEAL = Theme.Colors.PRIMARY
+    VIOLET = SERIES[1]
+    INDIGO = SERIES[3]  # a second series beside teal: the ramp's blue
+    AMBER = Theme.Colors.WARNING
+    ERROR = Theme.Colors.ERROR
 
 
 def chart_dot(n: int, data: str | None = None) -> ft.Container:
@@ -87,8 +49,8 @@ def chart_tooltip_kwargs() -> dict[str, Any]:
     # short form raises `TypeError: ... got an unexpected keyword argument
     # 'tooltip_border_side'` on Flet 0.28. Keep the doubled prefix.
     return {
-        "tooltip_bgcolor": Theme.Colors.SURFACE_1,
-        "tooltip_tooltip_border_side": ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
+        "tooltip_bgcolor": ft.Colors.SURFACE_CONTAINER_HIGHEST,
+        "tooltip_tooltip_border_side": ft.BorderSide(1, ft.Colors.OUTLINE),
         "tooltip_rounded_radius": 8,
         "tooltip_padding": 10,
         "tooltip_max_content_width": 200,
@@ -109,13 +71,10 @@ class ChartPoint:
     """
 
     @staticmethod
-    def dot(color: str = ft.Colors.ON_SURFACE) -> ft.ChartCirclePoint:
-        """Small marker drawn at every data point on a visible series.
-
-        Default color is the on-surface foreground so the dots read on
-        any line color. Pass the line color (or any other) to bias the
-        dot toward / away from the curve.
-        """
+    def dot(color: str) -> ft.ChartCirclePoint:
+        """Small marker drawn at every data point on a visible series, in
+        the series' own colour: an ink dot buries a dense line in either
+        mode."""
         return ft.ChartCirclePoint(radius=3, color=color, stroke_width=0)
 
     @staticmethod
@@ -167,11 +126,9 @@ class LineSeries:
     # tinting the area between the line and the split on each side. One
     # series, so tooltips and hover are untouched. ``None`` = plain line.
     split_y: float | None = None
-    split_below_color: str = "#EF4444"  # ChartColors.ERROR - self-contained
+    split_below_color: str = ChartColors.ERROR
     highlighted_indices: frozenset[int] = field(default_factory=frozenset)
-    highlight_color: str = (
-        "#F59E0B"  # ChartColors.AMBER - keep dataclass self-contained
-    )
+    highlight_color: str = ChartColors.AMBER
     # A guide (where a warning begins, say): a dashed level, out of the
     # legend and the tooltips, that the y-axis still takes in.
     guide: bool = False

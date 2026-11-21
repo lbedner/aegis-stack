@@ -26,14 +26,13 @@ from ..modal_sections import PIE_CHART_COLORS, EmptyStatePlaceholder, MetricCard
 from app.components.frontend.dashboard.modals.observability_modal.shared import _EXC_COLUMNS
 
 
-def _build_exception_expanded_content(exc: dict, is_dark_mode: bool) -> ft.Control:
+def _build_exception_expanded_content(exc: dict) -> ft.Control:
     """Build expanded content for an exception row.
 
     Shows exception type, full message, and stacktrace.
 
     Args:
         exc: Exception dict from Logfire query
-        is_dark_mode: Whether the page is in dark mode
 
     Returns:
         Column with exception details
@@ -118,7 +117,6 @@ def _build_exception_expanded_content(exc: dict, is_dark_mode: bool) -> ft.Contr
             copyable_markdown(
                 f"```python\n{stacktrace}\n```",
                 copy_text=stacktrace,
-                dark=is_dark_mode,
             )
         )
 
@@ -162,7 +160,6 @@ class ExceptionsSection(ft.Container):
 
         metadata = component_data.metadata or {}
         exceptions = metadata.get("recent_exceptions", [])
-        is_dark_mode = page.theme_mode == ft.ThemeMode.DARK
 
         grouped = _group_exceptions(exceptions)
 
@@ -183,9 +180,7 @@ class ExceptionsSection(ft.Container):
             rows.append(
                 ExpandableRow(
                     cells=[display_name, short_msg, str(count), timestamp],
-                    expanded_content=_build_exception_expanded_content(
-                        exc, is_dark_mode
-                    ),
+                    expanded_content=_build_exception_expanded_content(exc),
                 )
             )
 

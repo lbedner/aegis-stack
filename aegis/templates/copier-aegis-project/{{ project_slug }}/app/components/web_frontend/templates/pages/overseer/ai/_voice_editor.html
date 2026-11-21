@@ -5,7 +5,7 @@
    carries hidden), and the form is drawn again as it changes. #}
 {% from "components/macros/chat.html" import speak_button %}
 {% from "components/macros/layout.html" import avatar %}
-{% from "components/macros/form.html" import checklist, field, primary_button, range_chips, search_input, textarea %}
+{% from "components/macros/form.html" import checklist, control, field, primary_button, range_chips, search_input, textarea %}
 {% set v = view %}
 {% set d = v.delivery %}
 {% macro carry(shown) %}{% for name, value in v.form.items() if name not in shown %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}{% endmacro %}
@@ -14,7 +14,7 @@
 {% macro chosen_bar(pick=False) %}
 {% if v.chosen %}
 <div data-voice-chosen class="flex items-center gap-3 rounded border border-aegis-border px-3 py-2">
-  {% if pick %}<input type="radio" name="voice" value="{{ v.chosen.id }}" checked class="radio radio-xs radio-primary" aria-label="{{ v.chosen.name }}">{% else %}<span class="text-xs text-aegis-muted">Voice</span>{% endif %}
+  {% if pick %}<input type="radio" name="voice" value="{{ v.chosen.id }}" checked class="{{ control("radio") }}" aria-label="{{ v.chosen.name }}">{% else %}<span class="text-xs text-aegis-muted">Voice</span>{% endif %}
   {{ avatar(v.chosen.provider_name, marks.get(v.chosen.provider)) }}
   <span class="text-sm text-aegis-text">{{ v.chosen.name }}</span>
   <span class="flex-1 text-xs text-aegis-muted">{{ v.chosen.detail }}{% if not pick %} · on <span class="font-mono">{{ v.model }}</span>{% endif %}</span>
@@ -56,7 +56,7 @@
     <div class="divide-y divide-aegis-border/40 border-y border-aegis-border/40">
       {% for c in f.cards %}
       <label data-voice-card="{{ c.id }}" class="flex items-center gap-3 px-2 py-1.5 cursor-pointer hover:bg-aegis-border/20">
-        <input type="radio" name="voice" value="{{ c.id }}" class="radio radio-xs radio-primary">
+        <input type="radio" name="voice" value="{{ c.id }}" class="{{ control("radio") }}">
         {{ avatar(c.provider_name, marks.get(c.provider)) }}
         <span class="w-44 truncate text-sm text-aegis-text">{{ c.name }}</span>
         <span class="flex-1 text-xs text-aegis-muted">{{ c.detail }}</span>
@@ -70,7 +70,7 @@
     <p class="text-xs text-aegis-muted">{{ v.chosen.name if v.chosen else v.voice }} is spoken on</p>
     {% for m in v.models %}
     <label data-voice-model="{{ m.id }}" class="flex items-center gap-3 px-2 py-1 cursor-pointer hover:bg-aegis-border/20">
-      <input type="radio" name="model" value="{{ m.id }}" class="radio radio-xs radio-primary" {% if m.id == v.model %}checked{% endif %}>
+      <input type="radio" name="model" value="{{ m.id }}" class="{{ control("radio") }}" {% if m.id == v.model %}checked{% endif %}>
       <span class="w-64 font-mono text-xs text-aegis-text">{{ m.id }}</span>
       <span class="flex-1 text-xs text-aegis-muted">{{ m.note }}</span>
     </label>

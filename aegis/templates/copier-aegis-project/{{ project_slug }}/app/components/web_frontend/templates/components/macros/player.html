@@ -4,7 +4,7 @@
    latest to start says what it is under them. Played in scenes
    (``[data-play-scene]`` inside it), ``chapters`` (each its ``key`` and
    ``title``) go to each, where there are two or more. #}
-{% from "components/macros/form.html" import action %}
+{% from "components/macros/form.html" import action, control %}
 {% from "components/macros/icons.html" import icon %}
 
 {# The speeds offered, fastest first: real time, and slowed so a few
@@ -26,7 +26,7 @@
     {{ action("From the start", 'data-play-do="restart"', glyph="replay") }}
     <input type="range" data-play-seek min="0" max="0" step="any" value="0" aria-label="Where in it" class="range range-xs range-primary min-w-40 flex-1">
     <span data-play-clock class="tabular-nums text-aegis-muted whitespace-nowrap"></span>
-    <select data-play-speed aria-label="Speed" class="select select-sm select-caret pr-8">
+    <select data-play-speed aria-label="Speed" class="{{ control("select") }} pr-8">
       {% for value, name in SPEEDS %}<option value="{{ value }}">{{ name }}</option>{% endfor %}
     </select>
   </div>

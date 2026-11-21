@@ -16,7 +16,7 @@ from pathlib import Path
 import flet as ft
 
 from app.components.frontend.controls.text import DisplayText, H2Text, SecondaryText
-from app.components.frontend.styles import PulseColors
+from app.components.frontend.theme import AegisTheme as Theme
 from app.core.log import logger
 
 _GRID_SPAN = 1600
@@ -53,7 +53,7 @@ class BrandingPanel(ft.Container):
         super().__init__()
 
         # Grid background — many positioned 1px containers in a Stack
-        line_color = ft.Colors.with_opacity(0.06, PulseColors.TEAL)
+        line_color = ft.Colors.with_opacity(0.06, Theme.Colors.PRIMARY)
         grid_lines: list[ft.Control] = []
         for x in range(0, _GRID_SPAN, _GRID_STEP):
             grid_lines.append(
@@ -77,13 +77,13 @@ class BrandingPanel(ft.Container):
                 fit=ft.ImageFit.CONTAIN,
             )
         else:
-            logo = DisplayText("OVERSEER", color=PulseColors.TEAL)
+            logo = DisplayText("OVERSEER", color=Theme.Colors.PRIMARY)
 
         glow = ft.Container(
             content=logo,
             padding=ft.padding.all(48),
             border_radius=320,
-            bgcolor=ft.Colors.with_opacity(0.05, PulseColors.TEAL),
+            bgcolor=ft.Colors.with_opacity(0.05, Theme.Colors.PRIMARY),
         )
 
         center = ft.Container(
@@ -91,8 +91,8 @@ class BrandingPanel(ft.Container):
                 controls=[
                     glow,
                     ft.Container(height=32),
-                    H2Text(project_name, color=PulseColors.TEXT),
-                    SecondaryText(tagline, color=PulseColors.MUTED),
+                    H2Text(project_name, color=ft.Colors.ON_SURFACE),
+                    SecondaryText(tagline, color=ft.Colors.ON_SURFACE_VARIANT),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 alignment=ft.MainAxisAlignment.CENTER,
@@ -102,7 +102,7 @@ class BrandingPanel(ft.Container):
                 center=ft.alignment.center,
                 radius=1.2,
                 colors=[
-                    ft.Colors.with_opacity(0.10, PulseColors.TEAL),
+                    ft.Colors.with_opacity(0.10, Theme.Colors.PRIMARY),
                     ft.Colors.TRANSPARENT,
                 ],
             ),
@@ -115,9 +115,9 @@ class BrandingPanel(ft.Container):
             expand=True,
         )
         self.border = ft.border.only(
-            left=ft.BorderSide(width=1, color=PulseColors.BORDER)
+            left=ft.BorderSide(width=1, color=ft.Colors.OUTLINE)
         )
-        self.bgcolor = PulseColors.BG
+        self.bgcolor = ft.Colors.SURFACE
         self.expand = True
         self.alignment = ft.alignment.center
         self.clip_behavior = ft.ClipBehavior.HARD_EDGE

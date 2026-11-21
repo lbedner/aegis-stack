@@ -114,7 +114,7 @@ class SchedulerCard:
                 spacing=4,
             ),
             padding=ft.padding.only(bottom=8),
-            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
+            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
         )
 
         # Build job rows
@@ -165,7 +165,7 @@ class SchedulerCard:
                                     next_run_display,
                                     style=ft.TextStyle(
                                         size=12,
-                                        color=Theme.Colors.TEXT_SECONDARY,
+                                        color=ft.Colors.ON_SURFACE_VARIANT,
                                     ),
                                 ),
                                 width=70,
@@ -196,9 +196,9 @@ class SchedulerCard:
                 [header_row] + rows,
                 spacing=0,
             ),
-            bgcolor=ft.Colors.with_opacity(0.08, ft.Colors.GREY),
+            bgcolor=Theme.Colors.SURFACE_3,
             border_radius=8,
-            border=ft.border.all(1, ft.Colors.with_opacity(0.15, ft.Colors.GREY)),
+            border=ft.border.all(1, ft.Colors.OUTLINE),
             padding=ft.padding.all(12),
         )
 

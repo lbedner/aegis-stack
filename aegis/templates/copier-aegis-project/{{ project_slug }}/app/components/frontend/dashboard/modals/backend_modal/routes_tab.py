@@ -22,6 +22,7 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.controls.surface_panel import SurfacePanel
+from app.components.frontend.theme import SERIES
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system import ui_backend
 from app.services.system.models import ComponentStatus
@@ -108,7 +109,7 @@ class RouteTableRow(ft.Container):
                                     content=SecondaryText(
                                         "DEPRECATED",
                                         size=9,
-                                        color=ft.Colors.ORANGE,
+                                        color=SERIES[6],
                                     ),
                                     visible=deprecated,
                                     padding=ft.padding.only(left=8),
@@ -261,9 +262,7 @@ class RouteTableRow(ft.Container):
     def _on_hover(self, e: ft.ControlEvent) -> None:
         """Handle hover state change."""
         if e.data == "true":
-            self.row_container.bgcolor = ft.Colors.with_opacity(
-                0.08, ft.Colors.ON_SURFACE
-            )
+            self.row_container.bgcolor = Theme.Colors.SURFACE_3
         else:
             self.row_container.bgcolor = ft.Colors.SURFACE
         if e.control.page:
@@ -322,7 +321,7 @@ class RouteGroupSection(ft.Container):
                 spacing=Theme.Spacing.SM,
             ),
             padding=ft.padding.symmetric(horizontal=8, vertical=4),
-            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
+            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
         )
 
         # Build route rows

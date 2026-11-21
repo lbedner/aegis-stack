@@ -312,7 +312,7 @@ class SuggestionsMixin(BudgetPanelState):
         amount = suggestion.get("suggested_limit") or 0
         return ft.Row(
             [
-                Tag("PARSED", color=Theme.Colors.ACCENT),
+                Tag("PARSED", color=Theme.Colors.PRIMARY),
                 ft.Container(
                     content=TableCellText(goal_suggestion_message(suggestion)),
                     expand=True,

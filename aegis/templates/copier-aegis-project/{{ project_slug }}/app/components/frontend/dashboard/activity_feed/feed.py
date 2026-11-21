@@ -64,7 +64,7 @@ class ActivityFeed(ft.Container):
             width=6,
             height=6,
             border_radius=3,
-            bgcolor=Theme.Colors.ACCENT,
+            bgcolor=Theme.Colors.PRIMARY,
             opacity=0,
             animate_opacity=_anim,
         )
@@ -73,7 +73,7 @@ class ActivityFeed(ft.Container):
         self._filter_icon = ft.Icon(
             ft.Icons.FILTER_LIST,
             size=16,
-            color=Theme.Colors.TEXT_SECONDARY,
+            color=ft.Colors.ON_SURFACE_VARIANT,
         )
 
         # Filter zone: hover here to expand pills (icon + dot + wrapper)
@@ -99,7 +99,7 @@ class ActivityFeed(ft.Container):
             padding=ft.padding.symmetric(
                 horizontal=Theme.Spacing.MD, vertical=self._row_padding + 2
             ),
-            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
+            bgcolor=Theme.Colors.SURFACE_2,
             border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
         )
 

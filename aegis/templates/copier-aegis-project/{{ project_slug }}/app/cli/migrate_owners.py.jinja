@@ -1,11 +1,13 @@
 """Which revision writes which table, and which writes a table's keys.
 
 ``migrate_gen`` writes one revision per service. A table belongs to the
-service whose package holds its model; a key to ``user`` on a table whose
+service whose package holds its model (or that the package says it is part
+of: mail's ``PART_OF`` is documents); a key to ``user`` on a table whose
 service has an ``<service>_auth_link`` in the run belongs to that link.
 """
 {% if include_database %}
 
+import importlib
 from pathlib import Path
 from typing import Any
 
@@ -34,13 +36,21 @@ def _owners() -> dict[str, list[str]]:
         elif parts[:2] in (["app", "services"], ["app", "components"]) and (
             "models" in parts
         ):
-            base = parts[2]
+            base = _part_of(parts[2]) if parts[1] == "services" else parts[2]
             sub = parts[parts.index("models") + 1 : parts.index("models") + 2]
         else:
             continue
         names = [f"{base}_{sub[0]}", base] if sub else [base]
         owners[mapper.persist_selectable.key] = names
     return owners
+
+
+def _part_of(folder: str) -> str:
+    """The service whose revision writes a services folder's tables: the one
+    it says it is part of (``PART_OF``, ``app.core.ownership``), else its
+    own. Shared code keeps its own name."""
+    part = getattr(importlib.import_module(f"app.services.{folder}"), "PART_OF", None)
+    return str(part) if part and part != "shared" else folder
 
 
 def _sweep_target(all_services: list[str], versions: Path) -> str:

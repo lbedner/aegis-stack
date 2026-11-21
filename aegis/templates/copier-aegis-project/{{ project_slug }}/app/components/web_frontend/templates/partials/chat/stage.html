@@ -6,7 +6,8 @@
    conversation the chat had open: the thread stays the record.
    Needs: ``chat_surface.stage_context``. #}
 {% extends "base.html" %}
-{% from "components/macros/chat.html" import button_classes, conversation_field %}
+{% from "components/macros/form.html" import button_classes %}
+{% from "components/macros/chat.html" import conversation_field %}
 {% from "partials/chat/_call.html" import call_bar, mic_states, phone, phone_states with context %}
 {% block title %}{{ assistant }}{% endblock %}
 {% block navbar %}{% endblock %}

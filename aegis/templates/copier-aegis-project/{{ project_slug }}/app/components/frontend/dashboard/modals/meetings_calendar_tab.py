@@ -84,7 +84,7 @@ class CalendarTab(ft.Container):
             "",
             size=Theme.Typography.H3,
             weight=ft.FontWeight.W_600,
-            color=Theme.Colors.TEXT_PRIMARY,
+            color=ft.Colors.ON_SURFACE,
         )
         self._grid = ft.Container(
             content=EmptyStatePlaceholder("Loading the calendar..."), expand=True
@@ -121,7 +121,7 @@ class CalendarTab(ft.Container):
         return ft.IconButton(
             icon=icon,
             icon_size=18,
-            icon_color=Theme.Colors.TEXT_SECONDARY,
+            icon_color=ft.Colors.ON_SURFACE_VARIANT,
             on_click=step,
         )
 
@@ -170,12 +170,12 @@ class CalendarTab(ft.Container):
                         str(day.day),
                         size=Theme.Typography.BODY_SMALL,
                         weight=ft.FontWeight.W_600 if today else None,
-                        color=Theme.Colors.ACCENT
+                        color=Theme.Colors.PRIMARY
                         if today
                         else (
-                            Theme.Colors.TEXT_SECONDARY
+                            ft.Colors.ON_SURFACE_VARIANT
                             if outside
-                            else Theme.Colors.TEXT_PRIMARY
+                            else ft.Colors.ON_SURFACE
                         ),
                     ),
                     *(self._entry(e) for e in entries),
@@ -187,10 +187,10 @@ class CalendarTab(ft.Container):
             height=96,
             padding=Theme.Spacing.XS,
             border=ft.border.all(
-                1, Theme.Colors.ACCENT if today else Theme.Colors.BORDER_DEFAULT
+                1, Theme.Colors.PRIMARY if today else ft.Colors.OUTLINE
             ),
             border_radius=4,
-            bgcolor=None if outside else Theme.Colors.SURFACE_1,
+            bgcolor=None if outside else ft.Colors.SURFACE_CONTAINER_HIGHEST,
         )
 
     def _entry(self, entry: dict[str, Any]) -> ft.Control:
@@ -198,7 +198,7 @@ class CalendarTab(ft.Container):
             content=ft.Text(
                 entry_line(entry),
                 size=Theme.Typography.BODY_SMALL,
-                color=Theme.Colors.TEXT_PRIMARY,
+                color=ft.Colors.ON_SURFACE,
                 max_lines=1,
                 overflow=ft.TextOverflow.ELLIPSIS,
             ),

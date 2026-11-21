@@ -83,7 +83,7 @@ class PagesStrip(ft.Row):
             width=48,
             height=64,
             alignment=ft.alignment.center,
-            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+            border=ft.border.all(1, ft.Colors.OUTLINE),
             border_radius=4,
             opacity=0.45 if unread else 1.0,
             tooltip=(row.get("detail") or f"Page {number}")
@@ -122,7 +122,7 @@ class PagesStrip(ft.Row):
                         ),
                         width=380,
                         height=600,
-                        bgcolor=Theme.Colors.SURFACE_0,
+                        bgcolor=ft.Colors.SURFACE,
                         border_radius=6,
                         padding=Theme.Spacing.MD,
                     ),

@@ -299,9 +299,9 @@ class PayeesTab(PayeeDialogsMixin, FinancePanel):
         unused = sum(1 for m in self._items if not m.get("transaction_count"))
         missing = sum(1 for m in self._items if not m.get("website_url"))
         self._stats.controls = [
-            headline_stat("Payees", f"{len(self._items):,}", Theme.Colors.TEXT_PRIMARY),
-            headline_stat("No address", f"{missing:,}", Theme.Colors.TEXT_PRIMARY),
-            headline_stat("Unused", f"{unused:,}", Theme.Colors.TEXT_PRIMARY),
+            headline_stat("Payees", f"{len(self._items):,}", ft.Colors.ON_SURFACE),
+            headline_stat("No address", f"{missing:,}", ft.Colors.ON_SURFACE),
+            headline_stat("Unused", f"{unused:,}", ft.Colors.ON_SURFACE),
         ]
         if self._stats.page:
             self._stats.update()

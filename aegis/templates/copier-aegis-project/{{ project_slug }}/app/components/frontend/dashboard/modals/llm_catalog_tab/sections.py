@@ -9,6 +9,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.snack_bar import SuccessSnackBar
+from app.components.frontend.theme import SERIES
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_number
 
@@ -32,10 +33,8 @@ class CatalogStatsSection(ft.Container):
         self.content = ft.Row(
             [
                 MetricCard("Vendors", str(vendor_count), Theme.Colors.PRIMARY),
-                MetricCard("Models", format_number(model_count), ft.Colors.PURPLE),
-                MetricCard(
-                    "Deployments", format_number(deployment_count), ft.Colors.CYAN
-                ),
+                MetricCard("Models", format_number(model_count), SERIES[1]),
+                MetricCard("Deployments", format_number(deployment_count), SERIES[7]),
                 MetricCard("Prices", format_number(price_count), Theme.Colors.SUCCESS),
             ],
             spacing=Theme.Spacing.MD,
@@ -107,7 +106,7 @@ class ActiveModelSection(ft.Container):
         self.padding = ft.padding.symmetric(
             horizontal=Theme.Spacing.MD, vertical=Theme.Spacing.SM
         )
-        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE)
+        self.bgcolor = Theme.Colors.SURFACE_2
         self.border = ft.border.all(1, ft.Colors.OUTLINE)
         self.border_radius = Theme.Components.CARD_RADIUS
 

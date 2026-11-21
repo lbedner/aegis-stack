@@ -29,6 +29,7 @@ from app.components.frontend.dashboard.modals.insights_modal.charts import (
     _pretty_date,
     _smart_step,
 )
+from app.components.frontend.theme import SERIES
 
 
 # Event type → chip border/highlight color
@@ -65,7 +66,7 @@ class StarsTab(InsightsTab):
         content.append(
             ft.Row(
                 [
-                    MetricCard("Total Stars", str(total_stars), "#FFD700"),
+                    MetricCard("Total Stars", str(total_stars), SERIES[10]),
                     MetricCard("In Range", str(range_stars), Theme.Colors.INFO),
                     MetricCard("Avg / Day", f"{avg_per_day:.1f}", Theme.Colors.SUCCESS),
                 ],
@@ -157,7 +158,7 @@ class StarsTab(InsightsTab):
                 ft.LineChartData(
                     data_points=release_anno,
                     stroke_width=0,
-                    color="#9CA3AF",
+                    color=ft.Colors.ON_SURFACE_VARIANT,
                 )
             )
 

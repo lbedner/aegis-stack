@@ -5,7 +5,9 @@ change goes through ``DocumentService`` on the request's session; files
 land in the object store.
 """
 
+import asyncio
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from fastapi import FastAPI
@@ -17,11 +19,14 @@ pytest.importorskip(
     "app.services.documents", reason="no documents service in this stack"
 )
 
+from app.components.web_frontend.overseer_live import JOB_DONE, JOB_EVENT  # noqa: E402
 from app.core import storage as storage_module  # noqa: E402
 from app.core.storage import FilesystemStorage  # noqa: E402
 from app.services.documents.models import DocumentPage  # noqa: E402
+from app.services.system.jobs import JobSnapshot  # noqa: E402
 from app.services.system.models import ComponentStatus  # noqa: E402
-from tests.web.dom import location, one, select, text  # noqa: E402
+from tests._mbox import mbox_bytes, message  # noqa: E402
+from tests.web.dom import location, none, one, select, text, triggers  # noqa: E402
 from tests.web.overseer import sign_in, status_with  # noqa: E402
 
 PAGE = "/overseer/services/documents"
@@ -71,6 +76,7 @@ def test_sections(docs: TestClient) -> None:
         "Documents",
         "Activity",
         "Tags",
+        "Mail",
     ]
 
 
@@ -264,3 +270,171 @@ def test_the_overview_counts_what_is_on_file(docs: TestClient) -> None:
         for cell in select(_get(docs), "#documents-figures > div")
     }
     assert figures["Documents"] == "2"
+
+
+# A mailbox export through the same door: an import job, followed on the page.
+MAIL_JOB = "#documents-mail-job"
+
+
+def _mail_job(status: str, **fields: Any) -> JobSnapshot:
+    return JobSnapshot(
+        job_id="j1",
+        name="mail-import:export.mbox",
+        status=status,
+        label=fields.pop("label", ""),
+        result=fields.pop("result", None),
+        error=fields.pop("error", None),
+    )
+
+
+def _follow(monkeypatch: pytest.MonkeyPatch, job: JobSnapshot) -> None:
+    from app.components.web_frontend import overseer_documents
+
+    class Runner:
+        async def lookup(self, job_id: str) -> JobSnapshot | None:
+            return job if job_id == job.job_id else None
+
+    monkeypatch.setattr(overseer_documents, "get_job_runner", lambda: Runner())
+
+
+async def test_a_mailbox_export_is_imported_not_filed(
+    docs: TestClient, files: FilesystemStorage, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The bytes go to storage and the import starts as a job; the answer
+    sends the list there with the job named, and no document is filed."""
+    from app.components.web_frontend import overseer_documents as view
+    from app.components.web_frontend.routes.partials import overseer_documents
+
+    started: list[tuple[str, str]] = []
+
+    async def start(key: str, *, file_name: str, owner_user_id: int | None) -> str:
+        started.append((key, file_name))
+        return "j1"
+
+    monkeypatch.setattr(overseer_documents, "start_mail_import", start)
+    data = mbox_bytes([message()])
+
+    response = docs.post(
+        f"{PARTIALS}/upload", files={"file": ("export.mbox", data, "application/mbox")}
+    )
+
+    assert response.status_code == 200, response.text
+    assert parse_qs(urlparse(location(response)).query)[view.MAIL_JOB_PARAM] == ["j1"]
+    [(key, name)] = started
+    assert name == "export.mbox" and await files.get(key) == data
+    assert _titles(_get(docs, "documents")) == []
+
+
+def test_a_mailbox_past_the_cap_is_refused(
+    docs: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.components.web_frontend.routes.partials import overseer_documents
+    from app.core.config import settings
+
+    async def start(key: str, *, file_name: str, owner_user_id: int | None) -> str:
+        raise AssertionError("a file past the cap must not start an import")
+
+    monkeypatch.setattr(overseer_documents, "start_mail_import", start)
+    monkeypatch.setattr(settings, "MAIL_IMPORT_MAX_BYTES", 8)
+
+    response = docs.post(
+        f"{PARTIALS}/upload", files={"file": ("x.eml", b"0123456789", "message/rfc822")}
+    )
+
+    assert triggers(response)["toast"]["tone"] == "error"
+
+
+@pytest.mark.parametrize("htmx", [False, True], ids=["cold", "htmx"])
+def test_a_running_import_is_followed_on_the_list(
+    docs: TestClient, monkeypatch: pytest.MonkeyPatch, htmx: bool
+) -> None:
+    """Pushed as it changes (SSE), nothing polled, on either render path."""
+    from app.components.web_frontend import overseer_documents as view
+
+    _follow(monkeypatch, _mail_job("running", label="Read 100 of 400 messages"))
+    response = docs.get(
+        f"{PAGE}/documents?{view.MAIL_JOB_PARAM}=j1",
+        headers={"HX-Request": "true"} if htmx else {},
+    )
+
+    assert response.status_code == 200, response.text
+    html = response.text
+    (none if htmx else one)(html, "html")
+    stream = one(html, f"{MAIL_JOB} [sse-connect]")
+    assert stream.get("sse-connect") == f"{PARTIALS}/mail/jobs/j1/events"
+    assert stream.get("sse-close") == JOB_DONE
+    assert one(stream, "progress").get("value") == "0.25"
+    assert not select(html, "[hx-trigger*='every']")
+
+
+def test_no_import_named_shows_no_follower(docs: TestClient) -> None:
+    none(_get(docs, "documents"), MAIL_JOB)
+    none(_get(docs, "documents", "mail_job=unknown"), MAIL_JOB)
+
+
+def test_how_an_import_ended_is_said() -> None:
+    from app.components.web_frontend import overseer_documents as view
+
+    done = view.mail_job_view(
+        _mail_job(
+            "done",
+            result={
+                "messages_new": 3,
+                "messages_duplicate": 1,
+                "letters_filed": 2,
+                "attachments_filed": 4,
+            },
+        ).as_dict()
+    )
+    broke = view.mail_job_view(_mail_job("failed", error="Unreadable").as_dict())
+
+    assert done["title"] == "Done" and done["tone"] == "muted"
+    for said in ("3 messages", "1 already", "2 letters", "4 attachments"):
+        assert said in done["label"], done["label"]
+    assert (broke["tone"], broke["label"]) == ("error", "Unreadable")
+
+
+def test_one_of_a_thing_is_said_as_one() -> None:
+    from app.components.web_frontend import overseer_documents as view
+
+    one = {k: 1 for k in ("messages_new", "letters_filed", "attachments_filed")}
+    done = view.mail_job_view(_mail_job("done", result=one).as_dict())
+
+    assert done["label"] == (
+        "1 message filed (0 already on file): 1 letter, 1 attachment."
+    )
+
+
+async def test_the_import_is_pushed_until_it_ends() -> None:
+    """Each change pushed, then the end: what it filed, the list loaded
+    once more so the new documents show, and the stream closed."""
+    from app.components.web_frontend import overseer_documents as view
+    from app.services.system.jobs import get_job_runner
+
+    go = asyncio.Event()
+
+    async def work(handle: Any) -> dict[str, Any]:
+        handle.set_label("Read 1 of 2 messages")
+        await go.wait()
+        return {"messages_new": 2, "letters_filed": 2, "attachments_filed": 1}
+
+    job_id = get_job_runner().start("mail-import:x.mbox", work, label="Reading...")
+    frames: list[str] = []
+    async for sent in view.mail_job_events(job_id):
+        frames.append(sent)
+        go.set()
+
+    assert frames[0].startswith(f"event: {JOB_EVENT}")
+    assert frames[-1].startswith(f"event: {JOB_DONE}")
+    last = _frame_html(frames[-2])
+    assert "2 messages" in text(one(last, "[data-job][data-status=done] p"))
+    reload = one(last, "[hx-trigger=load]")
+    assert reload.get("hx-target") == "#documents-list"
+
+
+def _frame_html(frame: str) -> str:
+    return "\n".join(
+        line.removeprefix("data: ")
+        for line in frame.splitlines()
+        if line.startswith("data: ")
+    )

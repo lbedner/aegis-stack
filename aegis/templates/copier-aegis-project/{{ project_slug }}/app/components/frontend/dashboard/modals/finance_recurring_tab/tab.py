@@ -185,8 +185,8 @@ class RecurringTab(
         # requests that can fail individually.
         self._progress = ft.ProgressBar(
             value=None,
-            color=Theme.Colors.ACCENT,
-            bgcolor=ft.Colors.with_opacity(0.15, Theme.Colors.ACCENT),
+            color=Theme.Colors.PRIMARY,
+            bgcolor=ft.Colors.with_opacity(0.15, Theme.Colors.PRIMARY),
             visible=False,
         )
         add_button = PulseButton(

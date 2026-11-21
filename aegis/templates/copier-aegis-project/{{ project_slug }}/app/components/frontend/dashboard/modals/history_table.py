@@ -40,7 +40,7 @@ def build_error_detail_block(message: str) -> ft.Container:
     """Styled monospace error box shown in expanded row content."""
     return ft.Container(
         content=ft.Text(message, size=12, color=ft.Colors.ON_SURFACE, selectable=True),
-        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
+        bgcolor=Theme.Colors.SURFACE_2,
         border_radius=6,
         padding=ft.padding.all(10),
         border=ft.border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
@@ -107,7 +107,7 @@ class HoverRevealFilter(ft.Container):
             [
                 self._wrapper,
                 self._dot,
-                ft.Icon(icon, size=16, color=Theme.Colors.TEXT_SECONDARY),
+                ft.Icon(icon, size=16, color=ft.Colors.ON_SURFACE_VARIANT),
             ],
             spacing=6,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -125,7 +125,7 @@ class HoverRevealFilter(ft.Container):
                 label,
                 size=Theme.Typography.BODY_SMALL,
                 weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                color=color if is_selected else Theme.Colors.TEXT_SECONDARY,
+                color=color if is_selected else ft.Colors.ON_SURFACE_VARIANT,
                 text_align=ft.TextAlign.CENTER,
             ),
             width=_PILL_WIDTH,
@@ -155,7 +155,7 @@ class HoverRevealFilter(ft.Container):
                 if is_selected
                 else ft.Colors.TRANSPARENT
             )
-            pill.content.color = color if is_selected else Theme.Colors.TEXT_SECONDARY
+            pill.content.color = color if is_selected else ft.Colors.ON_SURFACE_VARIANT
         if self.page:
             with contextlib.suppress(Exception):
                 self.update()

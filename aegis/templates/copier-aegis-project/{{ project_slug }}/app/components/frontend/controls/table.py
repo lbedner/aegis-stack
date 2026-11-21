@@ -25,7 +25,7 @@ class TableHeaderText(ft.Text):  # type: ignore[misc]
         defaults = {
             "weight": ft.FontWeight.W_500,
             "size": Theme.Typography.BODY_SMALL,
-            "color": ft.Colors.GREY_600,
+            "color": ft.Colors.ON_SURFACE_VARIANT,
         }
         defaults.update(kwargs)
 

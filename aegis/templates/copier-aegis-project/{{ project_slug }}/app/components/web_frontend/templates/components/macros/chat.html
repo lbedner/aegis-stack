@@ -8,17 +8,10 @@
    what lets one macro serve both a history render and the swap at the end
    of a live turn.
 #}
+{% from "components/macros/form.html" import button_classes %}
 {% from "components/macros/icons.html" import icon %}
 {% from "components/macros/layout.html" import avatar, copy_icon %}
 {% import "components/macros/layout.html" as layout %}
-
-{# The chat's buttons: outlined and quiet, so the conversation stays louder
-   than the controls. ``tone`` primary is teal; ``size`` sm or xs. #}
-{% macro button_classes(tone="default", size="sm") -%}
-{% set tones = {"default": "border-aegis-border text-aegis-muted hover:border-aegis-muted hover:text-aegis-text hover:bg-aegis-border/20", "primary": "btn-primary"} %}
-btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, tones["default"]) }}
-{%- endmacro %}
-
 
 {# What a voice control is doing, drawn from its data-state (voice.js only
    sets it): the resting icon (the caller) while idle; recording, a pulsing

@@ -114,7 +114,9 @@ class SlowQueriesSection(ft.Container):
             self.content = ft.Column(
                 [
                     header_row,
-                    ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                    ft.Divider(
+                        height=1,
+                    ),
                     ft.Column(query_rows, spacing=0),
                 ],
                 spacing=0,

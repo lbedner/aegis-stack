@@ -24,7 +24,6 @@ from app.components.frontend.dashboard.cards.card_utils import (
 )
 from app.components.frontend.dashboard.diagram.diagram_view import DiagramView
 from app.components.frontend.dashboard.status_overview import StatusOverviewPanel
-from app.components.frontend.theme_manager import ThemeManager
 from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
@@ -50,7 +49,6 @@ class SystemDashboard:
         self._status_overview_panel: StatusOverviewPanel | None = None
         self._activity_feed: ActivityFeed | None = None
         self._diagram_view: DiagramView | None = None
-        self._theme_manager: ThemeManager | None = None
         self._page: ft.Page | None = None
         # Holds the cards between refreshes so an unchanged component
         # keeps its card object; see card_registry for why that matters.
@@ -63,7 +61,6 @@ class SystemDashboard:
         status_overview_panel: StatusOverviewPanel,
         activity_feed: ActivityFeed,
         diagram_view: DiagramView,
-        theme_manager: ThemeManager,
         page: ft.Page,
     ) -> None:
         """Initialize dashboard with component references."""
@@ -72,7 +69,6 @@ class SystemDashboard:
         self._status_overview_panel = status_overview_panel
         self._activity_feed = activity_feed
         self._diagram_view = diagram_view
-        self._theme_manager = theme_manager
         self._page = page
 
         # Log Flet version for debugging connection check compatibility

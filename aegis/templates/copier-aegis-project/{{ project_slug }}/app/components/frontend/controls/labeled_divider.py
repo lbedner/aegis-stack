@@ -10,7 +10,6 @@ from __future__ import annotations
 import flet as ft
 
 from app.components.frontend.controls.text import LabelText
-from app.components.frontend.styles import PulseColors
 
 
 class LabeledDivider(ft.Container):
@@ -20,8 +19,8 @@ class LabeledDivider(ft.Container):
         self,
         label: str,
         *,
-        line_color: str = PulseColors.BORDER,
-        label_color: str = PulseColors.MUTED,
+        line_color: str = ft.Colors.OUTLINE,
+        label_color: str = ft.Colors.ON_SURFACE_VARIANT,
         letter_spacing: float = 2,
         width: int | None = None,
     ) -> None:

@@ -10,7 +10,6 @@ from app.components.frontend.controls.form_fields.shared import (
     FormVariant,
     _build_label,
 )
-from app.components.frontend.styles import PulseColors
 from app.components.frontend.theme import AegisTheme as Theme
 
 
@@ -48,12 +47,10 @@ class FormDropdown(ft.Container):
         if variant == "pulse":
             dropdown_kwargs: dict[str, Any] = {
                 "border_radius": 4,
-                "bgcolor": PulseColors.CARD,
-                "border_color": PulseColors.BORDER
-                if not error
-                else _PULSE_ERROR_BORDER,
-                "focused_border_color": PulseColors.TEAL,
-                "text_style": ft.TextStyle(color=PulseColors.TEXT, size=14),
+                "bgcolor": ft.Colors.SURFACE_CONTAINER_HIGHEST,
+                "border_color": ft.Colors.OUTLINE if not error else _PULSE_ERROR_BORDER,
+                "focused_border_color": Theme.Colors.PRIMARY,
+                "text_style": ft.TextStyle(color=ft.Colors.ON_SURFACE, size=14),
                 "content_padding": ft.padding.symmetric(horizontal=12, vertical=10),
             }
         else:
@@ -122,7 +119,7 @@ class FormDropdown(ft.Container):
         # keeps its styling when an error is set or cleared.
         if self._variant == "pulse":
             self._dropdown.border_color = (
-                _PULSE_ERROR_BORDER if error else PulseColors.BORDER
+                _PULSE_ERROR_BORDER if error else ft.Colors.OUTLINE
             )
         else:
             self._dropdown.border_color = (

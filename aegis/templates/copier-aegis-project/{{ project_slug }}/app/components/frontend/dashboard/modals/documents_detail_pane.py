@@ -89,7 +89,7 @@ class DocumentDetailPane(ft.Container):
         self._others: list[dict[str, Any]] = []
         self.width = 400
         self.padding = ft.padding.all(Theme.Spacing.MD)
-        self.border = ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
+        self.border = ft.border.all(1, ft.Colors.OUTLINE)
         self.border_radius = Theme.Components.CARD_RADIUS
         self.content = EmptyStatePlaceholder("Select a document")
 
@@ -151,7 +151,9 @@ class DocumentDetailPane(ft.Container):
             variant="muted",
             compact=True,
         )
-        hairline = ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT)
+        hairline = ft.Divider(
+            height=1,
+        )
         header = ft.Column(
             [
                 ft.Row(

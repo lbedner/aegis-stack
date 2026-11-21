@@ -39,6 +39,7 @@ from app.components.frontend.dashboard.modals.insights_modal.charts import (
     _smart_step,
 )
 from app.core.config import settings
+from app.components.frontend.theme import SERIES
 
 
 # Event type → chip border/highlight color
@@ -123,7 +124,7 @@ class DocsTab(InsightsTab):
                     MetricCard(
                         "Avg Duration",
                         f"{duration_min}m {duration_sec}s",
-                        "#A855F7",
+                        SERIES[1],
                         change_pct=pct_change(avg_duration, prev_d),
                     ),
                 ],
@@ -321,7 +322,7 @@ class DocsTab(InsightsTab):
                 ft.LineChartData(
                     data_points=release_anno,
                     stroke_width=0,
-                    color="#9CA3AF",
+                    color=ft.Colors.ON_SURFACE_VARIANT,
                 )
             )
 

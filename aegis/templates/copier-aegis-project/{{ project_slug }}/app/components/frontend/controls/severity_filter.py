@@ -13,7 +13,7 @@ from app.components.frontend.theme import AegisTheme as Theme
 
 # Severity levels: (label, min_severity, color)
 _SEVERITY_OPTIONS: list[tuple[str, int, str]] = [
-    ("All", 0, Theme.Colors.ACCENT),
+    ("All", 0, Theme.Colors.PRIMARY),
     ("Info", 1, Theme.Colors.INFO),
     ("Warning", 2, Theme.Colors.WARNING),
     ("Error", 3, Theme.Colors.ERROR),
@@ -57,7 +57,7 @@ class SeverityFilter(ft.Row):
         for _label, severity, color in _SEVERITY_OPTIONS:
             if severity == self._selected_severity:
                 return color
-        return Theme.Colors.ACCENT
+        return Theme.Colors.PRIMARY
 
     def _build_pill(self, label: str, severity: int, color: str) -> ft.Container:
         """Build a single pill container."""
@@ -67,7 +67,7 @@ class SeverityFilter(ft.Row):
                 label,
                 size=Theme.Typography.BODY_SMALL,
                 weight=Theme.Typography.WEIGHT_SEMIBOLD,
-                color=color if is_selected else Theme.Colors.TEXT_SECONDARY,
+                color=color if is_selected else ft.Colors.ON_SURFACE_VARIANT,
                 text_align=ft.TextAlign.CENTER,
             ),
             width=_PILL_WIDTH,
@@ -100,7 +100,7 @@ class SeverityFilter(ft.Row):
                 else ft.Colors.TRANSPARENT
             )
             text = pill.content
-            text.color = color if is_selected else Theme.Colors.TEXT_SECONDARY
+            text.color = color if is_selected else ft.Colors.ON_SURFACE_VARIANT
 
         if self.page:
             self.update()

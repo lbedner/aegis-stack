@@ -20,16 +20,34 @@ from app.components.frontend.theme import AegisTheme as Theme
 MARKDOWN_RE = re.compile(r"(^#{1,6}\s|\*\*|__|^[-*]\s|`|\[.+\]\(.+\))", re.MULTILINE)
 
 
-def code_highlight_theme(dark: bool = True) -> str:
-    """The syntax-highlight theme name for the current mode."""
-    return "ir-black" if dark else "atom-one-light"
+def _token(color: str, **style: object) -> ft.TextStyle:
+    return ft.TextStyle(color=color, **style)  # type: ignore[arg-type]
+
+
+# Code highlighting in theme roles, so it follows the mode: the token
+# colours htmx's ``.code-block .highlight`` rules give (keywords and
+# numbers teal, strings amber, comments muted italic, names semibold).
+# The root is transparent so the block decoration's surface shows.
+CODE_THEME = ft.MarkdownCustomCodeTheme(
+    root=ft.TextStyle(color=ft.Colors.ON_SURFACE, bgcolor=ft.Colors.TRANSPARENT),
+    keyword=_token(Theme.Colors.PRIMARY),
+    literal=_token(Theme.Colors.PRIMARY),
+    number=_token(Theme.Colors.PRIMARY),
+    string=_token(Theme.Colors.WARNING),
+    comment=_token(ft.Colors.ON_SURFACE_VARIANT, italic=True),
+    function=_token(ft.Colors.ON_SURFACE, weight=ft.FontWeight.W_600),
+    class_name=_token(ft.Colors.ON_SURFACE, weight=ft.FontWeight.W_600),
+    title=_token(ft.Colors.ON_SURFACE, weight=ft.FontWeight.W_600),
+    tag=_token(ft.Colors.ON_SURFACE, weight=ft.FontWeight.W_600),
+    deletion=_token(Theme.Colors.ERROR),
+)
 
 
 def markdown_style_sheet(color: str | None = None) -> ft.MarkdownStyleSheet:
     """Body text styled like the rest of the app, not the widget default.
 
     Defaults to the muted secondary tone (agent notes); pass
-    ``Theme.Colors.TEXT_PRIMARY`` for main-content bodies like chat.
+    ``ft.Colors.ON_SURFACE`` for main-content bodies like chat.
     Code spans and blocks get the house treatment (mono font on a
     surface-container background) instead of the widget's unthemed
     light-blue default.
@@ -37,7 +55,7 @@ def markdown_style_sheet(color: str | None = None) -> ft.MarkdownStyleSheet:
     body_style = ft.TextStyle(
         font_family="Roboto",
         size=Theme.Typography.BODY,
-        color=color or Theme.Colors.TEXT_SECONDARY,
+        color=color or ft.Colors.ON_SURFACE_VARIANT,
     )
     code_style = ft.TextStyle(
         size=12,
@@ -63,14 +81,13 @@ def markdown_control(
     *,
     selectable: bool = True,
     color: str | None = None,
-    dark: bool = True,
 ) -> ft.Markdown:
     """A themed markdown control for bodies that mutate (e.g. streaming)."""
     return ft.Markdown(
         value=value,
         selectable=selectable,
         extension_set=ft.MarkdownExtensionSet.GITHUB_FLAVORED,
-        code_theme=code_highlight_theme(dark),
+        code_theme=CODE_THEME,
         md_style_sheet=markdown_style_sheet(color),
     )
 
@@ -88,7 +105,6 @@ def copyable_markdown(
     copy_text: str | None = None,
     selectable: bool = True,
     color: str | None = None,
-    dark: bool = True,
 ) -> ft.Control:
     """Themed markdown with a copy affordance in the top-right corner.
 
@@ -103,7 +119,7 @@ def copyable_markdown(
     reserving a row above it; markdown bodies here can be long and the
     affordance should not push the first line down.
     """
-    body = markdown_control(value, selectable=selectable, color=color, dark=dark)
+    body = markdown_control(value, selectable=selectable, color=color)
     payload = value if copy_text is None else copy_text
 
     def _copy(e: ft.ControlEvent) -> None:

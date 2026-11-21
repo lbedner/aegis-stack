@@ -168,7 +168,7 @@ def _build_overview_goals(bulk: BulkInsightsResponse | None) -> ft.Column:
     Goal API endpoint is wired through.
     """
     header = H3Text("Goals")
-    divider = ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT)
+    divider = ft.Divider(height=1)
 
     if bulk is None:
         return ft.Column(

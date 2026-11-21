@@ -208,7 +208,7 @@ class AttachmentsMixin:
                     ft.IconButton(
                         icon=ft.Icons.CLOSE,
                         icon_size=12,
-                        icon_color=Theme.Colors.TEXT_SECONDARY,
+                        icon_color=ft.Colors.ON_SURFACE_VARIANT,
                         tooltip="Remove",
                         style=ft.ButtonStyle(padding=0),
                         width=20,

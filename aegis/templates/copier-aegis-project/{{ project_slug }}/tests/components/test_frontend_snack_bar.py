@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock
 
+import flet as ft
+
 from app.components.frontend.controls.snack_bar import (
     BaseSnackBar,
     ErrorSnackBar,
@@ -9,28 +11,28 @@ from app.components.frontend.controls.snack_bar import (
     SuccessSnackBar,
     WarningSnackBar,
 )
-from app.components.frontend.styles import ColorPalette, PulseColors
+from app.components.frontend.theme import AegisTheme as Theme
 
 
 def test_success_uses_teal_and_check_icon() -> None:
     bar = SuccessSnackBar("ok")
-    assert SuccessSnackBar.accent == PulseColors.TEAL
+    assert SuccessSnackBar.accent == Theme.Colors.PRIMARY
     assert SuccessSnackBar.title == "Success"
     assert bar.duration == 4000
 
 
 def test_error_uses_red_accent() -> None:
-    assert ErrorSnackBar.accent == ColorPalette.ACCENT_STOP
+    assert ErrorSnackBar.accent == Theme.Colors.ERROR
     assert ErrorSnackBar.title == "Error"
 
 
 def test_warning_uses_amber_accent() -> None:
-    assert WarningSnackBar.accent == PulseColors.AMBER
+    assert WarningSnackBar.accent == Theme.Colors.WARNING
     assert WarningSnackBar.title == "Warning"
 
 
 def test_info_uses_muted_accent() -> None:
-    assert InfoSnackBar.accent == PulseColors.MUTED
+    assert InfoSnackBar.accent == ft.Colors.ON_SURFACE_VARIANT
     assert InfoSnackBar.title == "Notice"
 
 

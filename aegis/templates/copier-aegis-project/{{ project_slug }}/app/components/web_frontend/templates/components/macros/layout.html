@@ -5,7 +5,7 @@
        {% from "components/macros/layout.html" import card, stat_tile, dialog, dropdown %}
 #}
 {% from "components/macros/feedback.html" import empty_state, toast_region %}
-{% from "components/macros/form.html" import action, cancel_button, filter_input %}
+{% from "components/macros/form.html" import action, button_classes, cancel_button, filter_input %}
 {% from "components/macros/icons.html" import icon, sprite %}
 
 {# Rendered markdown's typography (``|markdown``): an answer in the chat or
@@ -458,22 +458,29 @@
    would run off the bottom of the window, and keeps it on a phone's
    screen, and closes it on a click off it. ``options`` is a row's or a
    drawer's rarer actions behind a bare "..." (a data_table's
-   ``actions``), out of sight until wanted. #}
-{% macro dropdown(label="…", align="right", options=False) %}
+   ``actions``), out of sight until wanted. ``tone``/``size`` make the
+   summary a ``button_classes`` button (a page's main action: Settings'
+   Connect); ``panel`` makes it a panel of controls instead of a list of
+   actions (the account filter's checkboxes), sized by those classes. #}
+{% macro dropdown(label="…", align="right", options=False, tone=None, size=None, panel=None) %}
 <details data-dropdown class="relative{{ ' inline-block text-left' if options }}">
   {% if options %}
   <summary aria-label="Options" class="list-none cursor-pointer select-none px-2 py-0.5 rounded text-aegis-muted hover:text-aegis-text hover:bg-aegis-border/30">{{ label }}</summary>
+  {% elif tone or size %}
+  <summary class="list-none gap-1 {{ button_classes(tone or "default", size or "xs") }}">
+    {{ label }}
+    {{ icon("chevron-narrow", "w-3 h-3") }}
+  </summary>
   {% else %}
   <summary class="list-none cursor-pointer select-none inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded border border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted transition-colors">
     {{ label }}
-    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-    </svg>
+    {{ icon("chevron-narrow", "w-3 h-3", 2) }}
   </summary>
   {% endif %}
-  <ul role="menu" class="absolute {{ 'right-0' if align == 'right' else 'left-0' }} top-full mt-1 z-30 min-w-[11rem] max-w-[calc(100vw-2rem)] bg-aegis-card border border-aegis-border rounded-lg shadow-lg p-1">
+  {%- set tag = "div" if panel else "ul" %}
+  <{{ tag }}{% if not panel %} role="menu"{% endif %} class="absolute {{ 'right-0' if align == 'right' else 'left-0' }} top-full mt-1 z-30 max-w-[calc(100vw-2rem)] floating {{ panel or 'min-w-[11rem] p-1' }}">
     {{ caller() }}
-  </ul>
+  </{{ tag }}>
 </details>
 {% endmacro %}
 

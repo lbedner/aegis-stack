@@ -10,6 +10,8 @@ Category) rather than obviously broken.
 import inspect
 import re
 
+import flet as ft
+
 from app.components.frontend.dashboard.modals import finance_modal
 from app.components.frontend.dashboard.modals.finance_modal import register_columns
 
@@ -68,11 +70,10 @@ class TestExcludedRowsRecede:
 
     def test_an_excluded_amount_is_muted_ink(self) -> None:
         from app.components.frontend.dashboard.modals.finance_modal import _amount_cell
-        from app.components.frontend.theme import AegisTheme as Theme
 
         for cents in (23_171, -23_171):
             cell = _amount_cell(cents, excluded=True)
-            assert cell.color == Theme.Colors.TEXT_SECONDARY
+            assert cell.color == ft.Colors.ON_SURFACE_VARIANT
 
     def test_the_table_wires_the_flag_through(self) -> None:
         """An excluded inflow in a real table renders muted while its
@@ -83,7 +84,6 @@ class TestExcludedRowsRecede:
             ledger_amount_color,
             transaction_table,
         )
-        from app.components.frontend.theme import AegisTheme as Theme
 
         table = transaction_table(
             [
@@ -107,7 +107,7 @@ class TestExcludedRowsRecede:
         ]
         assert len(amounts) == 2
         colors = {c.color for c in amounts}
-        assert Theme.Colors.TEXT_SECONDARY in colors
+        assert ft.Colors.ON_SURFACE_VARIANT in colors
         assert ledger_amount_color(23_171) in colors
 
 

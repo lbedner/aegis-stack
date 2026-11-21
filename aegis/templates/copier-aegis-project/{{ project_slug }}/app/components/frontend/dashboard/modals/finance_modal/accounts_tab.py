@@ -108,7 +108,7 @@ def _overview_row(label: str, sublabel: str, amount: int, color: str) -> ft.Cont
                 PrimaryText(
                     label,
                     size=Theme.Typography.BODY,
-                    color=Theme.Colors.TEXT_PRIMARY,
+                    color=ft.Colors.ON_SURFACE,
                     weight=ft.FontWeight.W_500,
                     expand=True,
                     no_wrap=True,
@@ -117,7 +117,7 @@ def _overview_row(label: str, sublabel: str, amount: int, color: str) -> ft.Cont
                 SecondaryText(
                     sublabel,
                     size=Theme.Typography.CAPTION,
-                    color=Theme.Colors.TEXT_SECONDARY,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
                 NumericText(
                     _usd(amount),
@@ -132,5 +132,5 @@ def _overview_row(label: str, sublabel: str, amount: int, color: str) -> ft.Cont
         padding=ft.padding.symmetric(
             vertical=Theme.Spacing.SM, horizontal=Theme.Spacing.MD
         ),
-        border=ft.border.only(bottom=ft.BorderSide(1, Theme.Colors.BORDER_SUBTLE)),
+        border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
     )

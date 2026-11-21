@@ -35,8 +35,8 @@ from .pypi_data import (
 # this tab. These are not the theme's SUCCESS and ERROR - those are
 # #17CCBF and #D32F2F - so they are named here rather than swapped,
 # which would change what the tab looks like.
-HUMAN_COLOR = "#22C55E"
-BOT_COLOR = "#EF4444"
+HUMAN_COLOR = Theme.Colors.SUCCESS
+BOT_COLOR = Theme.Colors.ERROR
 
 # Above this share of bot traffic the percentage itself turns red.
 BOT_SHARE_ALARM = 0.8
@@ -115,7 +115,7 @@ def _downloads_chart(
             ft.LineChartData(
                 data_points=release_points,
                 stroke_width=0,
-                color="#9CA3AF",
+                color=ft.Colors.ON_SURFACE_VARIANT,
             ),
         ]
 
@@ -191,14 +191,14 @@ def _version_bars(content: list[Any], versions: Any) -> None:
             ),
             horizontal_grid_lines=ft.ChartGridLines(
                 interval=bar_rounded_max // 4 or 1,
-                color=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE),
+                color=Theme.Colors.SURFACE_3,
                 width=1,
             ),
-            tooltip_bgcolor=Theme.Colors.SURFACE_1,
+            tooltip_bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             tooltip_rounded_radius=8,
             tooltip_padding=10,
-            tooltip_tooltip_border_side=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT),
-            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+            tooltip_tooltip_border_side=ft.BorderSide(1, ft.Colors.OUTLINE),
+            border=ft.border.all(1, ft.Colors.OUTLINE),
             max_y=bar_rounded_max,
             height=250,
             expand=True,

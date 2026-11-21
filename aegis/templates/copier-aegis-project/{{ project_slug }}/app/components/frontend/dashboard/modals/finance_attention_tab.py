@@ -119,8 +119,8 @@ class AttentionTab(FinancePanel):
                 spacing=Theme.Spacing.XS,
             ),
             padding=ft.padding.all(Theme.Spacing.MD),
-            bgcolor=Theme.Colors.SURFACE_1,
-            border=ft.border.all(1, Theme.Colors.BORDER_SUBTLE),
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            border=ft.border.all(1, ft.Colors.OUTLINE),
             border_radius=Theme.Components.CARD_RADIUS,
         )
 

@@ -9,6 +9,7 @@ parameters now.
 import time
 from typing import Any
 import flet as ft
+from app.components.frontend.theme import AegisTheme as Theme
 from app.core.constants import ComponentName
 from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
@@ -296,7 +297,7 @@ def create_component_card(
                 content=ft.Text(f"Unknown component: {component_name}"),
                 padding=20,
                 bgcolor=ft.Colors.SURFACE,
-                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                border=ft.border.all(1, ft.Colors.OUTLINE),
                 border_radius=16,
                 width=800,
                 height=240,
@@ -317,7 +318,7 @@ def create_component_card(
             content=ft.Text(f"Error loading {component_name}"),
             padding=20,
             bgcolor=ft.Colors.ERROR_CONTAINER,
-            border=ft.border.all(1, ft.Colors.ERROR),
+            border=ft.border.all(1, Theme.Colors.ERROR),
             border_radius=16,
             width=800,
             height=240,

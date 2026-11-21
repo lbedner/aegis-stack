@@ -43,6 +43,7 @@ from app.components.frontend.dashboard.modals.insights_modal.charts import (
     _pretty_date,
     _smart_step,
 )
+from app.components.frontend.theme import SERIES
 
 
 # Event type → chip border/highlight color
@@ -215,25 +216,25 @@ class GitHubTrafficTab(InsightsTab):
                     MetricCard(
                         "Clone Ratio",
                         f"{clone_ratio:.1f}:1",
-                        "#E91E63",
+                        SERIES[4],
                         prev_value=prev_ratio_label,
                     ),
                     MetricCard(
                         "Forks",
                         str(len(forks)),
-                        "#A855F7",
+                        SERIES[1],
                         prev_value=f"in {range_label}",
                     ),
                     MetricCard(
                         "Releases",
                         str(len(releases)),
-                        "#22C55E",
+                        Theme.Colors.SUCCESS,
                         prev_value=f"in {range_label}",
                     ),
                     MetricCard(
                         "Avg Stars/Day",
                         f"{avg_stars:.1f}",
-                        "#F59E0B",
+                        Theme.Colors.WARNING,
                         prev_value=prev_stars_label,
                     ),
                 ],
@@ -405,11 +406,11 @@ class GitHubTrafficTab(InsightsTab):
                     ],
                 ),
                 horizontal_grid_lines=ft.ChartGridLines(
-                    color=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE),
+                    color=Theme.Colors.SURFACE_3,
                     width=1,
                 ),
                 **chart_tooltip_kwargs(),
-                border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+                border=ft.border.all(1, ft.Colors.OUTLINE),
                 interactive=True,
                 min_y=wk_min_y,
                 max_y=wk_max_y,

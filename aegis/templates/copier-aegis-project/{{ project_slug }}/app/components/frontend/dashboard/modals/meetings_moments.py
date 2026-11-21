@@ -104,7 +104,7 @@ def _moment(
     )
     return ft.Container(
         tile,
-        border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+        border=ft.border.all(1, ft.Colors.OUTLINE),
         border_radius=Theme.Components.CARD_RADIUS,
     )
 

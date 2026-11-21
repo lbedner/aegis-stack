@@ -139,7 +139,7 @@ class WrittenPane(ft.Container):
         self._showing: int | None = None
         self.width = 560
         self.padding = ft.padding.all(Theme.Spacing.MD)
-        self.border = ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
+        self.border = ft.border.all(1, ft.Colors.OUTLINE)
         self.border_radius = Theme.Components.CARD_RADIUS
         self.content = EmptyStatePlaceholder(placeholder)
 

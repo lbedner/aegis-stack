@@ -12,12 +12,14 @@ import base64
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
 from starlette.types import Message, Receive, Scope, Send
 
-from app.components.backend.middleware.paste_capture import (
-    PasteCaptureMiddleware,
-    inject_paste_script,
+from app.components.backend.middleware.dashboard_scripts import (
+    DashboardScriptsMiddleware,
+    inject_dashboard_scripts,
 )
+from app.core.appearance import FLET_MODE_KEY, HTMX_MODE_KEY
 from app.core.pastebox import Pastebox
 
 _PNG = b"\x89PNG fake bytes"
@@ -111,7 +113,7 @@ class TestPasteScriptInjection:
     def test_script_lands_before_closing_head(self) -> None:
         html = b"<html><head><title>x</title></head><body></body></html>"
 
-        patched = inject_paste_script(html)
+        patched = inject_dashboard_scripts(html)
 
         assert b"navigator" not in html  # untouched input
         assert patched.index(b"<script>") < patched.index(b"</head>")
@@ -119,7 +121,25 @@ class TestPasteScriptInjection:
 
     def test_html_without_head_is_left_alone(self) -> None:
         blob = b'{"not": "html"}'
-        assert inject_paste_script(blob) == blob
+        assert inject_dashboard_scripts(blob) == blob
+
+
+class TestModeBridgeInjection:
+    """Overseer's light/dark mode is htmx's (#629): the dashboard page
+    carries htmx's stored mode into Flet's client storage before Flutter
+    boots, and carries Overseer's toggle back."""
+
+    def test_bridge_names_both_keys(self) -> None:
+        patched = inject_dashboard_scripts(b"<html><head></head></html>")
+        head = patched.split(b"</head>")[0]
+        assert f'"flutter.{FLET_MODE_KEY}"'.encode() in head
+        assert f'"{HTMX_MODE_KEY}"'.encode() in head
+
+    def test_htmx_key_is_where_htmx_keeps_its_mode(self) -> None:
+        script = Path("app/components/web_frontend/static/js/theme.js")
+        if not script.exists():
+            pytest.skip("no htmx frontend in this stack")
+        assert f"localStorage.getItem('{HTMX_MODE_KEY}')" in script.read_text()
 
 
 class TestPasteCaptureUnderPathsend:
@@ -174,7 +194,7 @@ class TestPasteCaptureUnderPathsend:
             return {"type": "http.disconnect"}
 
         scope: Scope = {"type": "http", "path": path, "extensions": extensions}
-        await PasteCaptureMiddleware(file_app)(scope, receive, send)
+        await DashboardScriptsMiddleware(file_app)(scope, receive, send)
         return sent
 
     async def test_dashboard_html_is_injected_when_the_server_offers_pathsend(

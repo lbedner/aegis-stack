@@ -218,4 +218,46 @@ def test_interval_jobs_keep_their_times_across_restarts(
     assert len(next_runs) == 1
     (next_run,) = next_runs
     assert next_run - min(started) < timedelta(hours=24, seconds=1)
+
+def test_a_job_that_runs_at_start_runs_as_the_scheduler_starts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A deploy's change shows at once, not at the job's next hour: the
+    job runs as the scheduler starts, then on its own schedule."""
+    from datetime import UTC, datetime, timedelta
+
+    import app.components.scheduler.main as scheduler_main
+    from app.core.schedule import ServiceJob
+
+    async def nightly() -> None:
+        """A nightly chore."""
+
+    job = ServiceJob(
+        nightly, "nightly", "Nightly", {"trigger": "cron", "hour": 1}, at_start=True
+    )
+    monkeypatch.setattr(scheduler_main, "service_jobs", lambda: (job,))
+    next_run = _scheduled()["nightly"].next_run_time
+    assert next_run - datetime.now(UTC) < timedelta(seconds=5)
+
+
+@pytest.mark.parametrize(("env", "scheduled"), [("dev", False), ("prod", True)])
+def test_a_dev_stack_never_reaches_real_data(
+    monkeypatch: pytest.MonkeyPatch, env: str, scheduled: bool
+) -> None:
+    """A job that reaches real banks, inboxes or storage is the server's:
+    a laptop and a server syncing one bank access at the same minute froze
+    the server's ledger for days. A dev stack never schedules it."""
+    import app.components.scheduler.main as scheduler_main
+    from app.core.config import settings
+    from app.core.schedule import ServiceJob
+
+    async def sync() -> None:
+        """A sync with a real bank."""
+
+    job = ServiceJob(
+        sync, "sync", "Sync", {"trigger": "cron", "hour": 1}, server_only=True
+    )
+    monkeypatch.setattr(settings, "APP_ENV", env)
+    monkeypatch.setattr(scheduler_main, "service_jobs", lambda: (job,))
+    assert ("sync" in _scheduled()) is scheduled
 {%- endif %}

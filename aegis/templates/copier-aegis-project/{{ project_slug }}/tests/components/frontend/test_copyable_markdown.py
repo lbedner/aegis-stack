@@ -12,9 +12,8 @@ One control owns that, so no modal grows its own copy logic.
 from __future__ import annotations
 
 import flet as ft
-import pytest
 
-from app.components.frontend.controls.markdown import copyable_markdown
+from app.components.frontend.controls.markdown import CODE_THEME, copyable_markdown
 
 
 def _find(control: ft.Control, kind: type) -> list[ft.Control]:
@@ -101,14 +100,13 @@ class TestWhatGetsCopied:
 
 
 class TestItStaysAMarkdownControl:
-    @pytest.mark.parametrize("dark", [True, False])
-    def test_it_is_themed_in_both_modes(self, dark: bool) -> None:
-        """The dashboard renders in either mode and the code theme has
-        to follow, exactly as the bare control did."""
-        control = copyable_markdown(RENDERED, copy_text=SCHEMA, dark=dark)
+    def test_its_code_follows_the_mode(self) -> None:
+        """The dashboard renders in either mode, so code is coloured by
+        theme role, never by one mode's named highlight theme."""
+        control = copyable_markdown(RENDERED, copy_text=SCHEMA)
 
         markdown = _find(control, ft.Markdown)[0]
-        assert markdown.code_theme is not None
+        assert markdown.code_theme is CODE_THEME
         assert markdown.md_style_sheet is not None
 
     def test_it_is_still_selectable(self) -> None:

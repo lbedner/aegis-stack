@@ -127,7 +127,9 @@ class LLMCatalogTab(ft.Container):
                 self.page,
                 on_switched=self._load_data,
             ),
-            ft.Divider(height=20, color=ft.Colors.OUTLINE),
+            ft.Divider(
+                height=20,
+            ),
             FeaturedModelsSection(featured_models),
         ]
         self._content_column.scroll = ft.ScrollMode.AUTO

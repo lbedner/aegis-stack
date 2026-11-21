@@ -1,0 +1,84 @@
+"""One mail import, run as a job, wherever the job runs.
+
+An export of ten thousand messages outlives any request, so it runs on
+the worker where the stack has one (``start_job``), else as a task here.
+The bytes travel through storage rather than the queue: the worker
+mounts the same store, and a queue is a poor place to park a file. The
+worker's entry (``run_mail_import_job``) ships only with a worker to run
+it.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from app.core.db import get_async_session
+from app.core.log import logger
+from app.core.storage import get_storage
+from app.services.mail.ingest import ingest_mail
+{%- if include_worker %}
+from app.services.system.job_store import narrate, start_job
+{%- else %}
+from app.services.system.job_store import start_job
+{%- endif %}
+from app.services.system.jobs import Report
+
+
+async def run_mail_import(
+    storage_key: str,
+    *,
+    file_name: str,
+    owner_user_id: int | None,
+    report: Report,
+) -> dict[str, Any]:
+    """The import itself: the file's bytes from storage, read into
+    documents; ``report`` receives each progress label."""
+    data = await get_storage().get(storage_key)
+    if data is None:
+        raise ValueError("The uploaded file is no longer there.")
+    logger.info("mail.import.started", file_name=file_name, bytes=len(data))
+    result = await ingest_mail(
+        get_async_session,
+        data=data,
+        file_name=file_name,
+        owner_user_id=owner_user_id,
+        report=report,
+    )
+    return result.as_payload()
+
+
+async def start_mail_import(
+    storage_key: str, *, file_name: str, owner_user_id: int | None
+) -> str:
+    """Start the import as a job: on the worker where the stack has one."""
+    job_id = await start_job(
+        f"mail-import:{file_name}",
+        "mail_import_task",
+        (storage_key, file_name, owner_user_id),
+        lambda report: run_mail_import(
+            storage_key,
+            file_name=file_name,
+            owner_user_id=owner_user_id,
+            report=report,
+        ),
+        label=f"Reading {file_name}...",
+    )
+    logger.info("mail.import.queued", job_id=job_id, file_name=file_name)
+    return job_id
+{%- if include_worker %}
+
+
+async def run_mail_import_job(
+    job_id: str, storage_key: str, file_name: str, owner_user_id: int | None
+) -> dict[str, Any]:
+    """The worker's entry: narrate into the shared job store, then finish."""
+    return await narrate(
+        job_id,
+        lambda report: run_mail_import(
+            storage_key,
+            file_name=file_name,
+            owner_user_id=owner_user_id,
+            report=report,
+        ),
+    )
+{%- endif %}

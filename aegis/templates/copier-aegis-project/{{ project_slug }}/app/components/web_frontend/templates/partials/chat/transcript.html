@@ -4,7 +4,8 @@
    page; ``earlier`` leads it with the row that brings the page before,
    swapped in where the row stood (``page``: this IS such a page, so the
    empty note never shows). #}
-{% from "components/macros/chat.html" import bubble, button_classes, conversation_field %}
+{% from "components/macros/form.html" import button_classes %}
+{% from "components/macros/chat.html" import bubble, conversation_field %}
 {% if earlier %}
 <li id="chat-earlier" class="flex justify-center">
   <button type="button" hx-get="{{ earlier }}" hx-target="#chat-earlier" hx-swap="outerHTML" class="{{ button_classes('default', 'xs') }}">Show earlier</button>

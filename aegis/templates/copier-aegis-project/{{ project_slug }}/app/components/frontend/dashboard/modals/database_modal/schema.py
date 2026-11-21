@@ -15,7 +15,7 @@ from app.services.system import ui_database
 from app.services.system.models import ComponentStatus
 
 
-def _build_table_row(table: dict, is_dark_mode: bool) -> ExpandableRow:
+def _build_table_row(table: dict) -> ExpandableRow:
     """One table: its counts, expanding to its CREATE TABLE statement."""
     cells = [
         TableNameText(table["name"]),
@@ -28,7 +28,7 @@ def _build_table_row(table: dict, is_dark_mode: bool) -> ExpandableRow:
     return ExpandableRow(
         cells=cells,
         expanded_content=copyable_markdown(
-            f"```sql\n{table['sql']}\n```", copy_text=table["sql"], dark=is_dark_mode
+            f"```sql\n{table['sql']}\n```", copy_text=table["sql"]
         ),
     )
 
@@ -36,10 +36,9 @@ def _build_table_row(table: dict, is_dark_mode: bool) -> ExpandableRow:
 class SchemaTab(ft.Container):
     """Schema tab with expandable table details."""
 
-    def __init__(self, database_component: ComponentStatus, page: ft.Page) -> None:
+    def __init__(self, database_component: ComponentStatus) -> None:
         super().__init__()
         metadata = database_component.metadata or {}
-        is_dark_mode = page.theme_mode == ft.ThemeMode.DARK
 
         columns = [
             DataTableColumn("Table"),
@@ -49,7 +48,7 @@ class SchemaTab(ft.Container):
             DataTableColumn("FKs", width=50, alignment="right"),
         ]
 
-        rows = [_build_table_row(t, is_dark_mode) for t in ui_database.tables(metadata)]
+        rows = [_build_table_row(t) for t in ui_database.tables(metadata)]
 
         table = ExpandableDataTable(
             columns=columns,

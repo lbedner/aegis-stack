@@ -428,6 +428,34 @@ def files(tmp_path: Path) -> Generator[Any, None, None]:
     set_storage(store)
     yield store
     set_storage(None)
+{%- if include_documents %}
+
+
+@pytest.fixture
+def open_session(async_db_session: AsyncSession, files: Any) -> Any:
+    """The test's session for code that takes a way to OPEN one (mail's
+    ingest and pull), with the object store in the test's directory."""
+    from tests._session import opens
+
+    return opens(async_db_session)
+
+
+@pytest.fixture
+def dispatched(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Every document new paper asked to have read, in order. Only the
+    hand-off is faked: ``read_quietly`` looks ``start_extraction`` up at
+    call time, so its guard still runs."""
+    from app.services.documents.domains.extraction import dispatch
+
+    asked: list[int] = []
+
+    async def start(document_id: int, *, owner_user_id: Any, force: bool) -> str:
+        asked.append(document_id)
+        return f"job-{document_id}"
+
+    monkeypatch.setattr(dispatch, "start_extraction", start)
+    return asked
+{%- endif %}
 
 
 {%- if include_database %}

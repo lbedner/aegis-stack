@@ -314,7 +314,7 @@ class TestRunNow:
         assert response.status_code == 200
         button = one(response.text, "button[data-api-done]")
         assert button.get("hx-post") == "/api/v1/scheduler/jobs/database_backup/run"
-        assert "border-aegis-teal" in button.get("class")  # running is not destructive
+        assert "btn-primary" in button.get("class")  # running is not destructive
         assert "Daily Database Backup" in text(one(response.text, "p"))
 
     def test_unknown_job_is_404(self, signed_in: TestClient) -> None:

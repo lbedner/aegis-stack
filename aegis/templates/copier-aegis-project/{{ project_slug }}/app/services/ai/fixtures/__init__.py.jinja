@@ -18,6 +18,9 @@ from app.services.meetings.service import load_meetings_agent_fixtures
 {% if ai_evals %}
 from app.services.ai.domains.evals.agents import load_evals_agent_fixtures
 {% endif %}
+{% if include_documents %}
+from app.services.mail.tools import load_mail_agent_fixtures
+{% endif %}
 
 
 def load_agent_registry_fixtures(session: Session) -> dict[str, int]:
@@ -35,6 +38,9 @@ def load_agent_registry_fixtures(session: Session) -> dict[str, int]:
 {% endif %}
 {% if include_meetings and ai_framework == "pydantic-ai" %}
     counts.update(load_meetings_agent_fixtures(session))
+{% endif %}
+{% if include_documents %}
+    counts.update(load_mail_agent_fixtures(session))
 {% endif %}
 {% if ai_evals %}
     counts.update(load_evals_agent_fixtures(session))

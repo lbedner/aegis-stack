@@ -67,21 +67,6 @@ class BaseElevatedButton(ft.ElevatedButton):
             self.update()
 
 
-class ElevatedAddButton(BaseElevatedButton):
-    """Button for add/create actions."""
-
-    def __init__(
-        self, on_click_callable: Callable, text: str = "Add", **kwargs
-    ) -> None:
-        super().__init__(
-            on_click_callable,
-            style=styles.ELEVATED_BUTTON_ADD_STYLE,
-            text=text,
-            text_style=styles.AddButtonTextStyle,
-            **kwargs,
-        )
-
-
 class ElevatedUpdateButton(BaseElevatedButton):
     """Button for update/edit actions."""
 
@@ -92,22 +77,7 @@ class ElevatedUpdateButton(BaseElevatedButton):
             on_click_callable,
             style=styles.ELEVATED_BUTTON_UPDATE_STYLE,
             text=text,
-            text_style=styles.UpdateButtonTextStyle,
-            **kwargs,
-        )
-
-
-class ElevatedDeleteButton(BaseElevatedButton):
-    """Button for delete/remove actions."""
-
-    def __init__(
-        self, on_click_callable: Callable, text: str = "Delete", **kwargs
-    ) -> None:
-        super().__init__(
-            on_click_callable,
-            style=styles.ELEVATED_BUTTON_DELETE_STYLE,
-            text=text,
-            text_style=styles.DeleteButtonTextStyle,
+            text_style=styles.ButtonTextStyle(),
             **kwargs,
         )
 
@@ -122,22 +92,7 @@ class ElevatedCancelButton(BaseElevatedButton):
             on_click_callable,
             style=styles.ELEVATED_BUTTON_CANCEL_STYLE,
             text=text,
-            text_style=styles.CancelButtonTextStyle,
-            **kwargs,
-        )
-
-
-class ElevatedRefreshButton(BaseElevatedButton):
-    """Button for refresh/reload actions."""
-
-    def __init__(
-        self, on_click_callable: Callable, text: str = "Refresh", **kwargs
-    ) -> None:
-        super().__init__(
-            on_click_callable,
-            style=styles.ELEVATED_BUTTON_REFRESH_STYLE,
-            text=text,
-            text_style=styles.RefreshButtonTextStyle,
+            text_style=styles.ButtonTextStyle(),
             **kwargs,
         )
 

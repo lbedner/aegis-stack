@@ -5,7 +5,7 @@ Schedules every service's jobs (``app.core.schedule``): a service lists its
 own in ``app/services/<service>/scheduled_jobs.py``.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 import asyncio
 import logging
 from typing import Any
@@ -163,11 +163,17 @@ def register_service_jobs(scheduler: AsyncIOScheduler) -> None:
     task name onto the system queue, and a worker runs it. A manual run
     repeats the stored call, so it lands on the worker too.
 {%- endif %}
+
+    A dev stack leaves out the ``server_only`` ones.
     """
     for job in service_jobs():
+        if job.server_only and settings.is_dev:
+            continue  # and the orphan sweep drops one stored before
         trigger = dict(job.trigger)
         if trigger.get("trigger") == "interval":
             trigger.setdefault("start_date", INTERVAL_ANCHOR)
+        if job.at_start:
+            trigger["next_run_time"] = datetime.now(UTC)
         scheduler.add_job(
             scheduled_run,
             args=[job.id{% if include_worker %}, job.task_name{% endif %}],

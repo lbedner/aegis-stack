@@ -40,7 +40,7 @@ COL_WIDTH_STATUS = 80
 
 # Status filter options: (label, api_value, color)
 _STATUS_FILTER_OPTIONS: list[FilterOption] = [
-    ("All", "all", Theme.Colors.ACCENT),
+    ("All", "all", Theme.Colors.PRIMARY),
     ("Completed", "completed", Theme.Colors.SUCCESS),
     ("Failed", "failed", Theme.Colors.ERROR),
     ("Running", "running", Theme.Colors.INFO),
@@ -165,7 +165,7 @@ class TaskHistorySection(PaginatedHistorySection):
                 "status": FilterSpec(
                     icon=ft.Icons.FILTER_LIST,
                     options=_STATUS_FILTER_OPTIONS,
-                    dot_color=Theme.Colors.ACCENT,
+                    dot_color=Theme.Colors.PRIMARY,
                 ),
                 "queue": FilterSpec(
                     icon=ft.Icons.STACKED_BAR_CHART,

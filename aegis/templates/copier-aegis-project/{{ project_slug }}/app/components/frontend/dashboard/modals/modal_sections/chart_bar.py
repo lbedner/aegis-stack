@@ -125,11 +125,11 @@ class BarChartCard(ft.Container):
             ),
             horizontal_grid_lines=ft.ChartGridLines(
                 interval=step,
-                color=ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE),
+                color=Theme.Colors.SURFACE_3,
                 width=1,
             ),
             **chart_tooltip_kwargs(),
-            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+            border=ft.border.all(1, ft.Colors.OUTLINE),
             interactive=True,
             max_y=max_y,
             # A 2px surface gap between adjacent bars so two fills never
@@ -216,7 +216,7 @@ class RankedBarCard(ft.Container):
                                     content=ft.Text(
                                         row.label,
                                         size=Theme.Typography.BODY_SMALL,
-                                        color=Theme.Colors.TEXT_PRIMARY,
+                                        color=ft.Colors.ON_SURFACE,
                                         max_lines=1,
                                         overflow=ft.TextOverflow.ELLIPSIS,
                                         tooltip=row.label,  # clipped is still readable
@@ -235,7 +235,7 @@ class RankedBarCard(ft.Container):
                                 NumericText(
                                     row.display,
                                     size=Theme.Typography.BODY_SMALL,
-                                    color=Theme.Colors.TEXT_PRIMARY,
+                                    color=ft.Colors.ON_SURFACE,
                                 ),
                             ],
                             spacing=Theme.Spacing.SM,

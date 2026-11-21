@@ -59,7 +59,7 @@ class CalendarPanel(ft.Container):
             "",
             size=Theme.Typography.BODY,
             weight=ft.FontWeight.W_600,
-            color=Theme.Colors.TEXT_PRIMARY,
+            color=ft.Colors.ON_SURFACE,
         )
         self._grid = ft.Column(spacing=2, tight=True)
         self.content = ft.Column(
@@ -79,7 +79,7 @@ class CalendarPanel(ft.Container):
                             content=ft.Text(
                                 day,
                                 size=Theme.Typography.BODY_SMALL,
-                                color=Theme.Colors.TEXT_SECONDARY,
+                                color=ft.Colors.ON_SURFACE_VARIANT,
                             ),
                             width=_CELL,
                             alignment=ft.alignment.center,
@@ -99,7 +99,7 @@ class CalendarPanel(ft.Container):
         return ft.IconButton(
             icon=icon,
             icon_size=18,
-            icon_color=Theme.Colors.TEXT_SECONDARY,
+            icon_color=ft.Colors.ON_SURFACE_VARIANT,
             on_click=lambda _e, d=delta: self._step(d),
         )
 
@@ -126,13 +126,13 @@ class CalendarPanel(ft.Container):
         is_selected = self._selected is not None and day == self._selected
         is_today = day == self._today
         if is_selected:
-            color = ft.Colors.BLACK
+            color = ft.Colors.ON_PRIMARY
         elif in_month:
-            color = Theme.Colors.TEXT_PRIMARY
+            color = ft.Colors.ON_SURFACE
         else:
             # Neighbouring months stay visible but recede - a blank cell
             # makes the grid read as broken rather than as context.
-            color = Theme.Colors.TEXT_SECONDARY
+            color = ft.Colors.ON_SURFACE_VARIANT
         return ft.Container(
             content=ft.Text(
                 str(day.day),
@@ -144,11 +144,11 @@ class CalendarPanel(ft.Container):
             height=_CELL,
             alignment=ft.alignment.center,
             border_radius=_CELL / 2,
-            bgcolor=Theme.Colors.ACCENT if is_selected else None,
+            bgcolor=Theme.Colors.PRIMARY if is_selected else None,
             # Today is OUTLINED and the selection is FILLED, so the two
             # never have to be told apart by shade alone.
             border=(
-                ft.border.all(1, Theme.Colors.ACCENT)
+                ft.border.all(1, Theme.Colors.PRIMARY)
                 if is_today and not is_selected
                 else None
             ),

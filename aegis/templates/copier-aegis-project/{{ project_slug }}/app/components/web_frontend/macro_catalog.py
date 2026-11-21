@@ -295,6 +295,12 @@ EXAMPLES: dict[str, dict[str, str]] = {
             {% call oob("queue-count") %}1,204{% endcall %}""",
     },
     "form": {
+        "control": """<input type="text" placeholder="A bare control" class="{{ control('input') }}">""",
+        "button_classes": """
+            <span class="flex gap-2">
+              <button type="button" class="{{ button_classes() }}">Save</button>
+              <button type="button" class="{{ button_classes('default') }}">Cancel</button>
+            </span>""",
         "primary_button": """
             {% set on_click %}@click="$dispatch('toast', { text: 'Clicked', tone: 'ok' })"{% endset %}
             {{ primary_button("Save", attrs=on_click) }}""",

@@ -149,8 +149,8 @@ class ConnectionCard(ft.Container):
         # card content instead of dead space past a fixed-width grid.
         self.col = {"sm": 12, "lg": 6}
         self.padding = ft.padding.all(Theme.Spacing.MD)
-        self.bgcolor = Theme.Colors.SURFACE_1
-        self.border = ft.border.all(1, Theme.Colors.BORDER_SUBTLE)
+        self.bgcolor = ft.Colors.SURFACE_CONTAINER_HIGHEST
+        self.border = ft.border.all(1, ft.Colors.OUTLINE)
         self.border_radius = Theme.Components.CARD_RADIUS
 
     def _toggle(self, _e: ft.ControlEvent) -> None:

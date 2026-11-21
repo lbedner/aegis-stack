@@ -83,7 +83,7 @@ def _build_queue_expanded_content(queue_name: str) -> ft.Control:
                 spacing=8,
             ),
             padding=ft.padding.only(bottom=6),
-            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE_VARIANT)),
+            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
         )
 
         # Task rows
@@ -118,7 +118,7 @@ def _build_queue_expanded_content(queue_name: str) -> ft.Control:
         # Wrap in a styled container
         tasks_table = ft.Container(
             content=ft.Column(task_rows, spacing=0),
-            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
+            bgcolor=Theme.Colors.SURFACE_2,
             border_radius=6,
             border=ft.border.all(1, ft.Colors.with_opacity(0.1, ft.Colors.ON_SURFACE)),
             padding=ft.padding.all(10),

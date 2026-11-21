@@ -105,7 +105,7 @@ class MeetingPane(ft.Container):
         self._view: RecordView | None = None
         self.width = 520
         self.padding = ft.padding.all(Theme.Spacing.MD)
-        self.border = ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
+        self.border = ft.border.all(1, ft.Colors.OUTLINE)
         self.border_radius = Theme.Components.CARD_RADIUS
         self.content = EmptyStatePlaceholder("Select a meeting")
 

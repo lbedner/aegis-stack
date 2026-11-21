@@ -150,7 +150,7 @@ class STTRecorderSection(
             padding=Theme.Spacing.MD,
             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             border_radius=Theme.Components.CARD_RADIUS,
-            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+            border=ft.border.all(1, ft.Colors.OUTLINE),
         )
 
         # Transcription field (visible in REVIEW state)
@@ -256,7 +256,7 @@ class STTRecorderSection(
             padding=Theme.Spacing.MD,
             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             border_radius=Theme.Components.CARD_RADIUS,
-            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+            border=ft.border.all(1, ft.Colors.OUTLINE),
         )
 
         # Main content column

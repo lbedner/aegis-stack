@@ -22,7 +22,7 @@
       {{ menu_item("Delete collection", delete, danger=True) }}
     {% endcall %}
   </div>
-  {% if job %}{% with card_id = "ai-collection-job" %}{% include "pages/overseer/ai/_job_card.html" %}{% endwith %}{% endif %}
+  {% if job %}{% with card_id = "ai-collection-job" %}{% include "pages/overseer/_job_card.html" %}{% endwith %}{% endif %}
   {% call card("Files", id="ai-collection-files") %}
     {{ data_table([
       {"key": "source", "label": "Source", "kind": "file"},

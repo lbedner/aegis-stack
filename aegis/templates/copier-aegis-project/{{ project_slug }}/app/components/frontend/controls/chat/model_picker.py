@@ -47,12 +47,12 @@ def _initial_avatar(name: str, color: str | None, radius: int = 10) -> ft.Contro
     """A colored initial standing in for a vendor/model logo."""
     return ft.CircleAvatar(
         max_radius=radius,
-        bgcolor=color or Theme.Colors.SURFACE_1,
+        bgcolor=color or ft.Colors.SURFACE_CONTAINER_HIGHEST,
         content=ft.Text(
             (name or "?")[:1].upper(),
             size=radius + 1,
             weight=ft.FontWeight.W_600,
-            color=Theme.Colors.TEXT_PRIMARY,
+            color=ft.Colors.ON_SURFACE,
         ),
     )
 
@@ -90,7 +90,7 @@ class _LazySection(ft.Column):  # type: ignore[misc]
         self._chevron = ft.Icon(
             ft.Icons.EXPAND_MORE,
             size=16,
-            color=Theme.Colors.TEXT_SECONDARY,
+            color=ft.Colors.ON_SURFACE_VARIANT,
         )
         self._body = ft.Column(tight=True, spacing=4, visible=False)
         head = ft.Container(
@@ -101,7 +101,7 @@ class _LazySection(ft.Column):  # type: ignore[misc]
             padding=ft.padding.symmetric(
                 horizontal=Theme.Spacing.SM, vertical=Theme.Spacing.SM
             ),
-            border=ft.border.only(bottom=ft.BorderSide(1, Theme.Colors.BORDER_SUBTLE)),
+            border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.OUTLINE)),
             ink=True,
             on_click=self._toggle,
         )
@@ -200,13 +200,13 @@ class ModelPickerDialog(StyledAlertDialog):
         text = chip.content
         if isinstance(text, ft.Text):
             text.color = (
-                Theme.Colors.TEXT_PRIMARY if selected else Theme.Colors.TEXT_SECONDARY
+                ft.Colors.ON_SURFACE if selected else ft.Colors.ON_SURFACE_VARIANT
             )
             text.weight = ft.FontWeight.W_600 if selected else ft.FontWeight.W_400
         chip.border = ft.border.only(
             bottom=ft.BorderSide(
                 2,
-                Theme.Colors.TEXT_PRIMARY if selected else ft.Colors.TRANSPARENT,
+                ft.Colors.ON_SURFACE if selected else ft.Colors.TRANSPARENT,
             )
         )
 
@@ -345,7 +345,9 @@ class ModelPickerDialog(StyledAlertDialog):
                 )
             )
         if active:
-            trailing.append(ft.Icon(ft.Icons.CHECK, size=16, color=Theme.Colors.ACCENT))
+            trailing.append(
+                ft.Icon(ft.Icons.CHECK, size=16, color=Theme.Colors.PRIMARY)
+            )
         leading = self._row_icon(model, under_vendor)
         return ft.Container(
             content=ft.Row(
@@ -374,7 +376,7 @@ class ModelPickerDialog(StyledAlertDialog):
             ),
             border_radius=Theme.Components.BUTTON_RADIUS,
             bgcolor=(
-                ft.Colors.with_opacity(0.08, Theme.Colors.ACCENT) if active else None
+                ft.Colors.with_opacity(0.08, Theme.Colors.PRIMARY) if active else None
             ),
             ink=True,
             on_click=lambda _event, mid=model_id: self.page.run_task(

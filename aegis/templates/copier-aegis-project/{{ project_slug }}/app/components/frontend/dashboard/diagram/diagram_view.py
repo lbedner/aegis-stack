@@ -8,6 +8,7 @@ in either tree or radial layout.
 import flet as ft
 
 from app.components.frontend.controls import SecondaryText
+from app.components.frontend.theme import AegisTheme as Theme
 from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus
 
@@ -112,7 +113,7 @@ class DiagramView(ft.Container):
             spacing=0,
             expand=True,
         )
-        self.bgcolor = ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE)
+        self.bgcolor = Theme.Colors.SURFACE_2
         self.border = ft.border.all(1, ft.Colors.OUTLINE)
         self.border_radius = 12
         self.expand = True

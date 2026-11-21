@@ -143,12 +143,7 @@ class Dropdown(ft.Container):
             # inside it. HARD_EDGE is the same fix StyledAlertDialog's own
             # panel already needed for the same reason.
             clip_behavior=ft.ClipBehavior.HARD_EDGE,
-            shadow=ft.BoxShadow(
-                spread_radius=0,
-                blur_radius=20,
-                color=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
-                offset=ft.Offset(0, 4),
-            ),
+            shadow=Theme.Components.POPUP_SHADOW,
             padding=ft.padding.symmetric(vertical=Theme.Spacing.SM),
             on_click=lambda e: None,  # stop taps inside the panel closing it
         )

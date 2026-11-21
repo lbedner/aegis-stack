@@ -2,7 +2,8 @@
    stage (stage.html). They read chat_path, voice, assistant, operator and
    calls from the page (``chat_surface._call_context``). #}
 {% from "components/macros/icons.html" import icon %}
-{% from "components/macros/chat.html" import button_classes, voice_states %}
+{% from "components/macros/form.html" import button_classes %}
+{% from "components/macros/chat.html" import voice_states %}
 
 {# A call's states, as the phone and the call bar both draw them. #}
 {% macro phone_states(size="w-4 h-4") %}{% call voice_states(size, record=True, work=True) %}{{ icon("phone", size) }}{% endcall %}{% endmacro %}

@@ -111,14 +111,14 @@ class TransactionsPanel(
         # column of single letters down the left edge).
         self._title = H3Text(
             "All Accounts",
-            color=Theme.Colors.TEXT_PRIMARY,
+            color=ft.Colors.ON_SURFACE,
             no_wrap=True,
             overflow=ft.TextOverflow.ELLIPSIS,
         )
         self._subtitle = SecondaryText(
             "",
             size=Theme.Typography.BODY_SMALL,
-            color=Theme.Colors.TEXT_SECONDARY,
+            color=ft.Colors.ON_SURFACE_VARIANT,
             no_wrap=True,
             overflow=ft.TextOverflow.ELLIPSIS,
         )

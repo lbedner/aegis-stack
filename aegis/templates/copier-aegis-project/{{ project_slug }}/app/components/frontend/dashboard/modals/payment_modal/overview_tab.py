@@ -8,7 +8,6 @@ provider delays the chart and not the tab.
 from typing import Any
 
 import flet as ft
-from app.components.frontend import styles
 from app.components.frontend.controls import (
     BodyText,
     H3Text,
@@ -146,7 +145,7 @@ class OverviewTab(ft.Container):
         non-decreasing) rather than noisy day-over-day spikes. Empty days
         simply carry the prior day's total forward.
         """
-        teal = styles.PulseColors.TEAL
+        teal = Theme.Colors.PRIMARY
         running = 0.0
         dollars: list[float] = []
         for p in points:
@@ -180,7 +179,7 @@ class OverviewTab(ft.Container):
                 label=ft.Text(
                     _short_date(points[i]["date"]),
                     size=10,
-                    color=styles.PulseColors.MUTED,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
             )
             for i in tick_idxs
@@ -190,12 +189,12 @@ class OverviewTab(ft.Container):
         return ft.LineChart(
             data_series=[series],
             border=ft.Border(
-                bottom=ft.BorderSide(1, styles.PulseColors.BORDER),
-                left=ft.BorderSide(1, styles.PulseColors.BORDER),
+                bottom=ft.BorderSide(1, ft.Colors.OUTLINE),
+                left=ft.BorderSide(1, ft.Colors.OUTLINE),
             ),
             horizontal_grid_lines=ft.ChartGridLines(
                 interval=y_max / 4 if y_max else 1,
-                color=ft.Colors.with_opacity(0.08, ft.Colors.WHITE),
+                color=Theme.Colors.SURFACE_3,
                 width=1,
             ),
             left_axis=ft.ChartAxis(
@@ -205,7 +204,7 @@ class OverviewTab(ft.Container):
                         label=ft.Text(
                             f"${v:,.0f}",
                             size=10,
-                            color=styles.PulseColors.MUTED,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
                         ),
                     )
                     for v in (0.0, y_max / 2, y_max)

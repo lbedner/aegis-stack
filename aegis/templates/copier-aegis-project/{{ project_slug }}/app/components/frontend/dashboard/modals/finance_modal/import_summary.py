@@ -85,21 +85,21 @@ def import_up_to_date_body(preview: dict[str, Any], file_name: str) -> ft.Column
                     _preview_dot(
                         "0 changes",
                         False,
-                        Theme.Colors.TEXT_SECONDARY,
+                        ft.Colors.ON_SURFACE_VARIANT,
                         "Every row in this file is already in your ledger.",
                     ),
                     (
                         _preview_dot(
                             "identical file",
                             False,
-                            Theme.Colors.TEXT_SECONDARY,
+                            ft.Colors.ON_SURFACE_VARIANT,
                             "Matched by content hash, so a rename would not fool it.",
                         )
                         if identical
                         else _preview_dot(
                             "up to date",
                             False,
-                            Theme.Colors.TEXT_SECONDARY,
+                            ft.Colors.ON_SURFACE_VARIANT,
                             "Every row this file carries is already stored - an "
                             "earlier import or sync brought them in.",
                         )
@@ -223,7 +223,7 @@ def investment_import_preview_body(preview: dict[str, Any]) -> ft.Column:
                 NumericText(
                     f"{p.get('shares', 0):,.3f} shares",
                     size=Theme.Typography.BODY_SMALL,
-                    color=Theme.Colors.TEXT_SECONDARY,
+                    color=ft.Colors.ON_SURFACE_VARIANT,
                 ),
                 ft.Container(width=Theme.Spacing.MD),
                 NumericText(
@@ -250,7 +250,7 @@ def investment_import_preview_body(preview: dict[str, Any]) -> ft.Column:
             NumericText(
                 _usd(preview.get("total_value", 0)),
                 size=Theme.Typography.BODY_SMALL,
-                color=Theme.Colors.ACCENT,
+                color=Theme.Colors.PRIMARY,
                 weight=ft.FontWeight.W_600,
             ),
         ],
@@ -265,7 +265,9 @@ def investment_import_preview_body(preview: dict[str, Any]) -> ft.Column:
             ),
             ft.Container(height=Theme.Spacing.XS),
             *rows,
-            ft.Divider(height=1, color=Theme.Colors.BORDER_SUBTLE),
+            ft.Divider(
+                height=1,
+            ),
             total_row,
         ],
         spacing=Theme.Spacing.XS,
@@ -304,7 +306,7 @@ def investment_import_summary_body(result: dict[str, Any]) -> ft.Column:
                 "Securities added",
                 created,
                 "New to the catalog",
-                Theme.Colors.TEXT_SECONDARY,
+                ft.Colors.ON_SURFACE_VARIANT,
                 "Funds this account hadn't held before.",
             ),
         ],

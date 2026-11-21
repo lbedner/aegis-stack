@@ -54,14 +54,14 @@ class SettingsTab(ft.Container):
             ),
             ft.Container(height=8),
             H3Text("Data Sources"),
-            ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+            ft.Divider(height=1),
         ]
 
         for src in db["sources"]:
             is_stale = src["key"] in stale_sources
             if src["enabled"]:
                 status_text = "Stale" if is_stale else "Active"
-                status_color = "#F59E0B" if is_stale else "#22C55E"
+                status_color = Theme.Colors.WARNING if is_stale else Theme.Colors.SUCCESS
             else:
                 status_text = "Disabled"
                 status_color = ft.Colors.ON_SURFACE_VARIANT
@@ -83,7 +83,7 @@ class SettingsTab(ft.Container):
                         ),
                         ft.Container(
                             content=LabelText(
-                                status_text, color=Theme.Colors.BADGE_TEXT
+                                status_text, color=ft.Colors.ON_PRIMARY
                             ),
                             bgcolor=status_color,
                             padding=ft.padding.symmetric(horizontal=6, vertical=2),

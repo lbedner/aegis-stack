@@ -21,22 +21,7 @@ from app.components.frontend.auth.session import (
     try_resume_session,
 )
 from app.core.client_session import REFRESH_COOKIE
-
-
-class FakeStorage:
-    def __init__(self, stored: dict[str, Any] | None = None) -> None:
-        self.stored = dict(stored or {})
-        self.removed: list[str] = []
-
-    async def get_async(self, key: str) -> Any:
-        return self.stored.get(key)
-
-    async def set_async(self, key: str, value: Any) -> None:
-        self.stored[key] = value
-
-    async def remove_async(self, key: str) -> None:
-        self.removed.append(key)
-        self.stored.pop(key, None)
+from tests.components.frontend._fakes import FakeStorage
 
 
 class FakeClient:

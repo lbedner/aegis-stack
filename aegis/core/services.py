@@ -1555,6 +1555,7 @@ SERVICES: dict[str, ServiceSpec] = {
         ],
         template_files=[
             "app/services/documents/",
+            "app/services/mail/",
             "app/components/backend/api/documents/",
         ],
         files=FileManifest(
@@ -1569,6 +1570,17 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/_jobs.py",
                 "tests/services/test_extraction_dispatch.py",
                 "tests/services/test_documents_module_layout.py",
+                # Mail, part of documents: a dropped file or an IMAP pull
+                # read into documents, and what each message became.
+                "app/services/mail",
+                "tests/services/test_mail_parse.py",
+                "tests/services/test_mail_ingest.py",
+                "tests/services/test_mail_models.py",
+                "tests/services/test_mail_jobs.py",
+                "tests/services/test_mail_pull.py",
+                "tests/services/test_mail_arrivals.py",
+                "tests/services/test_mail_ai_tools.py",
+                "tests/_mbox.py",
                 "tests/components/frontend/test_documents_ui.py",
                 "app/components/frontend/dashboard/cards/documents_card.py",
                 "app/components/frontend/dashboard/modals/documents_modal.py",
@@ -1589,6 +1601,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/components/web_frontend/routes/partials/overseer_documents.py",
                     "app/components/web_frontend/templates/pages/overseer/documents",
                     "tests/web/test_overseer_documents.py",
+                    "tests/web/test_overseer_mail.py",
                 ],
             },
         ),

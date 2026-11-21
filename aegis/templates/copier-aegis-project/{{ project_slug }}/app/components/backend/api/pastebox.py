@@ -1,7 +1,7 @@
 """The pastebox endpoints: stage a pasted image, drain the staged set.
 
 The POST side is called by the dashboard's injected capture script
-(see ``middleware/paste_capture.py``); the drain side by whichever
+(see ``middleware/dashboard_scripts.py``); the drain side by whichever
 consumer surface is polling (chat's attachment bar). Generic on
 purpose - nothing here knows what a consumer does with the image.
 """

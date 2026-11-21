@@ -1,10 +1,17 @@
-"""Injects the paste-capture script into the dashboard page.
+"""Splices the dashboard page's browser-side scripts into its HTML.
 
-Flet exposes no OS-clipboard image API (text only), so pasting a
-screenshot has to be caught in the browser itself: this middleware
-splices an inline listener into the dashboard's HTML that posts pasted
-image files to the generic ``/api/v1/pastebox`` endpoint, where
-consumer surfaces drain them (see ``app/core/pastebox.py``).
+Flet renders to a canvas and runs no script of ours, so what the page
+needs from the browser itself rides in here, ahead of Flutter's boot:
+
+- **Paste capture.** Flet exposes no OS-clipboard image API (text only),
+  so a pasted screenshot is caught in the browser and posted to the
+  generic ``/api/v1/pastebox`` endpoint, where consumer surfaces drain it
+  (see ``app/core/pastebox.py``).
+- **The light/dark mode bridge** (#629). Overseer's mode is htmx's:
+  htmx keeps it in ``localStorage["mode"]``, Flet's client storage keeps
+  ``FLET_MODE_KEY`` under Flutter's ``flutter.`` prefix, each value
+  JSON-encoded twice. The bridge copies htmx's choice across before
+  Flutter reads it, and copies Overseer's toggle back as Flutter writes.
 
 Injection over a vendored index.html on purpose: Flet's index markup
 changes across versions, and a response-time splice keeps working
@@ -13,15 +20,16 @@ without carrying a copy of it.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app.core.constants import DASHBOARD_PATH
+from app.core.appearance import FLET_MODE_KEY, HTMX_MODE_KEY
 
 # Posts every pasted image file; non-file pastes (plain text) fall
 # through untouched so normal text paste keeps working.
-_PASTE_SCRIPT = b"""<script>
+_PASTE_SCRIPT = """<script>
 document.addEventListener("paste", function (event) {
   var items = (event.clipboardData || {}).files || [];
   for (var i = 0; i < items.length; i++) {
@@ -36,30 +44,54 @@ document.addEventListener("paste", function (event) {
 });
 </script>"""
 
+_MODE_SCRIPT = (
+    """<script>
+(function (htmxKey, fletKey) {
+  try {
+    var mode = localStorage.getItem(htmxKey);
+    if (mode) localStorage.setItem(fletKey, JSON.stringify(JSON.stringify(mode)));
+    var setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      setItem.call(this, key, value);
+      if (key === fletKey) setItem.call(this, htmxKey, JSON.parse(JSON.parse(value)));
+    };
+  } catch (_) {
+    /* storage disabled: Overseer keeps its own default */
+  }
+})("""
+    + json.dumps(HTMX_MODE_KEY)
+    + ", "
+    + json.dumps(f"flutter.{FLET_MODE_KEY}")
+    + """);
+</script>"""
+)
 
-def inject_paste_script(body: bytes) -> bytes:
-    """The pure splice: script before ``</head>``, or the body untouched
+_SCRIPTS = (_PASTE_SCRIPT + _MODE_SCRIPT).encode()
+
+
+def inject_dashboard_scripts(body: bytes) -> bytes:
+    """The pure splice: scripts before ``</head>``, or the body untouched
     when there is no head to splice into (non-HTML payloads)."""
     marker = b"</head>"
     if marker not in body:
         return body
-    return body.replace(marker, _PASTE_SCRIPT + marker, 1)
+    return body.replace(marker, _SCRIPTS + marker, 1)
 
 
-class PasteCaptureMiddleware:
-    """Buffers dashboard HTML responses and splices the capture script.
+class DashboardScriptsMiddleware:
+    """Wraps the dashboard app, buffering its HTML responses to splice the
+    page scripts in.
 
     Pure ASGI (not ``BaseHTTPMiddleware``): the dashboard index is one
-    small document, and buffering only happens for ``text/html`` under
-    the dashboard mount - every other response streams through as-is.
+    small document, and buffering only happens for ``text/html`` - every
+    other response streams through as-is.
     """
 
-    def __init__(self, app: ASGIApp, mount_path: str = DASHBOARD_PATH) -> None:
+    def __init__(self, app: ASGIApp) -> None:
         self.app = app
-        self.mount_path = mount_path
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or not scope["path"].startswith(self.mount_path):
+        if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
@@ -69,7 +101,7 @@ class PasteCaptureMiddleware:
 
         async def send_injected(raw: bytes) -> None:
             """Release the stashed start plus the rewritten body."""
-            body = inject_paste_script(raw)
+            body = inject_dashboard_scripts(raw)
             assert start_message is not None
             start_message["headers"] = [
                 (k, v)

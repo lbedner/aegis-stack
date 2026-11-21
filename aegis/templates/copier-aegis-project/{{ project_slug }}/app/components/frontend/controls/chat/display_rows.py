@@ -29,7 +29,7 @@ def _value_text(value: str, *, color: str, **kwargs: Any) -> SecondaryText:
         color=color,
         spans=[
             ft.TextSpan(before + _ARROW),
-            ft.TextSpan(target, style=ft.TextStyle(color=Theme.Colors.ACCENT)),
+            ft.TextSpan(target, style=ft.TextStyle(color=Theme.Colors.PRIMARY)),
         ],
         **kwargs,
     )
@@ -47,12 +47,12 @@ def _detail_value_text(value: str, *, dimmed: bool, **kwargs: Any) -> SecondaryT
         return _value_text(value, color=ft.Colors.ON_SURFACE, **kwargs)
     head, sep, tail = value.partition(" · ")
     if not sep:
-        return SecondaryText(value, color=Theme.Colors.ACCENT, **kwargs)
+        return SecondaryText(value, color=Theme.Colors.PRIMARY, **kwargs)
     return SecondaryText(
         "",
         color=ft.Colors.ON_SURFACE,
         spans=[
-            ft.TextSpan(head, style=ft.TextStyle(color=Theme.Colors.ACCENT)),
+            ft.TextSpan(head, style=ft.TextStyle(color=Theme.Colors.PRIMARY)),
             ft.TextSpan(sep + tail),
         ],
         **kwargs,

@@ -45,7 +45,7 @@ class TagPicker(ft.Container):
             border_radius=Theme.Components.INPUT_RADIUS,
             bgcolor=ft.Colors.SURFACE,
             border_color=ft.Colors.OUTLINE,
-            focused_border_color=ft.Colors.PRIMARY,
+            focused_border_color=Theme.Colors.PRIMARY,
             text_size=13,
             content_padding=ft.padding.symmetric(horizontal=12, vertical=10),
             hint_text="Add tag",
@@ -136,8 +136,8 @@ class TagPicker(ft.Container):
                 tight=True,
             ),
             padding=ft.padding.symmetric(horizontal=8, vertical=2),
-            bgcolor=ft.Colors.with_opacity(0.10, ft.Colors.PRIMARY),
-            border=ft.border.all(1, ft.Colors.PRIMARY),
+            bgcolor=ft.Colors.with_opacity(0.10, Theme.Colors.PRIMARY),
+            border=ft.border.all(1, Theme.Colors.PRIMARY),
             border_radius=10,
             height=22,
         )
@@ -222,12 +222,12 @@ class SyndicatePicker(ft.Container):
                 ),
                 padding=ft.padding.symmetric(horizontal=10, vertical=2),
                 bgcolor=(
-                    ft.Colors.with_opacity(0.10, ft.Colors.PRIMARY)
+                    ft.Colors.with_opacity(0.10, Theme.Colors.PRIMARY)
                     if selected
                     else ft.Colors.TRANSPARENT
                 ),
                 border=ft.border.all(
-                    1, ft.Colors.PRIMARY if selected else ft.Colors.OUTLINE
+                    1, Theme.Colors.PRIMARY if selected else ft.Colors.OUTLINE
                 ),
                 border_radius=10,
                 height=22,

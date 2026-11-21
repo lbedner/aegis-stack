@@ -31,7 +31,7 @@ from app.services.system.errors.fingerprint import FRAME
 from app.services.system.models import ComponentStatus
 from app.services.system.patterns import PROJECT_ROOT
 
-from .filters import LINE_ANCHOR
+from .markup import LINE_ANCHOR
 from .overseer_nav import NavItem, SectionRequest
 from .rendering import templates, with_query
 

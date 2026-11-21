@@ -33,6 +33,7 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.services.insights.schemas import BulkInsightsResponse
 from app.services.insights.service import InsightViewService
 from app.services.insights.service import pct as pct_change
+from app.components.frontend.theme import SERIES
 
 from ..modal_sections import (
     ChartColors,
@@ -161,14 +162,14 @@ class OverviewTab(ft.Container):
                 MetricCard(
                     "Stars",
                     str(stars_total),
-                    "#FFD700",
+                    SERIES[10],
                     change_pct=pct_change(recent_stars, prev_star_count),
                     prev_value=f"+{today_stars} today",
                 ),
                 MetricCard(
                     "PyPI Downloads",
                     f"{db['pypi_total']:,}",
-                    "#FF69B4",
+                    SERIES[4],
                     change_pct=pct_change(pypi_14d, pypi_prev14d),
                     prev_value=f"+{latest_downloads:,} {dl_label}",
                 ),
@@ -344,7 +345,7 @@ class OverviewTab(ft.Container):
                 ft.Column(
                     [
                         H3Text("Recent Activity"),
-                        ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
+                        ft.Divider(height=1),
                         *activity_items,
                     ],
                     spacing=6,

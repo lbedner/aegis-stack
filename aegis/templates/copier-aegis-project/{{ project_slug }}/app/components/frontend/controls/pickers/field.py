@@ -50,7 +50,7 @@ class CategoryPickerField(ft.Container):
         self._display = ft.Text(
             self._labels[self._value],
             size=13,
-            color=(Theme.Colors.TEXT_SECONDARY if not self._value else None),
+            color=(ft.Colors.ON_SURFACE_VARIANT if not self._value else None),
             overflow=ft.TextOverflow.ELLIPSIS,
             max_lines=1,
             expand=True,
@@ -109,7 +109,7 @@ class CategoryPickerField(ft.Container):
                         content=ft.Text(
                             "No matches",
                             size=13,
-                            color=Theme.Colors.TEXT_SECONDARY,
+                            color=ft.Colors.ON_SURFACE_VARIANT,
                         ),
                         padding=ft.padding.symmetric(
                             vertical=Theme.Spacing.SM, horizontal=Theme.Spacing.MD
@@ -139,7 +139,9 @@ class CategoryPickerField(ft.Container):
             body=ft.Column(
                 [
                     search,
-                    ft.Divider(height=1, color=Theme.Colors.BORDER_SUBTLE),
+                    ft.Divider(
+                        height=1,
+                    ),
                     ft.Container(content=rows_column, height=self._ROWS_HEIGHT),
                 ],
                 spacing=Theme.Spacing.SM,
@@ -165,6 +167,6 @@ class CategoryPickerField(ft.Container):
     def value(self, new_value: str) -> None:
         self._value = new_value if new_value in self._labels else ""
         self._display.value = self._labels[self._value]
-        self._display.color = Theme.Colors.TEXT_SECONDARY if not self._value else None
+        self._display.color = ft.Colors.ON_SURFACE_VARIANT if not self._value else None
         if self.page:
             self._display.update()

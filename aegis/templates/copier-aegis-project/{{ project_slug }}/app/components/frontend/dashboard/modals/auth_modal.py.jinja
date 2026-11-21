@@ -216,7 +216,9 @@ class OverviewTab(ft.Container):
             [
                 OverviewSection(component_data),
                 ConfigurationSection(metadata),
-                ft.Divider(height=20, color=ft.Colors.OUTLINE_VARIANT),
+                ft.Divider(
+                    height=20,
+                ),
                 SecuritySection(metadata),
             ],
             spacing=0,

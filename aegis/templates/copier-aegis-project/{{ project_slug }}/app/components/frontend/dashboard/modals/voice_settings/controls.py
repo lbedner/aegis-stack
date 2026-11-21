@@ -73,7 +73,7 @@ class CollapsibleSection(ft.Container):
     def _on_hover(self, e: ft.ControlEvent) -> None:
         """Handle hover state."""
         if e.data == "true":
-            e.control.bgcolor = ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE)
+            e.control.bgcolor = Theme.Colors.SURFACE_3
         else:
             e.control.bgcolor = None
         if e.control.page:

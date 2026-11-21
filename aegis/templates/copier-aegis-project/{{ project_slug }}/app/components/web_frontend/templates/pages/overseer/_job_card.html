@@ -4,9 +4,9 @@
 {% call card(job.title, id=card_id) %}
 {% if job.events %}
 <div hx-ext="sse" sse-connect="{{ job.events }}" sse-close="{{ job.done }}">
-  <div sse-swap="{{ job.event }}" hx-target="this">{% include "pages/overseer/ai/_job.html" %}</div>
+  <div sse-swap="{{ job.event }}" hx-target="this">{% include "pages/overseer/_job.html" %}</div>
 </div>
 {% else %}
-{% include "pages/overseer/ai/_job.html" %}
+{% include "pages/overseer/_job.html" %}
 {% endif %}
 {% endcall %}

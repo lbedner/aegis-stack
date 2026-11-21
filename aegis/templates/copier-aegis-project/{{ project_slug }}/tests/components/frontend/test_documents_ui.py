@@ -428,4 +428,4 @@ def test_a_run_that_left_pages_unread_is_not_drawn_as_a_success() -> None:
     cell = ActivityTab._status_cell(by_id["none-read"])
     assert "0 of 7 pages extracted" in texts(cell)
     assert cell.color == Theme.Colors.WARNING
-    assert ActivityTab._status_cell(by_id["all-read"]).color == Theme.Colors.ACCENT
+    assert ActivityTab._status_cell(by_id["all-read"]).color == Theme.Colors.PRIMARY

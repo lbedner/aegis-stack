@@ -159,8 +159,8 @@ class TestLedgerChangingCountsAreCards:
                 {**PREVIEW, "rows_skipped": 0, "rows_error": 0}, "export.csv"
             )
         )
-        assert quiet["0 scheduled"] == Theme.Colors.TEXT_SECONDARY
-        assert quiet["0 errors"] == Theme.Colors.TEXT_SECONDARY
+        assert quiet["0 scheduled"] == ft.Colors.ON_SURFACE_VARIANT
+        assert quiet["0 errors"] == ft.Colors.ON_SURFACE_VARIANT
 
 
 class TestCardsMatchEveryOtherCard:
@@ -214,14 +214,14 @@ class TestColorCarriesMeaning:
         quiet = {**PREVIEW, "rows_updated": 0, "rows_error": 0}
         body = import_preview_body(quiet, "export.csv")
         _add, update, _have = _of_type(body, MetricCard)
-        assert update.value_text.color == Theme.Colors.TEXT_SECONDARY
+        assert update.value_text.color == ft.Colors.ON_SURFACE_VARIANT
 
     def test_already_have_is_never_accented(self) -> None:
         """The biggest number in the dialog is also the least interesting:
         it is what did NOT happen."""
         body = import_preview_body(PREVIEW, "export.csv")
         *_, have = _of_type(body, MetricCard)
-        assert have.value_text.color == Theme.Colors.TEXT_SECONDARY
+        assert have.value_text.color == ft.Colors.ON_SURFACE_VARIANT
 
 
 class TestAccountBreakdown:
@@ -419,7 +419,7 @@ class TestIdenticalFile:
         for _label, color in _dots(
             import_up_to_date_body(self.IDENTICAL, "e.csv")
         ).items():
-            assert color == Theme.Colors.TEXT_SECONDARY
+            assert color == ft.Colors.ON_SURFACE_VARIANT
 
     def test_it_says_nothing_was_written(self) -> None:
         rendered = " ".join(
@@ -546,7 +546,7 @@ class TestInvestmentPreviewBody:
         body = investment_import_preview_body(self.PREVIEW)
         texts = [t for t in self._texts(body) if isinstance(t.value, str)]
         total = next(t for t in texts if t.value == "$3,732.30")
-        assert total.color == Theme.Colors.ACCENT
+        assert total.color == Theme.Colors.PRIMARY
         # Under the rows, not in the header: the total is the LAST value
         # rendered, where the eye lands after scanning the column.
         values = [t.value for t in texts]
@@ -559,7 +559,7 @@ class TestInvestmentPreviewBody:
         shares = next(t for t in texts if t.value == "55.850 shares")
         value = next(t for t in texts if t.value == "$2,122.30")
         assert isinstance(name, PrimaryText)
-        assert shares.color == Theme.Colors.TEXT_SECONDARY
+        assert shares.color == ft.Colors.ON_SURFACE_VARIANT
         assert not isinstance(value, SecondaryText)
 
 

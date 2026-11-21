@@ -48,7 +48,7 @@ class ServicesCard:
             return ft.Container(
                 content=LabelText("No services registered"),
                 padding=ft.padding.all(12),
-                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.GREY),
+                bgcolor=Theme.Colors.SURFACE_2,
                 border_radius=8,
             )
 
@@ -159,7 +159,7 @@ class ServicesCard:
                         spacing=4,
                     ),
                     padding=ft.padding.all(12),
-                    bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.BLUE),
+                    bgcolor=ft.Colors.with_opacity(0.05, Theme.Colors.INFO),
                     border_radius=8,
                 )
             )
@@ -173,7 +173,9 @@ class ServicesCard:
                     dependencies_healthy = False
                     break
 
-        dep_color = Theme.Colors.SUCCESS if dependencies_healthy else ft.Colors.ORANGE
+        dep_color = (
+            Theme.Colors.SUCCESS if dependencies_healthy else Theme.Colors.WARNING
+        )
         stats_items.append(
             ft.Container(
                 content=ft.Column(

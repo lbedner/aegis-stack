@@ -144,7 +144,7 @@ def test_the_services_picker_is_the_logs_one(errors_client: TestClient) -> None:
     assert form.get("hx-target") == "#errors"
     assert one(html, "#errors-sources").get("hx-preserve") is not None
     for control in select(html, "#errors select"):
-        assert {"select-caret", "pr-8"} <= set(control.get("class").split())
+        assert {"select", "select-bordered"} <= set(control.get("class").split())
 
 
 @pytest.mark.parametrize(

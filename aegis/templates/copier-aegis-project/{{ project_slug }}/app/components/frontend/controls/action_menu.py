@@ -27,7 +27,6 @@ from app.components.frontend.controls.text import (
     PrimaryText,
     SecondaryText,
 )
-from app.components.frontend.styles import PulseColors
 from app.components.frontend.theme import AegisTheme as Theme
 
 
@@ -46,8 +45,8 @@ class ActionMenuItem(ft.PopupMenuItem):
         *,
         destructive: bool = False,
     ) -> None:
-        icon_color = ft.Colors.ERROR if destructive else ft.Colors.ON_SURFACE_VARIANT
-        text_color = ft.Colors.ERROR if destructive else ft.Colors.ON_SURFACE
+        icon_color = Theme.Colors.ERROR if destructive else ft.Colors.ON_SURFACE_VARIANT
+        text_color = Theme.Colors.ERROR if destructive else ft.Colors.ON_SURFACE
         super().__init__(
             content=ft.Row(
                 [
@@ -103,7 +102,9 @@ def _menu_action_row(action: MenuAction, on_chosen: Callable[[], None]) -> ft.Co
     ``on_chosen``): unlike the multi-select account filter, these are
     one-shot commands.
     """
-    icon_color = ft.Colors.ERROR if action.destructive else ft.Colors.ON_SURFACE_VARIANT
+    icon_color = (
+        Theme.Colors.ERROR if action.destructive else ft.Colors.ON_SURFACE_VARIANT
+    )
     # The text controls carry their own semantic colour - ErrorText IS the
     # red one - so neither needs a colour passed in here.
     label: ft.Control = (
@@ -168,17 +169,21 @@ class ActionDropdown(Dropdown):
         align: str = "left",
         min_width: int = 260,
     ) -> None:
-        teal = PulseColors.TEAL
+        teal = Theme.Colors.PRIMARY
         pill = ft.Container(
             content=ft.Row(
                 [
                     PrimaryText(
                         label,
                         size=Theme.Typography.BODY_SMALL,
-                        color=PulseColors.TEXT,
+                        color=ft.Colors.ON_SURFACE,
                         weight=ft.FontWeight.W_500,
                     ),
-                    ft.Icon(ft.Icons.ARROW_DROP_DOWN, size=18, color=PulseColors.TEXT),
+                    ft.Icon(
+                        ft.Icons.ARROW_DROP_DOWN,
+                        size=18,
+                        color=ft.Colors.ON_SURFACE,
+                    ),
                 ],
                 spacing=2,
                 tight=True,

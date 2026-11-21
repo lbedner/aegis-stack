@@ -58,7 +58,7 @@ class ServiceCard(ft.Row):
             ft.Container(
                 width=1,
                 height=divider_height,
-                bgcolor=divider_color or ft.Colors.OUTLINE_VARIANT,
+                bgcolor=divider_color or ft.Colors.OUTLINE,
                 margin=ft.margin.symmetric(horizontal=16),
             ),
             # Right section: Metrics/content

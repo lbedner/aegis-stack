@@ -4,8 +4,8 @@ from typing import Any
 
 import flet as ft
 
+from app.components.frontend.theme import SERIES
 from app.components.frontend.theme import AegisTheme as Theme
-from app.components.frontend.theme import DarkColorPalette
 from app.core.formatting import format_cost, format_number
 
 from ..modal_sections import MetricCard, PieChartCard
@@ -16,7 +16,7 @@ def _get_success_rate_color(rate: float) -> str:
     if rate >= 95:
         return Theme.Colors.SUCCESS
     elif rate >= 80:
-        return ft.Colors.ORANGE
+        return Theme.Colors.WARNING
     else:
         return Theme.Colors.ERROR
 
@@ -45,7 +45,7 @@ class HeroStatsSection(ft.Container):
                         MetricCard(
                             "Total Tokens",
                             format_number(total_tokens),
-                            ft.Colors.PURPLE,
+                            SERIES[1],
                         ),
                         MetricCard(
                             "Total Cost",
@@ -60,7 +60,7 @@ class HeroStatsSection(ft.Container):
                         MetricCard(
                             "Requests",
                             format_number(total_requests),
-                            ft.Colors.CYAN,
+                            SERIES[7],
                         ),
                     ],
                     spacing=Theme.Spacing.MD,
@@ -88,12 +88,12 @@ def _create_token_breakdown_card(stats: dict[str, Any]) -> PieChartCard:
         sections=[
             {
                 "value": input_tokens,
-                "color": DarkColorPalette.ACCENT,
+                "color": Theme.Colors.PRIMARY,
                 "label": f"Input Tokens ({input_pct:.1f}%)",
             },
             {
                 "value": output_tokens,
-                "color": ft.Colors.PURPLE_200,
+                "color": SERIES[1],
                 "label": f"Output Tokens ({output_pct:.1f}%)",
             },
         ],

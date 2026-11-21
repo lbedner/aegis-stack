@@ -10,8 +10,12 @@ Includes proper session management with transaction handling{% if database_engin
 import ssl
 import uuid
 {% endif %}
-from collections.abc import AsyncGenerator, Generator
-from contextlib import asynccontextmanager, contextmanager
+from collections.abc import AsyncGenerator, Callable, Generator
+from contextlib import (
+    AbstractAsyncContextManager,
+    asynccontextmanager,
+    contextmanager,
+)
 {% if database_engine == "sqlite" %}
 from pathlib import Path
 {% endif %}
@@ -286,6 +290,11 @@ def _name_connection(
 SessionLocal = sessionmaker(
     class_=Session, bind=engine, autoflush=False, autocommit=False
 )
+
+# How work that must NOT hold the write lock across something slow (a file
+# parse, a model call) gets a database: a way to OPEN one, taken briefly
+# and more than once, rather than one already open (``get_async_session``).
+OpenSession = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
 # Configure async session factory using SQLModel's AsyncSession
 AsyncSessionLocal = async_sessionmaker(

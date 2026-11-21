@@ -14,6 +14,8 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import flet as ft
+
 from app.components.frontend.controls.data_table import (
     PICKER_GUTTER_WIDTH,
     style_cell,
@@ -196,8 +198,8 @@ class TestTheCapabilities:
     def test_yes_carries_the_emphasis(self) -> None:
         """Monochrome-first: the present capability reads in primary ink
         and the absent one recedes, rather than spending a hue on it."""
-        assert capability_cell(True).color == Theme.Colors.TEXT_PRIMARY
-        assert capability_cell(False).color == Theme.Colors.TEXT_SECONDARY
+        assert capability_cell(True).color == ft.Colors.ON_SURFACE
+        assert capability_cell(False).color == ft.Colors.ON_SURFACE_VARIANT
 
     def test_completion_is_not_given_a_column(self) -> None:
         """Every generative model has it, so a column of "Yes" tells you

@@ -8633,6 +8633,7 @@ exports its tables before dropping them, so adding it back restores the data
 <li><code>--interactive, -i</code> - Use interactive component selection</li>
 <li><code>--project-path, -p PATH</code> - Path to the Aegis Stack project (default: current directory)</li>
 <li><code>--yes, -y</code> - Skip confirmation prompt</li>
+<li><code>--force, -f</code> - Remove a component an installed service still requires (warns instead of refusing)</li>
 </ul>
 <p><strong>Examples:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="c1"># Remove scheduler component</span>
@@ -8662,6 +8663,7 @@ exports its tables before dropping them, so adding it back restores the data
 <li>Removing scheduler with SQLite persistence leaves <code>data/scheduler.db</code> intact</li>
 <li>Shared template files are regenerated (backups created automatically)</li>
 <li>Redis is auto-removed when worker is removed (no standalone functionality)</li>
+<li>A component an installed service requires (the database under auth, the runner under meetings) is refused, naming the service; <code>--force</code> removes it anyway</li>
 </ul>
 <hr />
 <h3 id="aegis-remove-service">aegis remove-service</h3>
@@ -8757,6 +8759,13 @@ Keys you added yourself, and keys still in <code>.env.example</code>, stay as th
 <li><strong>Always commit before updating</strong>: <code>git add . &amp;&amp; git commit -m "Pre-update checkpoint"</code></li>
 <li><strong>Test after updating</strong>: Run <code>make check</code> to verify everything works</li>
 <li>Use <code>--dry-run</code> first to preview changes</li>
+<li><strong>Answers the project never gave are read off the project.</strong> A question
+  added after the project was generated is filled from what is on disk (a
+  meetings stack from before the runner split has the runner), the dry run
+  included, so the preview describes the update that will run.</li>
+<li><strong>What an installed part requires is switched on.</strong> A project with htmx and
+  <code>include_deploy: false</code> updates with deploy on, and the update says so:
+  <code>htmx requires deploy: turning deploy on</code>.</li>
 <li><strong>Conflicts need a real merge, not a side.</strong> A <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code> block only appears
   where you and the template changed the same region, so both changes usually
   have to survive. <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt; your project</code> is your code, <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt; new template</code>

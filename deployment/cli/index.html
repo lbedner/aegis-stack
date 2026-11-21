@@ -7279,6 +7279,10 @@ if it is missing.</p>
 <td>Application directory on the server (default: <code>/opt/{project-name}</code>)</td>
 </tr>
 <tr>
+<td><code>server.keep</code></td>
+<td>Extra server-only paths a deploy never syncs or deletes, as rsync patterns (<code>[uploads/, certs/client.pem]</code>). Added to the built-in ones: <code>.env</code>, <code>.env.deploy</code>, <code>data/</code>, <code>backups/</code>, <code>traefik/acme/</code> and <code>secrets/</code></td>
+</tr>
+<tr>
 <td><code>docker.context</code></td>
 <td>Docker context name (used by the generated Makefile's <code>deploy-*</code> targets)</td>
 </tr>
@@ -7287,6 +7291,10 @@ if it is missing.</p>
 <p>The <code>backup</code> and <code>health_check</code> settings are on
 <a href="../backups/#settings">Backups and restore</a>. Every field is optional beyond
 <code>server.host</code>; a missing one takes its default.</p>
+<p>A deploy ships what git tracks with <code>rsync --delete</code>, so anything else in
+<code>server.path</code> is removed unless one of those excludes names it. The deploy's
+output lists each path it removed, so a server-only file that needs
+<code>server.keep</code> shows up at deploy time.</p>
 <div class="admonition tip">
 <p class="admonition-title">Git-ignore deploy config</p>
 <p>Add <code>.aegis/</code> to your <code>.gitignore</code> to keep deployment config out of version control. <code>deploy-init</code> will remind you if it's missing.</p>

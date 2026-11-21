@@ -82,6 +82,7 @@ class TestGitHubEventsCollectorSuccess:
                             ["user2", "2026-04-10"],
                         ]
                     },
+                    status_code=200,
                     raise_for_status=lambda: None,
                 )
             elif "ReleaseEvent" in content:
@@ -92,6 +93,7 @@ class TestGitHubEventsCollectorSuccess:
                             ["bot", "v1.0.0", "Version 1.0.0", "2026-04-10"],
                         ]
                     },
+                    status_code=200,
                     raise_for_status=lambda: None,
                 )
             elif "WatchEvent" in content:
@@ -103,6 +105,7 @@ class TestGitHubEventsCollectorSuccess:
                             ["2026-04-10", 3],
                         ]
                     },
+                    status_code=200,
                     raise_for_status=lambda: None,
                 )
             else:  # Activity summary
@@ -115,6 +118,7 @@ class TestGitHubEventsCollectorSuccess:
                             ["2026-04-10", "IssuesEvent", 1],
                         ]
                     },
+                    status_code=200,
                     raise_for_status=lambda: None,
                 )
 
@@ -220,16 +224,19 @@ class TestGitHubEventsCollectorSuccess:
                     json=lambda: {
                         "data": [["user1", "2026-04-11"], ["user2", "2026-04-10"]]
                     },
+                    status_code=200,
                     raise_for_status=lambda: None,
                 )
             elif "ReleaseEvent" in content or "WatchEvent" in content:
                 return MagicMock(
                     json=lambda: {"data": []},
+                    status_code=200,
                     raise_for_status=lambda: None,
                 )
             else:
                 return MagicMock(
                     json=lambda: {"data": []},
+                    status_code=200,
                     raise_for_status=lambda: None,
                 )
 

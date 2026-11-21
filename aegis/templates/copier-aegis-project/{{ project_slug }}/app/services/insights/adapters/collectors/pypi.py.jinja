@@ -20,12 +20,15 @@ from app.services.insights.schemas import (
     PyPITypeBreakdown,
     PyPIVersionDetail,
 )
-from .base import BaseCollector, CollectionResult, parse_date, today as today_midnight
+from .base import (
+    BaseCollector,
+    CollectionResult,
+    clickhouse_query,
+    parse_date,
+    today as today_midnight,
+)
 
 logger = logging.getLogger(__name__)
-
-CLICKHOUSE_URL = "https://sql-clickhouse.clickhouse.com"
-CLICKHOUSE_PARAMS = {"user": "play", "default_format": "JSONCompact"}
 
 # Pre-aggregated table with all dimensions
 FULL_TABLE = "pypi.pypi_downloads_per_day_by_version_by_installer_by_type_by_country"
@@ -92,7 +95,7 @@ class PyPICollector(BaseCollector):
 
             async with httpx.AsyncClient(timeout=30.0) as client:
                 # All-time cumulative total
-                total_data = await self._query(
+                total_data = await clickhouse_query(
                     client,
                     f"""
                     SELECT sum(count) FROM {DAILY_TABLE}
@@ -112,7 +115,7 @@ class PyPICollector(BaseCollector):
                 rows_skipped += 0 if created else 1
 
                 # Per-day data with installer for human/bot split
-                daily_installer_data = await self._query(
+                daily_installer_data = await clickhouse_query(
                     client,
                     f"""
                     SELECT date, installer, sum(count) as downloads
@@ -180,7 +183,7 @@ class PyPICollector(BaseCollector):
                     rows_skipped += 0 if created else 1
 
                 # Per-day country breakdown
-                country_data = await self._query(
+                country_data = await clickhouse_query(
                     client,
                     f"""
                     SELECT date, country_code, sum(count) as downloads
@@ -217,7 +220,7 @@ class PyPICollector(BaseCollector):
                 # installer dimension every version row in the UI shows
                 # Human=0 / Bot=Total even though the daily totals do
                 # have the split.
-                version_data = await self._query(
+                version_data = await clickhouse_query(
                     client,
                     f"""
                     SELECT date, version, installer, sum(count) as downloads
@@ -265,7 +268,7 @@ class PyPICollector(BaseCollector):
                     rows_skipped += 0 if created else 1
 
                 # Per-day distribution type breakdown
-                type_data = await self._query(
+                type_data = await clickhouse_query(
                     client,
                     f"""
                     SELECT date, type, sum(count) as downloads
@@ -301,14 +304,3 @@ class PyPICollector(BaseCollector):
 
         except Exception as e:
             return self._error(f"PyPI collection failed: {e}", rows_written, rows_skipped)
-
-    async def _query(self, client: httpx.AsyncClient, sql: str) -> list[list]:
-        """Execute a ClickHouse SQL query and return rows."""
-        resp = await client.post(
-            CLICKHOUSE_URL,
-            params=CLICKHOUSE_PARAMS,
-            content=sql.strip(),
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        return data.get("data", [])

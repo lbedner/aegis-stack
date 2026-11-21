@@ -14,6 +14,7 @@ etc.) and calls one collector instance per (source, project).
 {% endif %}
 """
 
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -99,6 +100,9 @@ class CollectionResult(BaseModel):
 
 CLICKHOUSE_URL = "https://sql-clickhouse.clickhouse.com"
 CLICKHOUSE_PARAMS = {"user": "play", "default_format": "JSONCompact"}
+# A query is tried this often, the waits between growing by this much.
+CLICKHOUSE_ATTEMPTS = 3
+CLICKHOUSE_RETRY_SECONDS = 5.0
 
 
 def parse_date(date_str: str) -> datetime:
@@ -113,12 +117,21 @@ def parse_github_date(timestamp: str) -> datetime:
 
 
 async def clickhouse_query(client: httpx.AsyncClient, sql: str) -> list[list]:
-    """Execute a ClickHouse SQL query and return rows."""
-    resp = await client.post(
-        CLICKHOUSE_URL,
-        params=CLICKHOUSE_PARAMS,
-        content=sql.strip(),
-    )
+    """Execute a ClickHouse SQL query and return rows.
+
+    The public endpoint fails now and then with a 5xx the next request does
+    not, so a 5xx is retried, briefly; a 4xx is the query's fault and fails
+    at once.
+    """
+    for attempt in range(1, CLICKHOUSE_ATTEMPTS + 1):
+        resp = await client.post(
+            CLICKHOUSE_URL,
+            params=CLICKHOUSE_PARAMS,
+            content=sql.strip(),
+        )
+        if resp.status_code < 500 or attempt == CLICKHOUSE_ATTEMPTS:
+            break
+        await asyncio.sleep(CLICKHOUSE_RETRY_SECONDS * attempt)
     resp.raise_for_status()
     return resp.json().get("data", [])
 

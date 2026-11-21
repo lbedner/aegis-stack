@@ -25,6 +25,7 @@ from pathlib import Path
 
 import pytest
 
+from aegis.core.copier_manager import load_copier_answers
 from aegis.core.manual_updater import ManualUpdater, sweep_empty_stubs
 from aegis.core.services import SERVICES
 
@@ -82,6 +83,20 @@ class TestSweepEmptyStubs:
 
         assert keep.exists()
         assert "app/main.py" not in deleted
+
+    def test_only_sweeps_the_paths_it_is_given(self, fake_project: Path) -> None:
+        """An add sweeps what its templates could have left empty, never an
+        empty module of the project's own (an older stack's ``app/main.py``)."""
+        stub = fake_project / "app" / "services" / "auth" / "deps.py"
+        own = fake_project / "app" / "main.py"
+        stub.parent.mkdir(parents=True)
+        stub.write_text("")
+        own.write_text("")
+
+        deleted = sweep_empty_stubs(fake_project, only={"app/services/auth/deps.py"})
+
+        assert deleted == ["app/services/auth/deps.py"]
+        assert own.exists()
 
     def test_preserves_empty_init_py(self, fake_project: Path) -> None:
         """Empty ``__init__.py`` is meaningful (package marker) — keep it."""
@@ -316,6 +331,22 @@ class TestManualUpdaterInitPersistsReconciliation:
 
         after = (fake_project / ".copier-answers.yml").read_text()
         assert "include_insights: true" in after.lower()
+
+    def test_a_pre_split_meetings_project_keeps_its_runner(
+        self, fake_project: Path
+    ) -> None:
+        """Generated before the runner was a component: meetings on disk, no
+        answer for the runner. An add reads it as ``aegis update`` does, so
+        the runner is on rather than saved as copier's default ``false``."""
+        _seed_answers(fake_project, COPIER_ANSWERS_MINIMAL + "include_meetings: true\n")
+        meetings = fake_project / "app" / "services" / "meetings"
+        meetings.mkdir(parents=True)
+        (meetings / "service.py").write_text("x = 1\n")
+
+        updater = ManualUpdater(fake_project)
+
+        assert updater.answers.get("include_runner") is True
+        assert load_copier_answers(fake_project).get("include_runner") is True
 
     def test_init_no_op_when_disk_and_answers_agree(self, fake_project: Path) -> None:
         """If reconcile finds nothing new, don't rewrite the file (avoids

@@ -422,6 +422,7 @@ services:
   postgres:
     image: postgres:16-alpine
     hostname: postgres
+    shm_size: 256mb
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres

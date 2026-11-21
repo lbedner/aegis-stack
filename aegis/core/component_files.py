@@ -20,6 +20,21 @@ from ..constants import AnswerKeys, StorageBackends
 # Constants
 PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
 JINJA_EXTENSION = ".jinja"
+# The project tree's path inside the aegis-stack repository, as git names it.
+TEMPLATE_PROJECT_TREE = (
+    f"aegis/templates/copier-aegis-project/{PROJECT_SLUG_PLACEHOLDER}/"
+)
+
+
+def project_path_for(repo_path: str) -> str | None:
+    """The project path a repository template file renders to
+    (``.../{{ project_slug }}/app/x.py.jinja`` -> ``app/x.py``), or None for a
+    path outside the project tree."""
+    if not repo_path.startswith(TEMPLATE_PROJECT_TREE):
+        return None
+    relative = repo_path.removeprefix(TEMPLATE_PROJECT_TREE)
+    return relative.removesuffix(JINJA_EXTENSION) or None
+
 
 # Tooling/cache directories and compiled artefacts that may appear in the
 # template tree locally (e.g. ``__pycache__`` from importing a template's raw

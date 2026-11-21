@@ -316,7 +316,7 @@ def test_a_rollback_it_cannot_check_stops_before_touching_anything(
     """A dropped connection is neither "no such backup" nor "no dump": the
     second would restore the files and silently leave the database."""
     calls = _answering(monkeypatch, marker, code=255, err="ssh: timed out")
-    assert not _rollback_to_backup("h", "u", "/srv/app", TS)
+    assert not _rollback_to_backup("h", "u", "/srv/app", TS, keep=[])
     assert "ssh: timed out" in capsys.readouterr().err
     assert not any(" down " in c or "rsync" in c for c in calls)
 
@@ -339,7 +339,7 @@ def test_a_backup_without_a_dump_still_rolls_back(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls = _answering(monkeypatch, "test -f")
-    assert _rollback_to_backup("h", "u", "/srv/app", TS)
+    assert _rollback_to_backup("h", "u", "/srv/app", TS, keep=[])
     assert not any("psql" in c for c in calls)
 
 
@@ -377,7 +377,7 @@ class TestStaysOnTheServer:
 class TestRollback:
     def _rollback(self, monkeypatch: pytest.MonkeyPatch) -> list[str]:
         calls = _answering(monkeypatch)
-        assert _rollback_to_backup("h", "u", "/srv/app", TS)
+        assert _rollback_to_backup("h", "u", "/srv/app", TS, keep=[])
         return calls
 
     def test_restores_the_snapshot_and_the_object_store(
@@ -408,6 +408,42 @@ class TestRollback:
         calls = self._rollback(monkeypatch)
 
         assert f"[ ! -d /srv/app/backups/{TS}/files ] ||" in _rsync(calls)
+
+    def test_server_only_paths_survive_the_restore(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """The restore's ``--delete`` spares ``secrets/`` and ``server.keep``
+        (#2124), and says what it did delete."""
+        files = tmp_path / "backups" / TS / "files"
+        (files / "app").mkdir(parents=True)
+        (files / "app" / "main.py").write_text("OLD\n")
+        for path in ("secrets/key.json", "uploads/a.png", "app/stale.py"):
+            (tmp_path / path).parent.mkdir(exist_ok=True)
+            (tmp_path / path).write_text("LIVE\n")
+
+        def remote(host: str, user: str, command: str) -> subprocess.CompletedProcess:
+            if "rsync" not in command:
+                return subprocess.CompletedProcess([], 0, "", "")
+            return subprocess.run(
+                ["bash", "-c", command], capture_output=True, text=True
+            )
+
+        monkeypatch.setattr(deploy_mod, "_run_remote_capture", remote)
+        monkeypatch.setattr(deploy_mod, "_run_remote", remote)
+
+        assert _rollback_to_backup("h", "u", str(tmp_path), TS, keep=["uploads/"])
+
+        assert (tmp_path / "secrets" / "key.json").read_text() == "LIVE\n"
+        assert (tmp_path / "uploads" / "a.png").read_text() == "LIVE\n"
+        assert (tmp_path / "app" / "main.py").read_text() == "OLD\n"
+        assert not (tmp_path / "app" / "stale.py").exists()
+        out = capsys.readouterr().out
+        summary = out.split(t("deploy.sync_deleted", count=1))[-1]
+        assert summary != out
+        assert "app/stale.py" in summary
 
 
 @pytest.mark.parametrize(

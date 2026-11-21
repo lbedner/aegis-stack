@@ -77,3 +77,8 @@ docs/_build/
 # time. Left unignored on aegis-pulse this reached 2.5 GB of a 3.65 GB
 # image and helped fill a 77 GB droplet.
 backups/
+
+# Server-only credentials the operator drops beside the app and bind-mounts
+# in. `aegis deploy` never syncs or deletes them, and they stay out of image
+# layers.
+secrets/

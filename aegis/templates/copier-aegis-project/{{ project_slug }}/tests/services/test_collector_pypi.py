@@ -86,6 +86,7 @@ class TestPyPICollectorSuccess:
                             ["2026-04-10", "1.0.0", 350, 300],
                         ]
                     },
+                    status_code=200,
                     raise_for_status=lambda: None,
                 )
             elif "date, type" in content:
@@ -98,6 +99,7 @@ class TestPyPICollectorSuccess:
                             ["2026-04-10", "bdist_wheel", 320],
                         ]
                     },
+                    status_code=200,
                     raise_for_status=lambda: None,
                 )
             elif "date, installer" in content:
@@ -110,6 +112,7 @@ class TestPyPICollectorSuccess:
                             ["2026-04-10", "pip", 450],
                         ]
                     },
+                    status_code=200,
                     raise_for_status=lambda: None,
                 )
             elif "date, country_code" in content:
@@ -122,11 +125,13 @@ class TestPyPICollectorSuccess:
                             ["2026-04-10", "US", 250],
                         ]
                     },
+                    status_code=200,
                     raise_for_status=lambda: None,
                 )
             else:  # Total sum(count)
                 return MagicMock(
                     json=lambda: {"data": [[1000000]]},
+                    status_code=200,
                     raise_for_status=lambda: None,
                 )
 
@@ -224,6 +229,7 @@ class TestPyPICollectorSuccess:
                             ["2026-04-11", "1.0.0", 400, 350],
                         ]
                     },
+                    status_code=200,
                     raise_for_status=lambda: None,
                 )
             elif "date, installer" in content:
@@ -234,11 +240,13 @@ class TestPyPICollectorSuccess:
                             ["2026-04-11", "uv", 200],
                         ]
                     },
+                    status_code=200,
                     raise_for_status=lambda: None,
                 )
             else:
                 return MagicMock(
                     json=lambda: {"data": []},
+                    status_code=200,
                     raise_for_status=lambda: None,
                 )
 

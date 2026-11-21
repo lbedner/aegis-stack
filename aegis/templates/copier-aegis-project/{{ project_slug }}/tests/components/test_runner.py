@@ -18,7 +18,7 @@ import pytest
 
 from app.components.runner import client, hooks, protocol
 from app.components.runner.client import Runner, run_once
-from app.components.runner.protocol import RUNS, Answer, ClaimedRun
+from app.components.runner.protocol import CLAIM, Answer, ClaimedRun
 
 PROMPT = "Then Dana asked:\n\nCan the CSV export ship this week?"
 
@@ -85,7 +85,7 @@ async def _posted(
     def handle(request: httpx.Request) -> httpx.Response:
         assert request.headers["Authorization"] == "Bearer rnr_test"
         body = json.loads(request.content)
-        if request.url.path == f"{RUNS}/claim":
+        if request.url.path == CLAIM:
             if asked is not None:
                 asked.append(body)
             return (

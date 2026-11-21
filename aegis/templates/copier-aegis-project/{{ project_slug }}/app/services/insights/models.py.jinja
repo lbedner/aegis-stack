@@ -14,17 +14,6 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Any
 
-{% if insights_per_user %}
-# InsightEvent declares a FK to the `user` table (see `created_by_user_id`
-# below). Importing User here ensures its SQLModel metadata is registered
-# before any code in a non-webserver process — e.g. the scheduler — tries
-# to flush an InsightEvent. Without this, SQLAlchemy raises
-# NoReferencedTableError("user") because the scheduler's import chain
-# never touches the auth module that otherwise pulls User in.
-# noqa is because the symbol is only referenced by a FK string at commit
-# time, not by Python code here.
-from app.models.user import User  # noqa: F401
-{% endif %}
 from app.core.time import utcnow
 from sqlalchemy import JSON, CheckConstraint, Column, Index, String, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel

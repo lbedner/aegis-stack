@@ -19,7 +19,10 @@ from pathlib import Path
 
 import pytest
 
-from aegis.commands.update import _detect_existing_features
+from aegis.core.feature_detection import (
+    detect_existing_features as _detect_existing_features,
+)
+from aegis.core.feature_detection import enable_required_components
 
 
 def _touch(root: Path, rel: str) -> None:
@@ -225,3 +228,39 @@ class TestFinanceProviderDetection:
 
     def test_no_config_module_detects_nothing(self, tmp_path: Path) -> None:
         assert "finance_plaid" not in _detect_existing_features(tmp_path)
+
+
+class TestRequiredComponentsOnUpdate:
+    """An update closes over what an installed part requires, as init does."""
+
+    def test_a_required_component_that_is_off_is_switched_on(self) -> None:
+        answers = {"include_htmx": True, "include_deploy": False}
+
+        enabled = enable_required_components(answers)
+
+        assert answers["include_deploy"] is True
+        assert enabled == [("htmx", "deploy")]
+
+    def test_only_what_an_installed_part_requires(self) -> None:
+        answers = {"include_runner": True, "include_meetings": False}
+
+        enable_required_components(answers)
+
+        assert answers["include_database"] is True
+        assert answers["include_meetings"] is False  # nothing requires it
+
+    def test_nothing_missing_changes_nothing(self) -> None:
+        answers = {"include_htmx": True, "include_deploy": True}
+
+        assert enable_required_components(answers) == []
+        assert answers == {"include_htmx": True, "include_deploy": True}
+
+    def test_an_option_the_project_chose_brings_what_it_requires(self) -> None:
+        """``ai[sqlite]`` needs a database, though ``ai`` alone does not:
+        the requirement comes from the option, as init resolves it."""
+        answers = {"include_ai": True, "ai_backend": "sqlite"}
+
+        enabled = enable_required_components(answers)
+
+        assert answers["include_database"] is True
+        assert ("ai", "database") in enabled

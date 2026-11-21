@@ -235,6 +235,65 @@ class TestUpdateCommandDryRun:
         # (we can verify by checking that .copier-answers.yml hasn't changed)
         # This is a basic smoke test - real validation would compare commits
 
+    @patch("aegis.commands.update._preview_file_changes")
+    @patch("aegis.core.feature_detection.detect_existing_features")
+    @patch("aegis.commands.update.get_changelog", return_value="")
+    @patch("aegis.commands.update.get_current_template_commit")
+    def test_dry_run_previews_the_detected_answers(
+        self,
+        mock_get_commit: MagicMock,
+        _mock_changelog: MagicMock,
+        mock_detect: MagicMock,
+        mock_preview: MagicMock,
+        project_factory: "ProjectFactory",
+    ) -> None:
+        """The preview renders from the answers the real update will: what
+        detection fills in for a question the project never answered."""
+        mock_get_commit.return_value = "different-commit"  # Prevent early exit
+        mock_detect.return_value = {"a_newer_question": True, "include_auth": True}
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--dry-run"
+        )
+
+        assert result.success, result.stderr
+        answers = mock_preview.call_args.args[1]
+        assert answers["a_newer_question"] is True
+        # An answer the project gave is never overridden by detection.
+        assert answers["include_auth"] is False
+
+    @patch("aegis.commands.update._preview_file_changes")
+    @patch("aegis.commands.update.get_changelog", return_value="")
+    @patch("aegis.commands.update.validate_clean_git_tree", return_value=(True, ""))
+    @patch("aegis.commands.update.get_current_template_commit")
+    def test_update_switches_on_what_htmx_requires(
+        self,
+        mock_get_commit: MagicMock,
+        _mock_clean: MagicMock,
+        _mock_changelog: MagicMock,
+        mock_preview: MagicMock,
+        project_factory: "ProjectFactory",
+    ) -> None:
+        """A project with htmx and ``include_deploy: false`` (backfilled before
+        htmx required deploy) updates with deploy on, and says so."""
+        mock_get_commit.return_value = "different-commit"
+        project_path = project_factory("base_htmx")
+        answers_file = project_path / ".copier-answers.yml"
+        answers_file.write_text(
+            answers_file.read_text().replace(
+                "include_deploy: true", "include_deploy: false"
+            )
+        )
+
+        result = run_aegis_command(
+            "update", "--project-path", str(project_path), "--dry-run"
+        )
+
+        assert result.success, result.stderr
+        assert mock_preview.call_args.args[1]["include_deploy"] is True
+        assert "htmx requires deploy" in strip_ansi_codes(result.stdout + result.stderr)
+
 
 class TestUpdateCommandVersionResolution:
     """Tests for version resolution logic."""

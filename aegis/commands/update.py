@@ -17,9 +17,10 @@ import typer
 from .. import __version__ as aegis_version
 from ..cli import brand
 from ..config.defaults import GITHUB_TEMPLATE_URL
-from ..constants import AnswerKeys, Messages, OllamaMode
+from ..constants import AnswerKeys, Messages
 from ..core import project_deps
 from ..core.behavior_changes import behavior_changes_for
+from ..core.component_files import TEMPLATE_PROJECT_TREE, project_path_for
 from ..core.copier_manager import is_copier_project, load_copier_answers
 from ..core.copier_updater import (
     analyze_conflict_files,
@@ -34,10 +35,10 @@ from ..core.copier_updater import (
     resolve_ref_to_commit_remote,
     resolve_version_to_ref,
     rollback_to_backup,
-    src_path_to_git_url,
+    template_repo_url,
     validate_clean_git_tree,
 )
-from ..core.manual_updater import detect_insights_sources
+from ..core.feature_detection import with_detected_features
 from ..core.migration_generator import (
     generate_missing_migrations,
     get_services_needing_migrations,
@@ -45,121 +46,12 @@ from ..core.migration_generator import (
 from ..core.post_gen_tasks import cleanup_components, run_post_generation_tasks
 from ..core.template_cleanup import (
     cleanup_nested_project_directory,
-    env_value,
     removed_env_keys,
     stale_env_defaults,
     sync_template_changes,
 )
 from ..core.version_compatibility import get_cli_version, get_project_template_version
 from ..i18n import lazy_t, t
-
-
-def _detect_existing_features(target_path: Path) -> dict[str, Any]:
-    """Reconstruct ``include_*`` and sub-feature flags from project structure.
-
-    Older template versions didn't have today's full set of questions in
-    ``copier.yml`` (e.g. ``include_insights`` was added after 0.6.10), so
-    those flags are missing from older ``.copier-answers.yml`` files.
-    During ``aegis update -y``, copier silently uses the template's
-    ``default: false`` for any missing flag — which means a project that
-    *clearly* has ``app/services/insights/`` on disk gets re-rendered as
-    if it never had insights, deleting service files and breaking the
-    project.
-
-    To prevent that, we walk the project structure and re-derive a flag
-    set from what's actually installed. The caller persists those inferred
-    values into ``.copier-answers.yml`` BEFORE invoking copier update, so
-    copier reads them as part of the project's stored answers instead of
-    falling back to template defaults for newly-added questions. Writing
-    them to the answers file (rather than passing via
-    ``run_update(data=...)``) means every downstream step in the same
-    update run — copier render, ``cleanup_components``,
-    ``sync_template_changes``, ``run_post_generation_tasks`` — sees one
-    consistent picture. Earlier iterations of this fix passed the flags
-    only via ``data=`` and ``cleanup_components`` then re-read the stale
-    answers and deleted service files anyway.
-    """
-    from ..core.components import COMPONENTS
-    from ..core.services import SERVICES
-
-    # Marker presence → include_<name>, derived from each spec's
-    # ``marker_path`` (single source of truth — a new component/service with
-    # a marker is detectable on update automatically). Only ever sets True:
-    # an absent marker leaves the flag out so the caller's merge doesn't
-    # clobber an existing answer.
-    detected: dict[str, Any] = {}
-    for spec in [*SERVICES.values(), *COMPONENTS.values()]:
-        if spec.marker_path and (target_path / spec.marker_path).exists():
-            detected[AnswerKeys.include_key(spec.name)] = True
-
-    # The runner was meetings' own before it was a component: a project
-    # with meetings has it, though it has no answer for it and no marker
-    # yet, and would otherwise render meetings without what it now imports.
-    if detected.get(AnswerKeys.MEETINGS):
-        detected[AnswerKeys.RUNNER] = True
-
-    # Insights sub-flags come from the collector registration, so we
-    # neither resurrect collectors the user never opted into nor tear
-    # down ones they use.
-    detected.update(detect_insights_sources(target_path) or {})
-
-    # Not every question is a flag. ``ollama_mode`` is a three-valued string
-    # whose answer the project states outright, in the URL it talks to.
-    ollama_mode = _detect_ollama_mode(target_path)
-    if ollama_mode is not None:
-        detected[AnswerKeys.OLLAMA_MODE] = ollama_mode
-        # Ollama is the inference component now: a project that talks to one
-        # has it, at the placement its URL says.
-        detected[AnswerKeys.INFERENCE] = True
-        detected[AnswerKeys.INFERENCE_PLACEMENT] = ollama_mode
-
-    detected.update(_detect_finance_providers(target_path))
-
-    return detected
-
-
-def _detect_finance_providers(target_path: Path) -> dict[str, bool]:
-    """The finance provider flags, read back off the project's own settings.
-
-    ``config.py`` carries these two answers verbatim — copier renders
-    ``FINANCE_PLAID: bool = True`` or ``False`` — so the project states them
-    outright and there is nothing to infer. A field that is absent (the
-    project has no finance service, or predates the field) is left out
-    rather than guessed.
-    """
-    config = target_path / "app" / "core" / "config.py"
-    if not config.is_file():
-        return {}
-    source = config.read_text()
-    detected: dict[str, bool] = {}
-    for field, answer_key in (
-        ("FINANCE_PLAID", AnswerKeys.FINANCE_PLAID),
-        ("FINANCE_SNAPTRADE", AnswerKeys.FINANCE_SNAPTRADE),
-    ):
-        match = re.search(rf"^\s+{field}: bool = (True|False)$", source, re.M)
-        if match:
-            detected[answer_key] = match.group(1) == "True"
-    return detected
-
-
-def _detect_ollama_mode(target_path: Path) -> str | None:
-    """Which Ollama the project talks to, from the URL it actually uses.
-
-    The template's own dichotomy: ``docker`` is the compose service, and any
-    other reachable URL is an Ollama the project talks to over the network,
-    which is ``host``. An unset variable means no Ollama, which is already
-    the default — return None so nothing is written and no stored answer is
-    clobbered.
-
-    ``.env`` is what the app reads; ``.env.example`` is the template artifact
-    it was seeded from, and only stands in when the real file is gone.
-    """
-    for name in (".env", ".env.example"):
-        url = env_value(target_path / name, "OLLAMA_BASE_URL")
-        if url is None:
-            continue
-        return OllamaMode.DOCKER if "//ollama:" in url else OllamaMode.HOST
-    return None
 
 
 def _get_template_changed_files(
@@ -178,35 +70,15 @@ def _get_template_changed_files(
     changed files.
     """
     result = subprocess.run(
-        [
-            "git",
-            "diff",
-            "--name-only",
-            from_ref,
-            to_ref,
-            "--",
-            "aegis/templates/copier-aegis-project/{{ project_slug }}/",
-        ],
+        ["git", "diff", "--name-only", from_ref, to_ref, "--", TEMPLATE_PROJECT_TREE],
         cwd=template_root,
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
         return None
-
-    prefix = "aegis/templates/copier-aegis-project/{{ project_slug }}/"
-    changed: set[str] = set()
-    for line in result.stdout.splitlines():
-        line = line.strip()
-        if not line or not line.startswith(prefix):
-            continue
-        relative = line[len(prefix) :]
-        # Strip .jinja suffix — rendered files don't have it
-        if relative.endswith(".jinja"):
-            relative = relative[:-6]
-        if relative:
-            changed.add(relative)
-    return changed
+    changed = {project_path_for(line.strip()) for line in result.stdout.splitlines()}
+    return {path for path in changed if path}
 
 
 def _describe_as_version(target_ref: str, template_root: Path) -> str | None:
@@ -431,8 +303,7 @@ def _resolve_target_commit(
     commit = resolve_ref_to_commit(target_ref, template_root)
     if commit:
         return commit
-    repo_url = src_path_to_git_url(answers.get("_src_path") or GITHUB_TEMPLATE_URL)
-    return resolve_ref_to_commit_remote(target_ref, repo_url)
+    return resolve_ref_to_commit_remote(target_ref, template_repo_url(answers))
 
 
 def _advance_copier_tracking(
@@ -804,7 +675,7 @@ def update_command(
         typer.echo("")
         _preview_file_changes(
             target_path,
-            load_copier_answers(target_path) or {},
+            with_detected_features(target_path, load_copier_answers(target_path) or {}),
             target_ref,
             current_commit,
         )
@@ -915,82 +786,76 @@ def update_command(
         # ``.copier-answers.yml`` first, every downstream step (copier
         # render, cleanup_components, sync_template_changes,
         # post_generation_tasks) sees the correct state.
-        # See ``_detect_existing_features`` for full reasoning + scope.
-        detected_flags = _detect_existing_features(target_path)
-        if detected_flags:
-            answers_path = target_path / AnswerKeys.ANSWERS_FILENAME
-            if answers_path.exists():
-                with open(answers_path) as f:
-                    current_answers = yaml.safe_load(f) or {}
-                # setdefault: only fill in MISSING flags. Don't overwrite an
-                # explicit ``False`` from a user who deliberately removed
-                # a service.
-                changed = False
-                for flag, value in detected_flags.items():
-                    if flag not in current_answers:
-                        current_answers[flag] = value
-                        changed = True
-                if changed:
-                    with open(answers_path, "w") as f:
-                        yaml.safe_dump(
-                            current_answers,
-                            f,
-                            default_flow_style=False,
-                            sort_keys=False,
+        # See ``detect_existing_features`` for full reasoning + scope.
+        answers_path = target_path / AnswerKeys.ANSWERS_FILENAME
+        if answers_path.exists():
+            with open(answers_path) as f:
+                stored_answers = yaml.safe_load(f) or {}
+            # Only MISSING flags are filled; an explicit ``False`` from a
+            # user who deliberately removed a service stands, unless a part
+            # still installed requires it.
+            current_answers = with_detected_features(target_path, stored_answers)
+            if current_answers != stored_answers:
+                with open(answers_path, "w") as f:
+                    yaml.safe_dump(
+                        current_answers,
+                        f,
+                        default_flow_style=False,
+                        sort_keys=False,
+                    )
+                # Copier requires a clean git tree, so commit the
+                # backfill. If the commit fails (e.g. blocked by a
+                # pre-commit hook) the working tree is left dirty —
+                # which would cause copier to fail with a confusing
+                # error several steps later. Verify the tree is clean
+                # post-commit and abort with a clear message if not.
+                try:
+                    subprocess.run(
+                        ["git", "add", AnswerKeys.ANSWERS_FILENAME],
+                        cwd=target_path,
+                        check=True,
+                        capture_output=True,
+                    )
+                    subprocess.run(
+                        [
+                            "git",
+                            "commit",
+                            "-m",
+                            "Backfill missing copier flags from project structure",
+                        ],
+                        cwd=target_path,
+                        check=True,
+                        capture_output=True,
+                    )
+                except subprocess.CalledProcessError as exc:
+                    # ``git commit`` exits non-zero when there's
+                    # nothing to commit too — that's harmless. Only
+                    # abort if the answers file is actually dirty.
+                    status = subprocess.run(
+                        [
+                            "git",
+                            "status",
+                            "--porcelain",
+                            AnswerKeys.ANSWERS_FILENAME,
+                        ],
+                        cwd=target_path,
+                        capture_output=True,
+                        text=True,
+                    )
+                    if status.stdout.strip():
+                        stderr = (
+                            (exc.stderr or b"")
+                            .decode("utf-8", errors="replace")
+                            .strip()
                         )
-                    # Copier requires a clean git tree, so commit the
-                    # backfill. If the commit fails (e.g. blocked by a
-                    # pre-commit hook) the working tree is left dirty —
-                    # which would cause copier to fail with a confusing
-                    # error several steps later. Verify the tree is clean
-                    # post-commit and abort with a clear message if not.
-                    try:
-                        subprocess.run(
-                            ["git", "add", AnswerKeys.ANSWERS_FILENAME],
-                            cwd=target_path,
-                            check=True,
-                            capture_output=True,
+                        brand.error(
+                            "Failed to commit backfilled .copier-answers.yml; "
+                            "aborting because copier requires a clean git tree.",
+                            err=True,
                         )
-                        subprocess.run(
-                            [
-                                "git",
-                                "commit",
-                                "-m",
-                                "Backfill missing copier flags from project structure",
-                            ],
-                            cwd=target_path,
-                            check=True,
-                            capture_output=True,
-                        )
-                    except subprocess.CalledProcessError as exc:
-                        # ``git commit`` exits non-zero when there's
-                        # nothing to commit too — that's harmless. Only
-                        # abort if the answers file is actually dirty.
-                        status = subprocess.run(
-                            [
-                                "git",
-                                "status",
-                                "--porcelain",
-                                AnswerKeys.ANSWERS_FILENAME,
-                            ],
-                            cwd=target_path,
-                            capture_output=True,
-                            text=True,
-                        )
-                        if status.stdout.strip():
-                            stderr = (
-                                (exc.stderr or b"")
-                                .decode("utf-8", errors="replace")
-                                .strip()
-                            )
-                            brand.error(
-                                "Failed to commit backfilled .copier-answers.yml; "
-                                "aborting because copier requires a clean git tree.",
-                                err=True,
-                            )
-                            if stderr:
-                                typer.echo(stderr, err=True)
-                            raise typer.Exit(1) from exc
+                        if stderr:
+                            typer.echo(stderr, err=True)
+                        raise typer.Exit(1) from exc
 
         # Run Copier update with git-aware merge
         # NOTE: We do NOT pass src_path - Copier reads it from .copier-answers.yml

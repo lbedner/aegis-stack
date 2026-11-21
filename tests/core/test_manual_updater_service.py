@@ -15,12 +15,14 @@ the full path lives in ``tests/cli/test_add_plugin_resolver_integration.py``.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from aegis.constants import AnswerKeys, StorageBackends
+from aegis.core.component_files import get_template_path
 from aegis.core.manual_updater import ManualUpdater, UpdateResult
 
 COPIER_ANSWERS = """\
@@ -339,9 +341,10 @@ class TestAddServiceVariantUpgrade:
         self, fake_project: Path
     ) -> None:
         """Only a switch moves the local provider; adding the component
-        anew never rewrites what the AI service chose."""
+        anew never rewrites what the AI service chose. (A local provider
+        would already have brought the component: ai requires it.)"""
         (fake_project / ".copier-answers.yml").write_text(
-            COPIER_ANSWERS + "include_ai: true\nai_providers: llamacpp\n"
+            COPIER_ANSWERS + "include_ai: true\nai_providers: openai\n"
         )
         with (
             patch.object(
@@ -356,7 +359,7 @@ class TestAddServiceVariantUpgrade:
             )
         assert result.success, result.error_message
         answers = _make_updater(fake_project).answers
-        assert answers[AnswerKeys.AI_PROVIDERS] == "llamacpp"
+        assert answers[AnswerKeys.AI_PROVIDERS] == "openai"
 
     def test_same_variant_is_still_already_enabled(self, tmp_path: Path) -> None:
         project = self._project_with_basic_auth(tmp_path)
@@ -728,3 +731,93 @@ class TestARemovalRetiresItsSettings:
             for line in lines
             if line.startswith("# ") and "=" not in line
         )
+
+
+class TestRequiredComponentsOnAdd:
+    """``add`` reads the project as ``update`` does: what an installed part
+    requires is switched on, and the user told."""
+
+    def test_an_htmx_project_without_deploy_gets_deploy(
+        self, fake_project: Path
+    ) -> None:
+        (fake_project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS + "include_htmx: true\ninclude_deploy: false\n"
+        )
+
+        with patch("aegis.core.feature_detection.brand.warn") as warn:
+            updater = _make_updater(fake_project)
+
+        assert updater.answers[AnswerKeys.include_key("deploy")] is True
+        saved = (fake_project / ".copier-answers.yml").read_text()
+        assert "include_deploy: true" in saved
+        warned = " ".join(str(call.args[0]) for call in warn.call_args_list)
+        assert "htmx" in warned and "deploy" in warned
+
+
+class TestPathsAtProjectCommit:
+    """What the project's own template version had, read from git."""
+
+    def test_reads_the_template_at_the_project_commit(self, fake_project: Path) -> None:
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=get_template_path(),
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        (fake_project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS.replace("_commit: None", f"_commit: {head}")
+        )
+
+        paths = _make_updater(fake_project)._paths_at_project_commit
+
+        assert paths is not None
+        # Copier's names: no ``.jinja``, no ``{{ project_slug }}`` prefix.
+        assert {"Makefile", "app/__init__.py"} <= paths
+
+    def test_unknown_without_a_commit(self, fake_project: Path) -> None:
+        assert _make_updater(fake_project)._paths_at_project_commit is None
+
+    def test_an_installed_cli_reads_the_template_from_its_remote(
+        self, fake_project: Path, tmp_path: Path
+    ) -> None:
+        """A wheel's template is no git checkout: the tree at the project's
+        commit comes from the remote ``aegis update`` resolves against."""
+        (fake_project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS.replace("_commit: None", "_commit: abc123").replace(
+                "_src_path: aegis/templates/copier-aegis-project",
+                "_src_path: gh:owner/repo",
+            )
+        )
+        updater = _make_updater(fake_project)
+        updater.template_path = tmp_path / "site-packages"
+        updater.template_path.mkdir()
+        slug = "aegis/templates/copier-aegis-project/{{ project_slug }}"
+        tree = (f"{slug}/Makefile", f"{slug}/app/x.py.jinja", "aegis/__init__.py")
+
+        with patch(
+            "aegis.core.manual_updater.template_tree_at_remote", return_value=tree
+        ) as remote:
+            paths = updater._paths_at_project_commit
+
+        remote.assert_called_once_with("abc123", "https://github.com/owner/repo")
+        assert paths == {"Makefile", "app/x.py"}
+
+    def test_an_unreadable_remote_falls_back_with_a_warning(
+        self, fake_project: Path, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Offline, or a commit the remote does not have: the old rule (every
+        missing file a deletion), and the user is told why."""
+        (fake_project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS.replace("_commit: None", "_commit: abc123")
+        )
+        updater = _make_updater(fake_project)
+        updater.template_path = tmp_path
+
+        with patch(
+            "aegis.core.manual_updater.template_tree_at_remote",
+            side_effect=subprocess.CalledProcessError(128, "git clone"),
+        ):
+            assert updater._paths_at_project_commit is None
+
+        assert "abc123" in caplog.text

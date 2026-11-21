@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 {% if database_engine == "sqlite" %}
 from sqlalchemy.pool import NullPool
 {% endif %}
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Mapper, sessionmaker
 from sqlmodel import Session, SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -285,6 +285,17 @@ def _name_connection(
     else:
         cparams["application_name"] = name
 {% endif %}
+
+@event.listens_for(Mapper, "before_configured", once=True)
+def _load_every_model() -> None:
+    """Load every table before the first row or query of any process: a
+    process that imported one model (a CLI command, a worker, the
+    scheduler) could not otherwise flush it when a foreign key names a
+    table it never loaded (``user.id``)."""
+    from app.core.model_registry import import_all_models
+
+    import_all_models()
+
 
 # Configure session factory with SQLModel Session (sync)
 SessionLocal = sessionmaker(

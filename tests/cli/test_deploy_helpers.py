@@ -33,6 +33,7 @@ from aegis.commands.deploy import (
     _rolling_scale_command,
 )
 from aegis.config.defaults import version_to_git_tag
+from aegis.i18n import t
 
 
 def _git_init_with_origin(path: Path, remote: str) -> None:
@@ -388,7 +389,9 @@ def test_rollback_skips_db_restore_for_neon(
     monkeypatch.setattr(deploy_mod, "_run_remote_capture", _record_remote(calls))
     monkeypatch.setattr(deploy_mod, "_run_remote", _record_remote(calls))
 
-    ok = _rollback_to_backup("h", "u", "/srv/app", "2026-01-01_000000", neon=True)
+    ok = _rollback_to_backup(
+        "h", "u", "/srv/app", "2026-01-01_000000", neon=True, keep=[]
+    )
 
     assert ok is True
     assert not any("psql" in c for c in calls), "neon rollback must not run psql"
@@ -540,6 +543,49 @@ class TestWorkingTreeRsync:
         source, server = self._tree(tmp_path)
         self._sync(source, server)
         assert (server / ".env").read_text() == "SECRET=production\n"
+
+    def test_a_server_secrets_directory_survives(self, tmp_path: Path) -> None:
+        """An operator-dropped credential, bind-mounted into the app (#2124)."""
+        source, server = self._tree(tmp_path)
+        (server / "secrets").mkdir()
+        (server / "secrets" / "key.json").write_text("CREDENTIAL\n")
+        self._sync(source, server)
+        assert (server / "secrets" / "key.json").read_text() == "CREDENTIAL\n"
+
+    def test_paths_the_project_keeps_survive(self, tmp_path: Path) -> None:
+        source, server = self._tree(tmp_path)
+        (server / "uploads").mkdir()
+        (server / "uploads" / "a.png").write_text("PNG\n")
+        command = deploy_mod._working_tree_rsync(
+            source, f"{server}/", keep=["uploads/"]
+        )
+        assert subprocess.run(command, capture_output=True).returncode == 0
+        assert (server / "uploads" / "a.png").exists()
+        assert not (server / "app" / "llm_vendor.py").exists()
+
+    def test_the_deploy_says_what_it_deleted(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        source, server = self._tree(tmp_path)
+        assert deploy_mod._sync_tree(source, f"{server}/", keep=[]) == 0
+        out = capsys.readouterr().out
+        summary = out.split(t("deploy.sync_deleted", count=1))[-1]
+        assert summary != out
+        assert "app/llm_vendor.py" in summary
+        assert deploy_mod._deleted_paths(
+            "*deleting app/llm_vendor.py\n>f+++++++ app/kept.py\n"
+        ) == ["app/llm_vendor.py"]
+
+
+class TestServerKeep:
+    """``server.keep`` in ``.aegis/deploy.yml`` names server-only paths."""
+
+    def test_read_from_the_server_block(self) -> None:
+        config = {"server": {"host": "h", "keep": ["uploads/", "certs/x.pem"]}}
+        assert deploy_mod._server_keep(config) == ["uploads/", "certs/x.pem"]
+
+    def test_absent_is_empty(self) -> None:
+        assert deploy_mod._server_keep({"server": {"host": "h"}}) == []
 
 
 class TestTrackedTree:
@@ -776,6 +822,7 @@ def test_rolling_deploy_starts_services_the_release_added(
         "run",
         lambda *a, **k: subprocess.CompletedProcess([], returncode=0),
     )
+    monkeypatch.setattr(deploy_mod, "_sync_tree", lambda *a, **k: 0)
     monkeypatch.setattr(deploy_mod, "_upload_env", lambda *a, **k: "build1")
     monkeypatch.setattr(
         deploy_mod, "_rolling_running_services", lambda *a, **k: {"webserver"}
@@ -799,6 +846,7 @@ def test_rolling_deploy_starts_services_the_release_added(
         health_command="",
         drain_timeout=1,
         rollout_timeout=1,
+        keep=[],
     )
 
     assert any(c.endswith("up -d --no-deps socket-proxy") for c in calls)
@@ -887,6 +935,7 @@ def _quiet_rolling(
         "run",
         lambda *a, **k: subprocess.CompletedProcess([], returncode=0),
     )
+    monkeypatch.setattr(deploy_mod, "_sync_tree", lambda *a, **k: 0)
     monkeypatch.setattr(deploy_mod, "_upload_env", lambda *a, **k: "build1")
     monkeypatch.setattr(
         deploy_mod,
@@ -917,6 +966,7 @@ def _roll(tmp_path: Path, **kwargs: Any) -> None:
         health_command="",
         drain_timeout=1,
         rollout_timeout=1,
+        keep=[],
         **kwargs,
     )
 

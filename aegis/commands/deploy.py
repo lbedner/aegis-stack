@@ -14,7 +14,7 @@ import socket
 import subprocess
 import tempfile
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from functools import partial
@@ -766,8 +766,15 @@ def _rollback_to_backup(
     deploy_path: str,
     backup_timestamp: str,
     neon: bool = False,
+    *,
+    keep: Sequence[str],
 ) -> bool:
-    """Rollback to a specific backup. Returns True on success."""
+    """Rollback to a specific backup. Returns True on success.
+
+    The restore spares ``secrets/`` and ``keep`` (``server.keep``): they
+    belong to the server, not the code being rolled back (#2124). ``.env``
+    and ``data/`` are restored on purpose.
+    """
     safe_path = shlex.quote(deploy_path)
     backup_dir = f"{deploy_path}/backups/{backup_timestamp}"
     safe_backup = shlex.quote(backup_dir)
@@ -797,15 +804,19 @@ def _rollback_to_backup(
 
     typer.echo(t("deploy.rollback_restoring", timestamp=backup_timestamp))
     # An off-box copy comes back without files/: restore its data alone.
+    spared = "".join(
+        f" --exclude {shlex.quote(path)}" for path in ("backups", _SECRETS_DIR, *keep)
+    )
     restore_result = run(
-        f"[ ! -d {safe_backup}/files ] || rsync -a --delete --exclude backups"
-        f" {safe_backup}/files/ {safe_path}/"
+        f"[ ! -d {safe_backup}/files ] || rsync -a --delete --itemize-changes"
+        f"{spared} {safe_backup}/files/ {safe_path}/"
     )
     if restore_result.returncode != 0:
         brand.error(
             t("deploy.rollback_restore_failed", error=restore_result.stderr), err=True
         )
         return False
+    _warn_deleted(_deleted_paths(restore_result.stdout or ""))
     if not restore_data(run, compose_prefix, deploy_path, backup_dir):
         return False
 
@@ -1204,6 +1215,8 @@ def _run_rolling_deploy(
     drain_timeout: int,
     rollout_timeout: int,
     backup: Callable[[], str | None] | None = None,
+    *,
+    keep: Sequence[str],
 ) -> None:
     """Zero-HTTP-downtime deploy of code-only changes.
 
@@ -1230,11 +1243,7 @@ def _run_rolling_deploy(
     # Step 1: rsync working tree
     step(plan, "upload")
     typer.echo(t("deploy.syncing"))
-    with _tracked_tree(project_root) as shipped:
-        rsync_result = subprocess.run(
-            _working_tree_rsync(shipped, f"{user}@{host}:{deploy_path}/")
-        )
-    if rsync_result.returncode != 0:
+    if _sync_tree(project_root, f"{user}@{host}:{deploy_path}/", keep) != 0:
         brand.error(t("deploy.sync_failed"), err=True)
         raise typer.Exit(1)
 
@@ -1607,6 +1616,7 @@ def deploy_command(
     backup_cfg = backup_config(config)
     health_cfg = _get_health_config(config)
     neon = _is_neon_database(project_path)
+    keep = _server_keep(config)
 
     project_root = Path(project_path) if project_path else _get_project_root()
     sqlite = is_sqlite(_project_answers(project_root))
@@ -1630,6 +1640,7 @@ def deploy_command(
             health_command=health_command,
             drain_timeout=drain_timeout,
             rollout_timeout=rollout_timeout,
+            keep=keep,
             backup=partial(
                 _backed_up,
                 host,
@@ -1680,11 +1691,8 @@ def deploy_command(
         brand.error(t("deploy.mkdir_failed", path=deploy_path), err=True)
         raise typer.Exit(1)
 
-    with _tracked_tree(project_root) as shipped:
-        rsync_result = subprocess.run(
-            _working_tree_rsync(shipped, f"{user}@{host}:{deploy_path}/")
-        )
-    if rsync_result.returncode != 0:
+    destination = f"{user}@{host}:{deploy_path}/"
+    if _sync_tree(project_root, destination, keep) != 0:
         brand.error(t("deploy.sync_failed"), err=True)
         raise typer.Exit(1)
 
@@ -1721,7 +1729,7 @@ def deploy_command(
         if backup_timestamp and health_cfg["auto_rollback"]:
             brand.warn(t("deploy.auto_rollback"))
             rolled_back = _rollback_to_backup(
-                host, user, deploy_path, backup_timestamp, neon=neon
+                host, user, deploy_path, backup_timestamp, neon=neon, keep=keep
             )
             record("failed", rolled_back=rolled_back)
         raise typer.Exit(1)
@@ -1748,7 +1756,7 @@ def deploy_command(
             if backup_timestamp and health_cfg["auto_rollback"]:
                 brand.warn(t("deploy.auto_rollback"), bold=True)
                 success = _rollback_to_backup(
-                    host, user, deploy_path, backup_timestamp, neon=neon
+                    host, user, deploy_path, backup_timestamp, neon=neon, keep=keep
                 )
                 if success:
                     brand.success(t("deploy.rolled_back", timestamp=backup_timestamp))
@@ -1888,7 +1896,12 @@ def deploy_rollback_command(
 
     rolled_back_from = _live_build(host, user, deploy_path)
     success = _rollback_to_backup(
-        host, user, deploy_path, backup, neon=_is_neon_database(project_path)
+        host,
+        user,
+        deploy_path,
+        backup,
+        neon=_is_neon_database(project_path),
+        keep=_server_keep(config),
     )
     if success and rolled_back_from:
         _record_deploy(
@@ -2110,6 +2123,10 @@ _GH_DEPLOY_CONFIG_SECRET = "DEPLOY_CONFIG"
 _GH_DEPLOY_ENV_SECRET = "DEPLOY_ENV"
 
 
+# Operator-dropped credentials, bind-mounted into the app (#2124). Neither a
+# deploy nor a rollback's restore may delete or revert them.
+_SECRETS_DIR = "secrets/"
+
 # Server-only state, and everything that has no business on a server. With
 # ``--delete`` this list does double duty: rsync never deletes an excluded
 # path, so naming something here both keeps it from being pushed and keeps
@@ -2134,10 +2151,64 @@ _RSYNC_EXCLUDES = (
     "backups/",
     "node_modules/",
     "traefik/acme/",
+    _SECRETS_DIR,
 )
 
 
-def _working_tree_rsync(project_root: Path, destination: str) -> list[str]:
+def _server_keep(config: dict) -> list[str]:
+    """``server.keep``: a project's own server-only paths, never synced."""
+    return list((config.get("server") or {}).get("keep") or [])
+
+
+_DELETING = "*deleting "
+
+
+def _deleted_paths(itemized: str) -> list[str]:
+    """The paths rsync's ``--itemize-changes`` output says it deleted."""
+    return [
+        line[len(_DELETING) :].strip()
+        for line in itemized.splitlines()
+        if line.startswith(_DELETING)
+    ]
+
+
+def _warn_deleted(deleted: list[str]) -> None:
+    """Name what an rsync ``--delete`` removed from the server."""
+    if not deleted:
+        return
+    brand.warn(t("deploy.sync_deleted", count=len(deleted)))
+    for path in deleted:
+        brand.warn(f"  {path}")
+
+
+def _sync_tree(project_root: Path, destination: str, keep: Sequence[str]) -> int:
+    """Ship the tracked tree, then say what ``--delete`` removed there.
+
+    A server-only file the excludes missed is otherwise gone without a
+    word: Docker recreates a bind-mount source as an empty directory, so
+    nothing fails until the file is next needed (aegis-stack#2124).
+    rsync's output streams as it runs, so a long upload shows progress.
+    """
+    deleted: list[str] = []
+    with (
+        _tracked_tree(project_root) as shipped,
+        subprocess.Popen(
+            _working_tree_rsync(shipped, destination, keep),
+            stdout=subprocess.PIPE,
+            text=True,
+        ) as rsync,
+    ):
+        assert rsync.stdout is not None
+        for line in rsync.stdout:
+            typer.echo(line, nl=False)
+            deleted.extend(_deleted_paths(line))
+    _warn_deleted(deleted)
+    return rsync.returncode
+
+
+def _working_tree_rsync(
+    project_root: Path, destination: str, keep: Sequence[str] = ()
+) -> list[str]:
     """The argv that puts the working tree on the server, and only that.
 
     ``--delete`` is the point. Without it a file removed from the project
@@ -2148,10 +2219,12 @@ def _working_tree_rsync(project_root: Path, destination: str) -> list[str]:
     three startup seeds down with it - silently (aegis-stack#1130).
 
     Both the standard and rolling deploys call this. They used to build the
-    same argv by hand, twice.
+    same argv by hand, twice. ``keep`` (``server.keep``) adds a project's
+    own server-only paths to the excludes; ``--itemize-changes`` marks each
+    deletion ``*deleting`` so ``_sync_tree`` can name it.
     """
-    command = ["rsync", "-avz", "--delete"]
-    for pattern in _RSYNC_EXCLUDES:
+    command = ["rsync", "-avz", "--delete", "--itemize-changes"]
+    for pattern in (*_RSYNC_EXCLUDES, *keep):
         command.extend(["--exclude", pattern])
     command.extend([f"{project_root}/", destination])
     return command

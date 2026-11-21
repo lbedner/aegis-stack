@@ -5,19 +5,25 @@ This module provides an alternative to the manual updater by using Copier's
 native update mechanism with a copier.yml at the repository root.
 """
 
+import functools
 import logging
 import re
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from copier import run_update
 from packaging.version import parse
 from pydantic import BaseModel, Field
 
-from aegis.config.defaults import GITHUB_REPO_URL, version_to_git_tag
+from aegis.config.defaults import (
+    GITHUB_REPO_URL,
+    GITHUB_TEMPLATE_URL,
+    version_to_git_tag,
+)
 from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
-from aegis.core.component_files import AI_PERSISTENCE, group_on
+from aegis.core.component_files import AI_PERSISTENCE, TEMPLATE_PROJECT_TREE, group_on
 from aegis.core.copier_manager import load_copier_answers
 from aegis.core.migration_generator import get_services_needing_migrations
 from aegis.core.post_gen_tasks import cleanup_components, run_post_generation_tasks
@@ -501,31 +507,55 @@ def _resolve_commit_by_cloning(ref: str, repo_url: str) -> str | None:
     to nothing. A bare, treeless clone carries every commit but no file
     contents, enough for ``rev-parse`` to expand the prefix.
     """
-    with tempfile.TemporaryDirectory(prefix="aegis-resolve-") as clone:
-        try:
-            subprocess.run(
-                [
-                    "git",
-                    "clone",
-                    "--bare",
-                    "--filter=tree:0",
-                    "--quiet",
-                    repo_url,
-                    clone,
-                ],
-                capture_output=True,
-                check=True,
-                timeout=120,
-            )
-            result = subprocess.run(
-                ["git", "-C", clone, "rev-parse", "--verify", f"{ref}^{{commit}}"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-        except (subprocess.SubprocessError, OSError):
-            return None
-    return result.stdout.strip()
+    try:
+        out = _git_in_treeless_clone(
+            repo_url, "rev-parse", "--verify", f"{ref}^{{commit}}"
+        )
+    except (subprocess.SubprocessError, OSError):
+        return None
+    return out.strip()
+
+
+def _git_in_treeless_clone(repo_url: str, *args: str) -> str:
+    """The output of ``git <args>`` in a bare, treeless clone of ``repo_url``:
+    every commit, and only the trees and files ``args`` reads, fetched as it
+    reads them. Raises what ``git`` raises."""
+    with tempfile.TemporaryDirectory(prefix="aegis-clone-") as clone:
+        subprocess.run(
+            ["git", "clone", "--bare", "--filter=tree:0", "--quiet", repo_url, clone],
+            capture_output=True,
+            check=True,
+            timeout=120,
+        )
+        return subprocess.run(
+            ["git", "-C", clone, *args],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=120,
+        ).stdout
+
+
+def template_repo_url(answers: dict[str, Any]) -> str:
+    """The clonable URL of the template remote ``aegis update`` pulls from."""
+    return src_path_to_git_url(answers.get("_src_path") or GITHUB_TEMPLATE_URL)
+
+
+def template_tree_args(commit: str) -> list[str]:
+    """``git ls-tree`` arguments listing the project tree at ``commit``,
+    repository-relative from any directory."""
+    return ["ls-tree", "-r", "-z", "--name-only", "--full-tree", commit, "--"] + [
+        TEMPLATE_PROJECT_TREE
+    ]
+
+
+@functools.cache
+def template_tree_at_remote(commit: str, repo_url: str) -> tuple[str, ...]:
+    """Repository paths of the project tree at ``commit`` on ``repo_url``,
+    for an installed CLI whose template is no git checkout. One clone per
+    process. Raises what ``git`` raises (offline, unknown commit)."""
+    listing = _git_in_treeless_clone(repo_url, *template_tree_args(commit))
+    return tuple(p for p in listing.split("\0") if p)
 
 
 def resolve_version_to_ref(

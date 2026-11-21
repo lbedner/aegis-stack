@@ -19,7 +19,13 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.runner import hooks, runs, tokens
 from app.components.runner.models import RunnerToken
-from app.components.runner.protocol import Answer, ClaimedRun, ClaimRequest
+from app.components.runner.protocol import (
+    CLAIM,
+    FINISH,
+    Answer,
+    ClaimedRun,
+    ClaimRequest,
+)
 from app.core.db import get_async_db
 from app.services.shared.deps import get_owner_user_id, get_token_holder
 
@@ -71,11 +77,13 @@ async def get_runner_token(
     return token
 
 
-runs_router = APIRouter(prefix="/runner/runs", tags=["runner"])
+# Mounted at the root: its paths are the ones the runner and its agent's
+# hooks post to (``protocol``, ``hooks.PATH``), so neither can drift.
+runs_router = APIRouter(tags=["runner"])
 
 
 @runs_router.post(
-    "/claim",
+    CLAIM,
     response_model=ClaimedRun,
     responses={204: {"description": "Nothing waits for these actions"}},
 )
@@ -101,7 +109,7 @@ async def claim(
     return claimed.model_copy(update={"resume": await runs.resumes(db, run)})
 
 
-@runs_router.post("/{run_id}/finish", response_model=RunStanding)
+@runs_router.post(FINISH, response_model=RunStanding)
 async def finish(
     run_id: int,
     body: Answer,
@@ -126,7 +134,7 @@ async def finish(
     return RunStanding.model_validate(run)
 
 
-@runs_router.post("/activity", status_code=status.HTTP_204_NO_CONTENT)
+@runs_router.post(hooks.PATH, status_code=status.HTTP_204_NO_CONTENT)
 async def activity(
     event: dict[str, Any],
     token: RunnerToken = Depends(get_runner_token),

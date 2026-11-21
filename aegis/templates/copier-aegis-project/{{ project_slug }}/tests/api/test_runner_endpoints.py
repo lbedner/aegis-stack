@@ -2,18 +2,31 @@
 claims a run and posts its result; an owner makes, lists and revokes
 runner tokens."""
 
+from importlib.util import find_spec
+
+from fastapi import FastAPI
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.runner import hooks, runs, tokens
 from app.components.runner.models import RunnerToken
-from app.components.runner.protocol import RUNS
-from app.core.config import settings
+from app.components.runner.protocol import CLAIM, FINISH, RUNS
 from app.core.tokens import digest
 from tests._runner import asked, signed, step
 
 TOKENS = "/api/v1/runner/tokens"
+
+
+def test_the_app_serves_runs_where_the_runner_and_its_hooks_post(
+    app: FastAPI,
+) -> None:
+    """The routes are built from the paths the runner and its agent's hooks
+    post to, so the two cannot drift into a 404."""
+    served = {route.path for route in app.routes if isinstance(route, APIRoute)}
+
+    assert {CLAIM, FINISH, hooks.PATH} <= served
 
 
 async def test_a_runner_with_a_token_claims_a_run_and_posts_its_result(
@@ -217,7 +230,9 @@ async def test_an_owner_makes_lists_and_revokes_runner_tokens(
     assert maker.get(TOKENS).json() == []
 
 
-@pytest.mark.skipif(settings.AUTH_ENABLED, reason="with auth a token is its maker's")
+@pytest.mark.skipif(
+    find_spec("app.models.user") is not None, reason="with auth a token is its maker's"
+)
 def test_without_auth_only_the_operator_makes_or_revokes_a_token(
     async_client_with_db: TestClient,
 ) -> None:

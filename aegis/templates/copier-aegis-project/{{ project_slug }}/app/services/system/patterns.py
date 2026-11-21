@@ -34,6 +34,7 @@ from app.core.source_functions import Function
 from app.core.source_index import Module
 
 API_PACKAGE = "app.components.backend.api"
+COMPONENT_PACKAGE = "app.components"
 SERVICE_PACKAGE = "app.services"
 PROJECT_ROOT = source_index.ROOT
 # Past this many statements a handler or task is doing work a service
@@ -234,7 +235,8 @@ def _logs(statement: ast.stmt) -> bool:
 
 
 def thin(func: Any, uses_service: bool) -> bool:
-    """Hands the work to a service in a few statements, or is one statement
+    """Hands the work on (a service; for a route, its component's module too)
+    in a few statements, or is one statement
     (a constant answer, or a single delegation) with no work to hand over.
     Log lines are not counted."""
     statements = body(func)
@@ -297,7 +299,12 @@ def _uses_service(route: APIRoute) -> bool:
 
 
 def _thin_route(route: APIRoute) -> bool:
-    return thin(route.endpoint, _uses_service(route))
+    """Thin when it hands off to a service, or to its component's own module
+    outside the API (where that component's CLI shares the work)."""
+    from .dry_path import entry_of, hands_off  # the walk reads this module
+
+    hands = _injects_service(route) or hands_off(entry_of(route.endpoint, label(route)))
+    return thin(route.endpoint, hands)
 
 
 def routes(source: Iterable[BaseRoute]) -> list[tuple[str, APIRoute]]:
@@ -378,9 +385,10 @@ ROUTE = Pattern(
         Rule(
             "thin",
             "Thin handler",
-            "The handler takes the request apart and hands it to a service, so the "
-            "work lives where routes, tasks and jobs can all reach it: at most "
-            f"{THIN_STATEMENTS} statements around a service call, or one statement.",
+            "The handler takes the request apart and hands it to a service (or its "
+            "component's own module), so the work lives where routes, the CLI, tasks "
+            f"and jobs can all reach it: at most {THIN_STATEMENTS} statements around "
+            "that call, or one statement.",
             _thin_route,
         ),
     ),

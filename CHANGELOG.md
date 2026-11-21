@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-11-21
+
 ### Added
 
 - **Slow & locked keeps a week, by code.** What `db_activity` records (slow
@@ -229,6 +231,11 @@
 - **Postgres gets 256 MB of shared memory** (`shm_size`), so parallel
   vacuum and parallel queries no longer fail on Docker's 64 MB. The next
   deploy recreates the Postgres container once. (#2020)
+- **A route that hands its work to its component's own module is thin.**
+  `route.thin` counted only a service as somewhere to hand work to, so a
+  route calling `app.components.runner.tokens` (where the CLI shares the
+  work) was flagged. A component's module outside the API now counts; the
+  map's Service step still counts services only. (#2108)
 - **An Overseer drawer opened on an item that is gone stays closed**
   instead of reopening empty. (#2110)
 - **Illiana's known debt survives a template rename, and writes are not

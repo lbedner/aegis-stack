@@ -7289,15 +7289,50 @@
 </tr>
 <tr>
 <td><code>llamacpp</code></td>
-<td><code>llama-server</code> serving the one model it was started with: no load or unload, so the dashboards offer none.</td>
+<td><code>llama-server</code>: a router over a folder of GGUFs (<code>make llama</code>) loads and frees them on request; started on one model, it offers no load or unload.</td>
 <td>Chat that runs long tool loops. Its prompt cache rereads a shared prefix fast: a follow-up on a 12k-token prefix takes 0.6 s, where Ollama takes 4.6 s (measured on an M4 Max, the same GGUF).</td>
 </tr>
 </tbody>
 </table>
 <h3 id="running-llama-server">Running llama-server</h3>
-<p>On the host, start it with the flags chat needs, and name the model with <code>--alias</code>, which is how the catalog shows it:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>llama-server<span class="w"> </span>-hf<span class="w"> </span>ggml-org/Qwen3-1.7B-GGUF<span class="w"> </span>--alias<span class="w"> </span>qwen3:1.7b<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>--jinja<span class="w"> </span>-c<span class="w"> </span><span class="m">32768</span><span class="w"> </span>-np<span class="w"> </span><span class="m">1</span><span class="w"> </span>--metrics<span class="w"> </span>--port<span class="w"> </span><span class="m">8080</span>
+<p>On the host, <code>make llama</code> (<code>my-app inference llama</code>) serves every GGUF in <code>LLAMACPP_MODELS_DIR</code> (default <code>~/models</code>) as a router, with the flags chat needs. Ollama's models are linked in first when <code>OLLAMA_MODELS</code> (default <code>~/.ollama/models</code>) holds any, so one download serves both; <code>my-app inference link-ollama</code> links them without serving. It runs in the foreground: Ctrl-C stops it.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>brew<span class="w"> </span>install<span class="w"> </span>llama.cpp
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>make<span class="w"> </span>llama
+</span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>LLAMACPP_MODELS_DIR</code></td>
+<td><code>~/models</code></td>
+<td>The folder it serves.</td>
+</tr>
+<tr>
+<td><code>LLAMACPP_BASE_URL</code></td>
+<td>port 8080</td>
+<td>Its port is the one it listens on.</td>
+</tr>
+<tr>
+<td><code>LLAMACPP_CONTEXT</code></td>
+<td><code>32768</code></td>
+<td><code>-c</code>.</td>
+</tr>
+<tr>
+<td><code>LLAMACPP_ARGS</code></td>
+<td><code>-fa on -np 2 -kvu</code></td>
+<td>Further flags, as typed.</td>
+</tr>
+</tbody>
+</table>
+<p>To serve one model instead, start it by hand, and name the model with <code>--alias</code>, which is how the catalog shows it:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>llama-server<span class="w"> </span>-hf<span class="w"> </span>ggml-org/Qwen3-1.7B-GGUF<span class="w"> </span>--alias<span class="w"> </span>qwen3:1.7b<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--jinja<span class="w"> </span>-c<span class="w"> </span><span class="m">32768</span><span class="w"> </span>-np<span class="w"> </span><span class="m">1</span><span class="w"> </span>--metrics<span class="w"> </span>--port<span class="w"> </span><span class="m">8080</span>
 </span></code></pre></div>
 <ul>
 <li><code>--jinja</code>: the model's chat template, which tool calls need.</li>
@@ -7309,8 +7344,8 @@
 <p>In docker, the <code>llamacpp</code> service downloads <code>LLAMACPP_MODEL</code> (a Hugging Face <code>repo[:quant]</code>, default <code>ggml-org/Qwen3-1.7B-GGUF</code>) into a volume on its first start and serves it at <code>LLAMACPP_CONTEXT</code> (default 32768).</p>
 <h3 id="switching-engines">Switching engines</h3>
 <p>The engine holds nothing of the project's (its models live where it keeps them), so an installed component switches in place. The AI service's local provider moves with it, the placement stays, and everything that branches on the engine re-renders:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>llamacpp<span class="o">]</span><span class="w">   </span><span class="c1"># an Ollama project, now on llama.cpp</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>ollama<span class="o">]</span><span class="w">     </span><span class="c1"># and back</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>llamacpp<span class="o">]</span><span class="w">   </span><span class="c1"># an Ollama project, now on llama.cpp</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>ollama<span class="o">]</span><span class="w">     </span><span class="c1"># and back</span>
 </span></code></pre></div>
 <p>Point <code>LLAMACPP_BASE_URL</code> in <code>.env</code> at the server if it is not on the default port.</p>
 <h2 id="where-it-runs">Where it runs</h2>
@@ -7336,7 +7371,7 @@
 </tbody>
 </table>
 <p>Install Ollama from <a href="https://ollama.com/">ollama.com</a> for host placement, then pull a model:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>ollama<span class="w"> </span>pull<span class="w"> </span>llama3.1
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>ollama<span class="w"> </span>pull<span class="w"> </span>llama3.1
 </span></code></pre></div>
 <h2 id="what-you-get">What you get</h2>
 <ul>
@@ -7348,9 +7383,10 @@
 </ul>
 <h2 id="a-speech-server">A speech server</h2>
 <p>A speech server runs beside Ollama, where Ollama runs, and <code>ai[voice]</code> speaks through it. Kokoro-FastAPI is the one so far: Kokoro-82M, text to speech only.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>kokoro_fastapi<span class="o">]</span><span class="w">          </span><span class="c1"># Kokoro-FastAPI on the host</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker,kokoro_fastapi<span class="o">]</span><span class="w">   </span><span class="c1"># a kokoro-fastapi service in the compose stack</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>kokoro_fastapi<span class="o">]</span><span class="w">          </span><span class="c1"># Kokoro-FastAPI on the host</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker,kokoro_fastapi<span class="o">]</span><span class="w">   </span><span class="c1"># a kokoro-fastapi service in the compose stack</span>
 </span></code></pre></div>
+<p>An installed inference takes one later the same way: <code>aegis add inference[kokoro_fastapi]</code> keeps its engine and placement and adds the server.</p>
 <table>
 <thead>
 <tr>
@@ -7386,7 +7422,7 @@
 <li><strong><code>ai[voice]</code></strong> offers it as the Kokoro-FastAPI provider, with every voice it lists (<a href="../../services/ai/voice/#a-speech-server">Voice</a>).</li>
 </ul>
 <p>A server with OpenAI's speech API alone shows its voices, its models and the app's own timings. Kokoro-FastAPI reports its version always, and the rest only with its flags on. A server you run yourself needs them set, or the page names the ones missing:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">ALLOW_DEV_UNLOAD</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="nv">ENABLE_DEBUG_ENDPOINTS</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>./start-gpu_mac.sh
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nv">ALLOW_DEV_UNLOAD</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span><span class="nv">ENABLE_DEBUG_ENDPOINTS</span><span class="o">=</span><span class="nb">true</span><span class="w"> </span>./start-gpu_mac.sh
 </span></code></pre></div>
 <table>
 <thead>
@@ -7407,9 +7443,9 @@
 </tbody>
 </table>
 <h2 id="changing-placement">Changing placement</h2>
-<p>The placement is an answer in <code>.copier-answers.yml</code> (<code>inference_placement</code>), and the speech server another (<code>inference_speech</code>). Remove and re-add the component to switch:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>aegis<span class="w"> </span>remove<span class="w"> </span>inference
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker<span class="o">]</span>
+<p>The placement is an answer in <code>.copier-answers.yml</code> (<code>inference_placement</code>), and the speech server another (<code>inference_speech</code>). A speech server is added in place (above); to change the placement, remove and re-add the component:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>aegis<span class="w"> </span>remove<span class="w"> </span>inference
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker<span class="o">]</span>
 </span></code></pre></div>
 
 

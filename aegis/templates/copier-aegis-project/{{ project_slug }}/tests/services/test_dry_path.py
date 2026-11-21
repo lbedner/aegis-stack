@@ -74,6 +74,8 @@ FILES = {
     "app/services/blog/mail/keys.py": "SECRETS = ()\n",
     "app/services/blog/mail/client.py": "def send() -> None:\n    return None\n",
     "app/components/__init__.py": "",
+    "app/components/runner/__init__.py": "",
+    "app/components/runner/tokens.py": "def create(name: str) -> str:\n    return name\n",
     "app/components/worker/__init__.py": "",
     "app/components/worker/tasks/__init__.py": "",
     "app/components/worker/tasks/dry_tasks.py": (
@@ -115,6 +117,9 @@ FILES = {
         "    thing.go()\n"
         "async def notify() -> None:\n"
         "    client.send()\n"
+        "async def make_token(name: str) -> str:\n"
+        "    from app.components.runner import tokens\n"
+        "    return tokens.create(name)\n"
     ),
 }
 API = "app.components.backend.api.blog.router"
@@ -412,6 +417,18 @@ def test_a_service_is_reached_past_the_handler(index: source_index.Index) -> Non
     assert not dry_path.reaches_service(Entry("r", (API, "read")), index)
     assert not dry_path.reaches_service(job, index)
     assert not dry_path.reaches_service(None)
+
+
+def test_a_route_hands_off_to_its_components_module(index: source_index.Index) -> None:
+    """The thin rule's question: a component's own module (where its CLI and
+    its routes share the work) is somewhere to hand off to, as a service is;
+    the API's own helpers and core are not. It is no service, so the Service
+    step does not count it."""
+    token = Entry("r", (API, "make_token"))
+    assert dry_path.hands_off(token, index)
+    assert not dry_path.reaches_service(token, index)
+    assert not dry_path.hands_off(Entry("r", (API, "read")), index)
+    assert not dry_path.hands_off(Entry("r", (API, "loop_a")), index)
 
 
 def test_a_shared_instance_is_walked_into_its_class(tmp_path: Path) -> None:

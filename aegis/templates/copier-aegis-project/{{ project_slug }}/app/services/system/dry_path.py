@@ -10,7 +10,7 @@ Where the walk cannot see further it stops at that line and says why
 collapse to the nodes they join (``edges``), for a reader of the model."""
 
 import asyncio
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from functools import cache
 from typing import Any
 
@@ -25,7 +25,7 @@ from app.core.source_index import Index, within
 
 from .dry_names import symbol_of
 from .dry_walk import REASONS, UNSEEN, Entry, Frozen, Hop, HopKind, Need, Stop, Walker
-from .patterns import SERVICE_PACKAGE, label, returns
+from .patterns import API_PACKAGE, COMPONENT_PACKAGE, SERVICE_PACKAGE, label, returns
 
 # What callers read from here, defined beside the walk.
 __all__ = [
@@ -38,6 +38,7 @@ __all__ = [
     "edges_of",
     "entry_of",
     "find",
+    "hands_off",
     "reaches_service",
     "trace",
     "walk",
@@ -96,9 +97,34 @@ def reaches_service(entry: Entry | None, index: Index | None = None) -> bool:
     """Whether ``entry``'s walk (through ``index``, the project's) reaches
     ``app.services`` past its own handler: a function, class or table of
     one, however far down. What the patterns' Service step reads, once an
-    entry (its rows and its thin rule ask too)."""
+    entry (its rows ask too)."""
+    return _reaches(entry, index, _in_service)
+
+
+@cache
+def hands_off(entry: Entry | None, index: Index | None = None) -> bool:
+    """Whether ``entry``'s walk reaches a service or a component's own
+    module outside the API (``app.components.runner.tokens``): where a
+    component's CLI and its routes share their work. What the thin rule
+    reads."""
+    return _reaches(entry, index, _in_service_or_component)
+
+
+def _in_service(symbol: str) -> bool:
+    return within(symbol, SERVICE_PACKAGE)
+
+
+def _in_service_or_component(symbol: str) -> bool:
+    return _in_service(symbol) or (
+        within(symbol, COMPONENT_PACKAGE) and not within(symbol, API_PACKAGE)
+    )
+
+
+def _reaches(
+    entry: Entry | None, index: Index | None, where: Callable[[str], bool]
+) -> bool:
     return entry is not None and any(
-        hop.kind != HopKind.HANDLER and within(hop.symbol, SERVICE_PACKAGE)
+        hop.kind != HopKind.HANDLER and where(hop.symbol)
         for hop in trace(entry, index, set()).hops
     )
 

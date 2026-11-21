@@ -226,8 +226,12 @@ def _async_sqlite_take_over_transactions(
     apply_sqlite_pragmas(dbapi_connection)
 
 
+# A session opened ``read_only`` (``get_async_session``) begins plain.
+READ_ONLY = db_activity.READ_ONLY
+
+
 @event.listens_for(async_engine.sync_engine, "begin")
-def _async_sqlite_emit_begin(conn: Any) -> None:
+def emit_begin(conn: Any) -> None:
     """BEGIN IMMEDIATE, not a bare BEGIN.
 
     A bare BEGIN is DEFERRED: SQLite takes no lock until the first write
@@ -249,8 +253,13 @@ def _async_sqlite_emit_begin(conn: Any) -> None:
     failing. The cost is that read-only transactions on this engine also
     queue behind a writer, which for a single-file SQLite database is
     the cheaper of the two.
+
+    A session that only reads (``read_only``) begins plain: it never
+    writes, so no upgrade can fail, and it reads while the lock is held,
+    so code holding the lock can read through a session of its own.
     """
-    conn.exec_driver_sql("BEGIN IMMEDIATE")
+    read_only = conn.get_execution_options().get(READ_ONLY)
+    conn.exec_driver_sql("BEGIN" if read_only else "BEGIN IMMEDIATE")
 {% else %}
 async_engine = create_async_engine(
     _get_async_database_url(settings.database_url_effective),
@@ -344,9 +353,12 @@ def db_session(autocommit: bool = True) -> Generator[Session, None, None]:
 
 
 @asynccontextmanager
-async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_async_session(
+    read_only: bool = False,
+) -> AsyncGenerator[AsyncSession, None]:
     """
     Async database session context manager with automatic transaction handling.
+    ``read_only`` takes no write lock (``emit_begin``): for reads only.
 
     Yields:
         AsyncSession: Async database session instance
@@ -357,6 +369,9 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
             result = await session.exec(select(MyModel))
     """
     async with AsyncSessionLocal() as session:
+        if read_only:  # on its bind: no connection until it reads
+            sync = session.sync_session
+            sync.bind = sync.bind.execution_options(**{db_activity.READ_ONLY: True})
         try:
             yield session
             await session.commit()
@@ -372,8 +387,9 @@ async def release_lock(session: AsyncSession) -> None:
     On SQLite a transaction holds the one write lock from its first query
     (the async engine begins IMMEDIATE): one left open across a model that
     takes minutes stalls every process, and a second connection the same
-    request opens waits out the busy timeout behind it. On Postgres it is
-    a connection idle in a transaction."""
+    request opens to write waits out the busy timeout behind it (one opened
+    ``read_only`` does not). On Postgres it is a connection idle in a
+    transaction."""
     await session.commit()
 
 

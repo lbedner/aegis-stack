@@ -171,6 +171,7 @@ if TYPE_CHECKING:
 {%- endif %}
 {%- if ai_voice and ai_backend != "memory" %}
     from app.services.ai.domains.voice import (
+        call_setup,
         design,
         live_engines,
         profiles,

@@ -122,11 +122,15 @@ class TestFormatPrice:
         assert format_price(1.25, 10.0) == "$1.25 / $10"
         assert format_price(3.0, 15.0) == "$3 / $15"
 
-    def test_partial_or_missing_is_blank_or_single(self) -> None:
-        from app.core.model_picker import format_price
+    def test_partial_is_single_and_missing_is_unknown(self) -> None:
+        """No pricing on file, or zeros where it should be, is said to be
+        unknown: a blank or "$0 / $0" reads as free. A local model's is."""
+        from app.core.model_picker import UNKNOWN_PRICE, format_price
 
-        assert format_price(None, None) == ""
         assert format_price(0.5, None) == "$0.50"
+        assert format_price(None, None) == UNKNOWN_PRICE
+        assert format_price(0.0, 0.0) == UNKNOWN_PRICE
+        assert format_price(0.0, 0.0, local=True) == "Free"
 
 
 class TestFilterModels:

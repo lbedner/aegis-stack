@@ -191,12 +191,25 @@ def store(entry: dict[str, Any]) -> Coroutine[Any, Any, Any]:
     return get_cache().push(KEY, entry, KEEP, keep)
 
 
+# The execution option a read-only session begins with (``db.emit_begin``
+# begins it plain): no lock taken, so nothing waits on it.
+READ_ONLY = "aegis_read_only"
+
+
+def _locks(conn: Any) -> bool:
+    """Whether the transaction ``conn`` begins takes the write lock: the
+    async engine begins IMMEDIATE, except a read-only session."""
+    return bool(conn.dialect.is_async) and not conn.get_execution_options().get(
+        READ_ONLY
+    )
+
+
 def _waits_on_itself(conn: Any) -> None:
     """A task opening a locking transaction while it holds one: SQLite has
     one writer, so it waits out the busy timeout behind itself and fails."""
     task = frames.current_task()
     if (
-        conn.dialect.is_async
+        _locks(conn)
         and task is not None
         and any(e["locks"] and e["task"] is task for e in _open.values())
     ):
@@ -209,8 +222,7 @@ def _opened(conn: Any) -> None:
     _open[id(conn)] = {
         "began": datetime.now(UTC).isoformat(),
         "at": time.monotonic(),
-        # The async engine begins IMMEDIATE: it holds the write lock now.
-        "locks": bool(conn.dialect.is_async),
+        "locks": _locks(conn),
         "task": frames.current_task(),
         "thread": threading.get_ident(),
     }

@@ -129,6 +129,26 @@ class TestOpenAITTSProvider:
 
         assert isinstance(provider, BaseTTSProvider)
 
+    async def test_a_line_asked_for_as_wav_comes_back_as_wav(self) -> None:
+        """Its own format is MP3; a caller that reads the samples (a
+        cascade call) asks for WAV."""
+        provider = OpenAITTSProvider(model="gpt-4o-mini-tts")
+        asked: dict[str, Any] = {}
+
+        async def create(**kwargs: Any) -> Any:
+            asked.update(kwargs)
+            return SimpleNamespace(content=b"RIFF")
+
+        speech = SimpleNamespace(create=create)
+        provider._client = SimpleNamespace(audio=SimpleNamespace(speech=speech))
+
+        said = await provider.synthesize(
+            SpeechRequest(text="Hi", format=AudioFormat.WAV)
+        )
+
+        assert asked["response_format"] == "wav"
+        assert said.format == AudioFormat.WAV
+
 
 class TestBaseTTSProviderInterface:
     """Test BaseTTSProvider abstract interface."""

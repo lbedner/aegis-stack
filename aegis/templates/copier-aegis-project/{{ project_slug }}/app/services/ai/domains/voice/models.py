@@ -273,6 +273,11 @@ class SpeechRequest(BaseModel):
         "steers them); "
         "None = TTS_INSTRUCTIONS",
     )
+    format: AudioFormat | None = Field(
+        default=None,
+        description="The audio wanted, from a provider that picks one "
+        "(OpenAI); None = its own (TTS_FORMATS). Every other speaks WAV",
+    )
 
 
 class SpeechTokens(BaseModel):

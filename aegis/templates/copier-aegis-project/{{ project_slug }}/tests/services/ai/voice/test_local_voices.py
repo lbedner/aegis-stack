@@ -39,7 +39,7 @@ async def test_kokoro_speaks_a_wav_in_the_voices_accent(
     assert isinstance(said, kokoro.KokoroProvider)
     stub = _Kokoro()
     monkeypatch.setattr(kokoro, "model", lambda: stub)
-    monkeypatch.setattr(kokoro, "pcm16", lambda samples: b"\x00\x00" * 24_000)
+    monkeypatch.setattr(kokoro.realtime, "pcm16", lambda samples: b"\x00\x00" * 24_000)
 
     result = await said.synthesize(SpeechRequest(text="Hello", voice="bm_george"))
 
@@ -55,10 +55,10 @@ async def test_kokoro_speaks_a_wav_in_the_voices_accent(
 def test_a_model_file_already_fetched_is_not_fetched_again(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(kokoro, "CACHE", tmp_path)
     (tmp_path / "voices-v1.0.bin").write_bytes(b"kept")
 
-    assert kokoro.fetched("voices-v1.0.bin").read_bytes() == b"kept"
+    url = f"{kokoro.RELEASE}/voices-v1.0.bin"
+    assert local.fetched(url, tmp_path).read_bytes() == b"kept"
 
 
 async def test_parakeet_hears_what_was_said(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -23,6 +23,8 @@ from app.core.figures import FIGURES, absent
 from app.core.formatting import format_bytes, format_span
 
 NAME = "Kokoro-FastAPI"
+# Its id (SPEECH_SERVER, and the catalog's org for what it serves).
+SLUG = "kokoro_fastapi"
 # What it is called on the Docker network: the host, or its own compose
 # service (``inference[docker,kokoro_fastapi]``).
 DOCKER_HOSTS = {"host.docker.internal", "kokoro-fastapi"}

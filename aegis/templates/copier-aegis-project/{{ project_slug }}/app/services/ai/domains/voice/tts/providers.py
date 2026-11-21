@@ -133,6 +133,9 @@ class OpenAITTSProvider(BaseTTSProvider):
 
         return self._client
 
+    def _format(self, request: SpeechRequest) -> AudioFormat:
+        return request.format or TTS_FORMATS[self.provider_type]
+
     def _speech_kwargs(self, request: SpeechRequest) -> dict[str, Any]:
         """One set of arguments for the whole-file and the streamed call.
         ``speed`` works on every model (measured on gpt-4o-mini-tts: 6.40s ->
@@ -142,7 +145,7 @@ class OpenAITTSProvider(BaseTTSProvider):
             "model": self.model,
             "voice": request.voice or self.default_voice,
             "input": request.text,
-            "response_format": TTS_FORMATS[self.provider_type].value,
+            "response_format": self._format(request).value,
         }
         if request.speed:
             kwargs["speed"] = request.speed
@@ -185,7 +188,7 @@ class OpenAITTSProvider(BaseTTSProvider):
             )
 
             audio = response.content
-            spoken_as = TTS_FORMATS[self.provider_type]
+            spoken_as = self._format(request)
             return SpeechResult(
                 audio=audio,
                 format=spoken_as,

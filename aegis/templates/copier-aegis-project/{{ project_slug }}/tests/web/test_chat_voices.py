@@ -29,6 +29,8 @@ from tests.web.overseer import AI, on_session, sign_in, status_with
 VOICES = f"{OVERSEER.path}/voices"
 # A realtime model a live call can run on.
 LIVE = "gemini-3.8-live"
+# A local chat model, which a call runs on as a cascade.
+LOCAL = "qwen3.8:27b"
 
 
 @pytest.fixture
@@ -64,8 +66,8 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     picked: list[str] = []
     titles = {LIVE: "Gemini Live", "gpt-realtime-2.1": "GPT Realtime 2.1"}
 
-    async def catalog(mode: str = "chat") -> list[dict[str, Any]]:
-        return [
+    async def catalog(mode: str | None = "chat") -> list[dict[str, Any]]:
+        realtime = [
             {"model_id": LIVE, "title": "Gemini Live", "vendor": "google"},
             {
                 "model_id": "gpt-realtime-2.1",
@@ -73,6 +75,22 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
                 "vendor": "openai",
             },
         ]
+        chat = [
+            {"model_id": LOCAL, "title": "Qwen 3.8 27B", "vendor": "llamacpp"},
+            {"model_id": "gpt-5.5", "title": "GPT-5.5", "vendor": "openai"},
+        ]
+        every = [{**m, "mode": "realtime"} for m in realtime] + [
+            {**m, "mode": "chat"} for m in chat
+        ]
+        every.append(
+            {
+                "model_id": "nomic",
+                "title": "Nomic",
+                "vendor": "llamacpp",
+                "mode": "embedding",
+            }
+        )
+        return [m for m in every if mode in (None, m["mode"])]
 
     async def calling(db: Any) -> Any:
         return (
@@ -157,9 +175,31 @@ class TestCalls:
         html = hx.get(VOICES).text
         rows = select(html, "[data-call-model]")
         # The one in use leads: the list is long, and it is what you check.
-        assert [r.get("data-call-model") for r in rows] == ["gpt-realtime-2.1", LIVE]
+        assert [r.get("data-call-model") for r in rows] == [
+            "gpt-realtime-2.1",
+            LIVE,
+            LOCAL,
+        ]
         current = one(html, "[data-call-model][aria-current=true]")
         assert current.get("data-call-model") == "gpt-realtime-2.1"
+
+    def test_a_local_chat_model_is_a_call_in_the_voices_own_ears_and_voice(
+        self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
+    ) -> None:
+        """No realtime API: the call hears with the active voice's STT,
+        answers with the model and speaks with its TTS (a cascade), and its
+        row names that voice where a realtime model's says it needs none.
+        A cloud chat model is not offered: its vendor has realtime models
+        of its own."""
+        page = hx.get(VOICES).text
+        local = text(one(page, f'[data-call-model="{LOCAL}"]'))
+        live = text(one(page, f'[data-call-model="{LIVE}"]'))
+        assert "Hears and speaks through Marin" in local
+        assert "gpt-transcribe hears, gpt-4o-mini-tts-2025-03-20 speaks" in local
+        assert "Hears and speaks itself" in live
+        assert not select(page, '[data-call-model="gpt-5.5"]')
+        # Nor is a local model that is not a chat model.
+        assert not select(page, '[data-call-model="nomic"]')
 
     def test_a_pick_sets_what_calls_run_on(
         self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]

@@ -14,6 +14,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.domains.voice import live_engines, realtime_calls
+from app.services.ai.domains.voice.cascade import connection as cascade
 from app.services.ai.domains.voice.live_engines import ENGINE_SEEDS
 from app.services.ai.domains.voice.profiles import SETTINGS
 from app.services.ai.models.voice import LiveEngine
@@ -198,3 +199,43 @@ class TestChoosing:
         await async_db_session.commit()
 
         assert await live_engines.choose(async_db_session, "grok-voice") is None
+
+    @pytest.mark.asyncio
+    async def test_a_local_chat_model_gets_an_engine_and_runs_as_a_cascade(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """No realtime API: its call is the app's own chain (``cascade``),
+        on the model string the call path builds."""
+        await _local_model(async_db_session, "qwen3.8:27b", "chat")
+
+        made = await live_engines.choose(async_db_session, "qwen3.8:27b")
+
+        assert made is not None and made.is_enabled
+        await async_db_session.refresh(made, ["llm"])
+        await async_db_session.refresh(made.llm, ["served_by"])
+        model = live_engines.realtime_model(made)
+        assert model == "llamacpp:qwen3.8:27b" and cascade.serves(model)
+        assert not cascade.serves("google:gemini-3.8-live")
+
+    @pytest.mark.asyncio
+    async def test_a_local_model_that_does_not_chat_is_refused(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        await _local_model(async_db_session, "nomic-embed", "embedding")
+
+        assert await live_engines.choose(async_db_session, "nomic-embed") is None
+
+
+async def _local_model(session: AsyncSession, model_id: str, mode: str) -> None:
+    """A model llama.cpp serves, in the catalog."""
+    from app.services.ai.models.llm import LargeLanguageModel, LLMOrg
+
+    local = LLMOrg(slug="llamacpp", name="llamacpp")
+    session.add(local)
+    await session.flush()
+    session.add(
+        LargeLanguageModel(
+            model_id=model_id, title=model_id, mode=mode, served_by_org_id=local.id
+        )
+    )
+    await session.commit()

@@ -4,12 +4,8 @@ kokoro-onnx release on first use and kept in the cache."""
 
 import asyncio
 import logging
-import os
 from pathlib import Path
-import tempfile
 from typing import Any
-
-import httpx
 
 from .. import local
 from ..models import (
@@ -33,44 +29,12 @@ CACHE = Path.home() / ".cache" / "kokoro-onnx"
 LANGUAGES = {"a": "en-us", "b": "en-gb"}
 
 
-def fetched(name: str) -> Path:
-    """A model file in the cache, downloaded into it first when absent
-    (whole into a file of its own, then moved, so a cut-off download, or
-    another process fetching it too, never leaves half a file)."""
-    path = CACHE / name
-    if path.exists():
-        return path
-    CACHE.mkdir(parents=True, exist_ok=True)
-    fd, partial = tempfile.mkstemp(dir=CACHE, suffix=".partial")
-    logger.info(f"Fetching Kokoro's {name} into {CACHE}")
-    try:
-        with (
-            os.fdopen(fd, "wb") as out,
-            httpx.stream(
-                "GET", f"{RELEASE}/{name}", follow_redirects=True, timeout=60
-            ) as response,
-        ):
-            response.raise_for_status()
-            for chunk in response.iter_bytes(1 << 20):
-                out.write(chunk)
-        os.replace(partial, path)
-    except BaseException:
-        Path(partial).unlink(missing_ok=True)
-        raise
-    return path
-
-
 @local.loaded_once
 def model() -> Any:
     """The one Kokoro this process speaks with."""
     from kokoro_onnx import Kokoro
 
-    return Kokoro(*(str(fetched(name)) for name in FILES))
-
-
-def pcm16(samples: Any) -> bytes:
-    """Kokoro's float samples (a numpy array) as 16-bit PCM."""
-    return (samples.clip(-1, 1) * 32767).astype("<i2").tobytes()
+    return Kokoro(*(str(local.fetched(f"{RELEASE}/{name}", CACHE)) for name in FILES))
 
 
 class KokoroProvider(BaseTTSProvider):
@@ -90,7 +54,7 @@ class KokoroProvider(BaseTTSProvider):
             speed=request.speed or 1.0,
             lang=LANGUAGES.get(voice[0], LANGUAGES["a"]),
         )
-        return realtime.wav(pcm16(samples))
+        return realtime.wav(realtime.pcm16(samples))
 
     async def synthesize(self, request: SpeechRequest) -> SpeechResult:
         try:

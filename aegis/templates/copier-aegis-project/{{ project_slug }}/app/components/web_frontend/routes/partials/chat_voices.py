@@ -64,6 +64,7 @@ def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
         if rows is None:
             rows = await profiles.list_profiles(db)
         on = on or await calling(db)
+        active = next((p for p in rows if p.is_active), None)
         return dialog(
             request,
             TEMPLATE,
@@ -72,8 +73,8 @@ def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
             voices=rows,
             path=voices_path,
             assistant=await chat.assistant_name(mount, db),
-            active=next((p for p in rows if p.is_active), None),
-            call_rows=await models.call_rows(getattr(on, "model_id", None))
+            active=active,
+            call_rows=await models.call_rows(getattr(on, "model_id", None), active)
             if calls
             else None,
             calling=on,

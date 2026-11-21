@@ -4467,6 +4467,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#mail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mail
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#generated-files" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7267,6 +7278,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#mail" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Mail
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#generated-files" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7349,6 +7371,7 @@
 <li><strong>Dedupe that is enforced, not hoped for</strong> - uploading the same bytes twice returns the existing document with <code>200</code> instead of creating a second one, and a partial unique index makes that true under concurrency.</li>
 <li><strong>A lifecycle</strong> - a new version supersedes its predecessor rather than overwriting it, <code>protected</code> refuses deletion, and delete is a soft delete that frees the hash for re-filing later.</li>
 <li><strong>Page-addressed extraction</strong> - each page is read once and stored with how it was read, so a claim made from a document can cite the page and the method. See <a href="extraction/">Extraction</a>.</li>
+<li><strong>Mail</strong> - a service of its own (<code>app/services/mail</code>), part of documents. See <a href="#mail">Mail</a>.</li>
 <li><strong>Free-form tags</strong> - <code>GET /tags</code> returns them with counts. Tags rather than a taxonomy: what counts as a category differs per application.</li>
 <li><strong>An Overseer surface</strong> - a Documents card and a three-tab modal (Documents, Activity, Tags) with a detail pane, a page strip, and a full-size page viewer with the transcript beside it.</li>
 <li><strong>A health check</strong> - document and page counts, storage backend, and whether anything is waiting to be read.</li>
@@ -7428,33 +7451,89 @@
 </tbody>
 </table>
 <p>Adding the <a href="../../components/storage/">storage component</a> switches the default and adds the dev container. Because keys are hashes, switching backends is a copy of objects, not a migration of rows.</p>
+<h2 id="mail">Mail</h2>
+<p>Mail arrives two ways and is read one way. Each message is kept once, by its Message-ID, whatever file or pull brought it; its body is filed as a <code>letter</code> whose page is already read (the mail is text), and each attachment as a document of its own through the same store, deduplicated like any other upload (<code>source="mail"</code>, <code>channel="email"</code>). New paper is then handed to extraction; a reader that cannot start never fails the import.</p>
+<ul>
+<li><strong>A dropped file</strong> - a <code>.mbox</code> (a mailbox export) or <code>.eml</code> (one saved message) on the Overseer Documents upload is read as a job, on the worker where the stack has one. The same file twice is answered by the batch that already read it.</li>
+<li><strong>An IMAP pull</strong> - every 30 minutes the scheduler pulls the mailbox the secrets name, with an app password rather than OAuth. Read-only: the folder is EXAMINEd and bodies PEEKed, nothing is flagged, moved or deleted. It reads from now on: the first pull of a folder only notes where it ends, and each pull after asks for the UIDs above the last one seen, starting over when the server renumbers (a new UIDVALIDITY). A refused sign-in or an unreachable host is one line on the mailbox, never the password or the server's own words.</li>
+<li><strong>Arrivals</strong> - what came in and what each message became ("letter + 1 attachment", or why nothing), by the day it arrived: the <strong>Mail</strong> section of the Overseer Documents page (with the mailbox and how its last pull went), and the <code>arrivals</code> tool, which read the same rows.</li>
+</ul>
+<p>The pull's four settings are secrets, set in <code>.env</code> or on the Overseer Secrets page under <em>Mail (IMAP)</em>; the app password is checked with one sign-in before it is stored:</p>
+<table>
+<thead>
+<tr>
+<th>Secret</th>
+<th>What</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MAIL_IMAP_HOST</code></td>
+<td>the IMAP server, e.g. <code>imap.example.com</code></td>
+</tr>
+<tr>
+<td><code>MAIL_IMAP_USER</code></td>
+<td>the mailbox address</td>
+</tr>
+<tr>
+<td><code>MAIL_IMAP_FOLDER</code></td>
+<td>the folder or label to read; <code>INBOX</code> when unset</td>
+</tr>
+<tr>
+<td><code>MAIL_IMAP_PASSWORD</code></td>
+<td>an app password for that mailbox</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Who a sender is</strong> is not the mail service's question. After a batch's messages are filed, ingest hands the new <code>MailMessage</code> rows (<code>from_address</code> is the sender) to every hook registered with <code>register_messages_filed(hook)</code>, each <code>async (db, messages, owner_user_id)</code> in a session of its own; one that raises is logged, never the import's failure. A contacts service plugs in there. The template registers nothing.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.mail.ingest</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_messages_filed</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">match_senders</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">messages</span><span class="p">,</span> <span class="n">owner_user_id</span><span class="p">):</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="o">...</span>  <span class="c1"># look the addresses up in one query, stage what you file on db</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">register_messages_filed</span><span class="p">(</span><span class="n">match_senders</span><span class="p">)</span>
+</span></code></pre></div>
 <h2 id="generated-files">Generated Files</h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>my-app/
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>├── app/services/documents/
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>│   ├── service.py            # DocumentService: ingest, store, list, tag, delete
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>│   ├── models.py             # document, document_tag, document_page
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>│   ├── queries.py            # the reads, batched (no N+1 on tags)
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>│   ├── health.py
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>│   └── domains/extraction/
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>│       ├── pages.py          # the run: which pages need reading, and what each becomes
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>│       ├── pdf.py            # pypdfium2: text layer and page rendering
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>│       ├── vision.py         # the reader for pages without a text layer
-</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>│       ├── dispatch.py       # worker when there is one, in-process when not
-</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>│       └── jobs.py           # the entry points a run is started through
-</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>├── app/components/backend/api/documents/
-</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>│   ├── router.py             # documents, tags, content
-</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>│   └── pages.py              # extract, pages, page image
-</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>├── app/components/frontend/dashboard/
-</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>│   ├── cards/documents_card.py
-</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>│   └── modals/documents_modal.py, documents_detail_pane.py,
-</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>│       documents_pages.py, documents_activity.py
-</span><span id="__span-3-20"><a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>└── tests/services/test_documents_service.py, test_document_extraction.py
-</span><span id="__span-3-21"><a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>    tests/api/test_documents_endpoints.py, test_document_pages.py
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>my-app/
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>├── app/services/documents/
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>│   ├── service.py            # DocumentService: ingest, store, list, tag, delete
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>│   ├── models.py             # document, document_tag, document_page
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>│   ├── queries.py            # the reads, batched (no N+1 on tags)
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>│   ├── health.py
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>│   └── domains/extraction/
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>│       ├── pages.py          # the run: which pages need reading, and what each becomes
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│       ├── pdf.py            # pypdfium2: text layer and page rendering
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>│       ├── vision.py         # the reader for pages without a text layer
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>│       ├── dispatch.py       # worker when there is one, in-process when not
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>│       └── jobs.py           # the entry points a run is started through
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>├── app/components/backend/api/documents/
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>│   ├── router.py             # documents, tags, content
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>│   └── pages.py              # extract, pages, page image
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>├── app/components/frontend/dashboard/
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>│   ├── cards/documents_card.py
+</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>│   └── modals/documents_modal.py, documents_detail_pane.py,
+</span><span id="__span-4-19"><a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a>│       documents_pages.py, documents_activity.py
+</span><span id="__span-4-20"><a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a>├── app/services/mail/
+</span><span id="__span-4-21"><a id="__codelineno-4-21" name="__codelineno-4-21" href="#__codelineno-4-21"></a>│   ├── parse.py              # bytes to messages, stdlib only
+</span><span id="__span-4-22"><a id="__codelineno-4-22" name="__codelineno-4-22" href="#__codelineno-4-22"></a>│   ├── ingest.py             # messages to rows and documents; the seam
+</span><span id="__span-4-23"><a id="__codelineno-4-23" name="__codelineno-4-23" href="#__codelineno-4-23"></a>│   ├── jobs.py               # a dropped file&#39;s import as a job
+</span><span id="__span-4-24"><a id="__codelineno-4-24" name="__codelineno-4-24" href="#__codelineno-4-24"></a>│   ├── pull.py               # the IMAP pull and its secrets
+</span><span id="__span-4-25"><a id="__codelineno-4-25" name="__codelineno-4-25" href="#__codelineno-4-25"></a>│   ├── arrivals.py           # what came in, for the page and the tool
+</span><span id="__span-4-26"><a id="__codelineno-4-26" name="__codelineno-4-26" href="#__codelineno-4-26"></a>│   ├── tools.py              # the arrivals tool
+</span><span id="__span-4-27"><a id="__codelineno-4-27" name="__codelineno-4-27" href="#__codelineno-4-27"></a>│   ├── scheduled_jobs.py     # the pull, every 30 minutes
+</span><span id="__span-4-28"><a id="__codelineno-4-28" name="__codelineno-4-28" href="#__codelineno-4-28"></a>│   ├── models.py             # mail_batch, mail_message, mail_attachment, mail_mailbox
+</span><span id="__span-4-29"><a id="__codelineno-4-29" name="__codelineno-4-29" href="#__codelineno-4-29"></a>│   ├── queries.py
+</span><span id="__span-4-30"><a id="__codelineno-4-30" name="__codelineno-4-30" href="#__codelineno-4-30"></a>│   └── settings.py
+</span><span id="__span-4-31"><a id="__codelineno-4-31" name="__codelineno-4-31" href="#__codelineno-4-31"></a>└── tests/services/test_documents_service.py, test_document_extraction.py
+</span><span id="__span-4-32"><a id="__codelineno-4-32" name="__codelineno-4-32" href="#__codelineno-4-32"></a>    tests/api/test_documents_endpoints.py, test_document_pages.py
 </span></code></pre></div>
 <h2 id="configuration">Configuration</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">STORAGE_BACKEND</span><span class="o">=</span>filesystem<span class="w">     </span><span class="c1"># or s3, set for you by the storage component</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">STORAGE_ROOT</span><span class="o">=</span>storage_data<span class="w">      </span><span class="c1"># filesystem backend only</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">STORAGE_BACKEND</span><span class="o">=</span>filesystem<span class="w">     </span><span class="c1"># or s3, set for you by the storage component</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nv">STORAGE_ROOT</span><span class="o">=</span>storage_data<span class="w">      </span><span class="c1"># filesystem backend only</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nv">MAIL_IMPORT_MAX_BYTES</span><span class="o">=</span><span class="m">104857600</span><span class="w">   </span><span class="c1"># the largest mail file the upload takes</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="nv">MAIL_IMPORT_MAX_MESSAGES</span><span class="o">=</span><span class="m">2000</span><span class="w">     </span><span class="c1"># messages read from one file; the rest skipped with a warning</span>
 </span></code></pre></div>
+<p>The IMAP pull's settings are secrets; see <a href="#mail">Mail</a>.</p>
 <p>The S3 settings (<code>S3_ENDPOINT_URL</code>, <code>S3_BUCKET</code>, <code>S3_ACCESS_KEY</code>, <code>S3_SECRET_KEY</code>) belong to the storage component and are documented with it.</p>
 <h2 id="health-status">Health Status</h2>
 <table>

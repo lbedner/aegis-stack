@@ -163,6 +163,34 @@ class TestAddCommand:
         speech = (project_path / "app/core/speech_settings.py").read_text()
         assert '"http://kokoro-fastapi:8880/v1"' in speech
 
+    def test_add_gives_an_installed_inference_a_speech_server(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """``aegis add inference[kokoro_fastapi]`` on a project that already
+        has inference adds the speech server it was refused before: the
+        answer, its health check, and the host URL its placement implies."""
+        project_path = project_factory("base")
+        first = run_aegis_command(
+            "add", "inference[llamacpp]", "--project-path", str(project_path), "--yes"
+        )
+        assert first.success, f"Command failed: {first.stderr}"
+
+        result = run_aegis_command(
+            "add",
+            "inference[kokoro_fastapi]",
+            "--project-path",
+            str(project_path),
+            "--yes",
+        )
+
+        assert result.success, f"Command failed: {result.stderr}"
+        answers = load_copier_answers(project_path)
+        assert answers.get("inference_speech") == "kokoro_fastapi"
+        assert answers.get("inference_engine") == "llamacpp"
+        assert (project_path / "app/services/system/health_speech.py").is_file()
+        speech = (project_path / "app/core/speech_settings.py").read_text()
+        assert '"http://host.docker.internal:8880/v1"' in speech
+
     def test_the_ollama_provider_brings_inference_with_its_answers(
         self, project_factory: ProjectFactory
     ) -> None:

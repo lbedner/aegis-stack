@@ -80,13 +80,18 @@ def _tokens(usage: Any) -> SpeechTokens:
     )
 
 
-def wav(pcm: bytes) -> bytes:
-    """Mono 16-bit PCM at the Realtime API's rate, as a WAV."""
+def pcm16(samples: Any) -> bytes:
+    """Float samples (a numpy array, -1 to 1) as 16-bit PCM."""
+    return (samples.clip(-1, 1) * 32767).astype("<i2").tobytes()
+
+
+def wav(pcm: bytes, rate: int = RATE) -> bytes:
+    """Mono 16-bit PCM at ``rate`` (the Realtime API's), as a WAV."""
     out = io.BytesIO()
     with wave.open(out, "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
-        w.setframerate(RATE)
+        w.setframerate(rate)
         w.writeframes(pcm)
     return out.getvalue()
 

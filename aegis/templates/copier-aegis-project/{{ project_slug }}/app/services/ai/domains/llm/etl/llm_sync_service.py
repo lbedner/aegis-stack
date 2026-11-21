@@ -32,6 +32,7 @@ from app.services.ai.domains.llm.etl.queries import (  # noqa: F401
     local_models_present,
 )
 from app.services.ai.domains.llm.etl.results import SyncResult
+from app.services.ai.domains.llm.etl.speech_sync import sync_speech
 from app.services.ai.domains.llm.etl.upserts import UpsertMixin
 from app.services.ai.domains.llm.etl.vendor_metadata import (
     VENDOR_METADATA as VENDOR_METADATA,
@@ -104,17 +105,15 @@ class LLMSyncService(UpsertMixin):
         """
         source = sync_source(source)
 
-        if source == "local":  # the inference engine's models only
+        if source == "local":  # what this machine serves only
             result = await self.sync_local(dry_run=dry_run)
-        elif source == "all":  # both cloud and the engine, merged
+        elif source == "all":  # both cloud and this machine, merged
             result = await self._sync_cloud(mode_filter, dry_run)
-            local_result = await self.sync_local(dry_run=dry_run)
-            result.vendors_added += local_result.vendors_added
-            result.models_added += local_result.models_added
-            result.models_updated += local_result.models_updated
-            result.errors.extend(local_result.errors)
+            result.merge(await self.sync_local(dry_run=dry_run))
         else:
             result = await self._sync_cloud(mode_filter, dry_run)
+        if source in ("local", "all"):  # the speech server beside the engine
+            result.merge(await sync_speech(self, dry_run))
         if not dry_run:
             # Once per sync, whichever ran: a local-only install never runs
             # the cloud half, and its engine's logo is filled here too.

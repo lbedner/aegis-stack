@@ -4,7 +4,8 @@ Its own module because both the service and the row writers it
 delegates to tally into it.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
+from typing import Self
 
 
 @dataclass
@@ -19,6 +20,13 @@ class SyncResult:
     prices_synced: int = 0
     modalities_synced: int = 0
     errors: list[str] = field(default_factory=list)
+
+    def merge(self, other: Self) -> None:
+        """Another sync's tally (the engine's, the speech server's) added in."""
+        for f in fields(self):
+            if f.type is int:
+                setattr(self, f.name, getattr(self, f.name) + getattr(other, f.name))
+        self.errors.extend(other.errors)
 
     @property
     def total_synced(self) -> int:

@@ -42,8 +42,9 @@ FLAT_ROW_CAP = 60
 CATALOG_LIMIT = 200
 
 
-async def catalog(mode: str = "chat") -> list[dict[str, Any]]:
-    """Every model of this kind this install can call right now."""
+async def catalog(mode: str | None = "chat") -> list[dict[str, Any]]:
+    """Every model of this kind (every kind, with None) this install can
+    call right now."""
     from app.components.backend.api.llm.routes import get_models
 
     # Every argument spelled out: called in-process, the handler's Query
@@ -90,15 +91,15 @@ async def model_choices(
 
 
 async def call_models() -> list[dict[str, Any]]:
-    """The realtime models a live call can reach: a vendor the call path
-    serves, by the vendor's own id (the catalog's routed copies, "gemini/...",
-    are not reachable)."""
+    """What a live call can run on (``live_engines.reachable``), each with
+    its ``kind``: a realtime model, or a local chat model, which a call
+    runs as a cascade. One read of every kind: the rule picks."""
     from app.services.ai.service import live_engines
 
     return [
-        m
-        for m in await catalog("realtime")
-        if m.get("vendor") in live_engines.CALL_VENDORS and "/" not in m["model_id"]
+        {**m, "kind": "realtime" if m["mode"] == "realtime" else "cascade"}
+        for m in await catalog(None)
+        if live_engines.reachable(str(m.get("vendor") or ""), m["mode"], m["model_id"])
     ]
 
 
@@ -133,13 +134,39 @@ async def use_for_calls(model_id: str) -> str | None:
     return None
 
 
-async def call_rows(current: str | None = None) -> list[dict[str, Any]]:
-    """The realtime models a live call can reach, as picker rows: the one
-    in use (``current``) first, then the newest."""
-    live = newest_first([{**m, "kind": "realtime"} for m in await call_models()])
+async def call_rows(
+    current: str | None = None, voice: Any | None = None
+) -> list[dict[str, Any]]:
+    """What a live call can run on, as picker rows: the one in use
+    (``current``) first, then the newest. Each says how its call hears and
+    speaks: a realtime model by itself, a local model through ``voice``
+    (the active profile), whose STT and TTS it names."""
+    live = newest_first(await call_models())
     live.sort(key=lambda m: m["model_id"] != current)
     icons = await vendor_icons(live)
-    return [_row(m, under_vendor=None, icons=icons) for m in live]
+    through = _through(voice)
+    return [
+        _row(
+            m,
+            under_vendor=None,
+            icons=icons,
+            ears="Hears and speaks itself" if m["kind"] == "realtime" else through,
+        )
+        for m in live
+    ]
+
+
+def _through(voice: Any | None) -> str:
+    """How a cascade call hears and speaks: the voice's own models, or the
+    defaults it leaves in place."""
+    from app.core.config import settings
+    from app.services.ai.service import get_current_voice_config
+
+    config = get_current_voice_config(settings)
+    stt = getattr(voice, "stt_model", None) or config["stt_model"]
+    tts = getattr(voice, "tts_model", None) or config["tts_model"]
+    name = getattr(voice, "name", None) or "the active voice"
+    return f"Hears and speaks through {name}: {stt} hears, {tts} speaks"
 
 
 async def vendor_icons(models: list[dict[str, Any]]) -> dict[str, str]:
@@ -208,7 +235,11 @@ def chip(model: str) -> dict[str, Any]:
 
 
 def _row(
-    model: dict[str, Any], *, under_vendor: str | None, icons: dict[str, str]
+    model: dict[str, Any],
+    *,
+    under_vendor: str | None,
+    icons: dict[str, str],
+    ears: str | None = None,
 ) -> dict[str, Any]:
     """One picker row. An icon only where it adds information: the lab
     behind a hosted model when it differs from the group's vendor, and the
@@ -223,6 +254,7 @@ def _row(
     facts = " · ".join(
         part
         for part in (
+            ears,
             # A voice model's window is not what picks it; its price is.
             None if voice else format_context_window(model.get("context_window")),
             format_price(

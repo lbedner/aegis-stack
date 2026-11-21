@@ -33,6 +33,7 @@ from app.services.ai.domains.chat.user_memory import memory_user
 from app.services.ai.domains.spend import calls
 from app.services.ai.domains.voice import live_engines
 from app.services.ai.domains.voice.call_turns import save_turn
+from app.services.ai.domains.voice.cascade import connection as cascade
 from app.services.ai.domains.voice.catalog import GEMINI_PREBUILT, get_voice
 from app.services.ai.domains.voice.live_engines import is_gpt_live
 from app.services.ai.domains.voice.models import TTSProvider
@@ -131,6 +132,8 @@ def call_voice(model: str, voice: str | None) -> str | None:
     the engine's provider has it (one voice for the agent's calls and
     spoken lines), else OpenAI's recommended one, else (Gemini) its own,
     None."""
+    if cascade.serves(model):
+        return voice  # it speaks in the profile's own TTS
     spoken = get_voice(voice) if voice else None
     by = spoken.provider_id if spoken else None
     if model.startswith("openai:"):
@@ -268,7 +271,9 @@ async def realtime_for(
         # the manners, it made answers up (2026-11-16).
         instructions = _and_history(instructions, history)
     realtime = agent.realtime(
-        model,
+        await cascade.for_call(ai, model, user_id=user_id)
+        if cascade.serves(model)
+        else model,
         instructions=await call_instructions(agent, history),
         model_settings=_model_settings(model, voice, max_output_tokens, instructions),
         toolsets=[CALL_TOOLS] if hang_up else [],
@@ -357,7 +362,7 @@ async def drive(
     usage = None
     ended: CallEnd = "provider"
     log = TurnLog()
-    provider, _, bare = model.rpartition(":")
+    provider, bare = live_engines.split_model(model)
     # The call so far, at the last saved turn: each turn keeps its share.
     so_far = {"input_tokens": 0, "output_tokens": 0, "cost": 0.0}
     rates = await calls.realtime_price(bare)

@@ -240,6 +240,23 @@ class TestACallKnowsWhoSheIs:
         assert realtime["toolsets"] == []
 
     @pytest.mark.asyncio
+    async def test_a_local_chat_model_is_called_as_a_cascade(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """It has no realtime API: the agent's session runs on the app's own
+        chain around it, and a realtime model is still called by name."""
+        from app.services.ai.domains.voice.cascade.connection import (
+            CascadeRealtimeModel,
+        )
+
+        _, local = await _built(monkeypatch, model="ollama:qwen3.8:27b")
+        _, cloud = await _built(monkeypatch)
+
+        assert isinstance(local["model"], CascadeRealtimeModel)
+        assert local["model"].model_name == "qwen3.8:27b"
+        assert cloud["model"] == "google:gemini-3.8-live"
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("model", ["openai:gpt-live-1", "google:gemini-3.8-live"])
     async def test_the_model_that_speaks_is_told_how_to_say_the_list(
         self, monkeypatch: pytest.MonkeyPatch, model: str
@@ -311,7 +328,8 @@ async def _built(
         built["held"] = conversation.metadata.get(chat.AGENT_KEY)
         prompts.append(agent_config.system_prompt)
         agent = SimpleNamespace(
-            system_prompt_parts=_no_parts, realtime=lambda model, **kw: kw
+            system_prompt_parts=_no_parts,
+            realtime=lambda model, **kw: {**kw, "model": model},
         )
         return SimpleNamespace(agent=agent, conversation_context=history)
 
@@ -419,6 +437,38 @@ class TestACutCall:
         assert user.content == "How much is left?"
         assert reply.metadata["interrupted"] is True
         assert [step["tool"] for step in reply.metadata["tool_trace"]] == ["run_code"]
+
+    @pytest.mark.asyncio
+    async def test_a_local_models_turn_is_saved_under_its_whole_id(
+        self, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A local model's id has a colon of its own ("qwen3.8:27b"): only
+        the first one ends the provider's prefix."""
+        from app.services.ai.domains.voice.realtime_calls import drive
+        from tests._realtime import FakeRealtime
+
+        await _priced(async_db_session, monkeypatch)
+        conversation = await _conversation()
+
+        async def hang_up(session: object) -> None:
+            await session.close()  # type: ignore[attr-defined]
+
+        await drive(
+            ai_service,
+            FakeRealtime(_turn()[:2]),
+            ledger=async_db_session,
+            conversation_id=conversation.id,
+            model="llamacpp:qwen3.8:27b",
+            agent_slug="voice",
+            user_id=USER,
+            alongside=hang_up,
+        )
+
+        reply = (await ai_service.get_conversation(conversation.id)).messages[-1]
+        assert (reply.metadata["provider"], reply.metadata["model"]) == (
+            "llamacpp",
+            "qwen3.8:27b",
+        )
 
     @pytest.mark.asyncio
     async def test_a_call_soon_after_picks_up_the_question(self) -> None:
@@ -921,3 +971,5 @@ def test_a_call_speaks_only_a_prebuilt_gemini_voice(
 
     assert call_voice("google:gemini-3.8-live", "Kore") == "Kore"
     assert call_voice("google:gemini-3.8-live", "voice_en_gb_amelia") is None
+    # A cascade speaks in the profile's own TTS, whichever voice it is.
+    assert call_voice("llamacpp:qwen3.8:27b", "af_heart") == "af_heart"

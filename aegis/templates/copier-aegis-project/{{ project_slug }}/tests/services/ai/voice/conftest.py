@@ -1,5 +1,6 @@
 """Shared fixtures for voice service tests."""
 
+from importlib.util import find_spec
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -16,6 +17,10 @@ from app.services.ai.domains.voice import (
     VoiceSettingsResponse,
 )
 from tests._voice_settings import voice_settings
+
+# A cascade call's ear runs on numpy, which only a stack with a local
+# model installs (onnxruntime brings it).
+collect_ignore_glob = [] if find_spec("numpy") else ["test_cascade_*.py"]
 
 
 @pytest.fixture

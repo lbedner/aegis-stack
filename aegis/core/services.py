@@ -765,6 +765,11 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/services/ai/domains/voice/realtime_calls.py",
                     "app/services/ai/domains/voice/call_turns.py",
                     "app/services/ai/domains/voice/live_voice.py",
+                    # A call on a local model, built on the call path above.
+                    "app/services/ai/domains/voice/cascade",
+                    "tests/services/ai/voice/test_cascade_connection.py",
+                    "tests/services/ai/voice/test_cascade_turns.py",
+                    "tests/_cascade.py",
                     # The knowledge base's records; Chroma itself is files.
                     "app/services/rag/models/knowledge.py",
                     "app/services/rag/knowledge.py",

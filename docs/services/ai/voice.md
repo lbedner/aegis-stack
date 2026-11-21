@@ -225,7 +225,10 @@ languages, the mixes it saved), and they appear as they come in; a server
 not running yet is asked again on the next listing. Speech is asked for as
 WAV, whole or streamed, and usage is recorded at no cost. `SPEECH_SERVER`
 names which server it is, for what it takes beyond OpenAI's fields:
-`kokoro_fastapi`, the only one so far.
+`kokoro_fastapi`, the only one so far. The local catalog sync (`llm sync --source local`) lists
+the models it serves as speech models under that name, as it lists the
+inference engine's chat models; the OpenAI names it answers to are left to
+OpenAI.
 
 ---
 
@@ -420,12 +423,13 @@ curl http://localhost:8000/voice/catalog/summary | jq
 ## Live Calls
 
 The phone beside the chat's microphone opens a live call on the engine the
-voice profile names (Gemini Live, an OpenAI realtime model, or GPT-Live).
+voice profile names (Gemini Live, an OpenAI realtime model, GPT-Live, or
+a local chat model: see **A local model** below).
 The composer's chips say what each part runs on: the agent (opening its
 editor), the chat model (opening the Models dialog, chat models only) and
 **Calls: <engine>** (opening the voice dialog, whose Calls list picks the
-active profile's engine from the realtime models a call can reach, beside
-the voices themselves). Meetings answer live on the same engine.
+active profile's engine from the realtime models a call can reach and the
+local chat models, beside the voices themselves). Meetings answer live on the same engine.
 The server holds the engine's session; the page carries the audio over one
 WebSocket. The agent on a call is built the way a typed turn builds it:
 the same prompt, context modules, contexts and tools, plus how to talk on a
@@ -452,11 +456,25 @@ call and a tool to end it.
 - **Noise.** OpenAI realtime filters a laptop mic's noise and ends your turn
   when the thought does, not on a pause; Gemini waits 800ms of silence
   before ending it.
+- **A local model.** A chat model on Ollama or llama.cpp has no realtime
+  API, so the app runs the call itself (`voice/cascade`), on the same path
+  as the others (relay, tools, saved turns, billing). Silero VAD hears
+  speech; at each pause Smart Turn v3.2 judges whether you are done or
+  paused mid-thought ("I'd like to... um"), and two seconds of silence
+  end the turn anyway. The turn is heard by the profile's STT, answered by
+  the model with its tools, and said a sentence at a time in the profile's
+  TTS; speaking over it cuts it off. The two turn models (2MB and 8MB, BSD)
+  run on `onnxruntime`, which a stack with a local provider and voice
+  installs, and are fetched on first use into `~/.cache/turn-detection`.
+  The model costs nothing; the STT and TTS bill as they do for a spoken
+  line. With OpenAI's STT and TTS and a 7B model, the answer starts about
+  two and a half seconds after you stop.
 - **Mute** stops your voice going out (after a moment of silence, so the
   engine hears you stop) and pauses the quiet count.
 - **Her voice.** A call speaks the profile's voice where the engine's
   provider has it: Gemini Live speaks a Gemini voice, an OpenAI engine an
-  OpenAI one. With a voice the engine does not have, it speaks its own.
+  OpenAI one. With a voice the engine does not have, it speaks its own. A
+  local model speaks whatever the profile's TTS does.
 - **Who is calling.** A call is a turn on its mount: the mount's `bind`
   (an app's chat bound to the signed-in user and what they are looking
   at), the signed-in owner and the mount's `gate` all run on the call's

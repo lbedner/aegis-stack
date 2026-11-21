@@ -1,12 +1,20 @@
 """What the catalog lists for the voice that runs in the app's own process:
 Kokoro speaking (``tts/kokoro.py``) and Parakeet hearing
 (``stt/parakeet.py``). Kept out of ``catalog`` for its size; it adds these
-to its lists. Also how either loads its model (``loaded_once``)."""
+to its lists. Also how a model in the app's process is fetched
+(``fetched``) and loaded (``loaded_once``): theirs, and a cascade call's
+turn detection (``cascade/turns.py``)."""
 
 from collections.abc import Callable
 from functools import cache
+import logging
+import os
+from pathlib import Path
+import tempfile
 import threading
 from typing import Any
+
+import httpx
 
 from app.core import speech_server
 
@@ -21,6 +29,33 @@ from .models import (
 )
 
 _IN_APP = "runs in the app on the CPU, no key"
+logger = logging.getLogger(__name__)
+
+
+def fetched(url: str, cache_dir: Path) -> Path:
+    """The model file at ``url`` in ``cache_dir``, downloaded into it first
+    when absent (whole into a file of its own, then moved, so a cut-off
+    download, or another process fetching it too, never leaves half a
+    file)."""
+    path = cache_dir / url.rpartition("/")[2]
+    if path.exists():
+        return path
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    fd, partial = tempfile.mkstemp(dir=cache_dir, suffix=".partial")
+    logger.info(f"Fetching {url} into {cache_dir}")
+    try:
+        with (
+            os.fdopen(fd, "wb") as out,
+            httpx.stream("GET", url, follow_redirects=True, timeout=60) as response,
+        ):
+            response.raise_for_status()
+            for chunk in response.iter_bytes(1 << 20):
+                out.write(chunk)
+        os.replace(partial, path)
+    except BaseException:
+        Path(partial).unlink(missing_ok=True)
+        raise
+    return path
 
 
 def loaded_once(load: Callable[..., Any]) -> Callable[..., Any]:

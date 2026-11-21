@@ -97,16 +97,19 @@ async def engine_for_model(session: AsyncSession, model_id: str) -> LiveEngine |
     ).first()
 
 
-async def model_vendor(session: AsyncSession, model_id: str) -> tuple[int, str] | None:
-    """A catalog model's id and the slug of the org that serves it."""
+async def model_vendor(
+    session: AsyncSession, model_id: str
+) -> tuple[int, str, str] | None:
+    """A catalog model's id, the slug of the org that serves it, and its
+    mode ("realtime", "chat", ...)."""
     row = (
         await session.exec(
-            select(LargeLanguageModel.id, LLMOrg.slug)
+            select(LargeLanguageModel.id, LLMOrg.slug, LargeLanguageModel.mode)
             .join(LLMOrg, col(LargeLanguageModel.served_by_org_id) == LLMOrg.id)
             .where(LargeLanguageModel.model_id == model_id)
         )
     ).first()
-    return (row[0], row[1]) if row and row[0] is not None else None
+    return (row[0], row[1], row[2]) if row and row[0] is not None else None
 
 
 async def catalog_ids(session: AsyncSession, model_ids: list[str]) -> dict[str, int]:

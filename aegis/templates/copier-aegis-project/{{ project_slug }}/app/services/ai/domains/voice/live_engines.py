@@ -21,6 +21,7 @@ from app.core.voice_settings import setting_default
 from app.services.ai.domains.llm.queries import price_for_model
 from app.services.ai.domains.spend import calls
 from app.services.ai.domains.voice import queries
+from app.services.ai.models.provider_names import LOCAL_PROVIDERS
 from app.services.ai.models.voice import LiveEngine
 
 DEFAULT = setting_default("VOICE_LIVE_ENGINE")
@@ -125,10 +126,28 @@ ENGINE_SEEDS: tuple[dict[str, Any], ...] = (
 enabled = queries.enabled_engines
 
 
+def split_model(model: str) -> tuple[str, str]:
+    """A Pydantic AI model string's provider prefix and the model's own id
+    (``realtime_model`` joins them). The prefix ends at the first colon: a
+    local model's id has its own ("llamacpp:qwen3.8:27b"). No prefix, ""."""
+    provider, colon, bare = model.partition(":")
+    return (provider, bare) if colon else ("", model)
+
+
+def reachable(vendor: str, mode: str, model_id: str) -> bool:
+    """Whether a call can run on this catalog model: a realtime model of a
+    vendor the call path serves, by the vendor's own id (the catalog's
+    routed copies, "gemini/...", are not reachable), or a local chat model,
+    which a call runs as a cascade (``cascade``)."""
+    if mode == "realtime":
+        return vendor in CALL_VENDORS and "/" not in model_id
+    return mode == "chat" and vendor in LOCAL_PROVIDERS
+
+
 def is_gpt_live(model: str) -> bool:
     """GPT-Live, by its id bare ("gpt-live-1") or as Pydantic AI names it
     ("openai:gpt-live-1"): its own session settings."""
-    return model.rpartition(":")[2].startswith("gpt-live")
+    return split_model(model)[1].startswith("gpt-live")
 
 
 def pick(engines: list[LiveEngine], key: str | None) -> LiveEngine | None:
@@ -160,11 +179,11 @@ async def choose(session: AsyncSession, model_id: str) -> LiveEngine | None:
     """The engine for a catalog model picked for calls, offered again if it
     was turned off, or made on the spot with the seeded call instructions
     and reply cap, to be tuned on its row afterwards. None when the
-    catalog lacks the model or no call can reach its vendor."""
+    catalog lacks the model or no call can reach it (``reachable``)."""
     engine = await queries.engine_for_model(session, model_id)
     if engine is None:
         found = await queries.model_vendor(session, model_id)
-        if found is None or found[1] not in CALL_VENDORS:
+        if found is None or not reachable(found[1], found[2], model_id):
             return None
         engine = LiveEngine(
             key=model_id,

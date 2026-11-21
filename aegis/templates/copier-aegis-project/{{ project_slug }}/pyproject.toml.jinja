@@ -150,6 +150,11 @@ dependencies = [
     installs carry the dependency but never touch it. #}
     "pydantic-ai-harness[codemode]>=0.24.0,<0.37",
     "httpx>=0.27.0,<0.29",
+{%- if ai_voice and ("ollama" in ai_providers or "llamacpp" in ai_providers) %}
+    # A live call on a local model hears its turns in the app (Silero VAD
+    # and Smart Turn, voice/cascade): small ONNX models, no torch.
+    "onnxruntime>=1.32,<2",
+{%- endif %}
 {%- else %}
     # LangChain framework dependencies
     "langchain-core>=1.1.0,<2",

@@ -16,6 +16,8 @@ from app.services.system import job_store
 from tests._mbox import mbox_bytes, message
 from tests._session import opens
 
+pytestmark = pytest.mark.usefixtures("no_mail_hooks")
+
 WORKER = importlib.util.find_spec("app.components.worker") is not None
 
 

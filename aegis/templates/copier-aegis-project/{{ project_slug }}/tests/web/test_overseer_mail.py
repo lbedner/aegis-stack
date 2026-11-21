@@ -26,6 +26,8 @@ from tests._secret_settings import secret_settings  # noqa: E402
 from tests.web.dom import none, one, table_rows, text  # noqa: E402
 from tests.web.overseer import sign_in, status_with  # noqa: E402
 
+pytestmark = pytest.mark.usefixtures("no_mail_hooks")
+
 PAGE = "/overseer/services/documents"
 MAIL = f"{PAGE}/mail"
 DOCUMENTS = ComponentStatus(name="documents", message="Documents ready")

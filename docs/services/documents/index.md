@@ -99,9 +99,10 @@ The pull's four settings are secrets, set in `.env` or on the Overseer Secrets p
 | `MAIL_IMAP_FOLDER` | the folder or label to read; `INBOX` when unset |
 | `MAIL_IMAP_PASSWORD` | an app password for that mailbox |
 
-**Who a sender is** is not the mail service's question. After a batch's messages are filed, ingest hands the new `MailMessage` rows (`from_address` is the sender) to every hook registered with `register_messages_filed(hook)`, each `async (db, messages, owner_user_id)` in a session of its own; one that raises is logged, never the import's failure. A contacts service plugs in there. The template registers nothing.
+**Who a sender is** is not the mail service's question. After a batch's messages are filed, ingest hands the new `MailMessage` rows (`from_address` is the sender) to every hook registered with `register_messages_filed(hook)`, each `async (db, messages, owner_user_id)` in a session of its own; one that raises is logged, never the import's failure. A contacts service plugs in there, from its own `mail_hooks.py`: ingest imports every service's `mail_hooks` module before it calls the hooks, so the hook is registered in every process that files mail, the worker's included. The template registers nothing.
 
 ```python
+# app/services/<yours>/mail_hooks.py
 from app.services.mail.ingest import register_messages_filed
 
 async def match_senders(db, messages, owner_user_id):

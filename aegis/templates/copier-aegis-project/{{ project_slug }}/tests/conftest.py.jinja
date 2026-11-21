@@ -455,6 +455,21 @@ def dispatched(monkeypatch: pytest.MonkeyPatch) -> list[int]:
 
     monkeypatch.setattr(dispatch, "start_extraction", start)
     return asked
+
+
+@pytest.fixture
+def no_mail_hooks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mail's core alone: what a project's ``mail_hooks`` do as mail is
+    filed (file paper under a contact, read a letter) is theirs to test,
+    so the core's tests neither find nor call them. Found first, so a
+    hook module imported mid-test cannot register onto the stand-in
+    list and be lost with it."""
+    import app.services as services
+    from app.services.mail import ingest
+
+    ingest.import_modules_named(services, "mail_hooks")
+    monkeypatch.setattr(ingest, "_filed_hooks", [])
+    monkeypatch.setattr(ingest, "import_modules_named", lambda *args: [])
 {%- endif %}
 
 

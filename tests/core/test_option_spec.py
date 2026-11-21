@@ -501,6 +501,17 @@ class TestVariantDelta:
         )
         assert variant_delta("inference[ollama]", inference, ollama, **asked) == {}
 
+    def test_an_installed_inference_takes_a_speech_server_later(self) -> None:
+        """No speech server holds nothing, so adding one later is an upgrade,
+        and asking for none once one runs is already satisfied."""
+        from aegis.core.components import COMPONENTS
+
+        inference = COMPONENTS["inference"]
+        none = {"inference_speech": "none"}
+        kokoro = {"inference_speech": "kokoro_fastapi"}
+        assert variant_delta("inference[kokoro_fastapi]", inference, none) == kokoro
+        assert variant_delta("inference[none]", inference, kokoro) == {}
+
     def test_a_dependency_never_switches_it(self) -> None:
         """A plugin needing ``inference[ollama]`` on a llama.cpp project is a
         conflict, not a quiet move: the resolver does not ask deliberately."""

@@ -622,6 +622,9 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 default=InferenceSpeech.DEFAULT,
                 answer_key=AnswerKeys.INFERENCE_SPEECH,
                 about="guided.choice.inference_speech",
+                # No server holds nothing to lose: an installed inference
+                # takes one later (``aegis add inference[kokoro_fastapi]``).
+                upgrades_from=InferenceSpeech.NONE,
             ),
         ],
         # ``ollama_mode`` mirrors the placement; without the component there

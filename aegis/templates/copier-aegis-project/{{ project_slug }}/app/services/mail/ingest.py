@@ -22,6 +22,7 @@ import hashlib
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import OpenSession
+from app.core.discovery import import_modules_named
 from app.core.log import logger
 from app.core.time import utcnow
 from app.services.documents.domains.extraction.dispatch import read_quietly
@@ -44,6 +45,10 @@ _filed_hooks: list[MessagesFiled] = []
 
 def register_messages_filed(hook: MessagesFiled) -> None:
     """Hand every batch's new messages to ``hook``, after they are filed.
+
+    Call it from your service's ``mail_hooks.py``: ingest imports every
+    such module before it tells anyone, so the hook is there in each
+    process that files mail, the worker's included.
 
     Each hook runs in its own session, in registration order. One that
     raises is rolled back and logged, never the import's failure: the
@@ -230,6 +235,11 @@ async def _tell_filed(
     """The seam: each registered hook, given the batch's new messages."""
     if not rows:
         return
+    import app.services as services
+
+    # Found on disk, as tools and change types are; importing twice is a
+    # no-op.
+    import_modules_named(services, "mail_hooks")
     for hook in _filed_hooks:
         try:
             async with open_session() as db:

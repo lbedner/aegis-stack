@@ -69,10 +69,10 @@ PIECES = {
     "utils": ("Utils", "wiring"),
     "tools": ("Tools", "entry"),
     "change_types": ("Change types", "entry"),
+    "mail_hooks": ("Mail hooks", "entry"),  # what it does as mail is filed
     "sources": ("Sources", "entry"),  # research sources a plugin registers
     "overseer": ("Overseer", "entry"),  # its own page (app.core.overseer_pages)
-    # What it talks to (providers, file formats, collectors): logic, drawn
-    # with the domains, a package of its own so what it knows stays apart.
+    # What it talks to (providers, formats): logic, kept in its own package.
     "adapters": ("Adapters", "domains"),
 }
 

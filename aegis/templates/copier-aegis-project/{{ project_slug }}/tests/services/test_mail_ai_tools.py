@@ -22,6 +22,8 @@ from tests._mbox import PDF, eml_bytes, mbox_bytes, message
 from tests._secret_settings import secret_settings
 from tests._session import opens, rows_of
 
+pytestmark = pytest.mark.usefixtures("no_mail_hooks")
+
 
 @pytest.fixture(autouse=True)
 def _tools_use_test_session(

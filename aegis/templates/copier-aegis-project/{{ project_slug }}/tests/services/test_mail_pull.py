@@ -31,7 +31,10 @@ from tests._session import rows_of
 PASSWORD = "abcd efgh ijkl mnop"
 # Most tests pull several times: once to note where the folder ends,
 # then for what arrived after.
-pytestmark = pytest.mark.queryspy(threshold=5)
+pytestmark = [
+    pytest.mark.queryspy(threshold=5),
+    pytest.mark.usefixtures("no_mail_hooks"),
+]
 BOX = pull.Mailbox("imap.example.com", "sam@example.com", "Receipts", PASSWORD)
 
 

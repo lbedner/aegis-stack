@@ -23,6 +23,8 @@ from app.services.mail.parse import NotMailError
 from tests._mbox import PDF, eml_bytes, mbox_bytes, message
 from tests._session import rows_of
 
+pytestmark = pytest.mark.usefixtures("no_mail_hooks")
+
 
 async def papers(db: AsyncSession) -> list[Document]:
     return [d for d in await rows_of(db, Document) if d.kind != "letter"]
@@ -346,6 +348,39 @@ class TestTheSeam:
         )
 
         assert told == [(["<a@example.com>", "<b@example.com>"], None)]
+
+    async def test_a_services_mail_hooks_module_is_loaded_first(
+        self,
+        open_session: OpenSession,
+        dispatched: list[int],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A hook registers in its own service's ``mail_hooks.py``, found on
+        disk as tools and change types are: the worker, which files a
+        queued import, imports nothing else of that service, so a hook
+        registered anywhere else was never there to call."""
+        monkeypatch.setattr(ingest, "_filed_hooks", [])
+        told: list[str] = []
+
+        async def hook(
+            db: AsyncSession, rows: list[MailMessage], owner_user_id: int | None
+        ) -> None:
+            told.extend(row.message_id for row in rows)
+
+        def discovered(package: Any, name: str) -> list[Any]:
+            assert name == "mail_hooks"
+            if hook not in ingest._filed_hooks:
+                ingest.register_messages_filed(hook)
+            return []
+
+        monkeypatch.setattr(ingest, "import_modules_named", discovered)
+        await ingest.ingest_mail(
+            open_session,
+            data=mbox_bytes([message(message_id="<a@example.com>")]),
+            file_name="x.mbox",
+        )
+
+        assert told == ["<a@example.com>"]
 
     async def test_a_failing_hook_never_fails_the_import(
         self,

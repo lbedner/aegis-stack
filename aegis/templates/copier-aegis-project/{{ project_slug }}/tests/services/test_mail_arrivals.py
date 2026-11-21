@@ -20,6 +20,8 @@ from app.services.mail.models import MailMessage
 from tests._mbox import PDF, eml_bytes, mbox_bytes, message
 from tests._session import rows_of
 
+pytestmark = pytest.mark.usefixtures("no_mail_hooks")
+
 
 class TestWhatCameIn:
     async def test_three_mails_and_what_each_became(

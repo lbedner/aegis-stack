@@ -5,7 +5,7 @@ family holds (``redis_facts``)."""
 from __future__ import annotations
 
 from fnmatch import fnmatchcase
-from typing import Any
+from typing import Any, TypeVar
 
 
 class ReplyError(Exception):
@@ -51,8 +51,17 @@ class FakeRedis:
     async def type(self, key: str) -> str:
         return self._type(key)
 
-    async def set(self, key: str, value: str, **_options: Any) -> None:
+    async def set(
+        self, key: str, value: str, nx: bool = False, **_options: Any
+    ) -> bool | None:
+        if nx and key in self.strings:
+            return None
         self.strings[key] = value
+        return True
+
+    async def incrby(self, key: str, amount: int) -> int:
+        self.strings[key] = str(int(self.strings.get(key, 0)) + amount)
+        return int(self.strings[key])
 
     async def get(self, key: str) -> str | None:
         return self.strings.get(key)
@@ -183,6 +192,16 @@ class FakeRedis:
         for key in [*self.hashes, *self.strings, *self.zsets, *self.streams]:
             if fnmatchcase(key, match):
                 yield key
+
+
+Store = TypeVar("Store")
+
+
+def on_fake_redis(store: Store) -> Store:
+    """``store`` (a ``CacheService``, a ``SeriesStore``) on a fresh
+    ``FakeRedis`` in place of its in-process fallback."""
+    store._redis, store._store = FakeRedis(), None  # type: ignore[attr-defined]
+    return store
 
 
 class _Pipeline:

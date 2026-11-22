@@ -250,7 +250,7 @@ class TestInTreeWiringShape:
     @pytest.mark.parametrize(
         ("name", "routers", "cards", "modals"),
         [
-            ("auth", 3, 1, 1),  # auth + oauth (gated) + org (gated)
+            ("auth", 4, 1, 1),  # auth + oauth, guest, org (gated)
             ("ai", 4, 1, 1),  # ai + voice + llm + rag (3 gated)
             ("blog", 1, 1, 1),
             ("comms", 1, 1, 1),

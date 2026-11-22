@@ -192,3 +192,52 @@ async def usage_windows(
         ]
         for row in rows
     }
+
+
+async def owner_spend_since(
+    session: AsyncSession, *, user_id: str, action_prefix: str, since: datetime
+) -> float:
+    """Ledgered cost for one user's actions since ``since``: a family by its
+    prefix ending in ``:`` (``chat:``), else that one action (``chat_action``
+    of one agent, never the agents whose slugs begin with it)."""
+    row = await session.exec(
+        select(func.coalesce(func.sum(LLMUsage.total_cost), 0.0))
+        .where(LLMUsage.user_id == user_id)
+        .where(_actions(action_prefix))
+        .where(LLMUsage.timestamp >= since)
+    )
+    return float(row.one())
+
+
+async def shared_spend_since(
+    session: AsyncSession,
+    *,
+    users: str,
+    user_id: str,
+    action_prefix: str,
+    since: datetime,
+) -> tuple[float, float]:
+    """What every user whose id begins ``users`` (``guest:``) spent since
+    ``since``, and ``user_id``'s own part of it, in one query."""
+    mine = case((LLMUsage.user_id == user_id, LLMUsage.total_cost), else_=0.0)
+    # A range, not LIKE: LIKE with ESCAPE never uses the user_id index.
+    past = users[:-1] + chr(ord(users[-1]) + 1)
+    row = await session.exec(
+        select(
+            func.coalesce(func.sum(LLMUsage.total_cost), 0.0),
+            func.coalesce(func.sum(mine), 0.0),
+        )
+        .where(col(LLMUsage.user_id) >= users)
+        .where(col(LLMUsage.user_id) < past)
+        .where(_actions(action_prefix))
+        .where(LLMUsage.timestamp >= since)
+    )
+    together, own = row.one()
+    return float(together), float(own)
+
+
+def _actions(action_prefix: str) -> Any:
+    """A family by its prefix ending in ``:``, else that one action."""
+    if action_prefix.endswith(":"):
+        return col(LLMUsage.action).startswith(action_prefix, autoescape=True)
+    return LLMUsage.action == action_prefix

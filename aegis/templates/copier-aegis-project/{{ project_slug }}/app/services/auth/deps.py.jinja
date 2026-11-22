@@ -4,6 +4,10 @@ from app.core.db import get_async_db
 from app.core.security import SESSION_COOKIE
 from app.models.user import User
 from app.services.auth.service import get_current_user_from_token
+{%- if include_auth_guest %}
+from app.services.auth.service import visitor
+from app.services.auth.service import session_id_of
+{%- endif %}
 from app.services.auth.domains.sessions.tokens import RefreshService
 from app.services.auth.domains.users.accounts import UserService
 {%- if include_auth_org %}
@@ -77,14 +81,34 @@ async def get_optional_user(
     plan card for authed). Swallows the 401 ``get_current_user_from_token``
     would raise so the route can branch on the result instead of
     catching exceptions. With ``AUTH_ENABLED=False`` a request with no
-    session still resolves, to the synthetic dev user.
+    session still resolves, to the synthetic dev user.{% if include_auth_guest %} A guest is
+    ``None`` here: it is a visitor (``get_visitor``), never a user.{% endif %}
     """
+    return await _optional_user(token, user_service)
+
+
+async def _optional_user(
+    token: str | None, user_service: UserService, *, guests: bool = False
+) -> User | None:
     if not token and settings.AUTH_ENABLED:
         return None
     try:
-        return await get_current_user_from_token(token, user_service)
+        return await get_current_user_from_token(token, user_service, guests=guests)
     except HTTPException:
         return None
+
+
+{%- if include_auth_guest %}
+
+
+async def get_visitor(
+    token: str | None = Depends(get_session_token),
+    user_service: UserService = Depends(get_user_service),
+) -> str | None:
+    """``visitor()`` for this request; None signed out."""
+    user = await _optional_user(token, user_service, guests=True)
+    return visitor(user, session_id_of(token)) if user else None
+{%- endif %}
 
 
 async def get_verified_user(

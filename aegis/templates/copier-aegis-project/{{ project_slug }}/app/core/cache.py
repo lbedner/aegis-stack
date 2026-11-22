@@ -309,6 +309,24 @@ class CacheService:
         self._store[key] = (True, time.time() + ttl)
         return True
 
+    async def count(self, key: str, by: int, ttl: int) -> int:
+        """Add ``by`` to the number at ``key`` and return the total: one
+        step on Redis, so every process counts into the same number. The
+        key lapses ``ttl`` seconds after it was first counted. Read it only
+        through ``count`` (``by=0``): ``get`` unpickles, and a count is a
+        plain number."""
+        if self._redis is not None:
+            pipe = self._redis.pipeline()
+            pipe.set(key, 0, nx=True, ex=ttl)
+            pipe.incrby(key, by)
+            _, total = await pipe.execute()
+            return int(total)
+        total = (await self._lookup(key) or 0) + by
+        assert self._store is not None
+        expires_at = self._store.get(key, (0, time.time() + ttl))[1]
+        self._store[key] = (total, expires_at)
+        return total
+
     async def _keys(self, prefix: str) -> list[bytes]:
         """Every Redis key starting with ``prefix``: SCAN with MATCH, O(n)
         over the keyspace but never blocking the server, unlike KEYS."""

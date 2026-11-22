@@ -171,6 +171,9 @@ class BudgetStatus:
     # Carried through so a fail-open (DB unreadable) can be logged/asserted
     # distinctly from a genuine under-budget allow.
     degraded: bool = False
+    # Refused because every guest together spent the shared ceiling, not
+    # because this one spent its own: what the mount answers is its call.
+    shared: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
 
     @property

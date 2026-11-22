@@ -10,6 +10,7 @@ from app.models.user import User
 from app.services.auth.domains.sessions import history as session_history
 from app.services.auth.domains.sessions.tokens import RefreshService, access_token
 from app.services.auth.domains.users.accounts import (
+    FixedRoleError,
     RegistrationClosedError,
     RestoreConflictError,
     UserService,
@@ -23,6 +24,9 @@ from app.services.auth.domains.orgs.organizations import (
     OrgService,
     RestoreConflictError as OrgRestoreConflictError,
 )
+{% endif %}
+{% if include_auth_guest %}
+from app.services.auth.domains.sessions.guest import guest_user, is_guest, visitor
 {% endif %}
 from fastapi import HTTPException, status
 {% if include_auth_rbac %}
@@ -39,6 +43,7 @@ if TYPE_CHECKING:
 
 # What callers outside the service use of its domains.
 __all__ = [
+    "FixedRoleError",
     "RefreshService",
     "RegistrationClosedError",
     "RestoreConflictError",
@@ -51,6 +56,11 @@ __all__ = [
     "MembershipService",
     "OrgRestoreConflictError",
     "OrgService",
+{%- endif %}
+{%- if include_auth_guest %}
+    "guest_user",
+    "is_guest",
+    "visitor",
 {%- endif %}
 ]
 
@@ -78,9 +88,11 @@ def session_id_of(token: str | None) -> str | None:
 
 
 async def get_current_user_from_token(
-    token: str | None, user_service: UserService
+    token: str | None, user_service: UserService, *, guests: bool = False
 ) -> User:
-    """Get current user from JWT token."""
+    """Get current user from JWT token. The shared guest account
+    (``auth[guest]``) is refused (403) unless ``guests``: a route a guest
+    may use says so, so none hands a stranger what a member may do."""
     if not settings.AUTH_ENABLED:
         return _build_dev_user()
 
@@ -113,6 +125,10 @@ async def get_current_user_from_token(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Inactive user"
         )
+{%- if include_auth_guest %}
+    if not guests and is_guest(user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="guest_account")
+{%- endif %}
 
     # A signed-out session's access tokens end with it, not at their expiry.
     # A token without ``sid`` predates the claim or was minted outside a

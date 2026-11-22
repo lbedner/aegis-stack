@@ -185,6 +185,8 @@ def generate_with_copier(
         AnswerKeys.AUTH_ORG: template_context.get(AnswerKeys.AUTH_ORG, "no") == "yes",
         AnswerKeys.AUTH_OAUTH: template_context.get(AnswerKeys.AUTH_OAUTH, "no")
         == "yes",
+        AnswerKeys.AUTH_GUEST: template_context.get(AnswerKeys.AUTH_GUEST, "no")
+        == "yes",
         AnswerKeys.AI_FRAMEWORK: template_context.get(
             AnswerKeys.AI_FRAMEWORK, AIFrameworks.PYDANTIC_AI
         ),

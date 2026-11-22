@@ -2026,14 +2026,18 @@ class ManualUpdater:
             elif has_require_role:
                 inferred.update(_true_flags(auth_level_answers(AuthLevels.RBAC)))
 
-        # Auth OAuth marker — file may exist as a non-stub when oauth was wired
-        if has_file("app", "components", "backend", "api", "auth", "oauth.py"):
-            oauth_path = (
-                proj / "app" / "components" / "backend" / "api" / "auth" / "oauth.py"
-            )
+        # Auth OAuth / guest markers: each router exists as a non-stub when
+        # its flag was wired
+        for name, key in (
+            ("oauth.py", AnswerKeys.AUTH_OAUTH),
+            ("guest.py", AnswerKeys.AUTH_GUEST),
+        ):
+            if not has_file("app", "components", "backend", "api", "auth", name):
+                continue
+            path = proj / "app" / "components" / "backend" / "api" / "auth" / name
             try:
-                if oauth_path.read_text().strip():
-                    inferred[AnswerKeys.AUTH_OAUTH] = True
+                if path.read_text().strip():
+                    inferred[key] = True
             except (OSError, UnicodeDecodeError):
                 pass
 

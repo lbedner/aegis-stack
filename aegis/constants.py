@@ -330,6 +330,7 @@ class AnswerKeys:
     AUTH_RBAC = "include_auth_rbac"
     AUTH_ORG = "include_auth_org"
     AUTH_OAUTH = "include_oauth"
+    AUTH_GUEST = "include_auth_guest"
     AI_VOICE = "ai_voice"
     AI_EVALS = "ai_evals"
     OLLAMA_MODE = "ollama_mode"

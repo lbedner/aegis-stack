@@ -167,9 +167,27 @@ const SIGN_IN_ERRORS = {
   invalid: 'Incorrect email or password.',
   locked: 'Account temporarily locked after too many failed attempts. Try again shortly.',
   disabled: 'This account has been disabled. Contact an administrator to restore access.',
+  guest_limited: 'Too many guest sessions from here. Try again later.',
+  guest_human: 'We could not confirm you are human. Try again.',
+  guest_closed: 'Guest sign-in is closed.',
 };
 
 document.addEventListener('alpine:init', () => {
+  // Cloudflare Turnstile in front of guest sign-in, fetched only on a page
+  // that carries the widget. Cloudflare serves it unversioned and asks it
+  // never be hashed, so it is the one remote script without integrity.
+  const TURNSTILE_JS = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+  Alpine.data('humanCheck', () => ({
+    init() {
+      if (document.querySelector('script[data-turnstile]')) return;
+      const script = document.createElement('script');
+      script.src = TURNSTILE_JS;
+      script.async = true;
+      script.dataset.turnstile = '';
+      document.head.appendChild(script);
+    },
+  }));
+
   Alpine.data('loginForm', () => ({
       loading: false,
       error: '',

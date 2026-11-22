@@ -751,6 +751,7 @@ def test_the_page_scripts_declare_no_name_twice() -> None:
 # A script fetched from another origin: a tag's ``src``, or a URL a page
 # script loads itself (``createElement('script')``, ``import()``).
 REMOTE_TAG = re.compile(r"<script\b[^>]*\bsrc=\"https?://[^>]*>")
+TURNSTILE_JS = "https://challenges.cloudflare.com/turnstile/v0/api.js"
 REMOTE_URL = re.compile(r"['\"`]https?://[^'\"`]+['\"`]")
 
 
@@ -766,7 +767,9 @@ def test_no_third_party_script_runs_unverified() -> None:
         if "integrity=" not in tag or "crossorigin=" not in tag
     ]
     for path in APP_JS.parent.glob("*.js"):
-        source = path.read_text()
+        # Cloudflare serves Turnstile unversioned and refuses a hash; it
+        # loads only on the sign-in page, never Overseer's.
+        source = path.read_text().replace(f"'{TURNSTILE_JS}'", "")
         if REMOTE_URL.search(source) and ".integrity = " not in source:
             unverified.append(f"{path.name}: loads a remote script unhashed")
     assert unverified == []

@@ -225,8 +225,22 @@ class TestChoosing:
 
         assert await live_engines.choose(async_db_session, "nomic-embed") is None
 
+    @pytest.mark.asyncio
+    async def test_a_local_model_that_cannot_call_tools_is_refused(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """A call runs on the agent's tools: a model its engine says takes
+        none cannot answer one. Unknown is let through (an engine that does
+        not say)."""
+        await _local_model(async_db_session, "tiny:1b", "chat", tools=False)
 
-async def _local_model(session: AsyncSession, model_id: str, mode: str) -> None:
+        assert await live_engines.choose(async_db_session, "tiny:1b") is None
+        assert live_engines.reachable("llamacpp", "chat", "x", tools=None)
+
+
+async def _local_model(
+    session: AsyncSession, model_id: str, mode: str, tools: bool | None = None
+) -> None:
     """A model llama.cpp serves, in the catalog."""
     from app.services.ai.models.llm import LargeLanguageModel, LLMOrg
 
@@ -235,7 +249,50 @@ async def _local_model(session: AsyncSession, model_id: str, mode: str) -> None:
     await session.flush()
     session.add(
         LargeLanguageModel(
-            model_id=model_id, title=model_id, mode=mode, served_by_org_id=local.id
+            model_id=model_id,
+            title=model_id,
+            mode=mode,
+            served_by_org_id=local.id,
+            supports_tools=tools,
         )
     )
     await session.commit()
+
+
+class TestTheWait:
+    @pytest.mark.asyncio
+    async def test_it_is_the_median_of_a_models_recent_timed_turns(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """What the voice dialog says a caller waits for the first word:
+        the middle of the model's last turns that were timed; another
+        model's, and an untimed turn (Gemini says no end of speech), aside."""
+        from app.models.conversation import Conversation, ConversationMessage
+
+        talk = Conversation(title="call", user_id="7")
+        async_db_session.add(talk)
+        await async_db_session.flush()
+        for model, waited in (
+            ("qwen3.8:27b", 1200),
+            ("qwen3.8:27b", 2400),
+            ("qwen3.8:27b", 1800),
+            ("qwen3.8:27b", None),
+            ("gemini-3.8-live", 300),
+        ):
+            meta: dict[str, object] = {"model": model}
+            if waited is not None:
+                meta["first_word_ms"] = waited
+            async_db_session.add(
+                ConversationMessage(
+                    conversation_id=talk.id, role="assistant", meta_data=meta
+                )
+            )
+        await async_db_session.commit()
+
+        assert await live_engines.first_word_ms(async_db_session, "qwen3.8:27b") == 1800
+
+    @pytest.mark.asyncio
+    async def test_before_any_call_there_is_none(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        assert await live_engines.first_word_ms(async_db_session, "qwen3.8:27b") is None

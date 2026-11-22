@@ -219,7 +219,7 @@ async def marks(names: dict[str, tuple[str, ...]]) -> dict[str, str]:
     from app.core.db import get_async_session
 
     common = importlib.import_module(OVERSEER_COMMON)
-    async with get_async_session() as db:
+    async with get_async_session(read_only=True) as db:
         return await common.mark_urls(db, names)
 
 

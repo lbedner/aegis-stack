@@ -83,7 +83,7 @@ class DatabaseStore:
         ciphertexts = {name: await cache.get(CACHE_PREFIX + name) for name in names}
         missing = [name for name, value in ciphertexts.items() if value is None]
         if missing:
-            async with get_async_session() as db:
+            async with get_async_session(read_only=True) as db:
                 rows = (
                     await db.exec(
                         select(SecretRecord).where(col(SecretRecord.name).in_(missing))
@@ -126,7 +126,7 @@ class DatabaseStore:
 
     async def stored(self) -> dict[str, StoredSecret]:
         """Every stored row's hint, setter and time: one query, no decrypt."""
-        async with get_async_session() as db:
+        async with get_async_session(read_only=True) as db:
             rows = (await db.exec(select(SecretRecord))).all()
         return {
             row.name: StoredSecret(hint=row.hint, set_at=row.set_at, set_by=row.set_by)

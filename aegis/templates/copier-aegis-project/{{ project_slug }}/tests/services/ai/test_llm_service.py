@@ -346,7 +346,9 @@ def mock_async_session(llm_session: Session):
             return MockAsyncResult(self._session.exec(stmt))
 
     @asynccontextmanager
-    async def async_session_context() -> AsyncGenerator[MockAsyncSession]:
+    async def async_session_context(
+        read_only: bool = False,
+    ) -> AsyncGenerator[MockAsyncSession]:
         yield MockAsyncSession(llm_session)
 
     return async_session_context
@@ -489,10 +491,10 @@ class TestListModels:
         the others out - it must not loop a session per vendor."""
         sessions = 0
 
-        def counting_factory():
+        def counting_factory(read_only: bool = False):
             nonlocal sessions
             sessions += 1
-            return mock_async_session()
+            return mock_async_session(read_only=read_only)
 
         with patch(
             "app.services.ai.domains.llm.catalog.get_async_session",

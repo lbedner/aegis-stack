@@ -11,9 +11,10 @@ silent truncation. Needs the catalog, so offered with a persistence
 backend only.
 
 It holds the chat models only. What a live call runs on is picked with
-the voice it speaks in (``chat_voices``): the realtime models a call can
-reach (``call_rows``), a pick making one the active voice profile's engine
-(``use_for_calls``, made on the spot when it has none).
+the voice it speaks in (``chat_voices``, laid out by ``chat_calls``): the
+models a call can reach (``call_models``), a pick making one the active
+voice profile's engine (``use_for_calls``, made on the spot when it has
+none).
 """
 
 from typing import TYPE_CHECKING, Any
@@ -40,6 +41,7 @@ RECENT_LOOKBACK = 12
 SECTION_ROW_CAP = 30
 FLAT_ROW_CAP = 60
 CATALOG_LIMIT = 200
+MAKE_A_VOICE = "Make a voice first: a live call runs on the active voice."
 
 
 async def catalog(mode: str | None = "chat") -> list[dict[str, Any]]:
@@ -99,7 +101,12 @@ async def call_models() -> list[dict[str, Any]]:
     return [
         {**m, "kind": "realtime" if m["mode"] == "realtime" else "cascade"}
         for m in await catalog(None)
-        if live_engines.reachable(str(m.get("vendor") or ""), m["mode"], m["model_id"])
+        if live_engines.reachable(
+            str(m.get("vendor") or ""),
+            m["mode"],
+            m["model_id"],
+            m.get("supports_tools"),
+        )
     ]
 
 
@@ -128,45 +135,10 @@ async def use_for_calls(model_id: str) -> str | None:
         if engine is None:
             return f"A live call cannot run on {model_id}."
         if active is None or active.id is None:
-            return "Make a voice first: a live call runs on the active voice."
+            return MAKE_A_VOICE
         active = await profiles.update(db, active.id, live_engine=engine.key)
     profiles.apply(active, settings, ai_service)
     return None
-
-
-async def call_rows(
-    current: str | None = None, voice: Any | None = None
-) -> list[dict[str, Any]]:
-    """What a live call can run on, as picker rows: the one in use
-    (``current``) first, then the newest. Each says how its call hears and
-    speaks: a realtime model by itself, a local model through ``voice``
-    (the active profile), whose STT and TTS it names."""
-    live = newest_first(await call_models())
-    live.sort(key=lambda m: m["model_id"] != current)
-    icons = await vendor_icons(live)
-    through = _through(voice)
-    return [
-        _row(
-            m,
-            under_vendor=None,
-            icons=icons,
-            ears="Hears and speaks itself" if m["kind"] == "realtime" else through,
-        )
-        for m in live
-    ]
-
-
-def _through(voice: Any | None) -> str:
-    """How a cascade call hears and speaks: the voice's own models, or the
-    defaults it leaves in place."""
-    from app.core.config import settings
-    from app.services.ai.service import get_current_voice_config
-
-    config = get_current_voice_config(settings)
-    stt = getattr(voice, "stt_model", None) or config["stt_model"]
-    tts = getattr(voice, "tts_model", None) or config["tts_model"]
-    name = getattr(voice, "name", None) or "the active voice"
-    return f"Hears and speaks through {name}: {stt} hears, {tts} speaks"
 
 
 async def vendor_icons(models: list[dict[str, Any]]) -> dict[str, str]:
@@ -217,7 +189,7 @@ async def recent_ids() -> list[str]:
     from app.core.db import get_async_session
     from app.services.ai.service import recent_model_ids
 
-    async with get_async_session() as db:
+    async with get_async_session(read_only=True) as db:
         return await recent_model_ids(db, RECENT_LOOKBACK)
 
 
@@ -234,16 +206,20 @@ def chip(model: str) -> dict[str, Any]:
     return {"label": model_label({"model": model}), "model": model}
 
 
-def _row(
+def picker_row(
     model: dict[str, Any],
     *,
     under_vendor: str | None,
     icons: dict[str, str],
-    ears: str | None = None,
+    badges: list[dict[str, str]] | None = None,
+    priced: bool = True,
 ) -> dict[str, Any]:
     """One picker row. An icon only where it adds information: the lab
     behind a hosted model when it differs from the group's vendor, and the
-    vendor in flat views that have no group around them."""
+    vendor in flat views that have no group around them; ``badges`` (each
+    a ``label`` and ``tone``) where the row has more to say than facts;
+    not ``priced`` where its own price is not what it costs (a chain call's
+    model, whose speech is paid for around it)."""
     lab = lab_for_model(model)
     vendor = str(model.get("vendor") or "")
     voice = model.get("kind") == "realtime"
@@ -254,14 +230,15 @@ def _row(
     facts = " · ".join(
         part
         for part in (
-            ears,
             # A voice model's window is not what picks it; its price is.
             None if voice else format_context_window(model.get("context_window")),
             format_price(
                 model.get("input_price"),
                 model.get("output_price"),
                 local=is_local_model(model),
-            ),
+            )
+            if priced
+            else None,
         )
         if part
     )
@@ -271,6 +248,7 @@ def _row(
         "facts": facts,
         "icon_name": icon_for,
         "icon_url": icons.get(icon_for or ""),
+        "badges": badges or [],
     }
 
 
@@ -282,7 +260,7 @@ def _flat(
     return [
         {
             "name": None,
-            "rows": [_row(m, under_vendor=None, icons=icons) for m in shown],
+            "rows": [picker_row(m, under_vendor=None, icons=icons) for m in shown],
             "hidden": len(rows) - len(shown),
         }
     ]
@@ -301,7 +279,9 @@ def _grouped(
                 "name": vendor,
                 "icon_url": icons.get(vendor),
                 "count": len(rows),
-                "rows": [_row(m, under_vendor=vendor, icons=icons) for m in shown],
+                "rows": [
+                    picker_row(m, under_vendor=vendor, icons=icons) for m in shown
+                ],
                 "hidden": len(rows) - len(shown),
             }
         )
@@ -321,7 +301,7 @@ def _recent(
         {
             "name": None,
             "recent": True,
-            "rows": [_row(m, under_vendor=None, icons=icons) for m in recent],
+            "rows": [picker_row(m, under_vendor=None, icons=icons) for m in recent],
             "hidden": 0,
         }
     ]

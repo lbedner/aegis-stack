@@ -39,6 +39,9 @@ class LargeLanguageModel(SQLModel, table=True):
     # voice kind ("realtime", "audio_transcription", "audio_speech"). A chat
     # picker lists only "chat"; a voice setting picks its own kind.
     mode: str = Field(default="chat", max_length=32, index=True)
+    # Whether it can call tools (so drive an agent, or a live call); None
+    # where no source says. The local sync reads the engine's own report.
+    supports_tools: bool | None = None
 
     # Foreign key
     # The two org axes, both pointing at llm_org: who SERVES this model

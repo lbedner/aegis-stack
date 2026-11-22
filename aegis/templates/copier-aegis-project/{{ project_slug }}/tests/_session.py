@@ -13,12 +13,13 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 def opens(
     session: AsyncSession,
-) -> Callable[[], AbstractAsyncContextManager[AsyncSession]]:
-    """A stand-in for ``get_async_session`` that yields ``session``:
-    ``monkeypatch.setattr(module, "get_async_session", opens(session))``."""
+) -> Callable[..., AbstractAsyncContextManager[AsyncSession]]:
+    """A stand-in for ``get_async_session`` that yields ``session``, as a
+    reader or a writer: ``monkeypatch.setattr(module, "get_async_session",
+    opens(session))``."""
 
     @asynccontextmanager
-    async def opener() -> AsyncIterator[AsyncSession]:
+    async def opener(read_only: bool = False) -> AsyncIterator[AsyncSession]:
         yield session
 
     return opener

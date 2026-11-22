@@ -1,14 +1,15 @@
 {# The assistant's voice, in the one modal: what a live call runs on (where
-   the mount takes calls: ``call_rows``, ``calling``), the voice profiles,
+   the mount takes calls: ``setup``, from ``chat_calls.view``, and
+   ``calling``), the voice profiles,
    each with a preview; switch, make one from the active, or edit one; and
    how terms are said. ``view`` picks the piece: the composer's chip, the
    list, one voice's form, or the pronunciation list.
    Previews play through voice.js's Listen handler ([data-speak]). #}
 {% from "components/macros/icons.html" import icon %}
-{% from "components/macros/chat.html" import model_row, voice_chip, speak_button %}
+{% from "components/macros/chat.html" import call_part, model_row, voice_chip, speak_button %}
 {% from "components/macros/form.html" import action, field, text_input, number_input, select, primary_button %}
 {% from "components/macros/feedback.html" import error_banner, empty_state %}
-{% from "components/macros/layout.html" import dialog_title %}
+{% from "components/macros/layout.html" import chip, dialog_title %}
 {% from "components/macros/table.html" import data_table %}
 
 {% if view == "chip" %}
@@ -17,24 +18,39 @@
 {% elif view == "list" %}
 {% if chip_oob %}{{ voice_chip(active, path, calling, oob=True) }}{% endif %}
 <div id="voice-profiles" class="space-y-4">
-  {% if call_rows is not none %}
+  {% if setup is not none %}
   {{ dialog_title("Calls and voice", "What a live call with " ~ assistant ~ " runs on (a meeting's too), and the voice it speaks in. A pick takes effect on the next call, or the next thing said.") }}
-  <section class="space-y-1" data-calls>
-    <h3 class="micro-label text-aegis-muted">Calls run on</h3>
-    {% if call_rows %}
+  <section class="space-y-3" data-calls data-call-mode="{{ setup.mode }}">
+    <nav class="flex flex-wrap gap-2" aria-label="How a call runs">
+      {% for m in setup.modes %}{{ chip(m.label, m.active, m.url, hx_dialog(m.url)) }}{% endfor %}
+    </nav>
+    <div class="grid gap-2 {% if setup.mode == 'chain' %}sm:grid-cols-3{% endif %}">
+      {% for part in setup.parts %}{{ call_part(part) }}{% endfor %}
+    </div>
+    {% if setup.summary %}
+    <p data-call-summary class="rounded border border-aegis-border px-3 py-2 text-xs text-aegis-muted">
+      <span class="{{ 'text-aegis-teal' if setup.summary.local else 'text-aegis-text' }}">{{ setup.summary.where }}</span> · {{ setup.summary.cost }} · {{ setup.summary.wait }}</p>
+    {% endif %}
+    {% if setup.rows is not none %}
+    {% if setup.rows %}
     <ul class="max-h-56 overflow-y-auto">
-      {% for row in call_rows %}
-      {{ model_row(row, calling is not none and calling.model_id == row.model_id, "data-call-model", hx_dialog_post(path ~ "/calls")) }}
+      {% for row in setup.rows %}
+      {{ model_row(row, row.model_id == setup.current, setup.mark, hx_dialog_post(setup.post)) }}
       {% endfor %}
     </ul>
     {% else %}
-    <p class="text-xs text-aegis-muted">No live model can be reached: a call needs an OpenAI or Google key with a realtime model in the catalog.</p>
+    <p class="text-xs text-aegis-muted">{{ setup.empty }}</p>
+    {% endif %}
     {% endif %}
   </section>
-  <h3 class="micro-label text-aegis-muted">Voice</h3>
+  {% if setup.mode == "one" %}<h3 class="micro-label text-aegis-muted">Voice</h3>{% endif %}
   {% else %}
   {{ dialog_title("Voice", "How " ~ assistant ~ " hears and speaks. A switch takes effect on the next thing said.") }}
   {% endif %}
+  {# A chain's Speaks is the voice: its list shows there; one model's call
+     shows it below, for the replies spoken in chat (and the call, where
+     the model has the voice). #}
+  {% if setup is none or setup.mode == "one" or setup.list == "speaks" %}
   {% if voices %}
   <ul class="divide-y divide-aegis-border/60">
     {% for voice in voices %}
@@ -56,6 +72,7 @@
   </ul>
   {% else %}
   {{ empty_state("No voices yet", "The first one is made from .env when the app starts.") }}
+  {% endif %}
   {% endif %}
   <p class="flex items-center justify-between gap-2 text-xs text-aegis-muted">How every voice says terms like Traefik.
     {{ action("Pronunciation", hx_dialog(path ~ "/pronunciation", "data-pronunciations")) }}</p>

@@ -14,9 +14,13 @@ from typing import Any
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
     FunctionToolResultEvent,
+    PartDeltaEvent,
     PartEndEvent,
+    RealtimeInputSpeechEndEvent,
+    RealtimeInputSpeechStartEvent,
     RealtimeTurnCompleteEvent,
     SpeechPart,
+    SpeechPartDelta,
     ToolCallPart,
     ToolReturnPart,
 )
@@ -27,14 +31,12 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.components.backend.api.ai.service import ai_service
 from app.services.ai.domains.spend import calls
 from app.services.ai.domains.spend import recording as usage_recording
+from app.services.ai.domains.voice.call_turns import END_CALL, TurnLog, save_turn
 from app.services.ai.domains.voice.realtime_calls import (
     CALL_TOOLS,
-    END_CALL,
     RESUME_WINDOW,
-    TurnLog,
     call_voice,
     resumed,
-    save_turn,
 )
 from app.services.ai.models import AIProvider
 from app.services.ai.models.llm import LLMUsage
@@ -95,6 +97,30 @@ class TestATurn:
         assert [step["tool"] for step in trace] == ["run_code"]
         assert trace[0]["code"] == "await budget()"
         assert log.take() is None  # taken once
+
+    def test_it_times_the_caller_stopping_to_the_first_word_back(self) -> None:
+        """From the end of the caller's speech to the reply's first audio:
+        what a caller waits. Speaking again starts the wait over; a
+        provider that never says the caller stopped is not timed."""
+        now = iter([1.0, 3.0, 4.4])
+        log = TurnLog(clock=lambda: next(now))
+        audio = PartDeltaEvent(
+            index=1, delta=SpeechPartDelta(speaker="assistant", audio_chunk=b"hi")
+        )
+        for event in (
+            RealtimeInputSpeechStartEvent(item_id="a"),
+            RealtimeInputSpeechEndEvent(item_id="a"),  # 1.0, then they go on
+            RealtimeInputSpeechStartEvent(item_id="b"),
+            RealtimeInputSpeechEndEvent(item_id="b"),  # 3.0
+            audio,  # 4.4
+            audio,  # a later chunk is not the first word
+        ):
+            log.observe(event)
+
+        assert log.first_word_ms == 1400
+        untimed = TurnLog(clock=lambda: 9.0)
+        untimed.observe(audio)
+        assert untimed.first_word_ms is None
 
     def test_a_part_ended_twice_is_said_once(self) -> None:
         """#292: one reply was saved with its text twice, back to back - the
@@ -736,6 +762,41 @@ class TestDrivingACall:
         (row,) = (await async_db_session.exec(select(LLMUsage))).all()
         assert (row.action, row.model_id) == ("realtime", "gemini-3.8-live")
         assert row.total_cost > 0  # priced at the catalog's Gemini rates
+
+    @pytest.mark.asyncio
+    async def test_a_turn_keeps_how_long_the_caller_waited(
+        self, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Its first word's wait, on the reply, for the voice dialog's
+        "to first word"."""
+        from app.services.ai.domains.voice.realtime_calls import drive
+        from tests._realtime import FakeRealtime
+
+        await _priced(async_db_session, monkeypatch)
+        conversation = await _conversation()
+        audio = SpeechPartDelta(speaker="assistant", audio_chunk=b"hi")
+        events = [
+            RealtimeInputSpeechEndEvent(item_id="a"),
+            PartDeltaEvent(index=1, delta=audio),
+            *_turn(),
+        ]
+
+        async def hang_up(session: object) -> None:
+            await session.close()  # type: ignore[attr-defined]
+
+        await drive(
+            ai_service,
+            FakeRealtime(events),
+            ledger=async_db_session,
+            conversation_id=conversation.id,
+            model="google:gemini-3.8-live",
+            agent_slug="voice",
+            user_id=USER,
+            alongside=hang_up,
+        )
+
+        reply = (await ai_service.get_conversation(conversation.id)).messages[-1]
+        assert reply.metadata["first_word_ms"] >= 0
 
     @pytest.mark.asyncio
     async def test_a_turn_it_hands_off_names_its_row(

@@ -446,11 +446,29 @@ _RUNS_BEFORE_AGENTS = """\
         "WHERE agent IS NULL AND runner IN (SELECT name FROM runner_token)"
     )"""
 
+# What was spent is read from ``runner_spend`` (each run's cost written down
+# as it comes back, so it outlives the run). The runs kept from before it
+# said theirs only on themselves: write it down once, as of when each was
+# back. A ledger with anything in it was written since, so this never
+# counts a run twice, on any later runner revision.
+_SPEND_BEFORE_LEDGER = """\
+    op.execute(
+        "INSERT INTO runner_spend (action, at, cost) "
+        "SELECT action, finished_at, cost FROM runner_run "
+        "WHERE cost IS NOT NULL AND finished_at IS NOT NULL "
+        "AND NOT EXISTS (SELECT 1 FROM runner_spend)"
+    )"""
+
 RUNNER_MIGRATION = ServiceMigrationSpec(
     service_name="runner",
     description="Runner: work asked of a coding agent, and the tokens that claim it",
     data_after="\n".join(
-        (_MEETINGS_RUNS_CARRY_OVER, _MEETINGS_RUNS_NAMED, _RUNS_BEFORE_AGENTS)
+        (
+            _MEETINGS_RUNS_CARRY_OVER,
+            _MEETINGS_RUNS_NAMED,
+            _RUNS_BEFORE_AGENTS,
+            _SPEND_BEFORE_LEDGER,
+        )
     ),
     stamp_signature=("table", "runner_run"),
 )

@@ -237,6 +237,12 @@ def test_a_console_errors_message_leaves_its_attribution_out() -> None:
             "credential=[redacted]",
             "abc123",
         ),
+        # A credential's name inside a longer one, as an environment says it.
+        ("OPENAI_API_KEY=sk-live-abc123", "OPENAI_API_KEY=[redacted]", "abc123"),
+        ("export ENCRYPTION_KEY=abc123", "ENCRYPTION_KEY=[redacted]", "abc123"),
+        ('{"command": "STRIPE_SECRET_KEY=abc123 make"}', "[redacted]", "abc123"),
+        # A token by the prefix its maker gives it, wherever it is.
+        ("pushed with ghp_abcdefghijklmnop1234", "with [redacted]", "ghp_abc"),
         # A connection URL's password, by the app's one rule (``hide_password``).
         (
             "cannot reach postgresql://app:hunter2@db:5432/app",

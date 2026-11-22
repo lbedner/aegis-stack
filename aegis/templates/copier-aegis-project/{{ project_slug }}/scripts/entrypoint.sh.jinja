@@ -196,13 +196,15 @@ elif [ "$run_command" = "runner" ]; then
     fi
     export RUNNER_TOKEN
     # Their own variables: the } in {prompt} would end a ${...:-default}.
-    # The agent names its session and answers as JSON, so a run says what
-    # it cost and a later run of its session picks it up, and its hooks
+    # The agent names its session and streams it as JSON, a line an event
+    # (stream-json, which -p wants --verbose for), so a run shows its
+    # session as it goes, says what it cost, and a later run of its
+    # session picks it up, and its hooks
     # post each step to the app ({hooks}, which the runner fills in), so a
     # run says what it is doing; the resume form goes with the command it
     # resumes, so only the default one has it unless RUNNER_RESUME_COMMAND
     # says another.
-    how="--output-format json --permission-mode plan --settings {hooks}"
+    how="--output-format stream-json --verbose --permission-mode plan --settings {hooks}"
     default_command="claude -p {prompt} --session-id {session} $how"
     default_resume="claude -p {prompt} --resume {session} $how"
     if [ -z "$RUNNER_COMMAND" ]; then

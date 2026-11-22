@@ -7,6 +7,8 @@ reads them (``client.py``). Nothing here touches the database, so the
 runner imports it where there is none.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 # Where a runner, and its agent's hooks, reach the app's runs.
@@ -15,12 +17,36 @@ RUNS = "/api/v1/runner/runs"
 # route's own template: ``FINISH.format(run_id=...)``).
 CLAIM = f"{RUNS}/claim"
 FINISH = f"{RUNS}/{{run_id}}/finish"
+# Where a runner posts its agent's session as it goes (``Lines``).
+LINES = f"{RUNS}/{{run_id}}/lines"
 # What a runner gives a command where it is told nothing else, in seconds.
 TIMEOUT_SECONDS = 900.0
 # The most a run keeps of what came back.
 KEEP = 20_000
 # The most a run keeps of its agent's name.
 MOST_AGENT = 64
+# What an agent's session says, a line at a time: what it said, a tool it
+# called with what it was given, what the tool gave back. Each is cut to
+# ``MOST_LINE``, and a post carries at most ``MOST_LINES``.
+SAID, CALLED, RETURNED = "said", "called", "returned"
+MOST_LINE = 2_000
+MOST_LINES = 200
+# The run a runner answers itself, never its agent: push a run's branch
+# and open its pull request, its prompt what the request's body ends
+# with (``Closes acme/app#12``). Every runner takes it, with a GitHub
+# token in its environment (``GITHUB_TOKEN_ENV``: one repository,
+# Contents and Pull requests read and write), else says it has none.
+PUSH = "push"
+GITHUB_TOKEN_ENV = "RUNNER_GITHUB_TOKEN"
+# How an agent says it has no answer: the last line of what it says, as
+# every question it is asked tells it (work on a branch is not asked).
+NO_ANSWER_MARK = "[no answer]"
+NO_ANSWER_ASKED = (
+    "If you find no answer, say why, then end with a line that says only "
+    f"{NO_ANSWER_MARK}"
+)
+# A repository on GitHub, as its owner and name say it (``acme/app``).
+GITHUB_REPO = r"[\w.-]+/[\w.-]+?"
 
 
 def kept(result: str, ok: bool) -> str:
@@ -80,3 +106,22 @@ class Answer(BaseModel):
         description="The agent's session, in dollars",
     )
     worktree: str | None = Field(None, description="Where its work is kept")
+    unanswered: bool = Field(False, description="Its agent said it has no answer")
+    unpushed: int | None = Field(
+        None, ge=0, description="Its branch's commits the remote does not have"
+    )
+
+
+class Line(BaseModel):
+    """One line of an agent's session, as its runner heard it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: Literal["said", "called", "returned"]
+    text: str
+
+
+class Lines(BaseModel):
+    """What a runner heard of its agent's session since it last posted."""
+
+    lines: list[Line] = Field(max_length=MOST_LINES)

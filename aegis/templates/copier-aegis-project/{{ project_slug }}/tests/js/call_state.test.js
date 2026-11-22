@@ -9,7 +9,8 @@ const { start, next } = require('../../app/components/web_frontend/static/js/cal
 const play = (...events) => {
   let state = start(30000);
   const outs = [];
-  for (const event of [{ type: 'begin' }, ...events]) {
+  const begun = events[0]?.type === 'begin' ? events : [{ type: 'begin' }, ...events];
+  for (const event of begun) {
     const out = next(state, event);
     state = out.state;
     outs.push(out);
@@ -181,6 +182,16 @@ test('without turns from the provider, your transcript ending is the turn', () =
   const { state, last } = play(...GREETED, speech(true), WORDS, HEARD);
   assert.equal(state.owed, true);
   assert.notEqual(last.quiet, 'count');
+});
+
+test('a model that answers by choice owes no answer to your turn', () => {
+  // 2026-11-22: GPT-Live 1.1 let an "Okay" go by unanswered, and the call
+  // said it was working on it until you spoke again. Its answer, when it
+  // gives one, is its audio.
+  const chooses = { type: 'begin', chooses: true };
+  const { state, last } = play(chooses, ...GREETED, speech(true), WORDS, HEARD);
+  assert.equal(state.owed, false);
+  assert.equal(last.quiet, 'count');
 });
 
 test('a noise is owed nothing', () => {

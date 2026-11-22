@@ -49,8 +49,10 @@ def store(
 ) -> Iterator[FilesystemStorage]:
     """An object store on disk, and every session the test's own."""
 
+    # Signed as the real one: a module first imported under this patch
+    # keeps it, and a read-only read of its failed in a later test.
     @asynccontextmanager
-    async def session() -> AsyncGenerator[AsyncSession]:
+    async def session(read_only: bool = False) -> AsyncGenerator[AsyncSession]:
         yield async_db_session
 
     monkeypatch.setattr(app.core.db, "get_async_session", session)

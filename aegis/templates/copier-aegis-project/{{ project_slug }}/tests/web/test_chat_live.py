@@ -354,6 +354,7 @@ class TestTheCall:
         assert (ready["input_rate"], ready["output_rate"]) == (16_000, 24_000)
         assert ready["conversation_id"]  # a call without one starts one
         assert ready["engine"] == {"label": "Gemini 3.8 Live"}
+        assert ready["chooses"] is False  # it answers every turn
         assert voice == VOICE  # its voice, as the model spoke it
         assert gemini.live.audio == [b"\x10\x20"]  # yours, as the page sent it
         assert gemini.live.sent == [chat_live_lines.GREETING]  # it speaks first

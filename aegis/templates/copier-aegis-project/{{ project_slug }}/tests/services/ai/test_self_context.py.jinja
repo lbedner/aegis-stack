@@ -151,6 +151,27 @@ class TestWhatAReplyDid:
         assert after.startswith(history)
 
 
+class TestTurnsThatRideElsewhere:
+    """GPT-Live's backend reads the turns its session is seeded with: a
+    request read 15,650 tokens seeded, 1,733 not (2026-11-22). The turns
+    that ride as the seed (``seeded``) are left out of the history text,
+    or the backend pays for them twice."""
+
+    def test_the_seeded_turns_are_left_out_of_the_text(self) -> None:
+        from app.services.ai.service.prompt import PromptMixin
+
+        conversation = thread(["older", "reply", "newer"], "and now?")
+
+        text = PromptMixin._build_conversation_context(  # type: ignore[arg-type]
+            None, conversation, history_budget=10_000, seeded=2
+        )
+
+        assert "User: older" in text
+        assert "Assistant: reply" in text
+        assert "newer" not in text
+        assert "and now?" not in text
+
+
 class TestTheDays:
     def test_a_line_reads_the_same_after_midnight(
         self, monkeypatch: pytest.MonkeyPatch

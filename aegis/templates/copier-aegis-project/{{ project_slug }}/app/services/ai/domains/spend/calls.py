@@ -53,12 +53,34 @@ def per_second(rates: llm_queries.Rates | None) -> float | None:
     return (rates or {}).get("input_cost_per_second") or None
 
 
-def call_cost(rates: llm_queries.Rates | None, usage: Any, seconds: float) -> float:
+def call_cost(
+    rates: llm_queries.Rates | None,
+    usage: Any,
+    seconds: float,
+    delegated: llm_queries.Rates | None = None,
+) -> float:
     """What a live call has cost so far, its one home: its ``seconds`` at
-    the model's per-second rate where it bills by time, else its tokens
-    (``realtime_cost``)."""
+    the model's per-second rate where it bills by time, and then the tokens
+    of the model it hands its work to (``delegated``: GPT-Live's backend,
+    billed as any model is); else its own tokens (``realtime_cost``)."""
     rate = per_second(rates)
-    return seconds * rate if rate else realtime_cost(rates, usage)
+    if rate:
+        return seconds * rate + realtime_cost(delegated, usage)
+    return realtime_cost(rates, usage)
+
+
+def delegated_to(session: Any) -> str | None:
+    """The model a live session hands its work to, as Pydantic AI records
+    it on each response that model billed (``delegated_model``: GPT-Live's
+    backend); None until it has, or on a model that does its own work.
+    Read by attribute: this module ships with LangChain too, without
+    Pydantic AI to import."""
+    for message in session.all_messages():
+        if name := (getattr(message, "provider_details", None) or {}).get(
+            "delegated_model"
+        ):
+            return name
+    return None
 
 
 async def open_realtime(
@@ -104,12 +126,14 @@ async def bill_realtime(
     *,
     seconds: float,
     rates: llm_queries.Rates | None,
+    delegated: llm_queries.Rates | None = None,
     success: bool = True,
 ) -> float:
     """The call's row at what it has cost so far (``call_cost``), with its
     running usage and length; the cost. ``rates`` are read once, when the
-    call opened (``realtime_price``)."""
-    cost = call_cost(rates, usage, seconds)
+    call opened (``realtime_price``); ``delegated`` once its work is first
+    handed off (``delegated_to``)."""
+    cost = call_cost(rates, usage, seconds, delegated)
     if row_id is None:
         return cost
     try:

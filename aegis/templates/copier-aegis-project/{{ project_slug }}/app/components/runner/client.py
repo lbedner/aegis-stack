@@ -336,7 +336,8 @@ async def _ran(
             )
             await process.wait()
     except BaseException as exc:  # stopped, out of time, or unreadable
-        with contextlib.suppress(ProcessLookupError):
+        # Gone already: Linux says no such group, macOS that it is not ours.
+        with contextlib.suppress(ProcessLookupError, PermissionError):
             os.killpg(process.pid, signal.SIGKILL)
         if isinstance(exc, TimeoutError):
             given = f"{runner.timeout_seconds:g} seconds"

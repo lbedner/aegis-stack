@@ -177,7 +177,7 @@ def _entry(spec: PluginSpec) -> str:
         "experimental": spec.experimental,
     }
     lines = [
-        f"        {name}=Category.{value.name},"
+        f"        {name}=Category.{spec.category.name},"
         if name == "category"
         else f"        {name}={_value(value)},"
         for name, value in fields.items()

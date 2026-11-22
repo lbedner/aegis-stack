@@ -719,6 +719,21 @@
 </dl>
 {% endmacro %}
 
+{# What happened, in order: each ``item`` says ``when`` (its clock time,
+   ``format_timestamp``), ``what``, and maybe ``detail`` and ``error``
+   (red). A connection's opens and drops, the steps a run's agent took. #}
+{% macro timeline(items, id=none) %}
+<ol {% if id %}id="{{ id }}" {% endif %}class="space-y-2 text-sm">
+  {% for item in items %}
+  <li class="flex items-baseline gap-3">
+    <span class="font-mono text-xs text-aegis-muted tabular-nums">{{ item.when }}</span>
+    <span class="{{ 'text-error' if item.error else 'text-aegis-text' }} break-words min-w-0">{{ item.what }}</span>
+    {% if item.detail %}<span class="text-xs text-aegis-muted">{{ item.detail }}</span>{% endif %}
+  </li>
+  {% endfor %}
+</ol>
+{% endmacro %}
+
 {# A wrapping row of label-over-value figures, the Flet detail row.
    ``items`` are (label, value) pairs. #}
 {% macro stat_row(items) %}

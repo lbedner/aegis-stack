@@ -33,13 +33,16 @@ class TestRunLog:
         box = one(response.text, "[data-run-log]")
         assert box.get("sse-connect") == "/partials/overseer/runs/r1/log/events"
         assert one(box, "pre").get("sse-swap") == "run-log"
+        assert one(box, "pre").get("data-follow") == "run-log"
         assert text(one(box, "pre")) == "a b"
 
     def test_a_finished_run_holds_no_stream(
         self, signed_in: TestClient, run_log_sink: run_log.MemorySink
     ) -> None:
         run_log_sink.append("r1", "a")
-        box = one(signed_in.get("/partials/overseer/runs/r1/log").text, "[data-run-log]")
+        box = one(
+            signed_in.get("/partials/overseer/runs/r1/log").text, "[data-run-log]"
+        )
         assert box.get("sse-connect") is None
         assert one(box, "pre").get("sse-swap") is None
         assert text(box) == "Log a"
@@ -52,7 +55,10 @@ class TestRunLog:
         none(html, "[sse-connect]")
 
     def test_an_unreachable_store_is_a_503(
-        self, signed_in: TestClient, run_log_sink: run_log.MemorySink, monkeypatch: pytest.MonkeyPatch
+        self,
+        signed_in: TestClient,
+        run_log_sink: run_log.MemorySink,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         def down(run_id: str, start: int = 0) -> list[str]:
             raise OSError("run log store unreachable")
@@ -69,7 +75,9 @@ class TestRunLog:
         reads: list[str] = []
         read = run_log_sink.read
         monkeypatch.setattr(
-            run_log_sink, "read", lambda run_id, start=0: reads.append(run_id) or read(run_id, start)
+            run_log_sink,
+            "read",
+            lambda run_id, start=0: reads.append(run_id) or read(run_id, start),
         )
 
         events = await sent_events(overseer_runs.events("r1", max_frames=3))

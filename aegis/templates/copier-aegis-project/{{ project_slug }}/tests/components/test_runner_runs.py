@@ -5,7 +5,7 @@ import asyncio
 from datetime import timedelta
 
 import pytest
-from sqlmodel import select
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.runner import hooks, runs
@@ -15,11 +15,16 @@ from app.components.runner.models import (
     FAILED,
     MOST_ACTIVITY,
     MOST_AGENT,
+    MOST_LINE,
+    MOST_STEPS,
     MOST_TITLE,
     RunnerRun,
+    RunnerSpend,
+    RunnerStep,
 )
+from app.components.runner.protocol import CALLED, PUSH, RETURNED, SAID, Line
 from app.core.time import utcnow
-from tests._runner import ISSUE, a_run, answered, asked, claimed, someone_else
+from tests._runner import ISSUE, a_run, answered, asked, claimed, late, someone_else
 
 
 async def test_a_runner_claims_a_run_once_and_finishes_it(
@@ -75,6 +80,55 @@ async def test_a_run_stopped_after_it_was_claimed_is_not_answered_after_all(
     assert over == {run.subject_id: ("failed", runs.STOPPED)}
 
 
+async def _spent(db: AsyncSession) -> list[tuple[str, float]]:
+    """What was written down as spent, by action, in the order it was."""
+    rows = await db.exec(select(RunnerSpend).order_by(col(RunnerSpend.id)))
+    return [(row.action, row.cost) for row in rows.all()]
+
+
+async def test_what_a_run_cost_is_written_down_apart_from_it(
+    async_db_session: AsyncSession,
+) -> None:
+    """So a run replaced by a later ask, or forgotten with its subject, does
+    not take what it cost with it."""
+    db = async_db_session
+    run = await answered(db, await asked(db), cost=0.4)
+
+    await runs.forget(db, ISSUE, [run.subject_id])
+    await db.commit()
+
+    assert await _spent(db) == [("agent", 0.4)]
+
+
+@pytest.mark.parametrize(
+    ("how", "status", "kept"),
+    [("stopped", FAILED, 0.1), ("overdue", FAILED, 0.1), ("another", CLAIMED, None)],
+)
+async def test_what_a_stopped_or_overdue_run_cost_is_kept_and_it_stays_failed(
+    async_db_session: AsyncSession, how: str, status: str, kept: float | None
+) -> None:
+    """Its agent was working while it was stopped, or past when it was due:
+    what its runner says it cost is spent all the same, and the run is not
+    answered after all. Only the runner that held it says."""
+    db = async_db_session
+    run = await claimed(db, await asked(db))
+    if how == "stopped":
+        await runs.stop(db, ISSUE, [run.subject_id])
+    elif how == "overdue":
+        await late(db, run, 24 * 60)
+        await runs.fail_abandoned(db)
+    runner = "desk" if how == "another" else "laptop"
+
+    with pytest.raises(runs.RunNotFoundError):
+        await runs.finish(
+            db, run.id or 0, None, "Late.", ok=True, runner=runner, cost=0.1
+        )
+
+    await db.refresh(run)
+    assert (run.status, run.cost) == (status, kept)
+    assert await _spent(db) == ([("agent", 0.1)] if kept else [])
+
+
 async def test_a_runner_claims_only_its_owners_runs_and_its_actions(
     async_db_session: AsyncSession,
 ) -> None:
@@ -87,15 +141,6 @@ async def test_a_runner_claims_only_its_owners_runs_and_its_actions(
     assert await runs.claim(async_db_session, other, ["agent"], runner="a") is None
     assert await runs.claim(async_db_session, theirs, ["other"], runner="a") is None
     assert await runs.claim(async_db_session, None, ["agent"], runner="a") is not None
-
-
-async def _late(db: AsyncSession, run: RunnerRun, minutes: int) -> None:
-    """``run`` as if it had been claimed ``minutes`` earlier than it was."""
-    by = timedelta(minutes=minutes)
-    run.claimed_at -= by  # type: ignore[operator]
-    run.overdue_at -= by  # type: ignore[operator]
-    db.add(run)
-    await db.commit()
 
 
 async def test_a_run_whose_runner_went_quiet_fails(
@@ -113,8 +158,8 @@ async def test_a_run_whose_runner_went_quiet_fails(
         async_db_session, None, ["agent"], runner="tower", timeout=3600
     )
     assert gone is not None and live is not None and long is not None
-    await _late(async_db_session, gone, 31)
-    await _late(async_db_session, long, 31)
+    await late(async_db_session, gone, 31)
+    await late(async_db_session, long, 31)
 
     assert await runs.fail_abandoned(async_db_session) == 1
 
@@ -407,6 +452,74 @@ async def test_what_an_agent_is_doing_goes_on_the_run_going_in_its_session(
     assert going.activity_at is not None
 
 
+async def _steps(db: AsyncSession, run: RunnerRun) -> list[str]:
+    """The steps a run keeps, in the order its agent took them."""
+    return [step.step for step in await runs.steps(db, run.id or 0)]
+
+
+@pytest.mark.parametrize(
+    ("said", "kept"),
+    [
+        ("Edit app/main.py", ["Read app/main.py", "Edit app/main.py"]),
+        (hooks.NOTHING, ["Read app/main.py"]),
+    ],
+)
+async def test_a_run_keeps_each_step_its_agent_took(
+    async_db_session: AsyncSession, said: str, kept: list[str]
+) -> None:
+    """A step goes after the ones before it, so a run that is over can say
+    what its agent did; ending its turn is no step."""
+    db = async_db_session
+    run = await claimed(db, await asked(db))
+    db.add(RunnerStep(run_id=run.id or 0, step="Read app/main.py"))
+    await db.commit()
+
+    await runs.note(db, None, run.session_id or "", said)
+
+    assert await _steps(db, run) == kept
+
+
+async def test_a_run_keeps_so_many_steps_and_still_says_the_latest(
+    async_db_session: AsyncSession,
+) -> None:
+    """An agent in a loop cannot fill the table: past ``MOST_STEPS`` a step
+    is what the run is doing, and not kept."""
+    db = async_db_session
+    run = await claimed(db, await asked(db))
+    db.add_all(
+        RunnerStep(run_id=run.id or 0, step=f"Read {n}") for n in range(MOST_STEPS)
+    )
+    await db.commit()
+
+    await runs.note(db, None, run.session_id or "", "Edit app/main.py")
+    await runs.hear(
+        db, run.id or 0, None, "laptop", [Line(kind=SAID, text="Still here.")]
+    )
+
+    kept = await _steps(db, run)
+    # Its session is kept apart: its hooks' steps leave its lines room.
+    assert (len(kept), kept[-2:]) == (
+        MOST_STEPS + 1,
+        [f"Read {MOST_STEPS - 1}", "Still here."],
+    )
+    assert await _doing(db, run) == ["Edit app/main.py"]
+
+
+async def test_a_runs_steps_go_with_it(async_db_session: AsyncSession) -> None:
+    """Forgetting a run (or asking one in its place) forgets what its agent
+    did; another run's steps stay."""
+    db = async_db_session
+    gone, kept = await asked(db, "acme/app#1"), await asked(db, "acme/app#2")
+    db.add_all(RunnerStep(run_id=run.id or 0, step="Read") for run in (gone, kept))
+    await db.commit()
+
+    await runs.forget(db, ISSUE, ["acme/app#1"])
+    await db.commit()
+
+    left = (await db.exec(select(RunnerStep.run_id))).all()
+    assert left == [kept.id]
+
+
 async def test_an_agent_that_ended_its_turn_is_doing_nothing(
     async_db_session: AsyncSession,
 ) -> None:
@@ -513,24 +626,31 @@ async def test_a_tally_says_how_each_actions_runs_stand_and_what_they_cost_latel
     async_db_session: AsyncSession,
 ) -> None:
     """Per action: what waits and what a runner has, whenever asked; what
-    failed and what was spent since a time, and nothing from before it."""
+    failed and what was spent since a time, and nothing from before it.
+    What was spent is what was written down, the runs it was spent on kept
+    or not: an action whose runs are all gone still says it."""
     now = utcnow()
     since = now - timedelta(days=7)
     async_db_session.add_all(
         [
-            a_run(status=DONE, cost=0.25, finished_at=now),
-            a_run(status=FAILED, cost=1.0, finished_at=since - timedelta(days=1)),
+            a_run(status=DONE, finished_at=now),
+            a_run(status=FAILED, finished_at=since - timedelta(days=1)),
             a_run(status=FAILED, finished_at=now),
             a_run(status=CLAIMED),
             a_run(),
             a_run(action="ai"),
+            RunnerSpend(action="agent", cost=0.25, at=now),
+            RunnerSpend(action="agent", cost=0.5, at=now),  # a replaced run's
+            RunnerSpend(action="agent", cost=1.0, at=since - timedelta(days=1)),
+            RunnerSpend(action="gone", cost=0.1, at=now),
         ]
     )
     await async_db_session.flush()
 
     assert await runs.tally(async_db_session, since) == [
-        runs.Tally("agent", waiting=1, running=1, failed=1, cost=0.25),
+        runs.Tally("agent", waiting=1, running=1, failed=1, cost=0.75),
         runs.Tally("ai", waiting=1, running=0, failed=0, cost=0.0),
+        runs.Tally("gone", waiting=0, running=0, failed=0, cost=0.1),
     ]
 
 
@@ -544,3 +664,130 @@ async def test_a_claimed_run_keeps_only_so_much_of_its_agents_name(
     taken = await claimed(async_db_session, run, agent="c" * 100)
 
     assert taken.agent == "c" * MOST_AGENT
+
+
+async def test_a_run_back_on_a_branch_says_what_is_left_to_push(
+    async_db_session: AsyncSession,
+) -> None:
+    """Its runner counts its branch's commits the remote does not have."""
+    db = async_db_session
+    run = await asked(db, branch="issue-12-export")
+
+    back = await answered(db, run, unpushed=2)
+
+    assert back.unpushed == 2
+
+
+async def test_pushing_a_run_asks_its_runner_to_push_its_branch(
+    async_db_session: AsyncSession,
+) -> None:
+    """A run of its own, the runner's and never its agent's, on the same
+    branch, about the same subject, closing it where it is an issue on
+    GitHub."""
+    db = async_db_session
+    run = await answered(db, await asked(db, branch="issue-12-export"), unpushed=1)
+
+    push = await runs.push(db, run)
+
+    assert (push.action, push.branch, push.subject_id) == (
+        PUSH,
+        "issue-12-export",
+        "acme/app#12",
+    )
+    assert push.prompt == "Closes acme/app#12" and push.id != run.id
+
+
+@pytest.mark.parametrize(
+    ("branch", "same"), [("issue-12-export", True), ("issue-12-retry", False)]
+)
+async def test_a_push_asked_while_one_goes_on_its_branch_is_that_one(
+    async_db_session: AsyncSession, branch: str, same: bool
+) -> None:
+    """Not while one goes on another branch of the same subject."""
+    db = async_db_session
+    run = await answered(db, await asked(db, branch="issue-12-export"), unpushed=1)
+    going = a_run(action=PUSH, branch=branch)
+    db.add(going)
+    await db.commit()
+
+    push = await runs.push(db, run)
+
+    assert (push.id == going.id) is same
+
+
+async def test_a_run_back_keeps_whether_its_agent_answered(
+    async_db_session: AsyncSession,
+) -> None:
+    db = async_db_session
+
+    back = await answered(db, await asked(db), "Nothing in the notes.", unanswered=True)
+
+    assert back.unanswered is True
+
+
+async def _lines(db: AsyncSession, run: RunnerRun) -> list[tuple[str | None, str]]:
+    return [(step.kind, step.step) for step in await runs.steps(db, run.id or 0)]
+
+
+async def test_a_run_keeps_its_agents_session_as_its_runner_hears_it(
+    async_db_session: AsyncSession,
+) -> None:
+    """In order after its steps, cut to a length, and a line that looks
+    like a key masked before it is kept."""
+    db = async_db_session
+    run = await claimed(db, await asked(db))
+    long = "x" * (MOST_LINE + 50)
+    said = [
+        Line(kind=CALLED, text="Bash env"),
+        Line(
+            kind=RETURNED,
+            text="HOME=/root\nOPENAI_API_KEY=sk-live-abcdefghij1234\nghp_abcdefghijklmnopqrst12",
+        ),
+        Line(kind=SAID, text=long),
+    ]
+
+    await runs.hear(db, run.id or 0, None, "laptop", said)
+
+    assert await _lines(db, run) == [
+        (CALLED, "Bash env"),
+        (RETURNED, "HOME=/root\nOPENAI_API_KEY=[redacted]\n[redacted]"),
+        (SAID, long[:MOST_LINE]),
+    ]
+
+
+@pytest.mark.parametrize("by", ["another", "stopped"])
+async def test_a_session_is_kept_only_from_the_runner_holding_its_run(
+    async_db_session: AsyncSession, by: str
+) -> None:
+    db = async_db_session
+    run = await claimed(db, await asked(db))
+    if by == "stopped":
+        await runs.stop(db, ISSUE, ["acme/app#12"])
+
+    await runs.hear(
+        db,
+        run.id or 0,
+        None,
+        "laptop" if by == "stopped" else "desktop",
+        [Line(kind=SAID, text="Hi.")],
+    )
+
+    assert await _lines(db, run) == []
+
+
+async def test_what_an_agent_says_is_kept_with_its_keys_hidden(
+    async_db_session: AsyncSession,
+) -> None:
+    """What it is doing and what it came back with, as its session's lines."""
+    db = async_db_session
+    run = await claimed(db, await asked(db))
+
+    await runs.note(db, None, run.session_id or "", "Bash export GITHUB_TOKEN=ghp_x")
+    back = await runs.finish(
+        db, run.id or 0, None, "Used api_key=abc123.", ok=True, runner="laptop"
+    )
+
+    assert (back.activity, back.result) == (
+        "Bash export GITHUB_TOKEN=[redacted]",
+        "Used api_key=[redacted]",
+    )

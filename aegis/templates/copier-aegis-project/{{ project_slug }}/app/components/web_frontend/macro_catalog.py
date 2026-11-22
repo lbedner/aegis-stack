@@ -280,6 +280,8 @@ EXAMPLES: dict[str, dict[str, str]] = {
             {{ facts([("Engine", "taskiq 0.12.6"), ("Processes", 2), ("Queues", ["system", "load_test"])]) }}""",
         "stat_row": """
             {{ stat_row([("Processes", 2), ("Concurrency", 50), ("Timeout", "300s")]) }}""",
+        "timeline": """
+            {{ timeline([{"when": "12:00:05", "what": "Read app/main.py"}, {"when": "12:00:09", "what": "dropped", "detail": "after 4s", "error": True}]) }}""",
     },
     "feedback": {
         "toast_region": """

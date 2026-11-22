@@ -2818,9 +2818,9 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM runner_token WHERE runner_token.revoked_at IS NULL AND runner_token.last_used_at >= :last_used_at_1 LIMIT :param_1",
+      "label": "SELECT ... FROM runner_token WHERE runner_token.revoked_at IS NULL AND (runner_token.last_used_at >= :last_used_at_1 OR (EXISTS (SELECT runner_run_1.id FROM runner_run AS runner_run_1 WHERE runner_run_1.token_id = runner_token.id AND runner_run_1.status = :status_1 AND runner_run_1.overdue_at >= :overdue_at_1))) LIMIT :param_1",
       "file": "app/components/runner/queries.py",
-      "function": "used_since"
+      "function": "in_use"
     },
     {
       "kind": "repeated_statement",

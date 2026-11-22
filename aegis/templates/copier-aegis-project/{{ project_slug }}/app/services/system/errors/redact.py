@@ -21,10 +21,16 @@ NAMED = re.compile(
     r"|recovery_codes?|salt)(?:_|$)"
 )
 LOCALS = {"locals", "frame_locals", "local_vars"}
+# An assignment to a name holding one of the words, or ending in ``_key``
+# (``OPENAI_API_KEY=...``, ``"ENCRYPTION_KEY": "..."``), as an environment,
+# a config or a command line says it.
 ASSIGN = re.compile(
-    rf"(?i)\b({KEYWORDS})([\"' ]*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;]+)"
+    rf"(?i)(\b\w*(?:{KEYWORDS})\w*|\b\w+_key\b)([\"' ]*[:=]\s*)"
+    r"(?:\"[^\"]*\"|'[^']*'|[^\s,;\"]+)"
 )
 AUTH = re.compile(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+")
+# A token by the prefix its maker gives it, wherever it stands.
+TOKEN = re.compile(r"\b(?:sk-|ghp_|gho_|ghs_|github_pat_|xox[abp]-|AKIA)[\w-]{8,}")
 
 
 def secret_name(name: str) -> bool:
@@ -34,6 +40,7 @@ def secret_name(name: str) -> bool:
 
 def text(value: str) -> str:
     value = AUTH.sub(r"\1 [redacted]", value)
+    value = TOKEN.sub("[redacted]", value)
     value = ASSIGN.sub(r"\1\2[redacted]", value)
     return hide_passwords(value)
 

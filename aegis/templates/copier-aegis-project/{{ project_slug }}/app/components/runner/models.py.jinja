@@ -8,7 +8,7 @@ from sqlmodel import Field, SQLModel
 
 from app.core.time import utcnow
 
-from .protocol import MOST_AGENT
+from .protocol import MOST_AGENT, MOST_LINE
 
 # Where a run stands: asked, claimed by what runs it, then done or failed.
 ASKED, CLAIMED, DONE, FAILED = "asked", "claimed", "done", "failed"
@@ -22,6 +22,9 @@ LABELS = {ASKED: "Waiting", CLAIMED: "Running", DONE: "Done", FAILED: "Failed"}
 ANSWERED, NO_ANSWER = ("Answered", "ok"), ("No answer", "warn")
 # The most a run keeps of what its agent is doing.
 MOST_ACTIVITY = 255
+# And of the steps it took (``RunnerStep``): an agent in a loop stops
+# being written down there.
+MOST_STEPS = 500
 # And of what its asker calls it.
 MOST_TITLE = 255
 
@@ -31,14 +34,15 @@ MOST_TITLE = 255
 _OWNER_FK: str | None = {% if include_auth %}"user.id"{% else %}None{% endif %}
 
 
-def outcome(status: str, branch: str | None, back: bool) -> tuple[str, str]:
+def outcome(run: "RunnerRun", back: bool) -> tuple[str, str]:
     """How a run went, in a word and its tone: where it stands (``LABELS``,
     ``TONES``; a status neither knows reads as itself), but one answer that
-    is over says whether anything came ``back`` (its command succeeding is
-    not that). Work on a ``branch`` is done, not an answer."""
-    if status == DONE and not branch:
-        return ANSWERED if back else NO_ANSWER
-    return LABELS.get(status, status), TONES.get(status, "muted")
+    is over says whether anything came ``back`` and its agent did not say
+    it has none (``unanswered``; its command succeeding is not that). Work
+    on a branch is done, not an answer."""
+    if run.status == DONE and not run.branch:
+        return ANSWERED if back and not run.unanswered else NO_ANSWER
+    return LABELS.get(run.status, run.status), TONES.get(run.status, "muted")
 
 
 class RunnerRun(SQLModel, table=True):
@@ -63,7 +67,9 @@ class RunnerRun(SQLModel, table=True):
     the sum of its runs'. A run still claimed at ``overdue_at`` (twice what
     its runner gives a command) is never coming back. ``activity`` is what
     its agent last said it was doing (``hooks``), and when: nothing once
-    the agent ended its turn, the last step for a run that was stopped."""
+    the agent ended its turn, the last step for a run that was stopped.
+    ``token_id`` is the token a runner claimed it with (none, for a run its
+    asker took in the app)."""
 
     __tablename__ = "runner_run"
     __table_args__ = (Index("ix_runner_run_subject", "subject_kind", "subject_id"),)
@@ -89,9 +95,51 @@ class RunnerRun(SQLModel, table=True):
     session_id: str | None = Field(default=None, max_length=64, index=True)
     worktree: str | None = Field(default=None, max_length=1024)
     cost: float | None = None
+    # Its branch's commits the remote does not have, as its runner counted
+    # them once it was back (``Answer.unpushed``).
+    unpushed: int | None = None
+    # Its agent said it has no answer (``Answer.unanswered``).
+    unanswered: bool | None = None
     overdue_at: datetime | None = None
     activity: str | None = Field(default=None, max_length=MOST_ACTIVITY)
     activity_at: datetime | None = None
+    token_id: int | None = None
+
+
+class RunnerStep(SQLModel, table=True):
+    """One step a run's agent took, worded as its hook said it (``hooks``),
+    or a line of its session as its runner heard it (``kind``: what it
+    said, called or got back, masked and cut to ``MOST_LINE``): what a run
+    says it did, in the order taken. A run keeps at most ``MOST_STEPS``,
+    and its steps go with it, so what a tool gave back is gone with it.
+
+    ponytail: Overseer's readers see every owner's session lines, as they
+    see every owner's runs; kept to the run's owner where an owner's own
+    page shows them."""
+
+    __tablename__ = "runner_step"
+
+    id: int | None = Field(default=None, primary_key=True)
+    run_id: int = Field(foreign_key="runner_run.id", ondelete="CASCADE", index=True)
+    at: datetime = Field(default_factory=utcnow)
+    kind: str | None = Field(default=None, max_length=16)
+    step: str = Field(max_length=MOST_LINE)
+
+
+class RunnerSpend(SQLModel, table=True):
+    """What one run cost, by its action, written down when its runner said
+    so: it stays when the run goes (replaced by a later ask, forgotten with
+    its subject), so what was spent is these, never the runs still kept.
+
+    ponytail: no owner, since every reader sums every owner's; add one
+    with the first per-owner figure."""
+
+    __tablename__ = "runner_spend"
+
+    id: int | None = Field(default=None, primary_key=True)
+    action: str = Field(max_length=64)
+    at: datetime = Field(default_factory=utcnow, index=True)
+    cost: float
 
 
 class RunnerToken(SQLModel, table=True):

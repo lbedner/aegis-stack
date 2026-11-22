@@ -12,13 +12,13 @@ that make the agent say what it is doing (``hooks``).
 A run that asks one thing gets a fresh worktree of ``repo`` at ``ref``
 (none without a repository), so the command answers from the code as it
 is, never from whatever branch is checked out, and changes nothing that
-stays. A run that is work names a branch: its worktree is kept (``_kept``),
+stays. A run that is work names a branch: its worktree is kept (``branches.kept``),
 and a later run of its session continues there (``_forms``). What a
 coding agent answers is read for what it cost (``_read``).
 """
 
 import asyncio
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 import contextlib
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -29,23 +29,36 @@ from pathlib import Path
 import re
 import signal
 import subprocess
-import tempfile
 import time
+from typing import Any
 from uuid import uuid4
 
 import httpx
 
 from app.core.log import logger
 
-from . import hooks
+from . import branches, hooks
 from .protocol import (
+    CALLED,
     CLAIM,
     FINISH,
+    GITHUB_REPO,
+    GITHUB_TOKEN_ENV,
+    LINES,
     MOST_AGENT,
+    MOST_LINE,
+    MOST_LINES,
+    NO_ANSWER_ASKED,
+    NO_ANSWER_MARK,
+    PUSH,
+    RETURNED,
+    SAID,
     TIMEOUT_SECONDS,
     Answer,
     ClaimedRun,
     ClaimRequest,
+    Line,
+    Lines,
     kept,
 )
 
@@ -56,9 +69,19 @@ _PLACES = re.compile("|".join(map(re.escape, (PLACEHOLDER, SESSION, HOOKS))))
 # An agent that will not start or resume a session says so at once: a
 # command that fails later than this was working, and is not tried again.
 REFUSAL_SECONDS = 30.0
-# What git is given for one step (a fetch that waits on a prompt or a dead
-# network would otherwise hold the runner for good).
-GIT_SECONDS = 60.0
+# How often what an agent's session says is posted while it goes, at most,
+# and the longest line of it a runner reads (a tool's whole output, in
+# stream-json, is one line).
+TELL_SECONDS = 1.0
+LONGEST_LINE = 2**24
+# Where what an agent's session says goes: posted to its run (``run_once``).
+Tell = Callable[[list[Line]], Awaitable[None]]
+GITHUB_API = "https://api.github.com"
+GITHUB_TRANSPORT: httpx.AsyncBaseTransport | None = None
+NO_GITHUB_TOKEN = (
+    f"No {GITHUB_TOKEN_ENV} where this runner runs: it pushes with a GitHub "
+    "token for the repository (Contents and Pull requests, read and write)."
+)
 
 
 @dataclass(frozen=True)
@@ -96,11 +119,6 @@ class Runner:
         return (self.worktrees or beside).resolve()
 
 
-class WorktreeRefusedError(ValueError):
-    """The branch is no branch name, names a place outside the worktrees
-    folder, or its worktree is on something else."""
-
-
 async def run_forever(runner: Runner) -> None:
     """Claim and answer runs until stopped, looking again every
     ``poll_seconds`` while nothing waits."""
@@ -118,24 +136,31 @@ async def run_once(
 ) -> bool:
     """Claim one run and answer it; False when none waits."""
     asking = ClaimRequest(
-        actions=runner.actions,
+        actions=list(dict.fromkeys([*runner.actions, PUSH])),
         agent=runner.agent,
         worktrees=str(runner.home) if runner.home else None,
         timeout=runner.timeout_seconds,
     )
-    async with httpx.AsyncClient(
-        base_url=runner.url.rstrip("/"),
-        headers={"Authorization": f"Bearer {runner.token}"},
-        transport=transport,
-        timeout=30.0,
-    ) as api:
+    async with _client(runner.url.rstrip("/"), runner.token, transport) as api:
         claimed = await api.post(CLAIM, json=asking.model_dump())
         claimed.raise_for_status()
         if claimed.status_code == 204:
             return False
         run = ClaimedRun.model_validate(claimed.json())
         logger.info("Run claimed", run_id=run.id, action=run.action)
-        answer = await _answer(runner, run)
+
+        async def tell(lines: list[Line]) -> None:
+            """``lines`` posted to the run; one that cannot be is lost,
+            never the run (its answer still comes back)."""
+            where = LINES.format(run_id=run.id)
+            for start in range(0, len(lines), MOST_LINES):
+                batch = Lines(lines=lines[start : start + MOST_LINES])
+                try:
+                    (await api.post(where, json=batch.model_dump())).raise_for_status()
+                except httpx.HTTPError as exc:
+                    logger.warning("Session not posted", run_id=run.id, error=str(exc))
+
+        answer = await _answer(runner, run, tell)
         said = kept(answer.result, answer.ok)
         finished = await api.post(
             FINISH.format(run_id=run.id),
@@ -145,22 +170,95 @@ async def run_once(
         return True
 
 
-async def _answer(runner: Runner, run: ClaimedRun) -> Answer:
+async def _answer(runner: Runner, run: ClaimedRun, tell: Tell) -> Answer:
     """The run's answer: what its command came back with where it ran, or
-    why it could not run, and where its work is kept."""
+    why it could not run, and where its work is kept. A push is the
+    runner's own (``_pushed``), failing the same ways."""
     kept: str | None = None
+    unpushed: int | None = None
     try:
+        if run.action == PUSH:
+            return await _pushed(runner, run)
         with _worktree(runner, run.branch) as cwd:
             kept = str(cwd) if cwd and run.branch else None
-            answer = await _asked(runner, run, cwd)
+            answer = _marked(await _asked(runner, run, cwd, tell))
+            if cwd and kept:
+                unpushed = branches.unpushed(cwd)
     except subprocess.CalledProcessError as exc:  # git, saying why
         answer = Answer(ok=False, result=(exc.stderr or "").strip() or str(exc))
-    except (OSError, subprocess.SubprocessError, WorktreeRefusedError) as exc:
+    # A worktree refused, or a line too long to read (both ValueErrors).
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
         answer = Answer(ok=False, result=f"{type(exc).__name__}: {exc}")
-    return answer.model_copy(update={"worktree": kept})
+    return answer.model_copy(update={"worktree": kept, "unpushed": unpushed})
 
 
-async def _asked(runner: Runner, run: ClaimedRun, cwd: Path | None) -> Answer:
+def _marked(answer: Answer) -> Answer:
+    """``answer`` with its agent's mark of having none read off it: the
+    last line of what it said (``NO_ANSWER_MARK``, however it is dressed),
+    which is not kept. Only a question is asked for one (``_ran``)."""
+    said, _, last = answer.result.rstrip().rpartition("\n")
+    if not answer.ok or last.strip(" *`_") != NO_ANSWER_MARK:
+        return answer
+    return answer.model_copy(update={"result": said.rstrip(), "unanswered": True})
+
+
+def _client(
+    url: str, token: str, transport: httpx.AsyncBaseTransport | None
+) -> httpx.AsyncClient:
+    """An API at ``url``, sent ``token``."""
+    return httpx.AsyncClient(
+        base_url=url,
+        headers={"Authorization": f"Bearer {token}"},
+        transport=transport,
+        timeout=30.0,
+    )
+
+
+async def _pushed(runner: Runner, run: ClaimedRun) -> Answer:
+    """The run's branch pushed from the worktree this runner keeps for it,
+    and its pull request opened (or the one already open): its link. The
+    title and body are the commits' not yet pushed (the latest one's, when
+    all are), then the run's prompt; the token goes to git in its
+    environment, never on a command line or in what is said back.
+
+    ponytail: any of the owner's runners may claim a push; one without the
+    token or the worktree says so. Claiming it by the runner that ran the
+    work (its token), when owners run several."""
+    token = os.environ.get(GITHUB_TOKEN_ENV)
+    if not token:
+        return Answer(ok=False, result=NO_GITHUB_TOKEN)
+    if runner.repo is None or runner.home is None or not run.branch:
+        return Answer(ok=False, result="This runner keeps no worktrees")
+    path = branches.place(runner.repo, runner.home, run.branch)
+    if not (path / ".git").exists():
+        return Answer(ok=False, result=f"No worktree of {run.branch} on this runner")
+    origin = branches.git(
+        path, "remote", "get-url", "origin", check=False
+    ).stdout.strip()
+    found = re.search(rf"github\.com[:/]({GITHUB_REPO})(?:\.git)?$", origin)
+    if found is None:
+        return Answer(ok=False, result=f"Its remote is not on GitHub: {origin}")
+    slug, branch = found.group(1), run.branch
+    said = branches.git(
+        path, "log", "--reverse", "--format=%B", *branches.UNPUSHED
+    ).stdout.strip()
+    said = said or branches.git(path, "log", "-1", "--format=%B").stdout.strip()
+    title, _, body = said.partition("\n")
+    branches.push(path, slug, branch, token)
+    try:
+        async with _client(GITHUB_API, token, GITHUB_TRANSPORT) as github:
+            about = "\n\n".join(filter(None, (body.strip(), run.prompt.strip())))
+            url = await branches.pull_request(
+                github, slug, branch, title.strip(), about
+            )
+    except httpx.HTTPError as exc:
+        return Answer(ok=False, result=f"GitHub did not open it: {exc}")
+    return Answer(ok=True, result=url, worktree=str(path), unpushed=0)
+
+
+async def _asked(
+    runner: Runner, run: ClaimedRun, cwd: Path | None, tell: Tell
+) -> Answer:
     """What the run's command came back with. A session's second form
     (``_forms``) is tried only when the first refused: it failed at once,
     without an agent's answer that cost anything. A command that worked and
@@ -169,7 +267,7 @@ async def _asked(runner: Runner, run: ClaimedRun, cwd: Path | None) -> Answer:
     refused: list[Answer] = []
     for form in _forms(runner, run):
         began = time.monotonic()
-        code, printed, errors = await _ran(runner, form, run, cwd)
+        code, printed, errors = await _ran(runner, form, run, cwd, tell)
         said = _read(printed)
         if said is not None:
             answer = said.model_copy(update={"ok": said.ok and code == 0})
@@ -201,17 +299,19 @@ def _forms(runner: Runner, run: ClaimedRun) -> list[list[str]]:
 
 
 async def _ran(
-    runner: Runner, command: list[str], run: ClaimedRun, cwd: Path | None
+    runner: Runner, command: list[str], run: ClaimedRun, cwd: Path | None, tell: Tell
 ) -> tuple[int, str, str]:
     """``command`` run for the run where it is to run, its places filled in
     one pass (a prompt that names one is left as it was asked): its exit
-    code and what it printed. It runs in a process group of its own, so
+    code and what it printed, read as it prints it, what an agent's session
+    says told as it comes (``_out``). It runs in a process group of its own, so
     one that outlives ``timeout_seconds``, or whose runner is told to stop,
     is stopped with everything it started, and nothing of it goes on
     working in a kept worktree. Its environment carries the runner's token,
     for the agent's hooks to sign what they post (``hooks``)."""
+    asked = run.prompt if run.branch else f"{NO_ANSWER_ASKED}\n\n{run.prompt}"
     said = {
-        PLACEHOLDER: run.prompt,
+        PLACEHOLDER: asked,
         SESSION: run.session_id or str(uuid4()),
         HOOKS: json.dumps(hooks.settings(runner.url)),
     }
@@ -225,24 +325,100 @@ async def _ran(
         stderr=subprocess.PIPE,
         start_new_session=True,
         env={**os.environ, hooks.TOKEN_ENV: runner.token},
+        limit=LONGEST_LINE,
     )
     try:
         async with asyncio.timeout(runner.timeout_seconds):
-            printed, errors = await process.communicate(
-                None if takes_prompt else run.prompt.encode()
+            printed, errors, _ = await asyncio.gather(
+                _out(process.stdout, tell),  # type: ignore[arg-type]
+                process.stderr.read(),  # type: ignore[union-attr]
+                _give(process.stdin, asked),
             )
-    except (TimeoutError, asyncio.CancelledError) as exc:
+            await process.wait()
+    except BaseException as exc:  # stopped, out of time, or unreadable
         with contextlib.suppress(ProcessLookupError):
             os.killpg(process.pid, signal.SIGKILL)
         if isinstance(exc, TimeoutError):
             given = f"{runner.timeout_seconds:g} seconds"
             raise TimeoutError(f"The command was stopped after {given}") from None
         raise
-    return (
-        process.returncode or 0,
-        printed.decode(errors="replace"),
-        errors.decode(errors="replace"),
-    )
+    return (process.returncode or 0, printed, errors.decode(errors="replace"))
+
+
+async def _give(stdin: asyncio.StreamWriter | None, asked: str) -> None:
+    """``asked`` to a command that reads its prompt from stdin."""
+    if stdin is None:
+        return
+    # One that never reads it may have shut its end: no fault of its own.
+    with contextlib.suppress(BrokenPipeError, ConnectionResetError):
+        stdin.write(asked.encode())
+        await stdin.drain()
+        stdin.close()
+
+
+async def _out(stdout: asyncio.StreamReader, tell: Tell) -> str:
+    """What a command printed, read a line at a time; what an agent's
+    session says in it (``_heard``) told at most every ``TELL_SECONDS``,
+    and the rest once it is done: by a sender of its own, in order, so the
+    agent never waits on the app to go on printing."""
+    batches: asyncio.Queue[list[Line] | None] = asyncio.Queue()
+
+    async def send() -> None:
+        while (batch := await batches.get()) is not None:
+            await tell(batch)
+
+    sender = asyncio.create_task(send())
+    printed: list[str] = []
+    heard: list[Line] = []
+    told = time.monotonic()
+    try:
+        async for raw in stdout:
+            printed.append(raw.decode(errors="replace"))
+            heard += _heard(printed[-1])
+            if heard and time.monotonic() - told >= TELL_SECONDS:
+                batches.put_nowait(heard)
+                heard, told = [], time.monotonic()
+    except BaseException:
+        sender.cancel()
+        raise
+    if heard:
+        batches.put_nowait(heard)
+    batches.put_nowait(None)
+    await sender
+    return "".join(printed)
+
+
+def _heard(printed: str) -> list[Line]:
+    """What one line of an agent's session (Claude Code's stream-json) says:
+    what it said, each tool it called with what it was given, and what a
+    tool gave back, each cut to ``MOST_LINE``; nothing for its own events,
+    its thinking, or a line that is not one."""
+    try:
+        event = json.loads(printed)
+    except ValueError:
+        return []
+    if not isinstance(event, dict) or event.get("type") not in ("assistant", "user"):
+        return []
+    blocks = (event.get("message") or {}).get("content")
+    found: list[tuple[str, str]] = []
+    for block in blocks if isinstance(blocks, list) else []:
+        kind = block.get("type") if isinstance(block, dict) else None
+        if kind == "text" and event["type"] == "assistant" and block.get("text"):
+            found.append((SAID, block["text"]))
+        elif kind == "tool_use":
+            given = json.dumps(block.get("input"), ensure_ascii=False)
+            found.append((CALLED, f"{block.get('name')} {given}"))
+        elif kind == "tool_result":
+            found.append((RETURNED, _text_of(block.get("content"))))
+    return [Line(kind=kind, text=text[:MOST_LINE]) for kind, text in found]  # type: ignore[arg-type]
+
+
+def _text_of(content: Any) -> str:
+    """A tool's result as text: itself, or its text parts, a line each."""
+    if isinstance(content, str):
+        return content
+    parts = content if isinstance(content, list) else []
+    return "\n".join(p["text"] for p in parts if isinstance(p, dict) and "text" in p)
 
 
 def _read(printed: str) -> Answer | None:
@@ -253,7 +429,7 @@ def _read(printed: str) -> Answer | None:
     session has cost (where that is an amount). None for anything else:
     plain output."""
     text = printed.strip()
-    for candidate in (text, text.rpartition("\n")[2]):
+    for candidate in (text, *reversed(text.splitlines())):
         try:
             said = json.loads(candidate)
         except ValueError:
@@ -286,87 +462,7 @@ def _worktree(runner: Runner, branch: str | None) -> Iterator[Path | None]:
     if runner.repo is None or runner.home is None:
         yield None
     elif branch:
-        yield _kept(runner.repo, runner.ref, runner.home, branch)
+        yield branches.kept(runner.repo, runner.ref, runner.home, branch)
     else:
-        with _fresh(runner.repo, runner.ref) as path:
+        with branches.fresh(runner.repo, runner.ref) as path:
             yield path
-
-
-def _git(
-    repo: Path, *args: str, check: bool = True
-) -> subprocess.CompletedProcess[str]:
-    """``git`` in ``repo``, with nobody to ask and ``GIT_SECONDS`` to
-    answer; a refusal raises with what git said."""
-    return subprocess.run(
-        ["git", "-C", str(repo), *args],
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        check=check,
-        timeout=GIT_SECONDS,
-    )
-
-
-def _fetch(repo: Path) -> None:
-    """What the remote has now, where it can be reached in time."""
-    with contextlib.suppress(subprocess.TimeoutExpired):
-        _git(repo, "fetch", "--quiet", check=False)
-
-
-def _add(repo: Path, *how: str) -> None:
-    """A worktree of ``repo`` added as ``how`` says, any that were deleted
-    by hand forgotten first."""
-    _git(repo, "worktree", "prune", check=False)
-    _git(repo, "worktree", "add", "--quiet", *how)
-
-
-def _has(repo: Path, ref: str) -> bool:
-    return (
-        _git(repo, "rev-parse", "--verify", "--quiet", ref, check=False).returncode == 0
-    )
-
-
-def _kept(repo: Path, ref: str, home: Path, branch: str) -> Path:
-    """The worktree kept for ``branch`` under ``home``: found there, still
-    on it, or made the first time, on the branch as the repository or its
-    remote has it, else on a new one from ``ref``. ``branch`` is the app's
-    word: only a branch name is taken (never an option to git), and only
-    for a place under ``home``."""
-    if _git(repo, "check-ref-format", "--branch", branch, check=False).returncode:
-        raise WorktreeRefusedError(f"{branch!r} is no branch name")
-    path = (home / branch).resolve()
-    if not path.is_relative_to(home):
-        raise WorktreeRefusedError(f"{branch!r} is no place under {home}")
-    if (path / ".git").exists():
-        on = _git(path, "symbolic-ref", "--short", "--quiet", "HEAD", check=False)
-        if on.stdout.strip() != branch:
-            raise WorktreeRefusedError(
-                f"{path} is on {on.stdout.strip() or 'no branch'}, not {branch}"
-            )
-        return path
-    _fetch(repo)
-    there = _has(repo, f"refs/heads/{branch}") or _has(
-        repo, f"refs/remotes/origin/{branch}"
-    )
-    _add(
-        repo,
-        *(
-            [str(path), branch]
-            if there
-            else ["--no-track", "-b", branch, str(path), ref]
-        ),
-    )
-    return path
-
-
-@contextmanager
-def _fresh(repo: Path, ref: str) -> Iterator[Path]:
-    """A fresh worktree of ``repo`` at ``ref``, removed after."""
-    _fetch(repo)
-    with tempfile.TemporaryDirectory(prefix="runner-run-") as parent:
-        path = Path(parent) / "worktree"
-        _add(repo, "--detach", str(path), ref)
-        try:
-            yield path
-        finally:
-            _git(repo, "worktree", "remove", "--force", str(path), check=False)

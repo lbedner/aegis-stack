@@ -438,6 +438,7 @@ class TestWebFrontendScaffolding:
                 "section_tabs",
                 "sidebar_icon",
                 "stat_row",
+                "timeline",
                 "stat_tile",
                 "stats_strip",
                 "status_dot",

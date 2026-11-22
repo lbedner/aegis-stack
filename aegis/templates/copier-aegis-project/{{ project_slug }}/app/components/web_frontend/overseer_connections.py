@@ -14,7 +14,7 @@ from typing import Any
 
 from app.components.backend.middleware.connections import find, history
 from app.core.constants import ComponentName
-from app.core.formatting import format_span
+from app.core.formatting import format_span, format_timestamp
 
 from .overseer_live import fragment_events
 from .overseer_nav import page_url
@@ -155,7 +155,12 @@ async def drawer_context(record_id: str) -> dict[str, Any] | None:
             ("Ended", record["ended"]),
         ],
         "timeline": [
-            {"when": when.strftime("%H:%M:%S"), "what": what, "detail": detail}
+            {
+                "when": format_timestamp(when.isoformat()),
+                "what": what,
+                "detail": detail,
+                "error": what == "dropped",
+            }
             for when, what, detail in record["events"]
         ],
     }

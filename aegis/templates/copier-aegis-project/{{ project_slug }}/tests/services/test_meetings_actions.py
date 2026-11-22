@@ -201,18 +201,35 @@ async def test_a_run_about_a_card_with_a_topic_is_called_by_it(
 
 
 @pytest.mark.parametrize(
-    ("result", "state", "tone"),
-    [("Yes.", "Answered on laptop", "ok"), ("", "No answer on laptop", "warn")],
+    ("result", "unanswered", "state", "tone"),
+    [
+        ("Yes.", False, "Answered on laptop", "ok"),
+        ("", False, "No answer on laptop", "warn"),
+        ("Nothing in the notes.", True, "No answer on laptop", "warn"),
+    ],
 )
 async def test_an_answer_that_is_back_says_whether_it_had_anything_to_say(
-    async_db_session: AsyncSession, result: str, state: str, tone: str
+    async_db_session: AsyncSession,
+    result: str,
+    unanswered: bool,
+    state: str,
+    tone: str,
 ) -> None:
     """As Overseer's Runner page says it (``outcome``): a command that
-    succeeded and said nothing is not an answer."""
+    succeeded and said nothing, or whose agent said it has no answer, is
+    not an answer."""
     meeting_id, moment_id = await asked_a_question(async_db_session)
     run = await ask(async_db_session, moment_id, "agent", owner_user_id=None)
     await claim(async_db_session, None, ["agent"], runner="laptop")
-    await finish(async_db_session, run.id or 0, None, result, ok=True, runner="laptop")
+    await finish(
+        async_db_session,
+        run.id or 0,
+        None,
+        result,
+        ok=True,
+        runner="laptop",
+        unanswered=unanswered,
+    )
 
     (moment,) = await moments_of(async_db_session, meeting_id)
 

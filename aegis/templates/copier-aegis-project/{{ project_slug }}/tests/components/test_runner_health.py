@@ -5,11 +5,11 @@ on no runner that takes its owner's is the warning: nothing answers it."""
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.components.runner import health, runs
+from app.components.runner import health, runs, tokens
 from app.components.runner.health import RunnerFact, check_runner_health
 from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatusType
-from tests._runner import a_runner_looked_in, asked, someone_else
+from tests._runner import a_runner_looked_in, asked, claimed, late, someone_else
 from tests._session import opens
 
 
@@ -84,3 +84,24 @@ async def test_only_a_runner_that_takes_the_owners_runs_answers_them(
 
     assert found.status is status
     assert found.metadata[RunnerFact.LISTENING] is True
+
+
+@pytest.mark.parametrize(
+    ("overdue", "status"),
+    [(False, ComponentStatusType.HEALTHY), (True, ComponentStatusType.WARNING)],
+)
+async def test_a_runner_on_a_long_step_listens_until_its_run_is_overdue(
+    db: AsyncSession, overdue: bool, status: ComponentStatusType
+) -> None:
+    """A runner on a step longer than ``LISTENING`` still takes the next
+    run once its own is back, unless its own is overdue (it stopped)."""
+    token, _ = await tokens.create(db, None, "laptop")
+    run = await claimed(db, await asked(db), token_id=token.id)
+    if overdue:
+        await late(db, run, 24 * 60)
+    await asked(db, "acme/app#13")
+
+    found = await check_runner_health()
+
+    assert found.status is status
+    assert found.metadata[RunnerFact.LISTENING] is not overdue

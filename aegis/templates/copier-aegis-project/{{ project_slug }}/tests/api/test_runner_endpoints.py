@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.components.runner import hooks, runs, tokens
+from app.components.runner import hooks, protocol, runs, tokens
 from app.components.runner.models import RunnerToken
 from app.components.runner.protocol import CLAIM, FINISH, RUNS
 from app.core.tokens import digest
@@ -65,20 +65,21 @@ async def test_a_runner_with_a_token_claims_a_run_and_posts_its_result(
     assert again.status_code == 404
 
 
-async def test_a_runner_that_says_its_agent_marks_the_run_it_claims(
+async def test_a_runners_claim_marks_the_run_with_its_agent_and_token(
     authenticated_client: TestClient,
     async_db_session: AsyncSession,
     acting_owner_user_id: int | None,
 ) -> None:
     run = await asked(async_db_session, owner_user_id=acting_owner_user_id)
     runner = await signed(async_db_session, acting_owner_user_id)
+    (token,) = await tokens.live(async_db_session, acting_owner_user_id)
 
     authenticated_client.post(
         f"{RUNS}/claim", json={"actions": ["agent"], "agent": "claude"}, headers=runner
     )
 
     kept = await runs.one(async_db_session, run.id or 0)
-    assert kept is not None and kept.agent == "claude"
+    assert kept is not None and kept.agent == "claude" and kept.token_id == token.id
 
 
 async def test_a_run_on_a_branch_is_claimed_and_finished_as_work(
@@ -243,3 +244,28 @@ def test_without_auth_only_the_operator_makes_or_revokes_a_token(
 
     assert (made.status_code, revoked.status_code) == (403, 403)
     assert async_client_with_db.get(TOKENS).status_code == 200
+
+
+async def test_a_runner_posts_its_agents_session_to_the_run_it_holds(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    run = await asked(async_db_session, owner_user_id=acting_owner_user_id)
+    runner = await signed(async_db_session, acting_owner_user_id)
+    authenticated_client.post(
+        f"{RUNS}/claim", json={"actions": ["agent"]}, headers=runner
+    )
+    said = {"lines": [{"kind": protocol.SAID, "text": "Looking."}]}
+
+    posted = authenticated_client.post(
+        protocol.LINES.format(run_id=run.id), json=said, headers=runner
+    )
+    unsigned = authenticated_client.post(
+        protocol.LINES.format(run_id=run.id), json=said
+    )
+
+    assert (posted.status_code, unsigned.status_code) == (204, 401)
+    assert [step.step for step in await runs.steps(async_db_session, run.id or 0)] == [
+        "Looking."
+    ]

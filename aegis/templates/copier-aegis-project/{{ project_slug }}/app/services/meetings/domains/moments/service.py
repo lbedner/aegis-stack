@@ -374,7 +374,7 @@ async def _runs_of(
     for run in rows:
         action = named[run.id]
         stalled = run.id in waiting and not listening
-        went, tone = outcome(run.status, run.branch, bool(run.result))
+        went, tone = outcome(run, bool(run.result))
         runs.setdefault(moment_of(run), []).append(
             RunRecord(
                 id=run.id or 0,

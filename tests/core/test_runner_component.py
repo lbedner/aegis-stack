@@ -143,7 +143,7 @@ def test_with_no_command_set_it_runs_claude_in_a_session_and_asks_what_it_cost(
     fill in). The docs show them as they are."""
     args = _ran(tmp_path, {token: "rnr_test"}, meetings)
 
-    how = "--output-format json --permission-mode plan --settings {hooks}"
+    how = "--output-format stream-json --verbose --permission-mode plan --settings {hooks}"
     command = f"claude -p {{prompt}} --session-id {{session}} {how}"
     resume = f"claude -p {{prompt}} --resume {{session}} {how}"
     assert f"--command {command} --resume-command {resume}" in args

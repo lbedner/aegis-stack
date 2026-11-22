@@ -16,7 +16,7 @@ from uuid import UUID
 import httpx
 import pytest
 
-from app.components.runner import client, hooks, protocol
+from app.components.runner import branches, client, hooks, protocol
 from app.components.runner.client import Runner, run_once
 from app.components.runner.protocol import CLAIM, Answer, ClaimedRun
 
@@ -76,15 +76,24 @@ def _runner(repo: Path | None, command: list[str], **more: Any) -> Runner:
 
 
 async def _posted(
-    runner: Runner, *runs: dict[str, Any], asked: list[dict[str, Any]] | None = None
+    runner: Runner,
+    *runs: dict[str, Any],
+    asked: list[dict[str, Any]] | None = None,
+    heard: list[dict[str, Any]] | None = None,
 ) -> list[Answer]:
     """What ``runner`` posts back for ``runs``, claimed one at a time until
-    none waits; what it sent to claim each goes in ``asked``."""
+    none waits; what it sent to claim each goes in ``asked``, the lines of
+    its agent's session it posted as they came in ``heard``."""
     waiting, posted = list(runs), []
 
     def handle(request: httpx.Request) -> httpx.Response:
         assert request.headers["Authorization"] == "Bearer rnr_test"
         body = json.loads(request.content)
+        if request.url.path.endswith("/lines"):
+            assert request.url.path == protocol.LINES.format(run_id=7)
+            if heard is not None:
+                heard.extend(body["lines"])
+            return httpx.Response(204)
         if request.url.path == CLAIM:
             if asked is not None:
                 asked.append(body)
@@ -129,7 +138,7 @@ async def test_a_run_is_answered_in_a_fresh_worktree_and_posted(repo: Path) -> N
     assert question == "Can the CSV export ship this week?"
     assert readme == "The export ships on Thursdays."
     assert Path(where) != repo and not Path(where).exists()
-    assert asked[0]["actions"] == ["agent"]
+    assert asked[0]["actions"] == ["agent", protocol.PUSH]
 
 
 async def test_nothing_waiting_does_nothing(repo: Path) -> None:
@@ -148,11 +157,15 @@ async def test_a_command_without_a_prompt_placeholder_reads_it_on_stdin() -> Non
     """Any headless command works: one that takes the prompt as an argument
     names ``{prompt}``, one that reads it from stdin does not; no repository
     runs it where the runner was started."""
-    stdin = _python("import sys; print(sys.stdin.read().splitlines()[-1])")
+    stdin = _python(
+        "import sys; said = sys.stdin.read().splitlines(); print(said[0], said[-1])"
+    )
 
     (done,) = await _posted(_runner(None, stdin), _run())
 
-    assert done.result == "Can the CSV export ship this week?"
+    assert (
+        done.result == f"{protocol.NO_ANSWER_ASKED} Can the CSV export ship this week?"
+    )
 
 
 async def test_a_long_answer_keeps_its_start_and_a_long_failure_its_end(
@@ -266,7 +279,7 @@ async def test_a_session_the_agent_refuses_one_way_is_tried_the_other(
     """Whether a session is one to start or to continue is the agent's to
     say: what the app expects is tried first, and the other form once if
     the agent refuses it at once, so no session is stuck."""
-    run = _run(prompt="go on", session_id="0f0f", resume=resume)
+    run = _run(prompt="go on", session_id="0f0f", resume=resume, branch="issue-12")
     runner = _runner(None, command, resume_command=resume_command)
 
     (done,) = await _posted(runner, run)
@@ -371,7 +384,7 @@ async def test_a_prompt_that_names_a_placeholder_reaches_the_command_as_asked() 
 
     (done,) = await _posted(_runner(None, echo), _run(prompt=asked_of))
 
-    assert done.result == asked_of
+    assert done.result == f"{protocol.NO_ANSWER_ASKED}\n\n{asked_of}"
 
 
 async def test_a_command_out_of_time_is_stopped_with_all_it_started(
@@ -520,3 +533,321 @@ async def test_a_runner_says_which_agent_it_runs() -> None:
 
     assert asked[0]["agent"] == "claude"
     assert _runner(None, []).agent is None  # nothing to name
+
+
+# Commits what it was asked as NOTES.md where it runs, and answers as a
+# coding agent does.
+COMMIT = _python(
+    "import json, subprocess, sys; open('NOTES.md', 'a').write(sys.argv[1] + chr(10));"
+    " git = ['git', '-c', 'user.email=t@t', '-c', 'user.name=t'];"
+    " subprocess.run([*git, 'add', '-A'], check=True);"
+    " subprocess.run([*git, 'commit', '-qm', 'Ship the export' + chr(10) + chr(10)"
+    " + 'It ships on Thursdays.'], check=True);"
+    " print(json.dumps({'result': 'Committed'}))",
+    "{prompt}",
+)
+
+
+@pytest.fixture
+def github(repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """``repo`` as the runner's clone has it for its remote, at a place
+    named like GitHub's (``acme/app``), which a push over HTTPS reaches."""
+    remote = tmp_path / "github.com" / "acme" / "app.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(repo), str(remote)], check=True)
+    monkeypatch.setattr(branches, "GITHUB_GIT", f"{tmp_path}/github.com/{{slug}}.git")
+    return remote
+
+
+@pytest.fixture
+def clone(github: Path, tmp_path: Path) -> Path:
+    path = tmp_path / "clone"
+    subprocess.run(["git", "clone", "-q", str(github), str(path)], check=True)
+    return path
+
+
+@pytest.mark.parametrize(("command", "unpushed"), [(COMMIT, 1), (WORK, 0)])
+async def test_a_run_on_a_branch_says_how_many_commits_are_not_on_the_remote(
+    clone: Path, tmp_path: Path, command: list[str], unpushed: int
+) -> None:
+    """Counted by the runner, not the agent: what is left to push."""
+    runner = _runner(clone, command, worktrees=tmp_path / "kept")
+
+    (done,) = await _posted(runner, _run(branch="issue-12-export"))
+
+    assert done.ok and done.unpushed == unpushed
+
+
+async def test_one_answer_says_nothing_of_what_to_push(repo: Path) -> None:
+    (done,) = await _posted(_runner(repo, ANSWER), _run())
+
+    assert done.unpushed is None
+
+
+def _github_api(made: int = 201) -> tuple[httpx.MockTransport, list[dict[str, Any]]]:
+    """GitHub's API for ``acme/app``: its default branch, and a pull request
+    opened (``made`` 201) or one already open for the branch (422)."""
+    sent: list[dict[str, Any]] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "Bearer ghp_test"
+        if request.method == "POST":
+            sent.append(json.loads(request.content))
+            url = "https://github.com/acme/app/pull/5"
+            return httpx.Response(made, json={"html_url": url})
+        if request.url.path == "/repos/acme/app/pulls":
+            assert request.url.params["head"] == "acme:issue-12-export"
+            return httpx.Response(
+                200, json=[{"html_url": "https://github.com/acme/app/pull/4"}]
+            )
+        return httpx.Response(200, json={"default_branch": "main"})
+
+    return httpx.MockTransport(handle), sent
+
+
+@pytest.mark.parametrize(
+    ("made", "url"),
+    [
+        (201, "https://github.com/acme/app/pull/5"),
+        (422, "https://github.com/acme/app/pull/4"),
+    ],
+)
+async def test_a_push_pushes_the_branch_and_opens_its_pull_request(
+    clone: Path,
+    github: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    made: int,
+    url: str,
+) -> None:
+    """The runner pushes, never the agent: the branch over HTTPS with the
+    token in its environment, then a pull request for it, its commits'
+    message the body and what the app asked it to close at the end. A
+    branch that has one open already is that one. The repository's hooks,
+    which its agent may write, are not run with the token there."""
+    hook = clone / ".git" / "hooks" / "pre-push"
+    hook.write_text("#!/bin/sh\nexit 1\n")
+    hook.chmod(0o755)
+    api, sent = _github_api(made)
+    monkeypatch.setattr(client, "GITHUB_TRANSPORT", api)
+    monkeypatch.setenv(protocol.GITHUB_TOKEN_ENV, "ghp_test")
+    runner = _runner(clone, COMMIT, worktrees=tmp_path / "kept")
+    work = _run(branch="issue-12-export")
+    push = _run(
+        action=protocol.PUSH, prompt="Closes acme/app#12", branch="issue-12-export"
+    )
+
+    done, pushed = await _posted(runner, work, push)
+
+    assert pushed.ok and pushed.result == url and pushed.unpushed == 0
+    assert (
+        _git(github, "log", "-1", "--format=%s", "issue-12-export") == "Ship the export"
+    )
+    assert sent == [
+        {
+            "title": "Ship the export",
+            "head": "issue-12-export",
+            "base": "main",
+            "body": "It ships on Thursdays.\n\nCloses acme/app#12",
+        }
+    ]
+
+
+async def test_a_push_without_a_github_token_says_what_is_missing(
+    clone: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(protocol.GITHUB_TOKEN_ENV, raising=False)
+    runner = _runner(clone, COMMIT, worktrees=tmp_path / "kept")
+    push = _run(action=protocol.PUSH, prompt="", branch="issue-12-export")
+
+    (pushed,) = await _posted(runner, push)
+
+    assert not pushed.ok and protocol.GITHUB_TOKEN_ENV in pushed.result
+
+
+@pytest.mark.parametrize(
+    ("branch", "broken", "said"),
+    [
+        ("../clone", None, "WorktreeRefusedError"),
+        (
+            "issue-12-export",
+            subprocess.TimeoutExpired("git push", 60),
+            "TimeoutExpired",
+        ),
+        ("issue-12-export", OSError("no git"), "OSError"),
+    ],
+)
+async def test_a_push_that_cannot_go_says_why_and_the_runner_goes_on(
+    clone: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    branch: str,
+    broken: Exception | None,
+    said: str,
+) -> None:
+    """Pushed only from a worktree this runner keeps; git timing out or
+    missing fails the push, never the runner."""
+    monkeypatch.setenv(protocol.GITHUB_TOKEN_ENV, "ghp_test")
+    if broken is not None:
+
+        def fails(*_: Any, **__: Any) -> None:
+            raise broken
+
+        monkeypatch.setattr(branches, "push", fails)
+    runner = _runner(clone, COMMIT, worktrees=tmp_path / "kept")
+    work = _run(branch="issue-12-export")
+    push = _run(action=protocol.PUSH, prompt="", branch=branch)
+
+    _, pushed = await _posted(runner, work, push)
+
+    assert not pushed.ok and said in pushed.result
+
+
+# Prints the first line of what it is asked.
+FIRST_LINE = _python("import sys; print(sys.argv[1].splitlines()[0])", "{prompt}")
+
+
+@pytest.mark.parametrize(
+    ("branch", "first"),
+    [(None, protocol.NO_ANSWER_ASKED), ("issue-12", PROMPT.splitlines()[0])],
+)
+async def test_a_question_asks_its_agent_to_say_when_it_has_no_answer(
+    branch: str | None, first: str
+) -> None:
+    """Work on a branch is done, not an answer: it is asked as it was."""
+    (done,) = await _posted(_runner(None, FIRST_LINE), _run(branch=branch))
+
+    assert done.result == first
+
+
+@pytest.mark.parametrize(
+    ("says", "result", "unanswered"),
+    [
+        ("It ships Thursday.", "It ships Thursday.", False),
+        ("Nothing in the notes.\n[no answer]", "Nothing in the notes.", True),
+        ("Nothing in the notes.\n\n**`[no answer]`**", "Nothing in the notes.", True),
+        ("[no answer]", "", True),
+    ],
+)
+async def test_an_agent_that_says_it_has_no_answer_is_heard(
+    says: str, result: str, unanswered: bool
+) -> None:
+    """Its mark is read off what it said, however it dressed it, and what
+    it said is kept."""
+    (done,) = await _posted(_runner(None, _python(SAYS, says)), _run())
+
+    assert (done.ok, done.result, done.unanswered) == (True, result, unanswered)
+
+
+# A Claude Code session as stream-json prints it, as a real one did: its
+# own events, a thought, a tool called and what it gave back, what it said,
+# then the result the run reads.
+SESSION = [
+    {"type": "system", "subtype": "init", "session_id": "0f0f"},
+    {
+        "type": "assistant",
+        "message": {"content": [{"type": "thinking", "thinking": ""}]},
+    },
+    {
+        "type": "assistant",
+        "message": {
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "toolu_1",
+                    "name": "Bash",
+                    "input": {"command": "echo hello-from-tool"},
+                }
+            ]
+        },
+    },
+    {"type": "rate_limit_event"},
+    {
+        "type": "user",
+        "message": {
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_1",
+                    "content": "hello-from-tool",
+                },
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_2",
+                    "content": [
+                        {"type": "text", "text": "line one"},
+                        {"type": "text", "text": "line two"},
+                    ],
+                },
+            ]
+        },
+    },
+    {
+        "type": "assistant",
+        "message": {"content": [{"type": "text", "text": "It printed hello."}]},
+    },
+    {
+        "type": "result",
+        "subtype": "success",
+        "result": "It printed hello.",
+        "total_cost_usd": 0.01,
+    },
+]
+STREAMS = _python(
+    "import sys; sys.stdout.write(sys.argv[1])",
+    "".join(json.dumps(event) + "\n" for event in SESSION),
+)
+
+
+async def test_an_agents_session_is_posted_as_it_goes_and_its_result_is_the_answer() -> (
+    None
+):
+    """What it said, each tool it called with what it was given, and what
+    the tool gave back, in order; its own events and thoughts are not."""
+    heard: list[dict[str, Any]] = []
+
+    (done,) = await _posted(_runner(None, STREAMS), _run(), heard=heard)
+
+    assert (done.ok, done.result) == (True, "It printed hello.")
+    assert heard == [
+        {"kind": protocol.CALLED, "text": 'Bash {"command": "echo hello-from-tool"}'},
+        {"kind": protocol.RETURNED, "text": "hello-from-tool"},
+        {"kind": protocol.RETURNED, "text": "line one\nline two"},
+        {"kind": protocol.SAID, "text": "It printed hello."},
+    ]
+
+
+async def test_a_command_that_prints_no_session_posts_none() -> None:
+    heard: list[dict[str, Any]] = []
+
+    await _posted(_runner(None, _python(SAYS, "Yes.")), _run(), heard=heard)
+
+    assert heard == []
+
+
+async def test_an_answer_followed_by_a_stray_line_is_still_read() -> None:
+    late = _python(SAYS + "; print('a warning, late')", "Yes.")
+
+    (done,) = await _posted(_runner(None, late), _run())
+
+    assert (done.ok, done.result, done.cost) == (True, "Yes.", 0.1)
+
+
+async def test_a_line_too_long_to_read_fails_the_run_not_the_runner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(client, "LONGEST_LINE", 64)
+    long = _python("print('x' * 1000)")
+
+    first, second = await _posted(_runner(None, long), _run(), _run())
+
+    assert not first.ok and not second.ok and "ValueError" in first.result
+
+
+async def test_a_command_that_never_reads_its_prompt_still_answers() -> None:
+    """A prompt too big for the pipe, written to a command that does not
+    read it, is no failure of the command's."""
+    deaf = _python("print('ok')")
+
+    (done,) = await _posted(_runner(None, deaf), _run(prompt="x" * 1_000_000))
+
+    assert (done.ok, done.result) == (True, "ok")

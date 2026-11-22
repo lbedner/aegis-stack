@@ -666,6 +666,37 @@ async def impatient_engine():
     yield engine
     await engine.dispose()
     shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+@pytest.fixture
+async def holder(
+    impatient_engine: Any, monkeypatch: pytest.MonkeyPatch
+) -> AsyncGenerator[AsyncSession]:
+    """A session that has queried and not committed: it holds the write
+    lock, as a request's own session does from its first query, and every
+    session the code under test opens comes from the same database. A read
+    that opens its own session must not wait behind it (``read_only``)."""
+    from sqlalchemy import text
+
+    from app.core.cache import get_cache
+    import app.core.db as db
+
+    maker = async_sessionmaker(
+        impatient_engine, class_=AsyncSession, expire_on_commit=False
+    )
+    monkeypatch.setattr(db, "AsyncSessionLocal", maker)
+    await get_cache().clear()
+    async with maker() as session:
+        await session.exec(text("select 1"))  # type: ignore[call-overload]
+        yield session
+        await session.rollback()
+{%- else %}
+
+
+@pytest.fixture
+def holder() -> None:
+    """SQLite's one writer: Postgres has no lock to hold here."""
+    pytest.skip("a read waiting on its caller's lock is SQLite's")
 {%- endif %}
 
 

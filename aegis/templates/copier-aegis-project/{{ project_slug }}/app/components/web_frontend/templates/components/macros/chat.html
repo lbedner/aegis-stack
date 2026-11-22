@@ -10,7 +10,7 @@
 #}
 {% from "components/macros/form.html" import button_classes %}
 {% from "components/macros/icons.html" import icon %}
-{% from "components/macros/layout.html" import avatar, copy_icon %}
+{% from "components/macros/layout.html" import avatar, badge, copy_icon %}
 {% import "components/macros/layout.html" as layout %}
 
 {# What a voice control is doing, drawn from its data-state (voice.js only
@@ -245,7 +245,9 @@
 
 {# One model as a picker's row (the chat model's, a call's): a pick posts
    its id from the form ``form`` (its attributes; ``hidden``, what else it
-   posts), ``mark`` naming it for the page; teal-checked when ``current``. #}
+   posts), ``mark`` naming it for the page; teal-checked when ``current``.
+   ``row.badges`` (each a label and tone) say where it runs and what it can
+   do, where a row has that to say. #}
 {% macro model_row(row, current, mark, form, hidden="") %}
 <li>
   <form {{ form }}>
@@ -258,10 +260,23 @@
         <span class="block text-xs text-aegis-muted truncate">{{ row.model_id }}</span>
       </span>
       {% if row.facts %}<span class="text-xs text-aegis-muted whitespace-nowrap">{{ row.facts }}</span>{% endif %}
+      {% for b in row.badges or [] %}<span class="text-xs">{{ badge(b.label, b.tone) }}</span>{% endfor %}
       {% if current %}{{ icon("check", "w-4 h-4 text-aegis-teal shrink-0", 2, '', label="In use") }}{% endif %}
     </button>
   </form>
 </li>
+{% endmacro %}
+
+{# One part of a live call (what hears, thinks or speaks; or the one model
+   that does all three), opening its own list in the voice dialog: its
+   ``label``, what it is, its badges and a note; outlined teal when open. #}
+{% macro call_part(part) %}
+<a href="{{ part.url }}" {{ hx_dialog(part.url) }} data-call-part="{{ part.key }}" {% if part.open %}aria-current="true"{% endif %}
+   class="block min-w-0 rounded-lg border border-aegis-border px-3 py-2 hover:border-aegis-muted aria-[current=true]:border-aegis-teal transition-colors">
+  <span class="block micro-label text-aegis-muted">{{ part.label }}</span>
+  <span class="block text-sm text-aegis-text truncate" data-name>{{ part.name }}</span>
+  <span class="flex flex-wrap items-center gap-2 mt-1 text-xs">{% for b in part.badges %}{{ badge(b.label, b.tone) }}{% endfor %}{% if part.note %}<span class="text-aegis-muted">{{ part.note }}</span>{% endif %}</span>
+</a>
 {% endmacro %}
 
 {# One stored message as its bubble: the transcript and the settle swap

@@ -44,6 +44,8 @@ class CatalogModel(BaseModel):
     lab: str | None = None
     # What kind of model: "chat", or a voice kind (LargeLanguageModel.mode).
     mode: str = "chat"
+    # Whether it can call tools; None where no source says.
+    supports_tools: bool | None = None
 
 
 class LLMListResult(CatalogModel):
@@ -102,7 +104,7 @@ async def list_models(
     """
     if vendors is not None and not vendors:
         return []
-    async with get_async_session() as session:
+    async with get_async_session(read_only=True) as session:
         models = await queries.catalog_models(
             session,
             pattern=pattern,
@@ -154,6 +156,7 @@ def _list_result(model: LargeLanguageModel, price: LLMPrice | None) -> LLMListRe
         if model.released_on
         else None,
         mode=model.mode,
+        supports_tools=model.supports_tools,
     )
 
 

@@ -14,12 +14,13 @@ I=()
 [ "${INDEX:-testpypi}" = testpypi ] && I=(--index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ --index-strategy unsafe-best-match)
 # --refresh: a version published minutes ago is missing from a cached index.
 # And retried: TestPyPI's mirrors catch up at different times, so one call
-# can still miss a version another call just found.
+# can still miss a version another call just found. A template clone GitHub
+# cut off (RPC failed) is retried the same way.
 aeg() {
   local out rc
   for _ in 1 2 3 4 5 6; do
     out=$(uvx --refresh "${I[@]}" "aegis-stack@$1" "${@:2}" 2>&1); rc=$?
-    grep -qE "No solution found|no version of" <<<"$out" || break
+    grep -qE "No solution found|no version of|RPC failed|unable to access" <<<"$out" || break
     sleep 30
   done
   printf '%s\n' "$out"

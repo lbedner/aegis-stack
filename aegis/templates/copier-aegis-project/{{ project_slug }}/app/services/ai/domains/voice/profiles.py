@@ -78,8 +78,7 @@ def parse_form(form: Any) -> tuple[dict[str, Any], list[str]]:
         if value not in allowed:
             errors.append(f"{column.replace('_', ' ')}: pick one of the choices.")
         values[column] = value
-    if heard := get_stt_model(values["stt_model"]):  # heard by its own provider
-        values["stt_provider"] = heard.provider_id
+    values.update(hearing(values["stt_model"]))
     try:
         idle = int(str(form.get("live_idle_seconds") or ""))
         if not IDLE_RANGE[0] <= idle <= IDLE_RANGE[1]:
@@ -90,6 +89,24 @@ def parse_form(form: Any) -> tuple[dict[str, Any], list[str]]:
             f"Check in after is whole seconds from {IDLE_RANGE[0]} to {IDLE_RANGE[1]}."
         )
     return values, errors
+
+
+def hearing(model_id: str) -> dict[str, str]:
+    """The columns a hearing model sets: it, and its own provider (an
+    OpenAI model kept beside Parakeet would be asked of Parakeet); none for
+    a model the catalog does not know."""
+    heard = get_stt_model(model_id)
+    return {"stt_model": model_id, "stt_provider": heard.provider_id} if heard else {}
+
+
+async def hear_with(
+    session: AsyncSession, profile_id: int, model_id: str
+) -> VoiceProfile:
+    """``profile_id`` hearing with ``model_id`` (the call setup's Hears)."""
+    columns = hearing(model_id)
+    if not columns:
+        raise VoiceProfileError(f"{model_id} is not a hearing model.")
+    return await update(session, profile_id, **columns)
 
 
 def settings_for(profile: VoiceProfile, settings: Any) -> Any:

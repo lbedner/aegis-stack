@@ -6,6 +6,7 @@ import sqlite3
 from typing import Any
 
 import pytest
+from sqlalchemy import event, text
 
 from app.core.db import SQLITE_BUSY_TIMEOUT_MS, apply_sqlite_pragmas
 
@@ -84,9 +85,35 @@ class TestTwoWritersInOneTurn:
         - a bare BEGIN reads identically and fails."""
         import inspect
 
-        from app.core.db import _async_sqlite_emit_begin
+        from app.core.db import emit_begin
 
-        assert "BEGIN IMMEDIATE" in inspect.getsource(_async_sqlite_emit_begin)
+        assert "BEGIN IMMEDIATE" in inspect.getsource(emit_begin)
+
+
+class TestAReadOnlySession:
+    """``get_async_session(read_only=True)`` begins plain, and only once it
+    is used: a read the cache answers opens no connection at all."""
+
+    @pytest.mark.asyncio
+    async def test_it_opens_nothing_until_it_reads(self, holder: Any) -> None:
+        from app.core.db import get_async_session
+
+        engine = holder.bind.sync_engine
+        checkouts: list[object] = []
+
+        def checked_out(*_: object) -> None:
+            checkouts.append(1)
+
+        event.listen(engine, "checkout", checked_out)
+        try:
+            async with get_async_session(read_only=True):
+                pass
+            assert checkouts == []
+            async with get_async_session(read_only=True) as session:
+                await session.exec(text("select 1"))  # type: ignore[call-overload]
+            assert len(checkouts) == 1
+        finally:
+            event.remove(engine, "checkout", checked_out)
 
 
 class TestTheSuiteCanSeeALock:

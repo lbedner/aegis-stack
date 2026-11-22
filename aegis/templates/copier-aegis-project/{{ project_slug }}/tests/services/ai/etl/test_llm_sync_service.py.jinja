@@ -880,6 +880,8 @@ class TestLocalSync:
         ).one()
         assert model.context_window == 32768
         assert sync_db_session.get(LLMOrg, model.served_by_org_id).name == "llamacpp"
+        # Its chat template takes tools, so it can drive an agent (a call).
+        assert model.supports_tools is True
 
     async def test_a_model_the_engine_stopped_serving_leaves_the_picker(
         self, sync_db_session: Session, monkeypatch: pytest.MonkeyPatch

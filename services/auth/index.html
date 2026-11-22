@@ -4829,6 +4829,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#guest-sign-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Guest Sign-In
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7502,6 +7513,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#guest-sign-in" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Guest Sign-In
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#next-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7833,6 +7855,57 @@ can ship with GitHub configured and add Google later.</p>
 <p>API clients (CLIs, server-to-server) keep using
 <code>Authorization: Bearer ...</code>, the cookie path is parallel, not
 exclusive.</p>
+<h2 id="guest-sign-in">Guest Sign-In</h2>
+<p><code>auth[guest]</code> lets anyone in without signing up: "Continue as guest" on
+<code>/login</code> signs the visitor in to one shared guest account. Each click is a
+session of its own, so visitors on that account are told apart by session,
+never by user.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--services<span class="w"> </span>auth<span class="o">[</span>guest<span class="o">]</span><span class="w"> </span>--components<span class="w"> </span>database,htmx
+</span></code></pre></div>
+<ul>
+<li><code>POST /api/v1/auth/guest</code> starts the session (<code>source="guest"</code>), with the
+  cookies every sign-in sets. Its refresh token lives
+  <code>GUEST_SESSION_HOURS</code> (24) from its last use, not
+  <code>REFRESH_TOKEN_EXPIRE_DAYS</code>.</li>
+<li>One address may start <code>RATE_LIMIT_GUEST_MAX</code> guest sessions per
+  <code>RATE_LIMIT_GUEST_WINDOW</code> seconds (5 an hour), counted across processes
+  (<code>app/core/limits.py</code>); past that it answers 429.</li>
+<li>Set <code>TURNSTILE_SITE_KEY</code> and <code>TURNSTILE_SECRET_KEY</code> and the button sits
+  behind Cloudflare Turnstile; a failed check answers 403 and starts
+  nothing. Blank keys turn the check off.</li>
+<li>The guest account (<code>guest@example.com</code>, which no one can sign up with)
+  is made on first use, with a random password kept nowhere. It never takes
+  the first-user admin seat, and its role cannot be changed.</li>
+<li>A guest is no member: every route that resolves "the signed-in user"
+  refuses it (403 <code>guest_account</code>) unless the route lets guests in. Guests
+  may use <code>/me</code>, sign out, and list or end their own session only; profile,
+  users, orgs, tokens and anything owned by user id are refused, and
+  <code>get_optional_user</code> (so every page) sees a guest as signed out. What a
+  guest owns is keyed by <code>get_visitor</code> (<code>guest:&lt;session&gt;</code>). A route of your
+  own opens to guests with <code>get_current_user_from_token(..., guests=True)</code>.</li>
+<li>Deactivate the guest account to close guest sign-in (403 <code>guest_closed</code>).</li>
+<li>Overseer's Sessions page shows a guest's session as "Guest".</li>
+</ul>
+<p>What a guest owns elsewhere is keyed by its session too
+(<code>app/core/visitor.py</code>): a guest's owner id is <code>guest:&lt;session id&gt;</code>, a
+signed-in user's is the user id, and <code>get_visitor</code> (<code>app/services/auth/deps.py</code>)
+reads it off the request. With the AI service, <code>web_frontend/guest_chat.py</code>
+turns a chat mount into one guests can use:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.components.web_frontend.guest_chat</span><span class="w"> </span><span class="kn">import</span> <span class="n">Refusals</span><span class="p">,</span> <span class="n">for_visitors</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.domains.chat.chat_kit</span><span class="w"> </span><span class="kn">import</span> <span class="n">BudgetGuard</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="n">ASK</span> <span class="o">=</span> <span class="n">for_visitors</span><span class="p">(</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="n">ChatSurface</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="s2">&quot;/ask&quot;</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">surface</span><span class="o">=</span><span class="s2">&quot;ask&quot;</span><span class="p">,</span> <span class="n">calls</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="n">BudgetGuard</span><span class="p">(</span><span class="s2">&quot;chat:&quot;</span><span class="p">,</span> <span class="mf">1.00</span><span class="p">,</span> <span class="n">guest_session_usd</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span> <span class="n">all_guests_usd</span><span class="o">=</span><span class="mf">20.0</span><span class="p">),</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    <span class="n">Refusals</span><span class="p">(</span><span class="n">spent</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="n">shared</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">,</span> <span class="n">busy</span><span class="o">=</span><span class="s2">&quot;...&quot;</span><span class="p">),</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>Each guest then holds its own conversations, spends from its own daily
+ceiling (<code>guest_session_usd</code>), and all guests together from one more
+(<code>all_guests_usd</code>); a signed-in user on the mount keeps the per-user
+budget. Guests together hold at most <code>AI_GUEST_CONCURRENT_CALLS</code> live calls
+(3). Every refusal is the mount's own words, and a refused call leaves the
+conversation in text.</p>
 <h2 id="next-steps">Next Steps</h2>
 <table>
 <thead>

@@ -34,6 +34,9 @@ class InferenceEngineSettings(BaseSettings):
     # does not evict the chat's cached prompt.
     LLAMACPP_CONTEXT: int = 32768
     LLAMACPP_ARGS: str = "-fa on -np 2 -kvu"
+    # The model the compose service's router downloads and loads at start
+    # (a Hugging Face repo[:quant]), listed under this name.
+    LLAMACPP_MODEL: str = "ggml-org/Qwen3-1.7B-GGUF"
     # The most a reply may think before it answers, in tokens (a chat turn
     # is several replies); -1 leaves it to the model, as llama-server's own.
     LLAMACPP_THINKING_TOKENS: int = 512

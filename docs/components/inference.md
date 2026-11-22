@@ -49,7 +49,14 @@ llama-server -hf ggml-org/Qwen3-1.7B-GGUF --alias qwen3:1.7b \
   With one slot, a long conversation's fold (its running summary, written on the worker as old turns leave the history) is a request of its own and replaces the chat's cached prompt, so the chat's next turn reads its prompt afresh: once per cut, not per turn. Give the `summarizer` agent row another model, or run a second slot, to keep the chat's cache.
 - `--metrics`: Prometheus counters at `/metrics`.
 
-In docker, the `llamacpp` service downloads `LLAMACPP_MODEL` (a Hugging Face `repo[:quant]`, default `ggml-org/Qwen3-1.7B-GGUF`) into a volume on its first start and serves it at `LLAMACPP_CONTEXT` (default 32768).
+To keep memory free on a GPU, add `--models-memory-margin <MiB>` to `LLAMACPP_ARGS`: the router unloads the least recently used model until a new one fits with that much to spare.
+
+In docker, the `llamacpp` service is a router too:
+
+- It serves every model in its download cache and in `/models/local` (the `llamacpp-models` volume), at `LLAMACPP_CONTEXT` (default 32768). Overseer > Inference loads and frees each one.
+- It holds one model at a time (`--models-max 1`). The container's 8G holds one small model with its context, so loading another frees the last.
+- On its first start it downloads `LLAMACPP_MODEL` (a Hugging Face `repo[:quant]`, default `ggml-org/Qwen3-1.7B-GGUF`) and loads it under that name, which is the `AI_MODEL` chat starts on.
+- To add a `.gguf`: `docker compose cp <model.gguf> llamacpp:/models/local/`, then restart the service.
 
 ### Switching engines
 

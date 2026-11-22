@@ -479,22 +479,30 @@ services:
       - prod
 {%- endif %}
 {%- if ollama_mode == "docker" and inference_engine == "llamacpp" %}
-  # LLAMA.CPP SERVICE (Local LLM Inference): llama-server, one model. It
-  # downloads LLAMACPP_MODEL (a Hugging Face repo[:quant]) once, into the
-  # volume. The flags chat needs: --jinja (tool calls), -c (the context,
-  # shared by the slots), -np 1 (one slot keeps the whole context and its
-  # prompt cache), --metrics.
+  # LLAMA.CPP SERVICE (Local LLM Inference): a llama-server router. It
+  # serves every model in its download cache and /models/local (the
+  # volume), loading and freeing each on request, one at a time
+  # (--models-max 1, what the memory limit holds). The preset downloads
+  # LLAMACPP_MODEL (a Hugging Face repo[:quant]) once and loads it at
+  # start. The flags every model gets: --jinja (tool calls), -c (the
+  # context, shared by the slots), -np 1 (one slot keeps the whole context
+  # and its prompt cache), --metrics.
 
   llamacpp:
     image: ghcr.io/ggml-org/llama.cpp:server
     hostname: llamacpp
     environment:
       - LLAMA_CACHE=/models
+    configs:
+      - source: llamacpp-presets
+        target: /presets.ini
     command:
-      - -hf
-      - ${LLAMACPP_MODEL:-ggml-org/Qwen3-1.7B-GGUF}
-      - --alias
-      - ${LLAMACPP_MODEL:-ggml-org/Qwen3-1.7B-GGUF}
+      - --models-dir
+      - /models/local
+      - --models-preset
+      - /presets.ini
+      - --models-max
+      - "1"
       - --jinja
       - -c
       - ${LLAMACPP_CONTEXT:-32768}
@@ -507,6 +515,7 @@ services:
       - "8080"
     volumes:
       - llamacpp-data:/models
+      - llamacpp-models:/models/local
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
@@ -649,10 +658,26 @@ volumes:
 {%- endif %}
 {%- if ollama_mode == "docker" %}
   {{ inference_engine }}-data:
+{%- if inference_engine == "llamacpp" %}
+  llamacpp-models:
+{%- endif %}
 {%- endif %}
 {%- if include_ingress and ingress_tls %}
   traefik-letsencrypt:
 {%- endif %}
 {%- if include_deploy and deploy_target == "compose" %}
   docker-proxy:
+{%- endif %}
+{%- if ollama_mode == "docker" and inference_engine == "llamacpp" %}
+{%- set _llamacpp_model = "${LLAMACPP_MODEL:-ggml-org/Qwen3-1.7B-GGUF}" %}
+
+configs:
+  llamacpp-presets:
+    content: |
+      version = 1
+
+      [{{ _llamacpp_model }}]
+      hf-repo = {{ _llamacpp_model }}
+      load-on-startup = true
+      dedup-cache-models = true
 {%- endif %}

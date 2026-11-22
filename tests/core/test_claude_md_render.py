@@ -73,6 +73,13 @@ def test_database_section_present_iff_selected() -> None:
     assert "alembic" in with_db.lower()
 
 
+def test_database_section_says_how_a_test_repeats_a_query_on_purpose() -> None:
+    """A test that repeats a statement by design (two requests in turn) is
+    marked, with why; never split to dodge the gate, never baselined."""
+    with_db = _render_claude_md(_ctx(include_database=True))
+    assert "@pytest.mark.queryspy(allow_n_plus_one=True)" in with_db
+
+
 def test_worker_section_names_chosen_backend() -> None:
     for backend in ("arq", "dramatiq", "taskiq"):
         rendered = _render_claude_md(

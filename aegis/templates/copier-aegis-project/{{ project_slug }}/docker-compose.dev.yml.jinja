@@ -197,7 +197,9 @@ services:
         app: service:webserver
       dockerfile_inline: |
         FROM app
-        RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* && git config --system --add safe.directory '*'
+        # No git hooks: a checkout's are installed for its host (pre-commit's
+        # runs the host's .venv), and the agent runs the checks itself.
+        RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* && git config --system --add safe.directory '*' && git config --system core.hooksPath /dev/null
         RUN curl -fsSL https://claude.ai/install.sh | bash && ln -s /root/.local/bin/claude /usr/local/bin/claude
     init: true
     restart: unless-stopped

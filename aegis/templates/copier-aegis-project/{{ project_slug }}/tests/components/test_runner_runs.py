@@ -187,6 +187,32 @@ async def test_a_run_claimed_before_runs_said_when_they_are_due_still_fails(
     assert await runs.fail_abandoned(async_db_session) == 1
 
 
+async def test_each_subjects_latest_run_of_an_action_that_went_is_read_at_once(
+    async_db_session: AsyncSession,
+) -> None:
+    """What a list needs of one action for every subject on it, in one
+    read: each one's latest run of it that went (done), the owner's. One
+    that failed after it, or another owner's, is not it."""
+    theirs = await someone_else(async_db_session)
+    first, went, refused, none, other = [
+        a_run(subject_id=f"acme/app#{n}", action=PUSH, status=status, owner_user_id=who)
+        for n, status, who in [
+            (1, DONE, None),
+            (1, DONE, None),
+            (1, FAILED, None),
+            (2, FAILED, None),
+            (3, DONE, theirs),
+        ]
+    ]
+    async_db_session.add_all([first, went, refused, none, other])
+    await async_db_session.commit()
+    about = ["acme/app#1", "acme/app#2", "acme/app#3"]
+
+    latest = await runs.went(async_db_session, ISSUE, about, PUSH, owner_user_id=None)
+
+    assert latest == {"acme/app#1": went.id}
+
+
 async def test_a_subjects_runs_are_read_stopped_and_forgotten_by_subject(
     async_db_session: AsyncSession,
 ) -> None:
@@ -713,6 +739,22 @@ async def test_a_push_asked_while_one_goes_on_its_branch_is_that_one(
     push = await runs.push(db, run)
 
     assert (push.id == going.id) is same
+
+
+async def test_a_push_that_went_does_not_hide_one_going_after_it(
+    async_db_session: AsyncSession,
+) -> None:
+    db = async_db_session
+    run = await answered(db, await asked(db, branch="issue-12-export"), unpushed=1)
+    db.add(a_run(action=PUSH, branch="issue-12-export", status=DONE))
+    await db.commit()
+    going = a_run(action=PUSH, branch="issue-12-export")
+    db.add(going)
+    await db.commit()
+
+    push = await runs.push(db, run)
+
+    assert push.id == going.id
 
 
 async def test_a_run_back_keeps_whether_its_agent_answered(

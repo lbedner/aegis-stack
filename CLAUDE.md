@@ -6,11 +6,6 @@ and load on demand; see the index at the bottom.
 
 ## Hard rules
 
-### No git operations without explicit request
-Never run `git add`, `commit`, `push`, or create PRs, and do not run
-`git status`/`diff`/`log` as preparation, unless the user explicitly asks. Wait
-for explicit approval before any git operation.
-
 ### TDD: failing test first
 Write the failing test before the implementation, always. Confirm it fails for
 the right reason, then implement.
@@ -48,15 +43,11 @@ you to delete its entry. The reader being protected is an agent: 500 lines is
 
 Before editing under `aegis/`, `aegis/templates/`, or any `i18n/locales/`,
 name the skill from the index below that applies, and read its `SKILL.md` if
-this session has not. Two mechanisms, different strengths:
-
-- `.pi/extensions/skill-gate.ts` blocks `edit`/`write` under
-  `aegis/i18n/locales/`, `aegis/templates/copier-aegis-project/` and
-  `aegis/commands/` until the matching skill (`i18n`, `template-dev`,
-  `add-cli-command`) has been read in that session. It cannot be skipped.
-- Everything else is judgment: `plan-framework-change` before planning,
-  `add-service`/`add-component` for new specs, `create-plugin` for plugin
-  packages, `release` before a version.
+this session has not: `i18n` under `aegis/i18n/locales/`, `template-dev` under
+`aegis/templates/copier-aegis-project/`, `add-cli-command` under
+`aegis/commands/`, `plan-framework-change` before planning,
+`add-service`/`add-component` for new specs, `create-plugin` for plugin
+packages, `release` before a version.
 
 The failure this prevents is not hypothetical: locale files were filled with
 invented translations when the `i18n` skill says non-English values are the
@@ -121,13 +112,6 @@ New `@app.command` handlers in `app/cli/` are `async def` with plain `await` -
 NEVER `asyncio.run` inside a command. The harness in `app/cli/main.py`
 (`standalone_mode=False` + `iscoroutine` + one `asyncio.run`) owns the loop.
 Exemplar: `cli/llm.py:reset`.
-
-Nearly every existing command still uses the legacy shape: a sync `def`
-that calls `asyncio.run(_impl(...))` on a private twin. That is the
-majority, not the standard - do not copy it, and do not treat its
-prevalence as a reason to keep writing it. The one converted module in
-the wild is the crawl4ai plugin's `app/cli/crawl.py`, if you want six
-commands' worth of before/after.
 
 ## Skills index
 

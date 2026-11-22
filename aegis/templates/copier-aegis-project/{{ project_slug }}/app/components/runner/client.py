@@ -14,7 +14,7 @@ A run that asks one thing gets a fresh worktree of ``repo`` at ``ref``
 is, never from whatever branch is checked out, and changes nothing that
 stays. A run that is work names a branch: its worktree is kept (``branches.kept``),
 and a later run of its session continues there (``_forms``). What a
-coding agent answers is read for what it cost (``_read``).
+coding agent answers is read for what it cost (``transcript.read``).
 """
 
 import asyncio
@@ -23,7 +23,6 @@ import contextlib
 from contextlib import contextmanager
 from dataclasses import dataclass
 import json
-import math
 import os
 from pathlib import Path
 import re
@@ -37,22 +36,19 @@ import httpx
 
 from app.core.log import logger
 
-from . import branches, hooks
+from . import branches, hooks, transcript
 from .protocol import (
-    CALLED,
     CLAIM,
+    COMMIT_ASKED,
     FINISH,
     GITHUB_REPO,
     GITHUB_TOKEN_ENV,
     LINES,
     MOST_AGENT,
-    MOST_LINE,
     MOST_LINES,
     NO_ANSWER_ASKED,
     NO_ANSWER_MARK,
     PUSH,
-    RETURNED,
-    SAID,
     TIMEOUT_SECONDS,
     Answer,
     ClaimedRun,
@@ -74,6 +70,14 @@ REFUSAL_SECONDS = 30.0
 # stream-json, is one line).
 TELL_SECONDS = 1.0
 LONGEST_LINE = 2**24
+# How long a command out of time is given, once interrupted (as Ctrl-C
+# would), to go on its own: Claude Code writes down what its session cost
+# (its ``result``), which a command killed outright never can.
+INTERRUPT_SECONDS = 10.0
+# How long a command is given to say nothing (an agent stuck, not one at
+# work): each line it prints gives it that long again, up to its runner's
+# ``timeout_seconds``. Longer than any one tool call of Claude Code's.
+QUIET_SECONDS = 1200.0
 # Where what an agent's session says goes: posted to its run (``run_once``).
 Tell = Callable[[list[Line]], Awaitable[None]]
 GITHUB_API = "https://api.github.com"
@@ -82,6 +86,15 @@ NO_GITHUB_TOKEN = (
     f"No {GITHUB_TOKEN_ENV} where this runner runs: it pushes with a GitHub "
     "token for the repository (Contents and Pull requests, read and write)."
 )
+
+
+class OutOfTimeError(TimeoutError):
+    """A command stopped ``after`` its time, or after saying nothing for its
+    quiet limit, with what it ``printed`` by then (``_ran``)."""
+
+    def __init__(self, after: str, printed: str) -> None:
+        super().__init__(f"The command was stopped after {after} seconds")
+        self.printed = printed
 
 
 @dataclass(frozen=True)
@@ -94,6 +107,7 @@ class Runner:
     ref: str = "origin/main"
     poll_seconds: float = 5.0
     timeout_seconds: float = TIMEOUT_SECONDS
+    quiet_seconds: float = QUIET_SECONDS
     # What continues a session an agent began; without one every run runs
     # ``command``.
     resume_command: list[str] | None = None
@@ -232,13 +246,11 @@ async def _pushed(runner: Runner, run: ClaimedRun) -> Answer:
     path = branches.place(runner.repo, runner.home, run.branch)
     if not (path / ".git").exists():
         return Answer(ok=False, result=f"No worktree of {run.branch} on this runner")
-    origin = branches.git(
-        path, "remote", "get-url", "origin", check=False
-    ).stdout.strip()
-    found = re.search(rf"github\.com[:/]({GITHUB_REPO})(?:\.git)?$", origin)
-    if found is None:
+    origin, slug = _on_github(path)
+    if slug is None:
         return Answer(ok=False, result=f"Its remote is not on GitHub: {origin}")
-    slug, branch = found.group(1), run.branch
+    branch = run.branch
+    branches.catch_up(path, slug, branch, token)
     said = branches.git(
         path, "log", "--reverse", "--format=%B", *branches.UNPUSHED
     ).stdout.strip()
@@ -256,6 +268,16 @@ async def _pushed(runner: Runner, run: ClaimedRun) -> Answer:
     return Answer(ok=True, result=url, worktree=str(path), unpushed=0)
 
 
+def _on_github(path: Path) -> tuple[str, str | None]:
+    """A worktree's remote, and the repository on GitHub it is
+    (``owner/name``); None for one elsewhere."""
+    origin = branches.git(
+        path, "remote", "get-url", "origin", check=False
+    ).stdout.strip()
+    found = re.search(rf"github\.com[:/]({GITHUB_REPO})(?:\.git)?$", origin)
+    return origin, found.group(1) if found else None
+
+
 async def _asked(
     runner: Runner, run: ClaimedRun, cwd: Path | None, tell: Tell
 ) -> Answer:
@@ -267,8 +289,12 @@ async def _asked(
     refused: list[Answer] = []
     for form in _forms(runner, run):
         began = time.monotonic()
-        code, printed, errors = await _ran(runner, form, run, cwd, tell)
-        said = _read(printed)
+        try:
+            code, printed, errors = await _ran(runner, form, run, cwd, tell)
+        except OutOfTimeError as exc:  # failed, but what it cost is kept
+            said = transcript.read(exc.printed)
+            return Answer(ok=False, result=str(exc), cost=said.cost if said else None)
+        said = transcript.read(printed)
         if said is not None:
             answer = said.model_copy(update={"ok": said.ok and code == 0})
         elif code != 0:
@@ -305,15 +331,22 @@ async def _ran(
     one pass (a prompt that names one is left as it was asked): its exit
     code and what it printed, read as it prints it, what an agent's session
     says told as it comes (``_out``). It runs in a process group of its own, so
-    one that outlives ``timeout_seconds``, or whose runner is told to stop,
-    is stopped with everything it started, and nothing of it goes on
-    working in a kept worktree. Its environment carries the runner's token,
-    for the agent's hooks to sign what they post (``hooks``)."""
-    asked = run.prompt if run.branch else f"{NO_ANSWER_ASKED}\n\n{run.prompt}"
+    one that outlives ``timeout_seconds``, says nothing for
+    ``quiet_seconds``, or whose runner is told to stop, is stopped with
+    everything it started, and nothing of it goes on working in a kept
+    worktree; one out of time is interrupted first (``_interrupted``).
+    Its environment carries the runner's token,
+    for the agent's hooks to sign what they post (``hooks``), and never
+    its GitHub token: the runner alone pushes."""
+    asked = (
+        f"{run.prompt}\n\n{COMMIT_ASKED}"
+        if run.branch
+        else f"{NO_ANSWER_ASKED}\n\n{run.prompt}"
+    )
     said = {
         PLACEHOLDER: asked,
         SESSION: run.session_id or str(uuid4()),
-        HOOKS: json.dumps(hooks.settings(runner.url)),
+        HOOKS: json.dumps(hooks.settings(runner.url, commit=bool(run.branch))),
     }
     argv = [_PLACES.sub(lambda place: said[place.group()], part) for part in command]
     takes_prompt = any(PLACEHOLDER in part for part in command)
@@ -324,26 +357,67 @@ async def _ran(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         start_new_session=True,
-        env={**os.environ, hooks.TOKEN_ENV: runner.token},
+        env={k: v for k, v in os.environ.items() if k != GITHUB_TOKEN_ENV}
+        | {hooks.TOKEN_ENV: runner.token},
         limit=LONGEST_LINE,
     )
+    printed: list[str] = []
+    silence = asyncio.timeout(runner.quiet_seconds)
+
+    def alive() -> None:
+        """A line printed: as long again to print the next."""
+        # Not once its time is up (what it prints as it goes is still read).
+        with contextlib.suppress(RuntimeError):
+            silence.reschedule(asyncio.get_running_loop().time() + runner.quiet_seconds)
+
+    async def reads() -> list[Any]:
+        return await asyncio.gather(
+            _out(process.stdout, tell, printed, alive),  # type: ignore[arg-type]
+            process.stderr.read(),  # type: ignore[union-attr]
+            _give(process.stdin, asked),
+        )
+
+    # A task, so one cancelled when the runner is told to stop goes quietly.
+    reading = asyncio.create_task(reads())
     try:
-        async with asyncio.timeout(runner.timeout_seconds):
-            printed, errors, _ = await asyncio.gather(
-                _out(process.stdout, tell),  # type: ignore[arg-type]
-                process.stderr.read(),  # type: ignore[union-attr]
-                _give(process.stdin, asked),
-            )
+        async with asyncio.timeout(runner.timeout_seconds), silence:
+            _, errors, _ = await asyncio.shield(reading)
             await process.wait()
-    except BaseException as exc:  # stopped, out of time, or unreadable
-        # Gone already: Linux says no such group, macOS that it is not ours.
-        with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.killpg(process.pid, signal.SIGKILL)
-        if isinstance(exc, TimeoutError):
-            given = f"{runner.timeout_seconds:g} seconds"
-            raise TimeoutError(f"The command was stopped after {given}") from None
-        raise
-    return (process.returncode or 0, printed, errors.decode(errors="replace"))
+    except TimeoutError:
+        await _interrupted(process, reading)
+        after = (
+            f"saying nothing for {runner.quiet_seconds:g}"
+            if silence.expired()
+            else f"{runner.timeout_seconds:g}"
+        )
+        raise OutOfTimeError(after, "".join(printed)) from None
+    finally:  # stopped (in its grace too), out of time, or unreadable
+        if process.returncode is None:
+            _signal(process, signal.SIGKILL)
+        reading.cancel()
+    return (process.returncode or 0, "".join(printed), errors.decode(errors="replace"))
+
+
+async def _interrupted(
+    process: asyncio.subprocess.Process, reading: asyncio.Task[list[Any]]
+) -> None:
+    """A command out of time interrupted first, with all it started, and
+    given ``INTERRUPT_SECONDS`` to go (an agent says what it cost), then
+    killed, and what it printed read to the end where that comes in time."""
+    _signal(process, signal.SIGINT)
+    with contextlib.suppress(TimeoutError):
+        await asyncio.wait_for(process.wait(), INTERRUPT_SECONDS)
+    _signal(process, signal.SIGKILL)
+    # Its pipes close with it, so what it printed is read to the end.
+    with contextlib.suppress(TimeoutError, ValueError):
+        await asyncio.wait_for(reading, INTERRUPT_SECONDS)
+
+
+def _signal(process: asyncio.subprocess.Process, sig: signal.Signals) -> None:
+    """``sig`` sent to ``process`` and all it started (its group)."""
+    # Gone already: Linux says no such group, macOS that it is not ours.
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(process.pid, sig)
 
 
 async def _give(stdin: asyncio.StreamWriter | None, asked: str) -> None:
@@ -357,11 +431,18 @@ async def _give(stdin: asyncio.StreamWriter | None, asked: str) -> None:
         stdin.close()
 
 
-async def _out(stdout: asyncio.StreamReader, tell: Tell) -> str:
-    """What a command printed, read a line at a time; what an agent's
-    session says in it (``_heard``) told at most every ``TELL_SECONDS``,
-    and the rest once it is done: by a sender of its own, in order, so the
-    agent never waits on the app to go on printing."""
+async def _out(
+    stdout: asyncio.StreamReader,
+    tell: Tell,
+    printed: list[str],
+    alive: Callable[[], None],
+) -> None:
+    """What a command prints, read a line at a time into ``printed`` (so
+    what was read is kept whatever stops the reading), each one saying it
+    is still ``alive``; what an agent's session says in it (``transcript.heard``)
+    told at most every ``TELL_SECONDS``, and the rest once it is done: by a
+    sender of its own, in order, so the agent never waits on the app to go
+    on printing."""
     batches: asyncio.Queue[list[Line] | None] = asyncio.Queue()
 
     async def send() -> None:
@@ -369,13 +450,13 @@ async def _out(stdout: asyncio.StreamReader, tell: Tell) -> str:
             await tell(batch)
 
     sender = asyncio.create_task(send())
-    printed: list[str] = []
     heard: list[Line] = []
     told = time.monotonic()
     try:
         async for raw in stdout:
+            alive()
             printed.append(raw.decode(errors="replace"))
-            heard += _heard(printed[-1])
+            heard += transcript.heard(printed[-1])
             if heard and time.monotonic() - told >= TELL_SECONDS:
                 batches.put_nowait(heard)
                 heard, told = [], time.monotonic()
@@ -386,74 +467,6 @@ async def _out(stdout: asyncio.StreamReader, tell: Tell) -> str:
         batches.put_nowait(heard)
     batches.put_nowait(None)
     await sender
-    return "".join(printed)
-
-
-def _heard(printed: str) -> list[Line]:
-    """What one line of an agent's session (Claude Code's stream-json) says:
-    what it said, each tool it called with what it was given, and what a
-    tool gave back, each cut to ``MOST_LINE``; nothing for its own events,
-    its thinking, or a line that is not one."""
-    try:
-        event = json.loads(printed)
-    except ValueError:
-        return []
-    if not isinstance(event, dict) or event.get("type") not in ("assistant", "user"):
-        return []
-    blocks = (event.get("message") or {}).get("content")
-    found: list[tuple[str, str]] = []
-    for block in blocks if isinstance(blocks, list) else []:
-        kind = block.get("type") if isinstance(block, dict) else None
-        if kind == "text" and event["type"] == "assistant" and block.get("text"):
-            found.append((SAID, block["text"]))
-        elif kind == "tool_use":
-            given = json.dumps(block.get("input"), ensure_ascii=False)
-            found.append((CALLED, f"{block.get('name')} {given}"))
-        elif kind == "tool_result":
-            found.append((RETURNED, _text_of(block.get("content"))))
-    return [Line(kind=kind, text=text[:MOST_LINE]) for kind, text in found]  # type: ignore[arg-type]
-
-
-def _text_of(content: Any) -> str:
-    """A tool's result as text: itself, or its text parts, a line each."""
-    if isinstance(content, str):
-        return content
-    parts = content if isinstance(content, list) else []
-    return "\n".join(p["text"] for p in parts if isinstance(p, dict) and "text" in p)
-
-
-def _read(printed: str) -> Answer | None:
-    """A coding agent's own answer in what a command printed (one JSON
-    object, last if anything came before it, that is a ``result`` or says
-    its ``total_cost_usd``): what it said, or failing why (its ``errors``,
-    else the kind of failure), whether it ``is_error``, and what its
-    session has cost (where that is an amount). None for anything else:
-    plain output."""
-    text = printed.strip()
-    for candidate in (text, *reversed(text.splitlines())):
-        try:
-            said = json.loads(candidate)
-        except ValueError:
-            continue
-        if isinstance(said, dict) and (
-            said.get("type") == "result" or "total_cost_usd" in said
-        ):
-            break
-    else:
-        return None
-    cost = said.get("total_cost_usd")
-    why = "\n".join(map(str, said.get("errors") or [])) or said.get("subtype")
-    numbered = (
-        isinstance(cost, int | float)
-        and not isinstance(cost, bool)
-        and math.isfinite(cost)
-        and cost >= 0
-    )
-    return Answer(
-        ok=not said.get("is_error"),
-        result=str(said.get("result") or why or ""),
-        cost=cost if numbered else None,
-    )
 
 
 @contextmanager
@@ -463,7 +476,10 @@ def _worktree(runner: Runner, branch: str | None) -> Iterator[Path | None]:
     if runner.repo is None or runner.home is None:
         yield None
     elif branch:
-        yield branches.kept(runner.repo, runner.ref, runner.home, branch)
+        path = branches.kept(runner.repo, runner.ref, runner.home, branch)
+        if slug := _on_github(path)[1]:  # moved on there since: from there
+            branches.catch_up(path, slug, branch, os.environ.get(GITHUB_TOKEN_ENV))
+        yield path
     else:
         with branches.fresh(runner.repo, runner.ref) as path:
             yield path

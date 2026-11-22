@@ -16,8 +16,7 @@ Use when a feature branch has several work-in-progress commits that should land
 as one commit.
 
 Do NOT use on a shared branch others have based work on (rewriting its history
-breaks their clones), and do NOT run any git command here without explicit user
-request, per the repo git policy.
+breaks their clones).
 
 ## Files that change
 

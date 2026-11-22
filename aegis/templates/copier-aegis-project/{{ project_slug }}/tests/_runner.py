@@ -16,6 +16,8 @@ from app.components.runner.models import RunnerRun
 ISSUE = "issue"
 # Where a test's agent works.
 WHERE = "/code/app-worktrees/issue-12"
+# The pull request a push of ``acme/app``'s branch opens.
+PULL = "https://github.com/acme/app/pull/5"
 
 
 async def signed(db: AsyncSession, owner_user_id: int | None) -> dict[str, str]:

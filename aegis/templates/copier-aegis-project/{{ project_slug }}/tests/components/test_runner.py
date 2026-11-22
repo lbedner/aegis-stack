@@ -19,8 +19,15 @@ import pytest
 from app.components.runner import branches, client, hooks, protocol
 from app.components.runner.client import Runner, run_once
 from app.components.runner.protocol import CLAIM, Answer, ClaimedRun
+from tests._runner import PULL
 
 PROMPT = "Then Dana asked:\n\nCan the CSV export ship this week?"
+
+
+def _on_branch(prompt: str) -> str:
+    """What an agent is asked for work on a branch: the prompt, then to
+    commit it (``COMMIT_ASKED``)."""
+    return f"{prompt}\n\n{protocol.COMMIT_ASKED}"
 
 
 def _python(code: str, *args: str) -> list[str]:
@@ -197,7 +204,7 @@ async def test_a_run_with_a_branch_leaves_its_worktree_on_it(
     where = kept / "issue-12-export"
     assert done.ok and done.result == "Noted 0f0f"
     assert done.cost == 0.25 and done.worktree == str(where)
-    assert (where / "NOTES.md").read_text() == "first\n"
+    assert (where / "NOTES.md").read_text() == f"{_on_branch('first')}\n"
     assert _git(where, "branch", "--show-current") == "issue-12-export"
     # Where the app says the work will be (``queries.take``) is where it is.
     assert f"{asked[0]['worktrees']}/{run['branch']}" == done.worktree
@@ -216,7 +223,7 @@ async def test_a_follow_up_resumes_the_session_in_the_same_worktree(
     done = await _posted(runner, first, second)
 
     notes = (tmp_path / "kept" / "issue-12" / "NOTES.md").read_text()
-    assert notes == "first\nresumed second\n"
+    assert notes == f"{_on_branch('first')}\nresumed {_on_branch('second')}\n"
     assert [answer.ok for answer in done] == [True, True]
 
 
@@ -254,21 +261,21 @@ async def test_a_run_with_no_session_is_given_one(repo: Path) -> None:
             False,
             _python("import sys; sys.exit('Session ID is already in use.')"),
             _python(SAYS, "resumed {prompt}"),
-            "resumed go on",
+            f"resumed {_on_branch('go on')}",
             id="begun-in-a-run-the-app-never-heard-from",
         ),
         pytest.param(
             True,
             _python(SAYS, "started {prompt}"),
             _python("import sys; sys.exit('No conversation found')"),
-            "started go on",
+            f"started {_on_branch('go on')}",
             id="never-begun-or-kept-on-another-machine",
         ),
         pytest.param(
             True,
             _python(SAYS, "started {prompt}"),
             _agent({"is_error": True, "total_cost_usd": 0, "errors": ["None"]}, code=1),
-            "started go on",
+            f"started {_on_branch('go on')}",
             id="refused-in-the-agents-own-words",
         ),
     ],
@@ -379,46 +386,135 @@ async def test_a_cost_that_is_no_amount_is_no_cost(cost: Any) -> None:
 
 
 async def test_a_prompt_that_names_a_placeholder_reaches_the_command_as_asked() -> None:
-    echo = _python("import sys; print(sys.argv[1])", "{prompt}")
     asked_of = "explain the {session} and {prompt} placeholders"
 
-    (done,) = await _posted(_runner(None, echo), _run(prompt=asked_of))
+    (done,) = await _posted(_runner(None, ASKED), _run(prompt=asked_of))
 
     assert done.result == f"{protocol.NO_ANSWER_ASKED}\n\n{asked_of}"
 
 
-async def test_a_command_out_of_time_is_stopped_with_all_it_started(
-    tmp_path: Path,
-) -> None:
-    """A command that outlives its time is stopped with what it started:
-    nothing of it goes on working in a worktree the next run will use."""
-    beat = tmp_path / "beat"
-    child = f"import time\nwhile True:\n    open({str(beat)!r}, 'a').write('.'); time.sleep(0.05)"
-    spawns = _python(
-        "import subprocess, sys, time;"
-        " subprocess.Popen([sys.executable, '-c', sys.argv[1]]); time.sleep(30)",
-        child,
+# Writes to the file it is given until it is killed.
+BEATING = (
+    "import sys, time\nwhile True:\n"
+    "    open(sys.argv[1], 'a').write('.'); time.sleep(0.05)"
+)
+
+
+def _beats(beat: Path, *, deaf: bool = False) -> list[str]:
+    """A command that writes to ``beat`` until it is killed; ``deaf`` to an
+    interrupt, it writes from another it starts, as deaf."""
+    if not deaf:
+        return _python(BEATING, str(beat))
+    return _python(
+        "import signal, subprocess, sys, time; signal.signal(signal.SIGINT, signal.SIG_IGN);"
+        " subprocess.Popen([sys.executable, '-c', *sys.argv[1:]]); time.sleep(30)",
+        BEATING,
+        str(beat),
     )
 
-    (done,) = await _posted(_runner(None, spawns, timeout_seconds=1.0), _run())
 
-    assert not done.ok and "stopped after 1 seconds" in done.result
+async def _stilled(beat: Path) -> None:
+    """Nothing writes to ``beat`` any more: all that did was stopped."""
+    await asyncio.sleep(0.2)
     written = beat.stat().st_size
-    time.sleep(0.3)
+    await asyncio.sleep(0.3)
     assert beat.stat().st_size == written
 
 
-async def test_a_runner_told_to_stop_stops_its_command(tmp_path: Path) -> None:
+async def test_a_command_out_of_time_is_stopped_with_all_it_started(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A command that outlives its time, and its interrupt, is killed with
+    what it started: nothing of it goes on working in a worktree the next
+    run will use."""
+    monkeypatch.setattr(client, "INTERRUPT_SECONDS", 0.2)
+    beat = tmp_path / "beat"
+    began = time.monotonic()
+
+    (done,) = await _posted(
+        _runner(None, _beats(beat, deaf=True), timeout_seconds=1.0), _run()
+    )
+
+    assert not done.ok and "stopped after 1 seconds" in done.result
+    assert time.monotonic() - began < 5
+    await _stilled(beat)
+
+
+# A coding agent at work that, interrupted (as Ctrl-C would), says what its
+# session cost and goes, as Claude Code does in the middle of a tool.
+INTERRUPTED = _python(
+    "import json, signal, sys, time\n"
+    "def said(*_):\n"
+    "    print(json.dumps({'type': 'result', 'subtype': 'error_during_execution',"
+    " 'is_error': True, 'total_cost_usd': 0.25}), flush=True)\n"
+    "    sys.exit(130)\n"
+    "signal.signal(signal.SIGINT, said)\n"
+    "time.sleep(30)"
+)
+
+
+@pytest.mark.parametrize(
+    ("limits", "said"),
+    [
+        ({"timeout_seconds": 1.0}, "stopped after 1 seconds"),
+        (
+            {"quiet_seconds": 0.5, "timeout_seconds": 30.0},
+            "stopped after saying nothing for 0.5 seconds",
+        ),
+    ],
+    ids=["out of time", "quiet too long"],
+)
+async def test_an_agent_out_of_time_says_what_it_cost_before_it_is_stopped(
+    limits: dict[str, float], said: str
+) -> None:
+    """Interrupted first, an agent out of time, or quiet past its quiet
+    limit (stuck), writes down what its session cost, which is kept; killed
+    outright, it never could."""
+    (done,) = await _posted(_runner(None, INTERRUPTED, **limits), _run())
+
+    assert not done.ok and said in done.result
+    assert done.cost == 0.25
+
+
+async def test_a_command_at_work_keeps_its_time_as_long_as_it_says_something() -> None:
+    """Its quiet limit counts from the last line it printed: one that
+    prints as it goes outlives it (up to its runner's timeout)."""
+    talks = _python(
+        "import time\nfor _ in range(6):\n    print('.', flush=True); time.sleep(0.2)\nprint('done')"
+    )
+
+    (done,) = await _posted(_runner(None, talks, quiet_seconds=0.5), _run())
+
+    assert done.ok and done.result.endswith("done")
+
+
+async def test_a_runner_told_to_stop_while_its_command_is_interrupted_kills_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ctrl-C in the grace an interrupted command is given still kills it
+    and all it started."""
+    monkeypatch.setattr(client, "INTERRUPT_SECONDS", 30.0)
+    beat = tmp_path / "beat"
+    runner = _runner(None, _beats(beat, deaf=True), timeout_seconds=0.5)
+    answering = asyncio.create_task(_posted(runner, _run()))
+    await asyncio.sleep(1.5)  # out of time, in its grace
+
+    answering.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await answering
+
+    await _stilled(beat)
+
+
+async def test_a_runner_told_to_stop_stops_its_command(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """Ctrl-C reaches the runner alone (its command is in a group of its
     own): the runner stops the command, at once, instead of leaving an
-    agent at work with nobody to post its answer."""
+    agent at work with nobody to post its answer, and says nothing is
+    wrong."""
     beat = tmp_path / "beat"
-    beats = _python(
-        "import sys, time\nwhile True:\n"
-        "    open(sys.argv[1], 'a').write('.'); time.sleep(0.05)",
-        str(beat),
-    )
-    answering = asyncio.create_task(_posted(_runner(None, beats), _run()))
+    answering = asyncio.create_task(_posted(_runner(None, _beats(beat)), _run()))
     while not beat.exists():
         await asyncio.sleep(0.05)
 
@@ -426,10 +522,8 @@ async def test_a_runner_told_to_stop_stops_its_command(tmp_path: Path) -> None:
     with pytest.raises(asyncio.CancelledError):
         await answering
 
-    await asyncio.sleep(0.2)
-    written = beat.stat().st_size
-    await asyncio.sleep(0.3)
-    assert beat.stat().st_size == written
+    await _stilled(beat)
+    assert not [record for record in caplog.records if record.name == "asyncio"]
 
 
 @pytest.mark.parametrize("branch", ["-m", "a b", "x..y", "../../elsewhere"])
@@ -506,20 +600,41 @@ async def test_a_kept_worktree_moved_off_its_branch_is_not_worked_in(
     assert (tmp_path / "kept" / "issue-12" / "NOTES.md").read_text().count("again") == 0
 
 
-async def test_a_command_is_given_the_hooks_that_say_what_its_run_is_doing() -> None:
+async def test_an_agent_is_never_given_the_runners_github_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The runner alone pushes and reads GitHub: its token stays out of the
+    command's environment, so an agent cannot push its own work."""
+    monkeypatch.setenv(protocol.GITHUB_TOKEN_ENV, "ghp_test")
+    shows = _python(
+        "import os, sys; print(os.environ.get(sys.argv[1], 'none'))",
+        protocol.GITHUB_TOKEN_ENV,
+    )
+
+    (done,) = await _posted(_runner(None, shows), _run())
+
+    assert done.result == "none"
+
+
+@pytest.mark.parametrize("branch", [None, "issue-12"])
+async def test_a_command_is_given_the_hooks_that_say_what_its_run_is_doing(
+    branch: str | None,
+) -> None:
     """``{hooks}`` in a command is the agent's settings for the app the
     runner answers, whole in one argument; and however the runner was given
-    its token, the hooks find it in the command's environment to sign with."""
+    its token, the hooks find it in the command's environment to sign with.
+    Asked is not made sure: work on a branch's also hold its agent to
+    committing (``commit``)."""
     shows = _python(
         "import os, sys; print(sys.argv[1]); print(os.environ[sys.argv[2]])",
         "{hooks}",
         hooks.TOKEN_ENV,
     )
 
-    (done,) = await _posted(_runner(None, shows), _run())
+    (done,) = await _posted(_runner(None, shows), _run(branch=branch))
 
     given, token = done.result.splitlines()
-    assert json.loads(given) == hooks.settings("http://app")
+    assert json.loads(given) == hooks.settings("http://app", commit=bool(branch))
     assert token == "rnr_test"
 
 
@@ -577,23 +692,45 @@ async def test_a_run_on_a_branch_says_how_many_commits_are_not_on_the_remote(
     assert done.ok and done.unpushed == unpushed
 
 
+async def test_a_branch_run_out_of_time_still_says_what_is_left_to_push(
+    clone: Path, tmp_path: Path
+) -> None:
+    """Work committed before its time ran out is counted all the same, so
+    it can still be pushed."""
+    commits_then_works_on = _python(
+        "import subprocess, sys, time; subprocess.run(sys.argv[1:], check=True);"
+        " time.sleep(30)",
+        *COMMIT,
+    )
+    runner = _runner(
+        clone, commits_then_works_on, worktrees=tmp_path / "kept", timeout_seconds=3.0
+    )
+
+    (done,) = await _posted(runner, _run(branch="issue-12-export"))
+
+    assert not done.ok and "stopped after 3 seconds" in done.result
+    assert done.unpushed == 1
+
+
 async def test_one_answer_says_nothing_of_what_to_push(repo: Path) -> None:
     (done,) = await _posted(_runner(repo, ANSWER), _run())
 
     assert done.unpushed is None
 
 
-def _github_api(made: int = 201) -> tuple[httpx.MockTransport, list[dict[str, Any]]]:
-    """GitHub's API for ``acme/app``: its default branch, and a pull request
-    opened (``made`` 201) or one already open for the branch (422)."""
+def _on_github(
+    monkeypatch: pytest.MonkeyPatch, made: int = 201
+) -> list[dict[str, Any]]:
+    """The runner on GitHub with a token, its API that of ``acme/app``: its
+    default branch, and a pull request opened (``made`` 201) or one already
+    open for the branch (422). The pull requests it was sent."""
     sent: list[dict[str, Any]] = []
 
     def handle(request: httpx.Request) -> httpx.Response:
         assert request.headers["Authorization"] == "Bearer ghp_test"
         if request.method == "POST":
             sent.append(json.loads(request.content))
-            url = "https://github.com/acme/app/pull/5"
-            return httpx.Response(made, json={"html_url": url})
+            return httpx.Response(made, json={"html_url": PULL})
         if request.url.path == "/repos/acme/app/pulls":
             assert request.url.params["head"] == "acme:issue-12-export"
             return httpx.Response(
@@ -601,13 +738,15 @@ def _github_api(made: int = 201) -> tuple[httpx.MockTransport, list[dict[str, An
             )
         return httpx.Response(200, json={"default_branch": "main"})
 
-    return httpx.MockTransport(handle), sent
+    monkeypatch.setattr(client, "GITHUB_TRANSPORT", httpx.MockTransport(handle))
+    monkeypatch.setenv(protocol.GITHUB_TOKEN_ENV, "ghp_test")
+    return sent
 
 
 @pytest.mark.parametrize(
     ("made", "url"),
     [
-        (201, "https://github.com/acme/app/pull/5"),
+        (201, PULL),
         (422, "https://github.com/acme/app/pull/4"),
     ],
 )
@@ -627,9 +766,7 @@ async def test_a_push_pushes_the_branch_and_opens_its_pull_request(
     hook = clone / ".git" / "hooks" / "pre-push"
     hook.write_text("#!/bin/sh\nexit 1\n")
     hook.chmod(0o755)
-    api, sent = _github_api(made)
-    monkeypatch.setattr(client, "GITHUB_TRANSPORT", api)
-    monkeypatch.setenv(protocol.GITHUB_TOKEN_ENV, "ghp_test")
+    sent = _on_github(monkeypatch, made)
     runner = _runner(clone, COMMIT, worktrees=tmp_path / "kept")
     work = _run(branch="issue-12-export")
     push = _run(
@@ -650,6 +787,48 @@ async def test_a_push_pushes_the_branch_and_opens_its_pull_request(
             "body": "It ships on Thursdays.\n\nCloses acme/app#12",
         }
     ]
+
+
+async def test_a_branch_moved_on_github_is_caught_up_before_its_next_turn(
+    clone: Path, github: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pushed, then moved on GitHub (its base merged in there, say): the
+    next turn starts from GitHub's branch, so the push after it goes."""
+    _on_github(monkeypatch)
+    runner = _runner(clone, COMMIT, worktrees=tmp_path / "kept")
+    branch = "issue-12-export"
+    push = _run(action=protocol.PUSH, prompt="", branch=branch)
+    await _posted(runner, _run(branch=branch), push)
+    elsewhere = tmp_path / "elsewhere"
+    subprocess.run(
+        ["git", "clone", "-q", "-b", branch, str(github), str(elsewhere)], check=True
+    )
+    (elsewhere / "MAIN.md").write_text("merged")
+    _git(elsewhere, "add", "-A")
+    _git(elsewhere, "commit", "-qm", "Merge main")
+    _git(elsewhere, "push", "-q", "origin", branch)
+
+    done, pushed = await _posted(runner, _run(branch=branch, prompt="Again."), push)
+
+    assert done.ok and pushed.ok, pushed.result
+    said = _git(github, "log", "--format=%s", branch).splitlines()
+    assert said == ["Ship the export", "Merge main", "Ship the export", "first"]
+
+
+def test_git_is_told_nobody_is_there_to_ask(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Its credential prompt reads the terminal, not stdin: a fetch that
+    GitHub refuses fails at once instead of waiting out ``GIT_SECONDS``."""
+    given: dict[str, Any] = {}
+
+    def ran(argv: list[str], **how: Any) -> subprocess.CompletedProcess[str]:
+        given.update(how["env"] or {})
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(branches.subprocess, "run", ran)
+
+    branches.git(Path("."), "status")
+
+    assert given["GIT_TERMINAL_PROMPT"] == "0"
 
 
 async def test_a_push_without_a_github_token_says_what_is_missing(
@@ -702,21 +881,26 @@ async def test_a_push_that_cannot_go_says_why_and_the_runner_goes_on(
     assert not pushed.ok and said in pushed.result
 
 
-# Prints the first line of what it is asked.
-FIRST_LINE = _python("import sys; print(sys.argv[1].splitlines()[0])", "{prompt}")
+# Prints what it is asked, whole.
+ASKED = _python("import sys; print(sys.argv[1])", "{prompt}")
 
 
 @pytest.mark.parametrize(
-    ("branch", "first"),
-    [(None, protocol.NO_ANSWER_ASKED), ("issue-12", PROMPT.splitlines()[0])],
+    ("branch", "asked"),
+    [
+        (None, f"{protocol.NO_ANSWER_ASKED}\n\n{PROMPT}"),
+        ("issue-12", _on_branch(PROMPT)),
+    ],
 )
-async def test_a_question_asks_its_agent_to_say_when_it_has_no_answer(
-    branch: str | None, first: str
+async def test_what_an_agent_is_asked_says_how_its_turn_ends(
+    branch: str | None, asked: str
 ) -> None:
-    """Work on a branch is done, not an answer: it is asked as it was."""
-    (done,) = await _posted(_runner(None, FIRST_LINE), _run(branch=branch))
+    """A question is asked to say when it has no answer. Work on a branch
+    is done, not an answer: it is asked to be committed, the push left to
+    its owner (a Push sends a branch's commits)."""
+    (done,) = await _posted(_runner(None, ASKED), _run(branch=branch))
 
-    assert done.result == first
+    assert done.result == asked
 
 
 @pytest.mark.parametrize(

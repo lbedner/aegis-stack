@@ -180,10 +180,8 @@ worker backend variants, also update one taskiq stack that way.
 
 ## Pitfalls
 
-- This procedure describes `git add`, `git commit`, `git tag`, and `git push`
-  as the steps that must happen, but per the repo git policy the agent runs no
-  git command without explicit user approval; stop and ask before each, the
-  same as any other workflow.
+- `git tag` and `git push` publish the release and cannot be taken back: ask
+  before each.
 - A burned rc version string (any rc that ever reached TestPyPI) can never be
   reused, even after deletion: PyPI/TestPyPI reject the filename permanently,
   and re-running the same tag replays the same HTTP 400. Always increment to

@@ -31,7 +31,7 @@ from app.core.time import utcnow
 from app.services.system import ui_runtime
 from app.services.system.models import ComponentStatus
 from tests._fake_runtime import FakeRuntime, use_runtime
-from tests._runner import WHERE, a_run, answered, asked, claimed, someone_else
+from tests._runner import PULL, WHERE, a_run, answered, asked, claimed, someone_else
 from tests._session import opens
 from tests.web.dom import (
     none,
@@ -658,6 +658,8 @@ async def test_the_drawer_says_what_is_not_pushed_and_offers_to_push_it(
     assert text(one(html, "[data-push] p")) == said
     button = one(html, "[data-push] button")
     assert button.get("hx-post") == overseer_runner.push_url(run_id)
+    # Its answer is the drawer it was pressed in, not a modal over it.
+    assert button.get("hx-target") == "#drawer-body"
 
 
 async def test_pressing_push_asks_it_and_the_drawer_says_it_is_pushing(
@@ -672,6 +674,9 @@ async def test_pressing_push_asks_it_and_the_drawer_says_it_is_pushing(
     assert pressed.status_code == 200
     assert "Pushing" in text(one(pressed.text, "[data-push]"))
     none(pressed.text, "[data-push] button")
+    # The run is back, but its push goes: the drawer follows that.
+    live = one(pressed.text, "[sse-connect]")
+    assert live.get("sse-connect") == overseer_runner.events_url(run_id)
     (push,) = [
         r
         for r in await runs.about(async_db_session, "issue", ["acme/app#12"])
@@ -683,7 +688,7 @@ async def test_pressing_push_asks_it_and_the_drawer_says_it_is_pushing(
 @pytest.mark.parametrize(
     ("status", "result", "button"),
     [
-        (DONE, "https://github.com/acme/app/pull/5", False),
+        (DONE, PULL, False),
         (FAILED, "No RUNNER_GITHUB_TOKEN where this runner runs", True),
     ],
 )
@@ -704,6 +709,26 @@ async def test_a_push_back_shows_its_pull_request_or_why_not(
 
     assert result in text(one(html, "[data-push]"))
     assert bool(select(html, "[data-push] button")) is button
+
+
+async def test_a_run_pushed_once_stays_pushed_whatever_a_later_push_says(
+    overseer: TestClient, async_db_session: AsyncSession
+) -> None:
+    """Its commits are on GitHub once a push of them went: one asked after
+    that which failed does not take back its pull request's link."""
+    db = async_db_session
+    run_id = await _back_with(db, 1)
+    link = PULL
+    db.add(a_run(action=PUSH, branch=BRANCH, status=DONE, result=link))
+    await db.commit()
+    db.add(a_run(action=PUSH, branch=BRANCH, status=FAILED, result="rejected"))
+    await db.commit()
+
+    html = page_html(overseer, overseer_runner.drawer_url(run_id))
+
+    said = text(one(html, "[data-push]"))
+    assert link in said and "rejected" not in said
+    none(html, "[data-push] button")
 
 
 @pytest.mark.parametrize("going", [True, False])
@@ -740,6 +765,29 @@ async def test_a_going_runs_drawer_is_sent_as_it_goes(
 
     assert going.startswith(f"event: {overseer_runner.RUN_EVENT}\n")
     assert "Running" in frame_html(going)
+
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # its stream read before and after
+async def test_a_runs_stream_stays_open_while_its_push_goes(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run back with a push going is followed until the push is back,
+    whose last frame is its pull request's link."""
+    db = async_db_session
+    monkeypatch.setattr(overseer_runner, "get_async_session", opens(db))
+    run_id = await _back_with(db, 1)
+    push = a_run(action=PUSH, branch=BRANCH, status=CLAIMED)
+    db.add(push)
+    await db.commit()
+
+    going = await sent_events(overseer_runner.drawer_events(run_id, max_frames=1))
+    assert overseer_runner.RUN_DONE not in "".join(going)
+
+    push.status, push.result = DONE, PULL
+    await db.commit()
+    back = await sent_events(overseer_runner.drawer_events(run_id, max_frames=1))
+    assert back[-1].startswith(f"event: {overseer_runner.RUN_DONE}\n")
+    assert push.result in frame_html(back[0])
 
 
 async def test_a_runs_stream_closes_once_it_is_back(

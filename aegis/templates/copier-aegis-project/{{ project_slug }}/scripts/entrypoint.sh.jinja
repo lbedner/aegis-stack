@@ -204,7 +204,12 @@ elif [ "$run_command" = "runner" ]; then
     # run says what it is doing; the resume form goes with the command it
     # resumes, so only the default one has it unless RUNNER_RESUME_COMMAND
     # says another.
+    # RUNNER_BUDGET, in dollars, is the most one turn may spend: Claude
+    # Code stops itself there (--max-budget-usd), saying what it cost.
     how="--output-format stream-json --verbose --permission-mode plan --settings {hooks}"
+    if [ -n "$RUNNER_BUDGET" ]; then
+        how="$how --max-budget-usd $RUNNER_BUDGET"
+    fi
     default_command="claude -p {prompt} --session-id {session} $how"
     default_resume="claude -p {prompt} --resume {session} $how"
     if [ -z "$RUNNER_COMMAND" ]; then

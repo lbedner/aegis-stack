@@ -27,9 +27,9 @@ from app.core.hooks import Hook
 from app.core.time import utcnow
 from app.services.system.errors import redact
 
-from . import queries
+from . import queries, sessions
 from . import steps as agent_steps
-from .models import DONE, FAILED, GOING, MOST_ACTIVITY, MOST_TITLE, RunnerRun
+from .models import DONE, FAILED, MOST_ACTIVITY, MOST_TITLE, RunnerRun
 from .protocol import (
     GITHUB_REPO,
     MOST_AGENT,
@@ -54,6 +54,7 @@ _changed = _runs.tell
 about = queries.about
 going = queries.going
 answered = queries.answered
+went = queries.went
 latest = queries.latest
 tally = queries.tally
 Tally = queries.Tally
@@ -82,7 +83,7 @@ async def resumes(db: AsyncSession, run: RunnerRun) -> bool:
     start it: a runner took an earlier run of the session, so the agent may
     have begun it. A session cannot be started twice; one the agent never
     began refuses to resume, and its runner starts it instead."""
-    return await queries.taken_in_session(db, run.id or 0)
+    return await sessions.taken(db, run.id or 0)
 
 
 def _cut(words: str | None, most: int = MOST_TITLE) -> str | None:
@@ -221,7 +222,7 @@ async def finish(
     answer came back stays failed, though what it cost is kept."""
     status = DONE if ok else FAILED
     if cost is not None:
-        cost = max(cost - await queries.cost_of_session(db, run_id), 0.0)
+        cost = max(cost - await sessions.cost(db, run_id), 0.0)
     finished = await queries.finish(
         db,
         run_id,
@@ -255,8 +256,8 @@ async def push(db: AsyncSession, run: RunnerRun) -> RunnerRun:
     """A push of ``run``'s branch asked of its runner (never its agent):
     the branch pushed and its pull request opened, closing its subject
     where that is an issue on GitHub. The one going, while one goes."""
-    going = await queries.pushed(db, run)
-    if going is not None and going.status in GOING:
+    going = await queries.pushing(db, run)
+    if going is not None:
         return going
     return await ask(
         db,

@@ -1,6 +1,6 @@
 ---
 name: execute-issue
-description: Use when handed a GitHub issue (number or URL) to execute end to end. Reads the issue, classifies the work, loads the matching workflow skill, runs it against the stated acceptance criteria, and reports results without performing any git operations.
+description: Use when handed a GitHub issue (number or URL) to execute end to end. Reads the issue, classifies the work, loads the matching workflow skill, runs it against the stated acceptance criteria, and reports results.
 ---
 
 # Execute issue
@@ -16,11 +16,9 @@ issue's acceptance criteria. Issues authored with the agent-task template
 Use when given an issue number or URL and asked to execute, implement, or "do"
 it.
 
-Do NOT use to triage, comment on, or plan an issue without implementing it, and
-do NOT use it to open, branch, commit, or PR anything (those stay
-human-triggered; see Pitfalls). If the issue is vague enough that the scope or
-acceptance criteria cannot be restated concretely, stop and ask rather than
-guess.
+Do NOT use to triage, comment on, or plan an issue without implementing it. If
+the issue is vague enough that the scope or acceptance criteria cannot be
+restated concretely, stop and ask rather than guess.
 
 ## Files that change
 
@@ -64,7 +62,6 @@ locale strings). Load every matching skill and follow each for its slice.
 8. Report results against each acceptance-criterion line one by one: met, not
    met, or blocked, with the evidence (test name, gate output). Do not claim a
    criterion is met without having exercised it.
-9. Stop before any git operation and hand back to the user for review.
 
 ## Gates
 
@@ -75,9 +72,6 @@ before-done gate.
 
 ## Pitfalls
 
-- No git operations: branching, committing, and PRs stay human-triggered even
-  when the issue implies them, because the repo's git policy forbids unrequested
-  git actions.
 - An issue is a claim about the code, not the code itself; coding to the issue's
   described state without checking the real tree ships fixes for problems that
   do not exist. Surface the mismatch instead.

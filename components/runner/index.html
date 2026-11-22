@@ -2343,6 +2343,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What a run is doing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#its-session-as-it-goes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Its session, as it goes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -7228,6 +7245,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What a run is doing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#its-session-as-it-goes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Its session, as it goes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -7371,6 +7405,7 @@
 <li><strong>Start or continue is the agent's to say.</strong> The runner tries what the app expects and, if the agent refuses at once, the other form. So a run that timed out or was stopped does not leave its session stuck, and a command that worked for a while before failing is not run twice. Where both forms are refused, the run fails with what each said.</li>
 <li><strong>A branch is only a branch name</strong> (<code>git check-ref-format</code>), and its worktree only a place under the worktrees folder; anything else fails the run before git is asked. A kept worktree that has been moved off its branch is not worked in.</li>
 <li><strong>Time.</strong> A command is given 15 minutes (<code>--timeout</code>), then stopped with everything it started. Stopping the runner (Ctrl-C) stops its command the same way. Work usually wants longer.</li>
+<li><strong>Pushing is a press, never the agent's.</strong> A run back on a branch says how many of its commits are not on the remote ("1 commit not on GitHub" in its drawer, <code>unpushed</code> on the run). <strong>Push and open PR</strong> in the drawer asks a <code>push</code> run, which the runner answers itself: it pushes the branch over HTTPS and opens its pull request on the repository's default branch, titled and described by the commits not yet pushed and closing the run's issue (<code>acme/app#12</code>), or links the one already open for the branch. It needs a fine-grained GitHub token for the repository (Contents and Pull requests, read and write) as <code>RUNNER_GITHUB_TOKEN</code> where it runs; without one, the push says so. Merging stays yours.</li>
 <li><strong>Cleaning up is yours.</strong> A kept worktree stays until you remove it (<code>git worktree remove</code>).</li>
 <li><strong>On Linux</strong>, the dev runner's container runs as root, so the worktrees and session files it makes are root-owned on the host.</li>
 </ul>
@@ -7390,10 +7425,17 @@
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nv">RUNNER_TOKEN</span><span class="o">=</span>rnr_...<span class="w"> </span>claude<span class="w"> </span>--resume<span class="w"> </span>&lt;session&gt;<span class="w"> </span>--settings<span class="w"> </span>~/runner-hooks.json
 </span></code></pre></div>
 <p><code>runner hooks</code> prints them for the app as that machine reaches it (<code>--url</code> for another address). Its steps show on the latest run a runner took in the session. A step the app cannot be told about never holds the agent for more than a couple of seconds, and never fails it.</p>
+<h3 id="its-session-as-it-goes">Its session, as it goes</h3>
+<p>A run's drawer shows its agent's session as a terminal would: what it said, each tool it called with what it was given, and what the tool gave back, in order, followed as it goes and kept at the newest line unless you scroll up to read. The runner reads it from Claude Code's <code>--output-format stream-json --verbose</code> (the dev runner's default commands), one event per line, its last the result the run already reads, and posts what came about once a second, signed with its token, to the run it holds (<code>/lines</code>).</p>
+<ul>
+<li><strong>Kept with the run</strong>, up to 500 lines of its own besides its hooks' 500 steps, each cut to 2,000 characters, and gone with the run.</li>
+<li><strong>What a tool gave back can hold a secret</strong> (a file read, an environment printed). Each line, the run's step and what it came back with are redacted by the same rules as the errors Overseer keeps: a value set for a name like a credential's (<code>OPENAI_API_KEY=...</code>), an <code>Authorization</code> header, a URL's password, and a token by its prefix (<code>sk-</code>, <code>ghp_</code>, <code>github_pat_</code>, <code>xoxb-</code>, <code>AKIA</code>). Anything else a tool printed is kept as it printed it, and Overseer shows every owner's runs.</li>
+<li><strong>Another agent's command</strong> that prints no such session sends none, and the drawer shows the steps its hooks posted.</li>
+</ul>
 <h2 id="in-overseer">In Overseer</h2>
-<p><strong>Overseer &gt; Runner</strong> lists the newest 200 runs of every owner, newest first, and says so when older ones are left out. Each is marked with the icon of the agent that ran it, by the program its runner's command starts: <code>claude</code>, <code>gemini</code>, <code>opencode</code> and <code>cline</code> have one of their own. Any other program, and a run answered in the app, get a plain one, as does a command that starts through a launcher (<code>npx</code>, <code>python</code>). Runs a runner took before agents were recorded are taken to be <code>claude</code>'s, the default command's. The drawer names the agent beside its runner. and reads as what was asked, in its asker's words (<code>title</code>, and <code>source</code> for where it was asked; a run given neither reads as its subject), with how long it took, what it cost and how it went: Waiting, Running (with what its agent is doing), Answered, No answer (its command succeeded and said nothing), Done (work on a branch) or Failed. Runs asked in one place of one action fold into a row that holds them (a meeting's questions): how many, how long and how much together, and how they went. It unfolds to the runs, and opens by itself while one is going or failed in the last 7 days. A place is the run's <code>source</code>, so give runs that belong together the same one. Over the list: how many runs wait, how many a runner has, and what failed and what was spent in the last 7 days. The cost counts the runs still kept: a run replaced by asking the same thing again takes its cost with it, and a run that was stopped or timed out never said what it cost, so what was spent is at least that figure. Where runs of more than one action are listed, a chip keeps the list and the figures to one. Click a run to open it: what came back, who ran it, the worktree and session to pick it up with, and the prompt it was sent, folded. Reload the page for the next step.</p>
+<p><strong>Overseer &gt; Runner</strong> lists the newest 200 runs of every owner, newest first, and says so when older ones are left out. Each is marked with the icon of the agent that ran it, by the program its runner's command starts: <code>claude</code>, <code>gemini</code>, <code>opencode</code> and <code>cline</code> have one of their own. Any other program, and a run answered in the app, get a plain one, as does a command that starts through a launcher (<code>npx</code>, <code>python</code>). Runs a runner took before agents were recorded are taken to be <code>claude</code>'s, the default command's. The drawer names the agent beside its runner. and reads as what was asked, in its asker's words (<code>title</code>, and <code>source</code> for where it was asked; a run given neither reads as its subject), with how long it took, what it cost and how it went: Waiting, Running (with what its agent is doing), Answered, No answer (its command succeeded and said nothing, or its agent said it has none: the runner asks every question that is not work on a branch to end with a line <code>[no answer]</code> when it finds none, and reads that line off what it keeps), Done (work on a branch) or Failed. Runs asked in one place of one action fold into a row that holds them (a meeting's questions): how many, how long and how much together, and how they went. It unfolds to the runs, and opens by itself while one is going or failed in the last 7 days. A place is the run's <code>source</code>, so give runs that belong together the same one. Over the list: how many runs wait, how many a runner has, and what failed and what was spent in the last 7 days. The cost counts the runs still kept: a run replaced by asking the same thing again takes its cost with it, and a run that was stopped or timed out never said what it cost, so what was spent is at least that figure. Where runs of more than one action are listed, a chip keeps the list and the figures to one. Click a run to open it: what came back, who ran it, the worktree and session to pick it up with, and the prompt it was sent, folded. Reload the page for the next step.</p>
 <p>The update that brings <code>title</code> and <code>source</code> names the runs meetings had already asked, in the same revision: each gets its question and its meeting.</p>
-<p>The runner's health check counts the runs waiting and the runs a runner has, and says whether a runner is listening. A run waiting while no runner that takes its owner's runs is listening is a warning: nothing will answer it. The dashboard's Runner card shows the same counts, and Overseer's home shows them on the Runner card there.</p>
+<p>The runner's health check counts the runs waiting and the runs a runner has, and says whether a runner is listening: it used its token in the last two minutes (asking for runs, or posting a step), or it is working on a run that is not yet overdue (a runner on a long step posts nothing until it is back). A run waiting while no runner that takes its owner's runs is listening is a warning: nothing will answer it. The dashboard's Runner card shows the same counts, and Overseer's home shows them on the Runner card there.</p>
 <p>The dev stack's <code>runner</code> service shows on that page too, under <strong>Container</strong> and <strong>Logs</strong>.</p>
 <h2 id="running-one">Running one</h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>my-app<span class="w"> </span>runner<span class="w"> </span>token<span class="w"> </span>create<span class="w"> </span>laptop
@@ -7401,8 +7443,8 @@
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>my-app<span class="w"> </span>runner<span class="w"> </span>run<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--url<span class="w"> </span>https://my-app.example.com<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>--repo<span class="w"> </span>~/code/my-service<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span>--command<span class="w"> </span><span class="s1">&#39;claude -p {prompt} --session-id {session} --output-format json --permission-mode plan --settings {hooks}&#39;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span>--resume-command<span class="w"> </span><span class="s1">&#39;claude -p {prompt} --resume {session} --output-format json --permission-mode plan --settings {hooks}&#39;</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span>--command<span class="w"> </span><span class="s1">&#39;claude -p {prompt} --session-id {session} --output-format stream-json --verbose --permission-mode plan --settings {hooks}&#39;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span>--resume-command<span class="w"> </span><span class="s1">&#39;claude -p {prompt} --resume {session} --output-format stream-json --verbose --permission-mode plan --settings {hooks}&#39;</span>
 </span></code></pre></div>
 <p>Any headless agent works (<code>codex exec {prompt}</code>, <code>aider --message {prompt}</code>); one that answers with Claude Code's JSON result says what the run cost. The command above only reads (<code>--permission-mode plan</code>): a runner whose runs change code is given a command that may, and answers the actions that ask for it. Start more runners to answer more at once.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>--command<span class="w"> </span>CMD<span class="w">         </span><span class="c1"># Required: the command each run runs; {prompt} is its prompt</span>
@@ -7428,14 +7470,15 @@
 </span></code></pre></div>
 <p>That is all it needs. Its command is Claude Code's, in a session, saying what it cost, and read-only:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># The defaults, as if set:</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="c1"># RUNNER_COMMAND=claude -p {prompt} --session-id {session} --output-format json --permission-mode plan --settings {hooks}</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="c1"># RUNNER_RESUME_COMMAND=claude -p {prompt} --resume {session} --output-format json --permission-mode plan --settings {hooks}</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="c1"># RUNNER_COMMAND=claude -p {prompt} --session-id {session} --output-format stream-json --verbose --permission-mode plan --settings {hooks}</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="c1"># RUNNER_RESUME_COMMAND=claude -p {prompt} --resume {session} --output-format stream-json --verbose --permission-mode plan --settings {hooks}</span>
 </span></code></pre></div>
 <p>For runs that change code, set both forms to a command that may (here Claude Code accepting its own edits), and give work the room it needs:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nv">RUNNER_COMMAND</span><span class="o">=</span>claude<span class="w"> </span>-p<span class="w"> </span><span class="o">{</span>prompt<span class="o">}</span><span class="w"> </span>--session-id<span class="w"> </span><span class="o">{</span>session<span class="o">}</span><span class="w"> </span>--output-format<span class="w"> </span>json<span class="w"> </span>--permission-mode<span class="w"> </span>acceptEdits<span class="w"> </span>--settings<span class="w"> </span><span class="o">{</span>hooks<span class="o">}</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nv">RUNNER_RESUME_COMMAND</span><span class="o">=</span>claude<span class="w"> </span>-p<span class="w"> </span><span class="o">{</span>prompt<span class="o">}</span><span class="w"> </span>--resume<span class="w"> </span><span class="o">{</span>session<span class="o">}</span><span class="w"> </span>--output-format<span class="w"> </span>json<span class="w"> </span>--permission-mode<span class="w"> </span>acceptEdits<span class="w"> </span>--settings<span class="w"> </span><span class="o">{</span>hooks<span class="o">}</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="nv">RUNNER_COMMAND</span><span class="o">=</span>claude<span class="w"> </span>-p<span class="w"> </span><span class="o">{</span>prompt<span class="o">}</span><span class="w"> </span>--session-id<span class="w"> </span><span class="o">{</span>session<span class="o">}</span><span class="w"> </span>--output-format<span class="w"> </span>stream-json<span class="w"> </span>--verbose<span class="w"> </span>--permission-mode<span class="w"> </span>acceptEdits<span class="w"> </span>--settings<span class="w"> </span><span class="o">{</span>hooks<span class="o">}</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="nv">RUNNER_RESUME_COMMAND</span><span class="o">=</span>claude<span class="w"> </span>-p<span class="w"> </span><span class="o">{</span>prompt<span class="o">}</span><span class="w"> </span>--resume<span class="w"> </span><span class="o">{</span>session<span class="o">}</span><span class="w"> </span>--output-format<span class="w"> </span>stream-json<span class="w"> </span>--verbose<span class="w"> </span>--permission-mode<span class="w"> </span>acceptEdits<span class="w"> </span>--settings<span class="w"> </span><span class="o">{</span>hooks<span class="o">}</span>
 </span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="nv">RUNNER_TIMEOUT</span><span class="o">=</span><span class="m">3600</span>
 </span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="nv">RUNNER_WORKTREES</span><span class="o">=</span>/Users/you/code/worktrees/my-service
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="nv">RUNNER_GITHUB_TOKEN</span><span class="o">=</span>github_pat_...<span class="w">  </span><span class="c1"># to push a run&#39;s branch and open its PR</span>
 </span></code></pre></div>
 <p>The service sees your home directory at the same path, so a repository path reads as it does on your machine. <code>.env</code> never reaches it, so the agent does not hold the app's secrets.</p>
 <h2 id="asking-a-run-from-your-own-service">Asking a run from your own service</h2>

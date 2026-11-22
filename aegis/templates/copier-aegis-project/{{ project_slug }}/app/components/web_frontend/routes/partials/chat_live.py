@@ -212,6 +212,10 @@ async def _carry(
             "output_rate": session.audio_output_sample_rate,
             "conversation_id": conversation.id,
             "engine": info,
+            # A model whose turns are inferred (GPT-Live) answers when it
+            # chooses: an "Okay" can go by unanswered, so a turn of yours
+            # owes nothing until it speaks.
+            "chooses": bool(session.profile.get("synthesizes_turn_boundary")),
         }
     )
 

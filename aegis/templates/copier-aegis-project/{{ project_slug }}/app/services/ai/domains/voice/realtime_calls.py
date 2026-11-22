@@ -14,13 +14,16 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
+from pydantic_ai.messages import ModelMessage, RealtimeSessionErrorEvent
 from pydantic_ai.toolsets import FunctionToolset
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.log import logger
 from app.services.ai.domains.chat.cards import card_stage
+from app.services.ai.domains.chat.chat_kit import ChatMessage, to_model_history
+from app.services.ai.domains.chat.chat_kit.models import ChatRole
 from app.services.ai.domains.chat.readings import reading_stage
 from app.services.ai.domains.chat.user_memory import memory_user
 from app.services.ai.domains.spend import calls
@@ -96,9 +99,9 @@ def _model_settings(
         settings["openai_voice"] = speaks
         if is_gpt_live(model):
             # GPT-Live's voice takes the call manners, when to hand off and
-            # the thread so far (``realtime_for``); the agent's prompt is the
-            # backend's. It has no token limit and
-            # transcribes itself.
+            # the running summary (``realtime_for``); its thread rides as past
+            # turns, the agent's prompt is the backend's. It transcribes
+            # itself.
             if instructions:
                 settings["openai_live_instructions"] = instructions
             return settings
@@ -156,6 +159,45 @@ def _and_history(text: str, history: str) -> str:
     return f"{text}\n\n{history}" if history else text
 
 
+# What GPT-Live takes as past turns: OpenAI refuses a seed
+# (``session.input``) of more than 128 items or 8,192 tokens, measured
+# 2026-11-22; tokens at 3 characters, which errs short.
+LIVE_SEED_ITEMS = 128
+LIVE_SEED_CHARS = 8_192 * 3
+
+
+def _seed_size(conversation: Any) -> int:
+    """How many of the thread's latest turns GPT-Live is seeded with."""
+    from app.services.ai.service.prompt import replayed, steps_ahead
+
+    room, size = LIVE_SEED_CHARS, 0
+    for message in reversed(replayed(conversation.messages)[-LIVE_SEED_ITEMS:]):
+        room -= len(steps_ahead(message)) + len(message.content)
+        if room < 0:
+            break
+        size += 1
+    return size
+
+
+def _seeded(setup: Any, size: int) -> list[ModelMessage]:
+    """The thread's latest ``size`` turns, as far back as her prompt's
+    window reaches (``setup.history_start``), as the turns they were: a
+    reply with what its turn did. GPT-Live's voice hears them, and its
+    backend reads them (15,650 tokens seeded, 1,733 not, 2026-11-22)."""
+    from app.services.ai.service.prompt import replayed, steps_ahead
+
+    turns = replayed(setup.conversation.messages)
+    tail = turns[max(setup.history_start, len(turns) - size) :]
+    return to_model_history(
+        [
+            ChatMessage(
+                role=cast(ChatRole, m.role.value), content=steps_ahead(m) + m.content
+            )
+            for m in tail
+        ]
+    )
+
+
 async def realtime_for(
     ai: Any,
     *,
@@ -194,6 +236,7 @@ async def realtime_for(
     # GPT-Live's voice takes the call manners as its own (``_model_settings``).
     if not is_gpt_live(model):
         config = config.led_by(instructions)
+    seeded = _seed_size(conversation) if is_gpt_live(model) else 0
     setup = await ai._build_turn(
         conversation,
         config,
@@ -201,12 +244,16 @@ async def realtime_for(
         subject=subject,
         owner_user_id=owner_user_id,
         admin=admin,
+        seeded=seeded,
     )
     agent, history = setup.agent, setup.conversation_context
+    past = None
     if is_gpt_live(model):
         # Its voice hears the thread as every other engine does: told only
-        # the manners, it made answers up (2026-11-16).
-        instructions = _and_history(instructions, history)
+        # the manners, it made answers up (2026-11-16). The summary rides in
+        # its instructions; the latest turns as past turns (``_seeded``).
+        past = _seeded(setup, seeded)
+        instructions = _and_history(instructions, setup.history_summary)
     realtime = agent.realtime(
         await cascade.for_call(ai, model, user_id=user_id)
         if cascade.serves(model)
@@ -214,6 +261,9 @@ async def realtime_for(
         instructions=await call_instructions(agent, history),
         model_settings=_model_settings(model, voice, max_output_tokens, instructions),
         toolsets=[CALL_TOOLS] if hang_up else [],
+        # GPT-Live's voice: its thread as past turns (``_seeded``). Every
+        # other engine reads it in its prompt.
+        message_history=past,
     )
     return realtime, slug
 
@@ -286,8 +336,7 @@ async def drive(
 ) -> CallEnd:
     """Run one call to its end, and say who ended it (``CallEnd``): the
     agent's tools in a turn's context, each finished turn saved into the
-    conversation, the call's ledger row billed as each is (by the second on
-    a model priced by time, else by its tokens: ``call_cost``).
+    conversation, the call's ledger row billed as each is (``call_cost``).
     ``alongside`` runs beside the events for the length of the call (the
     audio both ways), ``on_event`` sees every event, ``on_saved`` hears of
     each saved turn with the call's own cost so far, and ``on_drawn`` of the
@@ -303,6 +352,16 @@ async def drive(
     # The call so far, at the last saved turn: each turn keeps its share.
     so_far = {"input_tokens": 0, "output_tokens": 0, "cost": 0.0}
     rates = await calls.realtime_price(bare)
+    # The rates of the model it hands its work to, read once it has; only
+    # a model priced by time hands its work elsewhere (GPT-Live).
+    delegated: calls.llm_queries.Rates | None = None
+    looked = not calls.per_second(rates)
+
+    async def handed_to(session: Any) -> None:
+        nonlocal delegated, looked
+        if not looked and (name := calls.delegated_to(session)):
+            looked = True
+            delegated = await calls.realtime_price(name)
     # The call's ledger row, written beside the audio rather than ahead of
     # it; each bill waits for it (``row``).
     opening: asyncio.Task[int | None] | None = None
@@ -317,6 +376,7 @@ async def drive(
         """Save one turn with its share of the call, billing the call's row;
         the call's cost so far."""
         nonlocal so_far
+        await handed_to(session)
         now = {
             "input_tokens": session.usage.input_tokens or 0,
             "output_tokens": session.usage.output_tokens or 0,
@@ -326,6 +386,7 @@ async def drive(
                 session.usage,
                 seconds=_elapsed(started),
                 rates=rates,
+                delegated=delegated,
             ),
         }
         shares: dict[str, Any] = {k: now[k] - so_far[k] for k in now}
@@ -372,6 +433,17 @@ async def drive(
                     async for event in session:
                         if on_event:
                             await on_event(event)
+                        if isinstance(event, RealtimeSessionErrorEvent):
+                            # Work the session lost (GPT-Live's backend
+                            # failing or stopping short): the call carries
+                            # on, but it went quiet with no word of why
+                            # (2026-11-22).
+                            logger.warning(
+                                "A live call lost work",
+                                error=event.message,
+                                code=event.code,
+                                model=model,
+                            )
                         if log.observe(event) and (turn := log.take()):
                             if on_turn:
                                 await on_turn(turn)
@@ -388,6 +460,7 @@ async def drive(
                     # A dropped call still used what it used, and still
                     # said and ran what it did: the turn it cut is kept.
                     usage = session.usage
+                    await handed_to(session)
                     if cut := log.take():
                         try:
                             await keep(session, cut, interrupted=True)
@@ -408,6 +481,7 @@ async def drive(
                 usage,
                 seconds=seconds,
                 rates=rates,
+                delegated=delegated,
                 success=ended != "error",
             )
         logger.info(

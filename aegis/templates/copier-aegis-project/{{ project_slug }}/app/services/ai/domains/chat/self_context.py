@@ -47,10 +47,14 @@ class TurnContext:
     messages_dropped: int = 0
     # The running summary of the dropped turns that rode (``summary``), and
     # how far a fold is due to take it (0: none due).
-    summary_chars: int = 0
+    summary: str = ""
     fold_to: int = 0
     tools: list[str] = field(default_factory=list)
     code_mode: bool = False
+
+    @property
+    def summary_chars(self) -> int:
+        return len(self.summary)
 
     @property
     def system_chars(self) -> int:

@@ -10,10 +10,15 @@ from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from typing import Any
 
+{% if ai_backend != "memory" and ai_framework == "pydantic-ai" -%}
+from app.core.concurrency import background
+{% endif -%}
 from app.services.ai.domains.chat.agent_loader import CODE_MODE_OVERRIDE, AgentConfig
 from app.services.ai.domains.chat.page_actions import on_page
 {%- if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
 from app.services.ai.domains.chat.module_context import render_context_modules
+from app.services.ai.domains.chat.self_context import TurnContext, current_turn
+from app.services.ai.domains.chat.summary import enqueue_fold
 from app.services.ai.domains.chat.user_memory import (
     build_user_memory_context,
     memory_user,
@@ -51,6 +56,10 @@ class TurnSetup:
 {%- if ai_framework == "pydantic-ai" %}
     agent: Any = None
     conversation_context: str = ""
+    # Where its replayed history starts among the thread's turns
+    # (``prompt.replayed``), and the running summary ahead of it.
+    history_start: int = 0
+    history_summary: str = ""
 {%- else %}
     llm: Any = None
     messages: list[Any] | None = None
@@ -71,11 +80,14 @@ class TurnMixin(PromptMixin):
         owner_user_id: int | None = None,
         admin: bool | None = None,
 {% if ai_rag %}        rag_context: RAGContext | None = None,
+{% endif %}{% if ai_framework == "pydantic-ai" %}        seeded: int = 0,
 {% endif %}    ) -> TurnSetup:
         """The agent for ``conversation``, built from every context block
         a turn reads, as the caller (``owner_user_id``, ``admin``) sees
         them. A typed turn and a live call (``realtime_calls``) both build
-        her here, so each can do what the other can."""
+        her here, so each can do what the other can.{% if ai_framework == "pydantic-ai" %} The thread's latest
+        ``seeded`` turns ride as the session's past turns (GPT-Live), out of
+        the history text.{% endif %}"""
         # On a page that declares its parts, she may point at them.
         agent_config = on_page(agent_config)
         # A played script's turn is built in the mode it was recorded in.
@@ -148,13 +160,25 @@ class TurnMixin(PromptMixin):
             context_window=context_window,
             readings=readings,
 {% endif %}            right_now=now,
+            seeded=seeded,
         )
+{%- if ai_backend != "memory" %}
+        seen = current_turn() or TurnContext()
+        # Turns that left its window fold into the running summary, on the
+        # worker, whichever way the turn was asked: a typed one or a call.
+        if seen.fold_to:
+            background(enqueue_fold(conversation.id, seen.fold_to))
+{%- endif %}
         return TurnSetup(
             conversation=conversation,
             agent_config=agent_config,
 {% if ai_rag %}            rag_context=rag_context,
 {% endif %}            agent=agent,
             conversation_context=conversation_context,
+{%- if ai_backend != "memory" %}
+            history_start=seen.messages_dropped,
+            history_summary=seen.summary,
+{%- endif %}
         )
 {%- else %}
         llm, messages, tools = await self._prepare_llm_and_messages(

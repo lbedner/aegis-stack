@@ -75,7 +75,9 @@ REPLY_CAP = 2_400
 # manners replace its default, which is what says when to.
 LIVE_HANDS_OFF = (
     "When they ask for something you cannot answer from this conversation "
-    "alone, delegate it."
+    "alone, or for anything to be shown, drawn or changed (a table, a "
+    "chart, a category), delegate it: you can only talk. Never say you "
+    "will do something you have not delegated."
 )
 
 # Every default LIVE_CALL_INSTRUCTIONS has had, by digest: an engine still

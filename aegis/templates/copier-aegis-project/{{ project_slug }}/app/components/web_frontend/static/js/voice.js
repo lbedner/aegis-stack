@@ -635,7 +635,7 @@
         return say('unsupported');
       }
       startBar(event.engine);
-      happen({ type: 'begin' });
+      happen({ type: 'begin', chooses: event.chooses });
     } else if (event.type === 'interrupted') {
       interrupted();
     } else if (event.type === 'hearing') {

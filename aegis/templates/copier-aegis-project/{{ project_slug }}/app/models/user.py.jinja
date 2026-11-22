@@ -4,13 +4,14 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import EmailStr
+from pydantic import EmailStr, field_validator
 import sqlalchemy as sa
 from sqlalchemy import CheckConstraint, Column, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from app.core.constants import ServiceName
 from app.core.time import utcnow
+from app.core.visitor import GUEST_EMAIL
 
 # Whose tables these are (``ownership``): ``app/models`` is no part's folder.
 PART_OF = ServiceName.AUTH
@@ -223,6 +224,13 @@ class UserCreate(SQLModel):
     email: EmailStr = Field(unique=True, index=True)
     full_name: str | None = None
     password: str = Field(min_length=8)
+
+    @field_validator("email")
+    @classmethod
+    def _not_the_guest(cls, email: str) -> str:
+        if email.lower() == GUEST_EMAIL:
+            raise ValueError("reserved for guest sign-in")
+        return email
 
 
 class UserLogin(SQLModel):

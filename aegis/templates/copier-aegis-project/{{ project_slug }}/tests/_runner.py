@@ -1,6 +1,7 @@
 """What the runner component's tests share, and the tests of what asks
 runs of it."""
 
+from datetime import timedelta
 from importlib.util import find_spec
 from itertools import count
 from typing import Any
@@ -70,6 +71,15 @@ async def claimed(db: AsyncSession, run: RunnerRun, **runner: Any) -> RunnerRun:
     taken = await runs.claim(db, None, ["agent"], runner="laptop", **runner)
     assert taken is not None and taken.id == run.id
     return taken
+
+
+async def late(db: AsyncSession, run: RunnerRun, minutes: int) -> None:
+    """``run`` as if it had been claimed ``minutes`` earlier than it was."""
+    by = timedelta(minutes=minutes)
+    run.claimed_at -= by  # type: ignore[operator]
+    run.overdue_at -= by  # type: ignore[operator]
+    db.add(run)
+    await db.commit()
 
 
 async def answered(

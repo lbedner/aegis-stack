@@ -82,6 +82,13 @@ def _usd(value: float) -> str:
     return f"${value:g}" if value == int(value) else f"${value:.2f}"
 
 
+def format_per_minute(usd: float) -> str:
+    """A rate by the minute: "$0.02 a minute", tenths of a cent shown
+    where cents would round it away."""
+    shown = _usd(usd) if usd >= 0.01 else f"${usd:.3f}"
+    return f"{shown} a minute"
+
+
 def is_local_model(model: dict[str, Any]) -> bool:
     """Does this model run on this machine. Reads either spelling: a catalog
     row calls it ``vendor``, a finished message's metadata ``provider``.
@@ -94,14 +101,18 @@ def is_local_model(model: dict[str, Any]) -> bool:
     return str(named).casefold() in LOCAL_PROVIDERS
 
 
+UNKNOWN_PRICE = "Price unknown"
+
+
 def format_price(
     input_price: float | None, output_price: float | None, *, local: bool = False
 ) -> str:
     """Per-million-token pricing as ``$in / $out``. A cloud model with no
-    pricing on file stays blank (unknown is not free); a local model's blank
+    pricing on file, or only zeros (a catalog's placeholder), is said to be
+    unknown: blank or "$0 / $0" would read as free. A local model's nothing
     is the answer, so it says Free."""
-    if input_price is None and output_price is None:
-        return "Free" if local else ""
+    if not input_price and not output_price:
+        return "Free" if local else UNKNOWN_PRICE
     if output_price is None:
         return _usd(input_price or 0.0)
     if input_price is None:

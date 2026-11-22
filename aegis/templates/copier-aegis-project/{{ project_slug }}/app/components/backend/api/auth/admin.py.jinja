@@ -23,6 +23,9 @@ from app.models.user import (
 from app.services.auth.service import get_current_user_from_token
 from app.services.auth.deps import get_current_active_user, get_session_token
 from app.services.auth.service import RestoreConflictError, UserService
+{%- if include_auth_rbac %}
+from app.services.auth.service import FixedRoleError
+{%- endif %}
 {% if include_auth_rbac %}
 from pydantic import BaseModel
 {% endif %}
@@ -335,7 +338,12 @@ async def set_user_role(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot change your own role. Ask another admin.",
         )
-    updated = await user_service.update_user(user_id, role=body.role)
+    try:
+        updated = await user_service.update_user(user_id, role=body.role)
+    except FixedRoleError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from None
     if not updated:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

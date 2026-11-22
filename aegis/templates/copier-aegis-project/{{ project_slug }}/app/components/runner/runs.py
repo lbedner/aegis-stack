@@ -18,16 +18,27 @@ here.
 """
 
 from datetime import timedelta
+import re
 from uuid import uuid4
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.hooks import Hook
 from app.core.time import utcnow
+from app.services.system.errors import redact
 
 from . import queries
-from .models import DONE, FAILED, MOST_ACTIVITY, MOST_TITLE, RunnerRun
-from .protocol import MOST_AGENT, TIMEOUT_SECONDS, kept
+from . import steps as agent_steps
+from .models import DONE, FAILED, GOING, MOST_ACTIVITY, MOST_TITLE, RunnerRun
+from .protocol import (
+    GITHUB_REPO,
+    MOST_AGENT,
+    MOST_LINE,
+    PUSH,
+    TIMEOUT_SECONDS,
+    Line,
+    kept,
+)
 
 # How long a claimed run is waited for where its runner gave no timeout
 # (the app's own, or a runner from before they did): twice a runner's
@@ -48,6 +59,8 @@ tally = queries.tally
 Tally = queries.Tally
 # One run, read afresh.
 one = queries.run
+steps = agent_steps.steps
+pushed = queries.pushed
 # These subjects' runs gone, or made another owner's, as their subjects
 # are: the caller commits.
 forget = queries.drop
@@ -126,14 +139,16 @@ async def take(
     timeout: float | None = None,
     worktrees: str | None = None,
     agent: str | None = None,
+    token_id: int | None = None,
 ) -> bool:
     """Claim the run for ``runner`` if it is still asked. What the runner
     says of itself goes on the run: how long it gives a command
     (``timeout``, seconds), so the run is waited for twice that, where
     it keeps a branch's worktree (``worktrees``), so a run on a branch says
-    where its work is before it is back, and which ``agent`` it runs (cut
-    to what a run keeps). A run asked in no session is given one, so what
-    its agent says it is doing finds it (``note``)."""
+    where its work is before it is back, which ``agent`` it runs (cut
+    to what a run keeps). A run
+    asked in no session is given one, so what its agent says it is doing
+    finds it (``note``)."""
     wait = timedelta(seconds=2 * timeout) if timeout else ABANDONED_AFTER
     taken = await queries.take(
         db,
@@ -143,6 +158,7 @@ async def take(
         session_id=new_session(),
         worktrees=worktrees,
         agent=_cut(agent, MOST_AGENT),
+        token_id=token_id,
     )
     await db.commit()
     if taken:
@@ -159,6 +175,7 @@ async def claim(
     timeout: float | None = None,
     worktrees: str | None = None,
     agent: str | None = None,
+    token_id: int | None = None,
 ) -> RunnerRun | None:
     """The oldest asked run of ``actions`` among the owner's, now claimed by
     ``runner`` (``take``); None when there is none."""
@@ -167,7 +184,13 @@ async def claim(
         if run_id is None:
             return None
         taken = await take(
-            db, run_id, runner, timeout=timeout, worktrees=worktrees, agent=agent
+            db,
+            run_id,
+            runner,
+            timeout=timeout,
+            worktrees=worktrees,
+            agent=agent,
+            token_id=token_id,
         )
         if taken:
             return await queries.run(db, run_id)
@@ -184,15 +207,18 @@ async def finish(
     runner: str,
     cost: float | None = None,
     worktree: str | None = None,
+    unpushed: int | None = None,
+    unanswered: bool = False,
 ) -> RunnerRun:
     """A run ``runner`` claimed, done (``ok``) or failed, with what it came
     back with and where its work is kept. ``cost`` is what the agent says
     its session has cost so far; the run keeps what it added to that (what
     the session's other runs have not already kept), so a session's cost is
-    the sum of its runs'. Only what claimed a run
+    the sum of its runs', and what it cost is written down apart from it
+    (``queries.spend``), so it outlasts the run. Only what claimed a run
     finishes it, and only while it is still claimed: another runner posting
-    over it would lose the answer, and one stopped as its answer came back
-    stays stopped."""
+    over it would lose the answer, and one stopped (or overdue) as its
+    answer came back stays failed, though what it cost is kept."""
     status = DONE if ok else FAILED
     if cost is not None:
         cost = max(cost - await queries.cost_of_session(db, run_id), 0.0)
@@ -202,16 +228,48 @@ async def finish(
         owner_user_id,
         runner,
         status,
-        kept(result, ok),
+        kept(redact.text(result), ok),
         cost=cost,
         worktree=worktree,
+        unpushed=unpushed,
+        unanswered=unanswered,
     )
+    if cost is not None and (
+        finished or await queries.cost_late(db, run_id, owner_user_id, runner, cost)
+    ):
+        await queries.spend(db, run_id, cost)
     await db.commit()
     run = await queries.run(db, run_id) if finished else None
     if run is None:
         raise RunNotFoundError(run_id)
     _changed()
     return run
+
+
+# A subject that is an issue on GitHub (``acme/app#12``), which a pull
+# request closes.
+_GITHUB_ISSUE = re.compile(rf"{GITHUB_REPO}#\d+")
+
+
+async def push(db: AsyncSession, run: RunnerRun) -> RunnerRun:
+    """A push of ``run``'s branch asked of its runner (never its agent):
+    the branch pushed and its pull request opened, closing its subject
+    where that is an issue on GitHub. The one going, while one goes."""
+    going = await queries.pushed(db, run)
+    if going is not None and going.status in GOING:
+        return going
+    return await ask(
+        db,
+        owner_user_id=run.owner_user_id,
+        kind=run.subject_kind,
+        subject_id=run.subject_id,
+        action=PUSH,
+        prompt=f"Closes {run.subject_id}"
+        if _GITHUB_ISSUE.fullmatch(run.subject_id)
+        else "",
+        title=f"Push {run.branch}",
+        branch=run.branch,
+    )
 
 
 async def stop(
@@ -234,8 +292,22 @@ async def note(
     what a run keeps; nothing, once it ended its turn), on the latest run
     a runner took in the session: the one going, or the one a terminal
     picked up."""
-    doing = _cut(activity, MOST_ACTIVITY)
-    await queries.note(db, owner_user_id, session_id, doing)
+    doing = _cut(redact.text(activity), MOST_ACTIVITY)
+    await agent_steps.note(db, owner_user_id, session_id, doing)
+    await db.commit()
+
+
+async def hear(
+    db: AsyncSession,
+    run_id: int,
+    owner_user_id: int | None,
+    runner: str,
+    lines: list[Line],
+) -> None:
+    """What ``runner`` heard of its agent's session, kept on the run it
+    holds: each line redacted (``redact.text``), then cut to ``MOST_LINE``."""
+    heard = [(line.kind, redact.text(line.text)[:MOST_LINE]) for line in lines]
+    await agent_steps.hear(db, run_id, owner_user_id, runner, heard)
     await db.commit()
 
 

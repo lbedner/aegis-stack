@@ -171,6 +171,7 @@ if TYPE_CHECKING:
 {%- endif %}
 {%- if ai_voice and ai_backend != "memory" %}
     from app.services.ai.domains.voice import (
+        call_setup,
         design,
         live_engines,
         profiles,
@@ -294,6 +295,9 @@ if TYPE_CHECKING:
         start_generate_evals,
     )
     from app.services.ai.models.evals import EvalCase, EvalRun, EvalScore
+{%- endif %}
+{%- if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
+    from app.services.ai.domains.chat.chat_kit import BudgetGuard
 {%- endif %}
     from app.services.ai.models.provider_names import LOCAL_PROVIDERS, provider_label
     from app.services.ai.service.ai_service import AIService

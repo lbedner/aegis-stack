@@ -183,6 +183,13 @@ SERVICES: dict[str, ServiceSpec] = {
                     when=lambda opts: bool(opts.get(AnswerKeys.AUTH_OAUTH)),
                 ),
                 RouterWiring(
+                    module="app.components.backend.api.auth.guest",
+                    symbol="router",
+                    alias="guest_router",
+                    prefix="/api/v1",
+                    when=lambda opts: bool(opts.get(AnswerKeys.AUTH_GUEST)),
+                ),
+                RouterWiring(
                     module="app.components.backend.api.orgs.router",
                     symbol="router",
                     alias="org_router",
@@ -268,8 +275,8 @@ SERVICES: dict[str, ServiceSpec] = {
             ORG_MIGRATION,
             AUTH_TOKENS_MIGRATION,
         ],
-        # Bracket-syntax options: auth[level, engine, oauth]
-        # e.g. auth[rbac], auth[org,postgres], auth[basic,oauth]
+        # Bracket-syntax options: auth[level, engine, oauth, guest]
+        # e.g. auth[rbac], auth[org,postgres], auth[basic,oauth], auth[guest]
         options=[
             OptionSpec(
                 name="level",
@@ -297,6 +304,13 @@ SERVICES: dict[str, ServiceSpec] = {
                 mode=OptionMode.FLAG,
                 choices=["oauth"],
                 answer_key=AnswerKeys.AUTH_OAUTH,
+                default=False,
+            ),
+            OptionSpec(
+                name="guest",
+                mode=OptionMode.FLAG,
+                choices=["guest"],
+                answer_key=AnswerKeys.AUTH_GUEST,
                 default=False,
             ),
         ],
@@ -392,6 +406,14 @@ SERVICES: dict[str, ServiceSpec] = {
                 "include_oauth": [
                     "app/components/backend/api/auth/oauth.py",
                     "app/components/frontend/controls/auth/oauth_button.py",
+                ],
+                # Guest sign-in: one shared account, a session per visitor.
+                "include_auth_guest": [
+                    "app/components/backend/api/auth/guest.py",
+                    "app/services/auth/domains/sessions/guest.py",
+                    "app/services/auth/settings.py",
+                    "app/components/backend/security/turnstile.py",
+                    "tests/api/test_guest_sign_in.py",
                 ],
                 # The web frontend's auth pages: sign-in and registration,
                 # Overseer's login, refusal and Auth page. Overseer itself
@@ -675,6 +697,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "tests/web/test_chat_surface_mounts.py",
                     "tests/web/test_overseer_ai_costs.py",
                     "app/components/web_frontend/routes/partials/chat_voices.py",
+                    "app/components/web_frontend/chat_calls.py",
                     "app/components/web_frontend/routes/partials/chat_live.py",
                     "app/components/web_frontend/routes/partials/chat_live_lines.py",
                     "app/components/web_frontend/static/js/mic-worklet.js",
@@ -685,6 +708,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/services/ai/models/voice",
                     "app/components/backend/startup/voice_profile.py",
                     "app/components/web_frontend/routes/partials/chat_voices.py",
+                    "app/components/web_frontend/chat_calls.py",
                     "app/components/web_frontend/routes/partials/chat_live.py",
                     "app/components/web_frontend/routes/partials/chat_live_lines.py",
                     "app/components/web_frontend/static/js/mic-worklet.js",
@@ -692,6 +716,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/components/web_frontend/templates/partials/chat/voices.html",
                     "app/components/web_frontend/static/marks/kokoro.png",
                     "tests/web/test_chat_voices.py",
+                    "tests/web/test_voice_dialog_reads_never_wait.py",
                     "tests/web/test_chat_live.py",
                     "tests/_voice_catalog.py",
                     "tests/_voice_packages.py",
@@ -764,6 +789,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/services/ai/domains/voice/live_engines.py",
                     "app/services/ai/domains/voice/realtime_calls.py",
                     "app/services/ai/domains/voice/call_turns.py",
+                    "app/services/ai/domains/voice/call_setup.py",
                     "app/services/ai/domains/voice/live_voice.py",
                     # A call on a local model, built on the call path above.
                     "app/services/ai/domains/voice/cascade",
@@ -791,6 +817,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/components/web_frontend/routes/partials/chat_live.py",
                     "app/components/web_frontend/routes/partials/chat_live_lines.py",
                     "app/components/web_frontend/routes/partials/chat_voices.py",
+                    "app/components/web_frontend/chat_calls.py",
                     "app/components/web_frontend/overseer_ai_costs.py",
                     "app/components/web_frontend/overseer_ai_costs_views.py",
                     *(
@@ -837,6 +864,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "tests/services/ai/voice/test_live_engines.py",
                     "tests/services/ai/voice/test_live_voice.py",
                     "tests/services/ai/voice/test_realtime_calls.py",
+                    "tests/services/ai/voice/test_call_setup.py",
                     "tests/services/ai/voice/test_speech_costs.py",
                     "tests/services/ai/voice/test_voice_design.py",
                     "tests/services/ai/voice/test_voice_profiles.py",
@@ -845,6 +873,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "tests/web/test_chat_cards.py",
                     "tests/web/test_chat_live.py",
                     "tests/web/test_chat_voices.py",
+                    "tests/web/test_voice_dialog_reads_never_wait.py",
                     "tests/web/test_overseer_ai_costs.py",
                     "tests/web/test_path_card.py",
                 ],

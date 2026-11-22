@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
-from starlette.responses import Response
+from starlette.responses import RedirectResponse, Response
 
 from app.components.backend.security import honeypot
 from app.components.web_frontend.assets import COMPONENT_DIR, static_url
@@ -25,6 +25,7 @@ from app.components.web_frontend.filters import FILTERS
 from app.components.web_frontend.themes import theme_named, themes
 from app.core import series
 from app.core.config import settings
+from app.core.formatting import site_path
 from app.core.time import zone_named
 from app.services.shared.deps import operator_refusal
 from app.services.system import topology, ui_runtime
@@ -57,6 +58,19 @@ def registration_enabled() -> bool:
 
 
 templates.env.globals["registration_enabled"] = registration_enabled
+
+
+def guest_sign_in() -> str | None:
+    """The Turnstile site key the "Continue as guest" button renders ("" while
+    the check is off), or None on a stack without guest sign-in."""
+    if not hasattr(settings, "GUEST_SESSION_HOURS"):
+        return None
+    from app.components.backend.security import turnstile  # auth[guest] only
+
+    return settings.TURNSTILE_SITE_KEY if turnstile.enabled() else ""
+
+
+templates.env.globals["guest_sign_in"] = guest_sign_in
 # Why this request may not make an operator's change (None: it may); the
 # Overseer shell hides every write control with it.
 templates.env.globals["operator_refusal"] = operator_refusal
@@ -235,6 +249,15 @@ def with_query(path: str, **params: str | list[str] | None) -> str:
     ]
     query = urlencode(pairs)
     return f"{path}?{query}" if query else path
+
+
+def refused_sign_in(path: str, reason: str, next: str) -> RedirectResponse:
+    """Back to the sign-in page at ``path`` saying why (``?error=``), still
+    headed for ``next``."""
+    return RedirectResponse(
+        url=with_query(path, error=reason, next=site_path(next, "") or None),
+        status_code=303,
+    )
 
 
 def chips(

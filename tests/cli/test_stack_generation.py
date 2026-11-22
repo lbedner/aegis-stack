@@ -618,13 +618,18 @@ STACK_COMBINATIONS = [
         # htmx too: finance and AI's Overseer pages together, the shape
         # that shipped three bugs no row built. The other services take
         # htmx on their own rows; ``everything`` cannot carry it in time.
-        services=["auth[rbac]", "ai[sqlite]", "finance"],
+        # Guest sign-in too: its login page and its chat mount for guests
+        # need htmx and a pydantic-ai chat on a database, which only this row
+        # has beside auth.
+        services=["auth[rbac,guest]", "ai[sqlite]", "finance"],
         description="Finance beside AI and RBAC auth: analyst renders, user.role exists",
         expected_files=[
             "app/services/finance/",
             "app/components/backend/api/finance/analyst.py",
             "tests/services/test_finance_clock.py",
             "app/core/db.py",
+            "app/components/web_frontend/guest_chat.py",
+            "tests/web/test_guest_login.py",
         ],
         expected_docker_services=["webserver", "scheduler"],
         expected_pyproject_deps=["fastapi", "flet", "sqlmodel", "pydantic-ai"],
@@ -729,7 +734,9 @@ STACK_COMBINATIONS = [
         # so carrying both here closes all ten at no new runner. See
         # tests/core/test_combination_coverage.py.
         services=[
-            "auth[org]",
+            # Guest sign-in rides here too: it meets orgs and every service
+            # an owner id reaches. Its pages are on ``finance_ai_rbac``.
+            "auth[org,guest]",
             "ai[sqlite]",
             "insights",
             "payment",
@@ -743,6 +750,8 @@ STACK_COMBINATIONS = [
         description="Kitchen sink: every service + all processing infra",
         expected_files=[
             "app/services/auth/",
+            "app/components/backend/api/auth/guest.py",
+            "app/services/auth/settings.py",
             "app/services/ai/",
             "app/services/insights/",
             "app/services/payment/",

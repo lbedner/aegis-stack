@@ -86,9 +86,29 @@ happens in `.env` rather than in code:
 | `TRUSTED_PROXIES` | Senders whose `X-Forwarded-For` is believed (addresses or CIDR ranges); defaults to loopback and the private ranges |
 
 Because the state is in-process, this is appropriate for single-instance
-deployments. If you horizontally scale the backend, swap the in-memory
-counter for a Redis-backed implementation — the dependency shape stays
-the same.
+deployments. For a cap that has to hold across processes and replicas,
+use `app/core/limits.py` instead:
+
+```python
+from app.core.limits import Budget, Slots
+
+starts = Budget("guest-starts", "RATE_LIMIT_GUEST_MAX", "RATE_LIMIT_GUEST_WINDOW")
+calls = Slots("guest-calls", "AI_GUEST_CONCURRENT_CALLS")
+
+if not await starts.take(client_ip):  # one more this window, if under the cap
+    ...
+if await calls.take("guests"):  # one held at once, until release
+    ...
+    await calls.release("guests")
+```
+
+Both count on the shared cache: with the Redis component, every process
+counts into one number; without it, each process caps itself. The key you
+pass is the pool, so an IP, a user or `"guests"` never spends another's.
+Each reads its cap (and a budget its window) from the settings it names on
+every check, so a value saved in Overseer applies at once, and a cap of 0
+is off. When the cache cannot be reached the request goes through with a
+warning: a cache blip never locks everyone out.
 
 ## 3. Router Registration
 

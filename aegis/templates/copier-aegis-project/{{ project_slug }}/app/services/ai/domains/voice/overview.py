@@ -150,7 +150,7 @@ def _price(row: Any) -> str | None:
     """A catalog price as per million in and out, as every model's is shown."""
     if row is None:
         return None
-    return format_price(row.input_price, row.output_price) or None
+    return format_price(row.input_price, row.output_price)
 
 
 def detail(*parts: Any) -> str:

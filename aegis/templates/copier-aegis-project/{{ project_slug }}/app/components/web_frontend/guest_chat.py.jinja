@@ -1,0 +1,75 @@
+{%- if include_auth_guest and include_ai and ai_framework == "pydantic-ai" and ai_backend != "memory" -%}
+"""A chat mount open to guests (``auth[guest]``): each visitor on the
+shared guest account holds its own conversations and spends from its own
+budget, and guests together hold at most ``AI_GUEST_CONCURRENT_CALLS``
+live calls.
+
+``for_visitors`` wires a mount's ``bind``, ``gate``, ``call_check`` and
+``on_call_end`` for that; what the budget is and what a refusal says stay
+the app's (``BudgetGuard``, ``Refusals``). A refused call leaves the same
+conversation in text, so every limit falls back to typing, never to a dead
+end. A signed-in user on the mount keeps the guard's per-user budget.
+"""
+
+from dataclasses import dataclass, replace
+
+from fastapi import Depends, HTTPException, status
+from starlette.requests import HTTPConnection
+
+from app.components.web_frontend.chat_surface import ChatSurface
+from app.core.db import get_async_session
+from app.core.limits import Slots
+from app.core.visitor import GUESTS, is_guest_visitor
+from app.services.ai.service import BudgetGuard
+from app.services.auth.deps import get_visitor
+
+CALLS = Slots("guest-calls", "AI_GUEST_CONCURRENT_CALLS")
+
+
+@dataclass(frozen=True)
+class Refusals:
+    """What the mount says when a limit is reached, in its own voice."""
+
+    spent: str  # this visitor's budget for today
+    shared: str  # every guest's together
+    busy: str  # every guest call slot is taken
+
+
+def for_visitors(
+    mount: ChatSurface, guard: BudgetGuard, refusals: Refusals
+) -> ChatSurface:
+    """``mount`` bound to the signed-in visitor (a guest by its session),
+    each turn and call checked against ``guard``."""
+
+    async def bind(who: str | None = Depends(get_visitor)) -> ChatSurface:
+        if who is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+        return replace(mount, user=who)
+
+    async def over(chat: ChatSurface) -> str | None:
+        # A session of its own: SQLite's write lock is never held across
+        # the answer that follows.
+        async with get_async_session() as session:
+            budget = await guard.check(session, chat.user)
+        if budget.allowed:
+            return None
+        return refusals.shared if budget.shared else refusals.spent
+
+    async def gate(
+        conn: HTTPConnection, chat: ChatSurface = Depends(bind)
+    ) -> str | None:
+        if reason := await over(chat):
+            return reason
+        calling = conn.scope["type"] == "websocket"
+        if calling and is_guest_visitor(chat.user) and not await CALLS.take(GUESTS):
+            return refusals.busy
+        return None
+
+    async def call_ended(chat: ChatSurface, how: str) -> None:
+        if is_guest_visitor(chat.user):
+            await CALLS.release(GUESTS)
+
+    return replace(
+        mount, bind=bind, gate=gate, call_check=over, on_call_end=call_ended
+    )
+{%- endif %}

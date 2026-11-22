@@ -151,6 +151,12 @@ PARTS: dict[str, Part] = {
             Option(
                 name="oauth", mode="flag", choices=("oauth",), answer="include_oauth"
             ),
+            Option(
+                name="guest",
+                mode="flag",
+                choices=("guest",),
+                answer="include_auth_guest",
+            ),
         ),
     ),
     "backend": Part(

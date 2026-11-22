@@ -19,7 +19,7 @@ _RUN = (
     "subject_id VARCHAR(255), action VARCHAR(64), title VARCHAR(255), "
     "source VARCHAR(255), prompt TEXT, status VARCHAR(16), result TEXT, "
     "runner VARCHAR(255), agent VARCHAR(64), asked_at DATETIME, "
-    "claimed_at DATETIME, finished_at DATETIME"
+    "claimed_at DATETIME, finished_at DATETIME, cost FLOAT"
 )
 _TOKEN = (
     "id INTEGER PRIMARY KEY, owner_user_id INTEGER, name VARCHAR(255), "
@@ -46,6 +46,8 @@ def _database(*statements: str) -> sa.Connection:
     made = (
         f"CREATE TABLE runner_run ({_RUN})",
         f"CREATE TABLE runner_token ({_TOKEN})",
+        "CREATE TABLE runner_spend (id INTEGER PRIMARY KEY, action VARCHAR(64), "
+        "at DATETIME, cost FLOAT)",
     )
     for statement in (*made, *statements):
         conn.exec_driver_sql(statement)
@@ -131,3 +133,23 @@ def test_runs_a_runner_took_before_runners_said_their_agent_are_claudes() -> Non
 
     agents = conn.exec_driver_sql("SELECT agent FROM runner_run ORDER BY id")
     assert [agent for (agent,) in agents] == ["claude", "codex", None, None]
+
+
+def test_what_runs_cost_before_spend_was_written_down_is_written_down_once() -> None:
+    """The page's spend is read from ``runner_spend`` now: a project that
+    updates writes down what its kept runs said they cost, when they were
+    back, so the figure does not start again from nothing. A later runner
+    revision finds it written and writes nothing more."""
+    conn = _database(
+        "INSERT INTO runner_run (id, subject_kind, subject_id, action, "
+        "finished_at, cost) VALUES "
+        "(1, 'issue', '7', 'agent', '2026-11-20 10:00:00', 0.4), "
+        "(2, 'issue', '8', 'agent', '2026-11-20 11:00:00', NULL), "
+        "(3, 'moment', '9', 'ai', NULL, NULL)",
+    )
+
+    run_data_after(conn, RUNNER_MIGRATION.data_after)
+    run_data_after(conn, RUNNER_MIGRATION.data_after)
+
+    spent = conn.exec_driver_sql("SELECT action, at, cost FROM runner_spend")
+    assert spent.all() == [("agent", "2026-11-20 10:00:00", 0.4)]

@@ -21,6 +21,7 @@ _SOURCES = {
     "password": ("Password", "blue"),
     "oauth:github": ("GitHub", "green"),
     "oauth:google": ("Google", "green"),
+    "guest": ("Guest", "yellow"),
 }
 
 

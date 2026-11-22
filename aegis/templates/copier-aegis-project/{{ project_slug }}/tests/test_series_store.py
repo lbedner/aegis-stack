@@ -7,7 +7,7 @@ from collections.abc import Callable
 import pytest
 
 from app.core.series_store import SeriesStore
-from tests._fake_redis import FakeRedis
+from tests._fake_redis import on_fake_redis
 
 
 def _memory() -> SeriesStore:
@@ -15,9 +15,7 @@ def _memory() -> SeriesStore:
 
 
 def _redis() -> SeriesStore:
-    store = SeriesStore()
-    store._redis, store._store = FakeRedis(), None  # type: ignore[assignment]
-    return store
+    return on_fake_redis(SeriesStore())
 
 
 BACKENDS = pytest.mark.parametrize("make", [_memory, _redis], ids=["memory", "redis"])

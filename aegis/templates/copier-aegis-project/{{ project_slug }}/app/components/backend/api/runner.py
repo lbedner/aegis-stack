@@ -22,9 +22,11 @@ from app.components.runner.models import RunnerToken
 from app.components.runner.protocol import (
     CLAIM,
     FINISH,
+    LINES,
     Answer,
     ClaimedRun,
     ClaimRequest,
+    Lines,
 )
 from app.core.db import get_async_db
 from app.services.shared.deps import get_owner_user_id, get_token_holder
@@ -102,6 +104,7 @@ async def claim(
         timeout=body.timeout,
         worktrees=body.worktrees,
         agent=body.agent,
+        token_id=token.id,
     )
     if run is None:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -128,10 +131,25 @@ async def finish(
             runner=token.name,
             cost=body.cost,
             worktree=body.worktree,
+            unpushed=body.unpushed,
+            unanswered=body.unanswered,
         )
     except runs.RunNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     return RunStanding.model_validate(run)
+
+
+@runs_router.post(LINES, status_code=status.HTTP_204_NO_CONTENT)
+async def lines(
+    run_id: int,
+    body: Lines,
+    token: RunnerToken = Depends(get_runner_token),
+    db: AsyncSession = Depends(get_async_db),
+) -> Response:
+    """What a runner heard of its agent's session, kept on the run it
+    holds; nothing, on one it no longer holds."""
+    await runs.hear(db, run_id, token.owner_user_id, token.name, body.lines)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @runs_router.post(hooks.PATH, status_code=status.HTTP_204_NO_CONTENT)

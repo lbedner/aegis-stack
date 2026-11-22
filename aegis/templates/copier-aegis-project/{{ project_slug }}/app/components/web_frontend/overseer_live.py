@@ -57,11 +57,14 @@ async def fragments_events(
     render: Callable[[], Awaitable[dict[str, str]]],
     interval: float,
     max_frames: int | None = None,
+    *,
+    done: str | None = None,
 ) -> AsyncIterator[str]:
     """Several fragments on one stream (a table and its charts, say):
     ``render()`` gives html by event name, and each event goes out when
     its html differs from the last one sent. A ``render()`` that fails
-    sends nothing that round: the page keeps what it shows."""
+    sends nothing that round: the page keeps what it shows. A round that
+    sends ``done`` is the last (``until_done``)."""
     last: dict[str, str] = {}
     deadline = time.monotonic() + MAX_STREAM_SECONDS
     frames = 0
@@ -74,9 +77,29 @@ async def fragments_events(
             sent = []
         for frame in sent:
             yield frame
+        if done in last:
+            return
         if not sent:
             yield ": unchanged\n\n"
         await asyncio.sleep(interval)
+
+
+def until_done(
+    render: Callable[[], Awaitable[tuple[dict[str, str], bool]]],
+    done: str,
+    interval: float,
+    max_frames: int | None = None,
+) -> AsyncIterator[str]:
+    """Fragments of something that goes (an agent's run), each sent when it
+    changes: ``render()`` gives html by event name and whether it still
+    goes. Once it does not, that last time and ``done``, which the page
+    closes its stream on (``sse-close``), and nothing more is read."""
+
+    async def one() -> dict[str, str]:
+        sent, going = await render()
+        return sent if going else sent | {done: "done"}
+
+    return fragments_events(one, interval, max_frames, done=done)
 
 
 def changed_frames(last: dict[str, str], payloads: dict[str, str]) -> list[str]:

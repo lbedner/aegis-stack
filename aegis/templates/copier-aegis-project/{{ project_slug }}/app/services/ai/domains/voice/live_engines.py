@@ -12,6 +12,7 @@ the app's, and an edit is never overwritten.
 from __future__ import annotations
 
 import hashlib
+import statistics
 from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -134,14 +135,15 @@ def split_model(model: str) -> tuple[str, str]:
     return (provider, bare) if colon else ("", model)
 
 
-def reachable(vendor: str, mode: str, model_id: str) -> bool:
+def reachable(vendor: str, mode: str, model_id: str, tools: bool | None = None) -> bool:
     """Whether a call can run on this catalog model: a realtime model of a
     vendor the call path serves, by the vendor's own id (the catalog's
-    routed copies, "gemini/...", are not reachable), or a local chat model,
-    which a call runs as a cascade (``cascade``)."""
+    routed copies, "gemini/...", are not reachable), or a local chat model
+    that can call the agent's tools (unknown let through: an engine that
+    does not say), which a call runs as a cascade (``cascade``)."""
     if mode == "realtime":
         return vendor in CALL_VENDORS and "/" not in model_id
-    return mode == "chat" and vendor in LOCAL_PROVIDERS
+    return mode == "chat" and vendor in LOCAL_PROVIDERS and tools is not False
 
 
 def is_gpt_live(model: str) -> bool:
@@ -183,11 +185,14 @@ async def choose(session: AsyncSession, model_id: str) -> LiveEngine | None:
     engine = await queries.engine_for_model(session, model_id)
     if engine is None:
         found = await queries.model_vendor(session, model_id)
-        if found is None or not reachable(found[1], found[2], model_id):
+        if found is None:
+            return None
+        llm_id, vendor, mode, tools = found
+        if not reachable(vendor, mode, model_id, tools):
             return None
         engine = LiveEngine(
             key=model_id,
-            llm_id=found[0],
+            llm_id=llm_id,
             instructions=LIVE_CALL_INSTRUCTIONS,
             max_output_tokens=None if is_gpt_live(model_id) else REPLY_CAP,
             sort_order=len(ENGINE_SEEDS),
@@ -244,3 +249,14 @@ async def refresh_defaults(session: AsyncSession) -> int:
     if stale:
         await session.commit()
     return len(stale)
+
+
+# How many recent turns a model's wait is the median of.
+WAITS = 20
+
+
+async def first_word_ms(session: AsyncSession, model_id: str) -> int | None:
+    """The median wait for the first word back on a call on ``model_id``,
+    over its last timed turns (``WAITS``); None before any."""
+    waits = await queries.first_word_waits(session, model_id, WAITS)
+    return round(statistics.median(waits)) if waits else None

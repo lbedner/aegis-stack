@@ -13,7 +13,12 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.config import settings
 from app.core.security import get_password_hash, verify_password
 from app.core.time import utcnow
+{%- if include_auth_rbac %}
+from app.core.visitor import GUEST_EMAIL
+from app.services.auth.domains.users.queries import member_count
+{%- endif %}
 from app.services.auth.domains.users.base import (
+    FixedRoleError as FixedRoleError,
     RegistrationClosedError as RegistrationClosedError,
     RestoreConflictError as RestoreConflictError,
     UserServiceBase,
@@ -65,9 +70,11 @@ class UserService(
         hashed_password = get_password_hash(user_data.password)
 
 {%- if include_auth_rbac %}
-        # First user becomes admin
-        count_result = await self.db.exec(select(func.count()).select_from(User))
-        is_first_user = count_result.one() == 0
+        # First user becomes admin; the guest account is never it, nor
+        # counted, so an early visitor never takes the operator's seat.
+        is_first_user = (
+            user_data.email != GUEST_EMAIL and await member_count(self.db) == 0
+        )
 
 {%- endif %}
         # Create user object.
@@ -147,6 +154,11 @@ class UserService(
         user = await self.get_user_by_id(user_id)
         if not user:
             return None
+{%- if include_auth_rbac %}
+        if "role" in updates and user.email == GUEST_EMAIL:
+            # Every visitor holds it: a role here is a role for anyone.
+            raise FixedRoleError("The guest account's role is fixed.")
+{%- endif %}
 
         for field, value in updates.items():
             if hasattr(user, field):

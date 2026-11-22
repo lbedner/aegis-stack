@@ -16,30 +16,25 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from pydantic_ai.messages import (
-    FunctionToolCallEvent,
-    FunctionToolResultEvent,
-    PartEndEvent,
-    RealtimeTurnCompleteEvent,
-    SpeechPart,
-)
 from pydantic_ai.toolsets import FunctionToolset
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.log import logger
-from app.services.ai.domains.chat.cards import attach_cards, card_stage
+from app.services.ai.domains.chat.cards import card_stage
 from app.services.ai.domains.chat.readings import reading_stage
 from app.services.ai.domains.chat.user_memory import memory_user
 from app.services.ai.domains.spend import calls
 from app.services.ai.domains.voice import live_engines
-from app.services.ai.domains.voice.call_turns import save_turn
+from app.services.ai.domains.voice.call_turns import (
+    END_CALL as END_CALL,  # what the call path reads it as
+)
+from app.services.ai.domains.voice.call_turns import TurnLog, end_call, save_turn
 from app.services.ai.domains.voice.cascade import connection as cascade
 from app.services.ai.domains.voice.catalog import GEMINI_PREBUILT, get_voice
 from app.services.ai.domains.voice.live_engines import is_gpt_live
 from app.services.ai.domains.voice.models import TTSProvider
 from app.services.ai.domains.voice.spoken import pronunciation_instructions
 from app.services.ai.models import AIProvider, MessageRole
-from app.services.ai.service.trace import record_tool_call, record_tool_result
 
 # What OpenAI transcribes the caller's side with: a saved turn needs both
 # sides, and only OpenAI's realtime models need asking.
@@ -63,68 +58,10 @@ def _elapsed(started: datetime) -> float:
     return (datetime.now(UTC) - started).total_seconds()
 
 
-def end_call() -> str:
-    """End the call. Use it once they have said they are done - a goodbye,
-    "that's all", thanks with nothing more to ask - right after your short
-    goodbye, and say nothing after it. Never on a turn with no words of
-    theirs in it (a noise, a breath, your own voice heard back): that is
-    not a goodbye, so carry on or ask what they meant."""
-    return "The call ends when your goodbye has played. Say nothing more."
-
-
-# A call ends on the agent's tool, not on a phrase the page listens for: a
-# model can drop a phrase. The page hangs up when it sees the call.
-END_CALL = end_call.__name__
+# A call ends on the agent's tool (``call_turns.end_call``), not on a
+# phrase the page listens for: a model can drop a phrase. The page hangs up
+# when it sees the call.
 CALL_TOOLS = FunctionToolset([end_call])
-
-
-class TurnLog:
-    """One turn, gathered from the session's events: what was heard, what
-    was said, and the steps, recorded as a streamed turn records them."""
-
-    def __init__(self) -> None:
-        self._reset()
-        # The cards the call's steps draw (its card stage), moved onto the
-        # step that drew them; the call's, not a turn's.
-        self.drawn: list[dict[str, Any]] = []
-        # The cards the last event's step drew, for the page at once.
-        self.shown: list[str] = []
-
-    def _reset(self) -> None:
-        self.heard: list[str] = []
-        self.said: list[str] = []
-        self.trace: list[dict[str, Any]] = []
-
-    def observe(self, event: Any) -> bool:
-        """Take in one event; True when it finished a turn. Ending the call
-        is how it ends, not one of the steps."""
-        self.shown = []
-        if (
-            isinstance(event, FunctionToolCallEvent | FunctionToolResultEvent)
-            and event.part.tool_name == END_CALL
-        ):
-            return False
-        if isinstance(event, PartEndEvent) and isinstance(event.part, SpeechPart):
-            text = (event.part.transcript or "").strip()
-            side = self.heard if event.part.speaker == "user" else self.said
-            # The same part reported finished twice is not more speech.
-            if text and (not side or side[-1] != text):
-                side.append(text)
-        elif isinstance(event, FunctionToolCallEvent):
-            record_tool_call(self.trace, event)
-        elif isinstance(event, FunctionToolResultEvent):
-            finished = record_tool_result(self.trace, event)
-            self.shown = [marker["id"] for marker in self.drawn]
-            attach_cards(finished, self.drawn)
-        return isinstance(event, RealtimeTurnCompleteEvent)
-
-    def take(self) -> tuple[str, str, list[dict[str, Any]]] | None:
-        """The finished turn, once; None when nothing was said."""
-        heard, said, trace = " ".join(self.heard), " ".join(self.said), self.trace
-        self._reset()
-        if not heard and not said:
-            return None
-        return heard, said, trace
 
 
 def call_voice(model: str, voice: str | None) -> str | None:
@@ -391,13 +328,17 @@ async def drive(
                 rates=rates,
             ),
         }
+        shares: dict[str, Any] = {k: now[k] - so_far[k] for k in now}
+        if log.first_word_ms is not None:
+            shares["first_word_ms"] = log.first_word_ms
+            log.first_word_ms = None
         await save_turn(
             ai,
             conversation_id,
             *turn,
             model=bare,
             provider=provider or "openai",
-            usage={k: now[k] - so_far[k] for k in now},
+            usage=shares,
             interrupted=interrupted,
         )
         so_far = now

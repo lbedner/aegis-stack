@@ -705,6 +705,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/components/secrets",
                 "app/components/backend/api/secrets",
                 "tests/components/test_secrets_store.py",
+                "tests/components/test_secret_reads_never_wait.py",
                 "tests/api/test_secrets_endpoints.py",
                 "app/components/frontend/dashboard/cards/secrets_card.py",
                 "app/components/frontend/dashboard/modals/secrets_modal.py",

@@ -103,6 +103,7 @@ class ModelResponse(BaseModel):
     released_on: str | None
     # What kind of model: "chat", or a voice kind ("realtime", ...).
     mode: str = "chat"
+    supports_tools: bool | None = None
 
 
 class CurrentConfigResponse(BaseModel):
@@ -301,6 +302,7 @@ async def get_models(
                 output_price=m.output_price,
                 released_on=m.released_on,
                 mode=m.mode,
+                supports_tools=m.supports_tools,
             )
             for m in results
         ]

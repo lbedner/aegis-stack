@@ -103,7 +103,10 @@ not already in `.queryspy-baseline.json` (CI's test job runs the same
 flags); the baseline is the known debt, shrink it, never add to it. A
 statement is known by its shape (its SQL with the selected columns collapsed,
 `tests/_queryspy_shape.py`), so adding a column changes no entry.
-`make check-queries-baseline` rewrites it after a fix. See the `add-model-and-migration` skill.
+`make check-queries-baseline` rewrites it after a fix. A test that repeats a
+statement by design, not in a loop (two requests in turn), is marked
+`@pytest.mark.queryspy(allow_n_plus_one=True)  # why`, never split to dodge
+the gate. See the `add-model-and-migration` skill.
 
 {% endif %}{% if include_worker %}## Worker
 

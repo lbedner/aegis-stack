@@ -17,6 +17,7 @@ from app.core.settings_base import SettingsBase
 {% if include_browser %}from app.components.browser.settings import BrowserSettings{% endif %}
 {% if include_meetings %}from app.services.meetings.settings import MeetingsSettings{% endif %}
 {% if include_documents %}from app.services.mail.settings import MailSettings{% endif %}
+{% if include_auth_guest %}from app.services.auth.settings import GuestSettings{% endif %}
 {% if include_worker %}from app.core.queue_workers import DEFAULT_QUEUES, QueueWorker{% endif %}
 {%- for p in _plugins | default([]) %}
 {%- for s in p.wiring.settings_mixins %}
@@ -44,7 +45,8 @@ class Settings(
 {%- endif %}{%- if include_browser %}
     BrowserSettings,{%- endif %}{%- if include_meetings %}
     MeetingsSettings,{%- endif %}{%- if include_documents %}
-    MailSettings,{%- endif %}
+    MailSettings,{%- endif %}{%- if include_auth_guest %}
+    GuestSettings,{%- endif %}
     SettingsBase,
 ):
     """The application's settings, loaded from ``.env`` (``model_config``)."""
@@ -244,7 +246,6 @@ class Settings(
     PASSWORD_RESET_EXPIRE_MINUTES: int = 60
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
 
-    # Rate limiting settings
     RATE_LIMIT_LOGIN_MAX: Annotated[int, Configurable("service_auth", "Sign-in attempts one address may make per window")] = 5
     RATE_LIMIT_LOGIN_WINDOW: Annotated[int, Configurable("service_auth", "Seconds the sign-in limit counts over")] = 60
     RATE_LIMIT_REGISTER_MAX: Annotated[int, Configurable("service_auth", "Sign-ups or password resets one address may ask for per window")] = 3
@@ -255,7 +256,6 @@ class Settings(
     RATE_LIMIT_RESEND_VERIFICATION_MAX: Annotated[int, Configurable("service_auth", "Verification emails one address may ask for per window")] = 3
     RATE_LIMIT_RESEND_VERIFICATION_WINDOW: Annotated[int, Configurable("service_auth", "Seconds the verification-email limit counts over")] = 300
 
-    # Account lockout settings
     ACCOUNT_LOCKOUT_ATTEMPTS: Annotated[int, Configurable("service_auth", "Failed sign-ins before an account is locked")] = 5
     ACCOUNT_LOCKOUT_MINUTES: Annotated[int, Configurable("service_auth", "Minutes a locked account stays locked")] = 15
 

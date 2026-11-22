@@ -15,8 +15,8 @@ traceback, a failing assert): a field named like one, and a URL's password.
 ``tests/test_secrets.py`` holds every declared credential to the names.
 """
 
-import re
 from collections.abc import Iterable
+import re
 from typing import Annotated, Any
 
 HIDDEN_SUFFIXES = ("_KEY", "_SECRET", "_TOKEN", "_PASSWORD")

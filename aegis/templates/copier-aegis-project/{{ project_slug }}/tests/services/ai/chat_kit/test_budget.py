@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.domains.chat.chat_kit import BudgetGuard
@@ -109,3 +110,48 @@ async def test_fails_open_on_unreadable_ledger() -> None:
     status = await BudgetGuard("chat:", 0.25).check(_BrokenSession(), "u1")
     assert status.allowed is True  # never block a turn on a read error
     assert status.degraded is True
+
+
+class TestGuests:
+    """Guests share one account and are told apart by session
+    (``app.core.visitor``): each spends from its own ceiling, and all of
+    them together from one more."""
+
+    @staticmethod
+    def _guard() -> BudgetGuard:
+        return BudgetGuard(
+            "chat:", 5.0, guest_session_usd=0.25, all_guests_usd=1.0
+        )
+
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # two guests checked in turn
+    async def test_a_guest_over_its_ceiling_is_refused_and_another_is_not(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        await _add_usage(
+            async_db_session, user_id="guest:a", action="chat:x", cost=0.30
+        )
+        guard = self._guard()
+        refused = await guard.check(async_db_session, "guest:a")
+        assert refused.allowed is False
+        assert refused.budget_usd == 0.25
+        assert refused.shared is False
+        assert (await guard.check(async_db_session, "guest:b")).allowed is True
+
+    async def test_over_the_shared_ceiling_every_guest_is_refused(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        for who in ("guest:a", "guest:b", "guest:c", "guest:d", "guest:e"):
+            await _add_usage(async_db_session, user_id=who, action="chat:x", cost=0.20)
+        status = await self._guard().check(async_db_session, "guest:new")
+        assert status.allowed is False
+        assert status.shared is True
+
+    async def test_a_signed_in_user_keeps_their_own_budget(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        for who in ("guest:a", "guest:b", "guest:c", "guest:d", "guest:e"):
+            await _add_usage(async_db_session, user_id=who, action="chat:x", cost=0.20)
+        await _add_usage(async_db_session, user_id="u1", action="chat:x", cost=1.0)
+        status = await self._guard().check(async_db_session, "u1")
+        assert status.allowed is True
+        assert status.budget_usd == 5.0

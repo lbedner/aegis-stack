@@ -53,6 +53,7 @@ OWNERS = (
     "app.core.aggregates",
     "app.core.ontology.shared",
     "app.services.rag.embedding",
+    "app.core.limits",
     # Last: the shared cache claims whatever is left in its database.
     "app.services.system.ui_cache",
 )

@@ -2,8 +2,9 @@
 
 A voice chip sits in the composer beside the model chip, naming what a
 live call runs on where the mount takes calls (else the voice). It opens
-the one dialog, which picks what calls run on (the realtime models a call
-can reach: ``chat_models.call_rows``), lists the voice profiles (each with
+the one dialog, which picks what calls run on, as the parts a call is made
+of (``chat_calls``: one model, or hear, think, speak), lists the voice
+profiles (each with
 a preview), switches the active one, makes a new one from the active, and
 edits one; and keeps the one list of how terms are said (``spoken``), for
 every voice. The active profile is applied onto the running settings
@@ -21,6 +22,7 @@ from fastapi.responses import HTMLResponse, Response
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.backend.api.ai.service import ai_service
+from app.components.web_frontend import chat_calls
 from app.components.web_frontend import chat_models as models
 from app.components.web_frontend import chat_surface as chat
 from app.components.web_frontend.chat_surface import ChatSurface
@@ -58,9 +60,12 @@ def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
         new_name: str = "",
         rows: list[VoiceProfile] | None = None,
         on: Any | None = None,
+        mode: str | None = None,
+        slot: str | None = None,
     ) -> Response:
         """The dialog's list, ``on`` what calls run on where the caller
-        has read it already."""
+        has read it already; ``mode`` and ``slot`` what the call setup
+        shows (``chat_calls.view``)."""
         if rows is None:
             rows = await profiles.list_profiles(db)
         on = on or await calling(db)
@@ -74,7 +79,9 @@ def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
             path=voices_path,
             assistant=await chat.assistant_name(mount, db),
             active=active,
-            call_rows=await models.call_rows(getattr(on, "model_id", None), active)
+            setup=await chat_calls.view(
+                db, voices_path, voice=active, calling=on, mode=mode, slot=slot
+            )
             if calls
             else None,
             calling=on,
@@ -129,9 +136,12 @@ def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
 
     @router.get("/voices", response_class=HTMLResponse)
     async def voices(
-        request: Request, db: AsyncSession = Depends(get_async_db)
+        request: Request,
+        mode: str | None = None,
+        slot: str | None = None,
+        db: AsyncSession = Depends(get_async_db),
     ) -> Response:
-        return await listing_response(request, db)
+        return await listing_response(request, db, mode=mode, slot=slot)
 
     # Before the per-voice routes: "pronunciation" is no voice id.
     def said_response(
@@ -196,6 +206,35 @@ def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
         return with_toast(
             await listing_response(request, db, chip=True, on=chosen),
             f"Calls now run on {chosen.title if chosen else model_id}.",
+        )
+
+    @router.post("/voices/hears", response_class=HTMLResponse)
+    async def hear_with(
+        request: Request,
+        model_id: Annotated[str, Form()],
+        db: AsyncSession = Depends(get_async_db),
+    ) -> Response:
+        """What hears the caller on a chained call: the active voice's
+        hearing model, so its spoken replies hear with it too."""
+        if not calls:
+            raise HTTPException(status_code=404)
+        active = await profiles.active_profile(db)
+        if active is None or active.id is None:
+            return with_toast(
+                await listing_response(request, db), models.MAKE_A_VOICE, tone="error"
+            )
+        try:
+            active = await profiles.hear_with(db, active.id, model_id)
+        except profiles.VoiceProfileError as error:
+            return with_toast(
+                await listing_response(request, db), str(error), tone="error"
+            )
+        profiles.apply(active, settings, ai_service)
+        return with_toast(
+            await listing_response(
+                request, db, mode=chat_calls.CHAIN, slot=chat_calls.HEARS
+            ),
+            f"{active.name} now hears with {model_id}.",
         )
 
     @router.post("/voices/{profile_id}/active", response_class=HTMLResponse)

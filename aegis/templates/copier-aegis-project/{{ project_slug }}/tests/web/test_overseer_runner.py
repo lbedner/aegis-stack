@@ -14,7 +14,15 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.runner import runs
 from app.components.runner.health import RunnerFact
-from app.components.runner.models import CLAIMED, DONE, FAILED, RunnerRun
+from app.components.runner.models import (
+    CLAIMED,
+    DONE,
+    FAILED,
+    RunnerRun,
+    RunnerSpend,
+    RunnerStep,
+)
+from app.components.runner.protocol import CALLED, PUSH, RETURNED, SAID
 from app.components.web_frontend import overseer_runner
 from app.components.web_frontend.assets import STATIC_DIR
 from app.core.constants import ComponentName
@@ -24,6 +32,7 @@ from app.services.system import ui_runtime
 from app.services.system.models import ComponentStatus
 from tests._fake_runtime import FakeRuntime, use_runtime
 from tests._runner import WHERE, a_run, answered, asked, claimed, someone_else
+from tests._session import opens
 from tests.web.dom import (
     none,
     one,
@@ -34,7 +43,7 @@ from tests.web.dom import (
     text,
     unfolded,
 )
-from tests.web.overseer import page_html, sign_in, status_with
+from tests.web.overseer import frame_html, page_html, sent_events, sign_in, status_with
 
 PAGE = "/overseer/components/runner"
 RUNNER = ComponentStatus(
@@ -161,12 +170,14 @@ async def test_runs_are_newest_first_and_a_finished_one_says_what_it_took(
         ({"result": "Fixed.", "branch": "issue-12"}, "Done", "ok"),
         # Its command succeeded and said nothing.
         ({"result": ""}, "No answer", "warn"),
+        # Its agent said it has none, and why.
+        ({"result": "Nothing in the notes.", "unanswered": True}, "No answer", "warn"),
     ],
 )
 async def test_a_run_that_is_back_says_how_it_went(
     overseer: TestClient,
     async_db_session: AsyncSession,
-    back: dict[str, str],
+    back: dict[str, Any],
     result: str,
     tone: str,
 ) -> None:
@@ -222,7 +233,8 @@ async def test_the_figures_say_how_the_queue_stands_and_what_the_week_cost(
             a_run(status=CLAIMED),
             a_run(status=CLAIMED),
             a_run(status=FAILED, finished_at=now),
-            a_run(status=DONE, cost=0.25, finished_at=now),
+            a_run(status=DONE, finished_at=now),
+            RunnerSpend(action="agent", cost=0.25, at=now),
         ]
     )
     await async_db_session.flush()
@@ -462,6 +474,30 @@ async def test_the_drawer_names_the_agent_with_its_runner(
     assert stat(html, "Runner") == "laptop · claude"
 
 
+async def test_the_drawer_says_what_the_agent_did_under_what_came_back(
+    overseer: TestClient, async_db_session: AsyncSession
+) -> None:
+    """Each step its agent took, in order and when, so a reader can see
+    what an answer rests on."""
+    db = async_db_session
+    run_id = await _finished(db, "Yes.")
+    at = datetime(2026, 11, 18, 12, 0, 5)
+    db.add_all(
+        RunnerStep(run_id=run_id, at=at + timedelta(seconds=n), step=step)
+        for n, step in enumerate(("Read app/main.py", "Bash Run the tests"))
+    )
+    await db.commit()
+
+    html = page_html(overseer, overseer_runner.drawer_url(run_id))
+
+    sections = [section.get("id") for section in select(html, "section")]
+    assert sections[:2] == ["run-result", "run-steps"]
+    assert [text(li) for li in select(html, "#run-steps li")] == [
+        "12:00:05 Read app/main.py",
+        "12:00:06 Bash Run the tests",
+    ]
+
+
 async def test_two_owners_runs_in_a_place_of_one_name_stay_apart(
     overseer: TestClient, async_db_session: AsyncSession
 ) -> None:
@@ -594,3 +630,172 @@ def test_a_run_that_is_gone_is_not_found(overseer: TestClient) -> None:
 
     assert response.status_code == 404
     assert overseer_runner.NO_RUN in response.text
+
+
+async def _back_with(db: AsyncSession, unpushed: int) -> int:
+    """A run on a branch back with ``unpushed`` commits not on the remote."""
+    run = await asked(db, branch=BRANCH, prompt="Fix the export.")
+    await answered(db, run, "Fixed.", unpushed=unpushed, worktree=WHERE)
+    return run.id or 0
+
+
+@pytest.mark.parametrize(
+    ("unpushed", "said"), [(1, "1 commit not on GitHub"), (0, None)]
+)
+async def test_the_drawer_says_what_is_not_pushed_and_offers_to_push_it(
+    overseer: TestClient,
+    async_db_session: AsyncSession,
+    unpushed: int,
+    said: str | None,
+) -> None:
+    run_id = await _back_with(async_db_session, unpushed)
+
+    html = page_html(overseer, overseer_runner.drawer_url(run_id))
+
+    if said is None:
+        none(html, "[data-push]")
+        return
+    assert text(one(html, "[data-push] p")) == said
+    button = one(html, "[data-push] button")
+    assert button.get("hx-post") == overseer_runner.push_url(run_id)
+
+
+async def test_pressing_push_asks_it_and_the_drawer_says_it_is_pushing(
+    overseer: TestClient, async_db_session: AsyncSession
+) -> None:
+    run_id = await _back_with(async_db_session, 1)
+
+    pressed = overseer.post(
+        overseer_runner.push_url(run_id), headers={"HX-Request": "true"}
+    )
+
+    assert pressed.status_code == 200
+    assert "Pushing" in text(one(pressed.text, "[data-push]"))
+    none(pressed.text, "[data-push] button")
+    (push,) = [
+        r
+        for r in await runs.about(async_db_session, "issue", ["acme/app#12"])
+        if r.action == PUSH
+    ]
+    assert push.branch == BRANCH
+
+
+@pytest.mark.parametrize(
+    ("status", "result", "button"),
+    [
+        (DONE, "https://github.com/acme/app/pull/5", False),
+        (FAILED, "No RUNNER_GITHUB_TOKEN where this runner runs", True),
+    ],
+)
+async def test_a_push_back_shows_its_pull_request_or_why_not(
+    overseer: TestClient,
+    async_db_session: AsyncSession,
+    status: str,
+    result: str,
+    button: bool,
+) -> None:
+    """Its link once done; why it did not push, with the button again."""
+    db = async_db_session
+    run_id = await _back_with(db, 1)
+    db.add(a_run(action=PUSH, branch=BRANCH, status=status, result=result))
+    await db.commit()
+
+    html = page_html(overseer, overseer_runner.drawer_url(run_id))
+
+    assert result in text(one(html, "[data-push]"))
+    assert bool(select(html, "[data-push] button")) is button
+
+
+@pytest.mark.parametrize("going", [True, False])
+async def test_a_going_runs_drawer_follows_it_and_one_back_does_not(
+    overseer: TestClient, async_db_session: AsyncSession, going: bool
+) -> None:
+    db = async_db_session
+    run = await claimed(db, await asked(db))
+    if not going:
+        run.status, run.result = DONE, "Yes."
+        await db.commit()
+
+    html = page_html(overseer, overseer_runner.drawer_url(run.id or 0))
+
+    if not going:
+        none(html, "[sse-connect]")
+        return
+    live = one(html, "[sse-connect]")
+    assert live.get("sse-connect") == overseer_runner.events_url(run.id or 0)
+    assert live.get("sse-close") == overseer_runner.RUN_DONE
+    assert one(live, "[sse-swap]").get("hx-swap") == "innerHTML"
+
+
+async def test_a_going_runs_drawer_is_sent_as_it_goes(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = async_db_session
+    monkeypatch.setattr(overseer_runner, "get_async_session", opens(db))
+    run = await claimed(db, await asked(db))
+
+    (going,) = await sent_events(
+        overseer_runner.drawer_events(run.id or 0, max_frames=1)
+    )
+
+    assert going.startswith(f"event: {overseer_runner.RUN_EVENT}\n")
+    assert "Running" in frame_html(going)
+
+
+async def test_a_runs_stream_closes_once_it_is_back(
+    overseer: TestClient,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Its last frame is what it came back with, then the event the page
+    closes the stream on."""
+    monkeypatch.setattr(overseer_runner, "get_async_session", opens(async_db_session))
+    run = await answered(async_db_session, await asked(async_db_session), "Yes.")
+
+    streamed = overseer.get(overseer_runner.events_url(run.id or 0))
+
+    frames = [f for f in streamed.text.split("\n\n") if f.startswith("event:")]
+    assert [f.split("\n")[0] for f in frames] == [
+        f"event: {overseer_runner.RUN_EVENT}",
+        f"event: {overseer_runner.RUN_DONE}",
+    ]
+    assert "Yes." in frame_html(frames[0])
+
+
+@pytest.mark.parametrize("heard", [True, False])
+async def test_the_drawer_shows_the_agents_session_like_a_terminal(
+    overseer: TestClient, async_db_session: AsyncSession, heard: bool
+) -> None:
+    """Its lines in order, each marked by what it is; a runner that sent
+    none leaves the steps its hooks posted."""
+    db = async_db_session
+    run = await claimed(db, await asked(db))
+    db.add(RunnerStep(run_id=run.id or 0, step="Bash ls"))
+    if heard:
+        db.add_all(
+            [
+                RunnerStep(
+                    run_id=run.id or 0, kind=CALLED, step='Bash {"command": "ls"}'
+                ),
+                RunnerStep(run_id=run.id or 0, kind=RETURNED, step="README.md"),
+                RunnerStep(run_id=run.id or 0, kind=SAID, step="One file."),
+            ]
+        )
+    await db.commit()
+
+    html = page_html(overseer, overseer_runner.drawer_url(run.id or 0))
+
+    if not heard:
+        none(html, "[data-session]")
+        assert text(one(html, "#run-steps")).endswith("Bash ls")
+        return
+    session = one(html, "[data-session]")
+    assert session.get("data-follow") is not None
+    assert [
+        (line.get("data-kind"), text(line)) for line in select(session, "[data-kind]")
+    ] == [
+        (CALLED, 'Bash {"command": "ls"}'),
+        (RETURNED, "README.md"),
+        (SAID, "One file."),
+    ]
+    none(html, "#run-steps")

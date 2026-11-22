@@ -10,6 +10,9 @@ from urllib.parse import quote
 
 from app.components.backend.api.auth.router import login as api_login
 from app.components.backend.api.auth.router import register as api_register
+{%- if include_auth_guest %}
+from app.components.web_frontend.routes import guest as guest_routes
+{%- endif %}
 from app.components.backend.api.deps import login_rate_limit, register_rate_limit
 from app.components.backend.security import honeypot
 from app.components.web_frontend.routes.partials import overseer_auth as overseer_auth_partials
@@ -34,7 +37,7 @@ from app.components.web_frontend.overseer_access import overseer_gate
 from app.components.web_frontend.rendering import is_htmx, templates
 {%- if include_auth %}
 from app.components.web_frontend.overseer_access import LOGIN
-from app.components.web_frontend.rendering import with_query
+from app.components.web_frontend.rendering import refused_sign_in
 {%- endif %}
 from app.components.web_frontend.routes import overseer as overseer_routes
 from app.components.web_frontend.routes.partials import overseer_code as overseer_code_partials
@@ -232,6 +235,9 @@ router.include_router(overseer_deployments_partials.router)
 router.include_router(overseer_errors_partials.router)
 router.include_router(overseer_code_partials.router)
 include_partials(router)
+{%- if include_auth_guest %}
+router.include_router(guest_routes.router)
+{%- endif %}
 router.include_router(overseer_routes.router)
 {%- if include_auth %}
 
@@ -278,14 +284,7 @@ async def login_submit(
         # message. Its 403 comes only after a correct password, for a
         # disabled account, so saying so reveals nothing new.
         reason = "disabled" if exc.status_code == 403 else "invalid"
-        return RedirectResponse(
-            url=with_query(
-                LOGIN if overseer else "/login",
-                error=reason,
-                next=site_path(next, "") or None,
-            ),
-            status_code=303,
-        )
+        return refused_sign_in(LOGIN if overseer else "/login", reason, next)
     return redirect
 
 

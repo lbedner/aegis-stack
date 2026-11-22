@@ -183,7 +183,7 @@ class TestPluginsInfo:
         assert "community" in result.stdout
 
     def test_info_lists_options_when_present(self, runner: CliRunner) -> None:
-        """auth has 3 options (level / engine / oauth); info should surface them."""
+        """auth has 4 options (level / engine / oauth / guest); info should surface them."""
         result = runner.invoke(plugins_app, ["info", "auth"])
         assert result.exit_code == 0
         assert "Options" in result.stdout

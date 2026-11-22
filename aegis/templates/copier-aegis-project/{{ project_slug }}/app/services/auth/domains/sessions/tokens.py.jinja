@@ -56,6 +56,9 @@ from app.core.time import utcnow
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.services.auth.domains.sessions.devices import DevicesMixin
+{%- if include_auth_guest %}
+from app.core.visitor import GUEST
+{%- endif %}
 
 
 # Shared with ``cleanup_jobs.cleanup_expired_refresh_tokens_job``. Rows
@@ -100,6 +103,16 @@ class Issued(NamedTuple):
 
 def _new_family_id() -> str:
     return str(uuid.uuid4())
+
+
+def _lifetime(source: object) -> timedelta:
+    """How long a refresh token of a session signed in by ``source`` lives{% if include_auth_guest %}:
+    a guest's is short, since anyone may start one{% endif %}."""
+{%- if include_auth_guest %}
+    if source == GUEST:
+        return timedelta(hours=settings.GUEST_SESSION_HOURS)
+{%- endif %}
+    return timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
 
 def access_token(user: User, session_id: str) -> str:
@@ -164,8 +177,7 @@ class RefreshService(DevicesMixin):
                 token=token_digest(token),
                 user_id=user_id,
                 family_id=family_id,
-                expires_at=utcnow()
-                + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+                expires_at=utcnow() + _lifetime(metadata.get("source")),
                 **metadata,
             )
         )

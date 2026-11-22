@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.models.conversation import ConversationMessage
 from app.services.ai.models.llm import LargeLanguageModel, LLMOrg
 from app.services.ai.models.voice import (
     LiveEngine,
@@ -99,17 +100,22 @@ async def engine_for_model(session: AsyncSession, model_id: str) -> LiveEngine |
 
 async def model_vendor(
     session: AsyncSession, model_id: str
-) -> tuple[int, str, str] | None:
-    """A catalog model's id, the slug of the org that serves it, and its
-    mode ("realtime", "chat", ...)."""
+) -> tuple[int, str, str, bool | None] | None:
+    """A catalog model's id, the slug of the org that serves it, its mode
+    ("realtime", "chat", ...) and whether it can call tools."""
     row = (
         await session.exec(
-            select(LargeLanguageModel.id, LLMOrg.slug, LargeLanguageModel.mode)
+            select(
+                LargeLanguageModel.id,
+                LLMOrg.slug,
+                LargeLanguageModel.mode,
+                LargeLanguageModel.supports_tools,
+            )
             .join(LLMOrg, col(LargeLanguageModel.served_by_org_id) == LLMOrg.id)
             .where(LargeLanguageModel.model_id == model_id)
         )
     ).first()
-    return (row[0], row[1], row[2]) if row and row[0] is not None else None
+    return (row[0], row[1], row[2], row[3]) if row and row[0] is not None else None
 
 
 async def catalog_ids(session: AsyncSession, model_ids: list[str]) -> dict[str, int]:
@@ -120,3 +126,22 @@ async def catalog_ids(session: AsyncSession, model_ids: list[str]) -> dict[str, 
         )
     )
     return {model_id: llm_id for model_id, llm_id in rows.all() if llm_id is not None}
+
+
+async def first_word_waits(
+    session: AsyncSession, model_id: str, limit: int
+) -> list[int]:
+    """How long callers waited for the first word back (ms), on the last
+    ``limit`` timed call turns on ``model_id``, newest first."""
+    meta = ConversationMessage.meta_data
+    waited = meta["first_word_ms"].as_integer()  # type: ignore[index]
+    rows = await session.exec(
+        select(waited)
+        .where(
+            meta["model"].as_string() == model_id,  # type: ignore[index]
+            waited.is_not(None),
+        )
+        .order_by(col(ConversationMessage.timestamp).desc())
+        .limit(limit)
+    )
+    return [int(ms) for ms in rows.all()]

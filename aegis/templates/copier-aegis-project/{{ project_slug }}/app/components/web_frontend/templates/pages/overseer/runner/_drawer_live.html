@@ -1,0 +1,32 @@
+{# What of a run in the drawer changes while it goes (_drawer.html): how it
+   stands, what came back, what its agent did, its branch on GitHub and
+   the facts of it. Sent again over SSE as it changes
+   (overseer_runner.drawer_events). #}
+{% from "components/macros/layout.html" import badge, card, facts as fact_list, timeline %}
+{% from "components/macros/form.html" import action %}
+{% from "pages/overseer/runner/_macros.html" import result as run_result %}
+<div>{{ badge(status.label, status.tone) }}</div>
+{% if result %}
+{% call card("Came back", id="run-result") %}{{ run_result(result, status.tone) }}{% endcall %}
+{% endif %}
+{% if session %}
+{% call card("Session", session|length|counted("line"), id="run-session") %}
+<div data-session data-follow="session" class="code-block max-h-96 overflow-auto space-y-1 text-xs">
+  {% for line in session %}<div data-kind="{{ line.kind }}" class="whitespace-pre-wrap {{ {"said": "text-aegis-text", "called": "text-aegis-accent", "returned": "text-aegis-muted"}[line.kind] }}">{{ line.text }}</div>{% endfor %}
+</div>
+{% endcall %}
+{% elif steps %}
+{% call card("What it did", steps|length|counted("step"), id="run-steps") %}{{ timeline(steps) }}{% endcall %}
+{% endif %}
+{% if push %}
+{% call card("GitHub", id="run-push") %}
+<div data-push class="space-y-2 text-sm text-aegis-text">
+  {% if push.status == "done" %}<a href="{{ push.result }}" target="_blank" rel="noopener" class="link">{{ push.result }}</a>
+  {% else %}<p>{{ push.unpushed|counted("commit") }} not on GitHub</p>{% endif %}
+  {% if push.status == "going" %}<p class="text-aegis-muted">Pushing</p>
+  {% elif push.status == "failed" %}{{ run_result(push.result, "error") }}{% endif %}
+  {% if push.post %}{{ action("Push and open PR", push.post ~ " data-write", "primary") }}{% endif %}
+</div>
+{% endcall %}
+{% endif %}
+{% call card("Details", id="run-facts") %}{{ fact_list(facts) }}{% endcall %}

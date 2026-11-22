@@ -176,6 +176,30 @@ async def test_a_transaction_opened_while_this_task_holds_one_waits_on_itself(
     assert "waits_on_itself" in waits[0]["caller"]
 
 
+async def test_a_read_only_transaction_takes_no_lock_so_waits_on_nothing(
+    path: Path,
+) -> None:
+    """A read (``get_async_session(read_only=True)``) begins plain, which
+    under WAL takes no lock: opened inside a held write it waits on
+    nothing, and held itself it blocks no later write."""
+    pytest.importorskip("aiosqlite")
+    watched = create_async_engine(f"sqlite+aiosqlite:///{path}")
+    db_activity.watch(watched.sync_engine)
+    reads = {db_activity.READ_ONLY: True}
+    try:
+        async with watched.begin() as first:
+            await first.execute(text("SELECT 1"))
+            async with watched.connect() as read:
+                await (await read.execution_options(**reads)).execute(text("SELECT 1"))
+        async with watched.connect() as read:
+            await (await read.execution_options(**reads)).execute(text("SELECT 1"))
+            async with watched.begin() as write:
+                await write.execute(text("SELECT 1"))
+    finally:
+        await watched.dispose()
+    assert not [e for e in await _recorded() if e["kind"] == "self_wait"]
+
+
 def test_the_activity_view_says_it_plainly() -> None:
     from app.services.system import ui_database
 

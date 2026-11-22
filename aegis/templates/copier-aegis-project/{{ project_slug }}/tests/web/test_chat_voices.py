@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.components.web_frontend import chat_calls
 from app.components.web_frontend.overseer_ai_chat import OVERSEER
 from app.components.web_frontend.routes.partials import chat_voices
 from app.core.config import settings
@@ -64,7 +65,11 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     from app.components.web_frontend import chat_models as models
 
     picked: list[str] = []
-    titles = {LIVE: "Gemini Live", "gpt-realtime-2.1": "GPT Realtime 2.1"}
+    titles = {
+        LIVE: "Gemini Live",
+        "gpt-realtime-2.1": "GPT Realtime 2.1",
+        LOCAL: "Qwen 3.8 27B",
+    }
 
     async def catalog(mode: str | None = "chat") -> list[dict[str, Any]]:
         realtime = [
@@ -76,7 +81,18 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
             },
         ]
         chat = [
-            {"model_id": LOCAL, "title": "Qwen 3.8 27B", "vendor": "llamacpp"},
+            {
+                "model_id": LOCAL,
+                "title": "Qwen 3.8 27B",
+                "vendor": "llamacpp",
+                "supports_tools": True,
+            },
+            {
+                "model_id": "tiny:1b",
+                "title": "Tiny",
+                "vendor": "llamacpp",
+                "supports_tools": False,
+            },
             {"model_id": "gpt-5.5", "title": "GPT-5.5", "vendor": "openai"},
         ]
         every = [{**m, "mode": "realtime"} for m in realtime] + [
@@ -165,41 +181,112 @@ class TestTheChip:
 
 
 class TestCalls:
-    """What a live call runs on is picked here, with the voice it speaks in:
-    the realtime models a call can reach, the one in use checked."""
+    """What a live call runs on, picked with the voice it speaks in, laid
+    out as the parts a call is made of: one model that hears and speaks,
+    or hear, think and speak (``chat_calls``)."""
 
-    def test_it_lists_what_a_call_can_run_on(
+    def test_one_model_lists_the_realtime_models_the_one_in_use_first(
         self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
     ) -> None:
         calls.append("gpt-realtime-2.1")
         html = hx.get(VOICES).text
+
+        assert one(html, "[data-calls]").get("data-call-mode") == chat_calls.ONE
         rows = select(html, "[data-call-model]")
-        # The one in use leads: the list is long, and it is what you check.
-        assert [r.get("data-call-model") for r in rows] == [
-            "gpt-realtime-2.1",
-            LIVE,
-            LOCAL,
-        ]
+        assert [r.get("data-call-model") for r in rows] == ["gpt-realtime-2.1", LIVE]
         current = one(html, "[data-call-model][aria-current=true]")
         assert current.get("data-call-model") == "gpt-realtime-2.1"
+        (part,) = select(html, "[data-call-part]")
+        assert text(one(part, "[data-name]")) == "GPT Realtime 2.1"
+        # Marin is an OpenAI voice: the call speaks in it.
+        assert "speaks as marin" in text(part)
+        assert one(html, "[data-call-summary]") is not None
+        # The voices stay in view: the replies said in chat use one.
+        assert select(html, "[data-voice-profile]")
 
-    def test_a_local_chat_model_is_a_call_in_the_voices_own_ears_and_voice(
+    def test_a_chain_shows_what_hears_thinks_and_speaks(
         self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
     ) -> None:
-        """No realtime API: the call hears with the active voice's STT,
-        answers with the model and speaks with its TTS (a cascade), and its
-        row names that voice where a realtime model's says it needs none.
-        A cloud chat model is not offered: its vendor has realtime models
-        of its own."""
-        page = hx.get(VOICES).text
-        local = text(one(page, f'[data-call-model="{LOCAL}"]'))
-        live = text(one(page, f'[data-call-model="{LIVE}"]'))
-        assert "Hears and speaks through Marin" in local
-        assert "gpt-transcribe hears, gpt-4o-mini-tts-2025-03-20 speaks" in local
-        assert "Hears and speaks itself" in live
-        assert not select(page, '[data-call-model="gpt-5.5"]')
-        # Nor is a local model that is not a chat model.
-        assert not select(page, '[data-call-model="nomic"]')
+        """A local model runs between the active voice's STT and TTS: each
+        part named, the model's list below, the summary adding them up. A
+        cloud chat model, a model that cannot call tools and one that does
+        not chat are not offered."""
+        calls.append(LOCAL)
+        html = hx.get(VOICES).text
+
+        assert one(html, "[data-calls]").get("data-call-mode") == chat_calls.CHAIN
+        parts = {
+            p.get("data-call-part"): text(one(p, "[data-name]"))
+            for p in select(html, "[data-call-part]")
+        }
+        assert parts == {
+            chat_calls.HEARS: "gpt-transcribe",
+            chat_calls.THINKS: "Qwen 3.8 27B",
+            chat_calls.SPEAKS: "gpt-4o-mini-tts-2025-03-20 · Marin",
+        }
+        opened = one(html, "[data-call-part][aria-current=true]")
+        assert opened.get("data-call-part") == chat_calls.THINKS
+        rows = [r.get("data-call-model") for r in select(html, "[data-call-model]")]
+        assert rows == [LOCAL]
+        assert chat_calls.TOOLS["label"] in text(
+            one(html, f'[data-call-model="{LOCAL}"]')
+        )
+        assert "in the cloud" in text(one(html, "[data-call-summary]"))
+        # Speaks is the voice: its list opens there, not under Thinks.
+        assert not select(html, "[data-voice-profile]")
+
+    def test_switching_to_a_chain_with_nothing_local_picked_asks_for_one(
+        self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
+    ) -> None:
+        calls.append(LIVE)
+        html = hx.get(chat_calls.address(VOICES, chat_calls.CHAIN)).text
+
+        thinks = one(html, f'[data-call-part="{chat_calls.THINKS}"]')
+        assert text(one(thinks, "[data-name]")) == chat_calls.PICK
+        assert not select(html, "[data-call-summary]")
+        assert not select(html, "[data-call-model][aria-current=true]")
+
+    def test_speaks_opens_the_voices(
+        self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
+    ) -> None:
+        calls.append(LOCAL)
+        url = chat_calls.address(VOICES, chat_calls.CHAIN, chat_calls.SPEAKS)
+        html = hx.get(url).text
+
+        assert len(select(html, "[data-voice-profile]")) == 2
+        assert not select(html, "[data-call-model]")
+
+    def test_hears_lists_the_hearing_models_the_voices_marked(
+        self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
+    ) -> None:
+        calls.append(LOCAL)
+        url = chat_calls.address(VOICES, chat_calls.CHAIN, chat_calls.HEARS)
+        listed = hx.get(url).text
+
+        heard = one(listed, "[data-hear-model][aria-current=true]")
+        assert heard.get("data-hear-model") == "gpt-transcribe"
+
+    async def test_hears_picks_the_voices_hearing_model(
+        self,
+        hx: TestClient,
+        voices: dict[str, VoiceProfile],
+        calls: list[str],
+        async_db_session: AsyncSession,
+    ) -> None:
+        """The active voice hears with it, by its own provider, at once:
+        a call and the replies said in chat both."""
+        calls.append(LOCAL)
+        response = hx.post(f"{VOICES}/hears", data={"model_id": "large-v3"})
+
+        await async_db_session.refresh(voices["marin"])
+        assert (voices["marin"].stt_model, voices["marin"].stt_provider) == (
+            "large-v3",
+            "faster_whisper",
+        )
+        assert settings.STT_MODEL == "large-v3"
+        hears = one(response.text, f'[data-call-part="{chat_calls.HEARS}"]')
+        assert text(one(hears, "[data-name]")) == "Large v3"
+        assert chat_calls.LOCAL["label"] in text(hears)
 
     def test_a_pick_sets_what_calls_run_on(
         self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]

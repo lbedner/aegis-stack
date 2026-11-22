@@ -6,7 +6,7 @@
 # - Update support
 
 _min_copier_version: "9.0.0"
-_version: "0.20.0"
+_version: "0.21.0"
 
 # IMPORTANT: Template content is in subdirectory
 # This allows the template to be recognized as git-tracked (aegis-stack repo root has .git)
@@ -274,6 +274,12 @@ include_auth_org:
 include_oauth:
   type: bool
   help: "Include OAuth social login (GitHub + Google)?"
+  default: false
+  when: "{{ include_auth }}"
+
+include_auth_guest:
+  type: bool
+  help: "Include guest sign-in (one shared account, a session per visitor)?"
   default: false
   when: "{{ include_auth }}"
 

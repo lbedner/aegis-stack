@@ -6,7 +6,7 @@ kept. A token belongs to one owner exactly (no owner: the operator's, on a
 stack without auth); revoked, it resolves to nothing.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -62,21 +62,24 @@ async def resolve(db: AsyncSession, value: str) -> RunnerToken | None:
     return row
 
 
+def _window() -> tuple[datetime, datetime]:
+    """Since when a token's use says its runner is running
+    (``LISTENING``), and now."""
+    now = utcnow()
+    return now - LISTENING, now
+
+
 async def listening(db: AsyncSession, owner_user_id: int | None) -> bool:
-    """Whether a runner that claims the owner's runs is running now."""
-    return await queries.used_since(db, owner_user_id, utcnow() - LISTENING)
+    """Whether a runner that claims the owner's runs is running now
+    (``queries.in_use``)."""
+    return await queries.in_use(db, owner_user_id, *_window())
 
 
 async def unanswered(db: AsyncSession) -> int:
     """How many asked runs no listening runner takes: none is running for
     their owner (a runner claims its token's owner's runs, or every
-    owner's).
-
-    ponytail: a runner on one step longer than ``LISTENING`` that posts
-    nothing reads as gone while more waits; keep the token that claimed a
-    run on it if that misleads.
-    """
-    return await queries.unanswered(db, utcnow() - LISTENING)
+    owner's)."""
+    return await queries.unanswered(db, *_window())
 
 
 async def live(db: AsyncSession, owner_user_id: int | None) -> list[RunnerToken]:

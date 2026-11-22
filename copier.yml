@@ -277,6 +277,12 @@ include_oauth:
   default: false
   when: "{{ include_auth }}"
 
+include_auth_guest:
+  type: bool
+  help: "Include guest sign-in (one shared account, a session per visitor)?"
+  default: false
+  when: "{{ include_auth }}"
+
 include_ai:
   type: bool
   help: "Include AI service?"

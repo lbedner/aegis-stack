@@ -438,26 +438,6 @@ async def recent_usage(
     ).all()
 
 
-async def spend_since(
-    session: AsyncSession, *, user_id: str, action_prefix: str, since: datetime
-) -> float:
-    """Ledgered cost for one user's actions since ``since``: a family by its
-    prefix ending in ``:`` (``chat:``), else that one action (``chat_action``
-    of one agent, never the agents whose slugs begin with it)."""
-    family = action_prefix.endswith(":")
-    row = await session.exec(
-        select(func.coalesce(func.sum(LLMUsage.total_cost), 0.0))
-        .where(LLMUsage.user_id == user_id)
-        .where(
-            col(LLMUsage.action).startswith(action_prefix, autoescape=True)
-            if family
-            else LLMUsage.action == action_prefix
-        )
-        .where(LLMUsage.timestamp >= since)
-    )
-    return float(row.one())
-
-
 async def org_icons(session: AsyncSession, keys: Iterable[str]) -> dict[str, str]:
     """The stored logo of each named org that has one, in one query, keyed
     by whichever of its slug or name was asked for: a provider is named by

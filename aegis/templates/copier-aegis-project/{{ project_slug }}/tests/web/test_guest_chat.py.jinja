@@ -1,0 +1,91 @@
+{%- if include_auth_guest and include_ai and ai_framework == "pydantic-ai" and ai_backend != "memory" -%}
+"""A chat mount open to guests (``guest_chat.for_visitors``): each visitor
+owns by its session, a turn past a budget is refused in the mount's words,
+and guests together hold at most so many live calls."""
+
+from dataclasses import replace
+from typing import Any
+
+from fastapi import HTTPException
+import pytest
+from starlette.requests import HTTPConnection
+
+from app.components.web_frontend import guest_chat
+from app.components.web_frontend.chat_surface import ChatSurface
+from app.core.config import settings
+from app.services.ai.domains.chat.chat_kit import BudgetStatus
+
+MOUNT = ChatSurface(path="/ask", user="", surface="ask")
+WORDS = guest_chat.Refusals(spent="spent", shared="shared", busy="busy")
+
+
+class _Guard:
+    """A budget that answers what the test set."""
+
+    def __init__(self, status: BudgetStatus) -> None:
+        self.status = status
+
+    async def check(self, session: Any, user_id: str) -> BudgetStatus:
+        return self.status
+
+
+def _allowed(**over: Any) -> BudgetStatus:
+    return BudgetStatus(**{"allowed": True, "spent_usd": 0.0, "budget_usd": 1.0} | over)
+
+
+def _conn(kind: str) -> HTTPConnection:
+    return HTTPConnection({"type": kind, "headers": []})
+
+
+async def test_the_mount_belongs_to_the_visitor() -> None:
+    mount = guest_chat.for_visitors(MOUNT, _Guard(_allowed()), WORDS)  # type: ignore[arg-type]
+    assert mount.bind is not None
+    assert (await mount.bind(who="guest:a")).user == "guest:a"
+    with pytest.raises(HTTPException):
+        await mount.bind(who=None)
+
+
+@pytest.mark.parametrize(
+    ("status", "said"),
+    [
+        (_allowed(), None),
+        (_allowed(allowed=False), "spent"),
+        (_allowed(allowed=False, shared=True), "shared"),
+    ],
+)
+async def test_a_turn_past_a_budget_is_refused_in_the_mounts_words(
+    status: BudgetStatus, said: str | None
+) -> None:
+    mount = guest_chat.for_visitors(MOUNT, _Guard(status), WORDS)  # type: ignore[arg-type]
+    chat = replace(mount, user="guest:a")
+    assert mount.gate is not None and mount.call_check is not None
+    assert await mount.gate(_conn("http"), chat=chat) == said
+    assert await mount.call_check(chat) == said
+
+
+async def test_guests_hold_at_most_so_many_calls_and_free_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "AI_GUEST_CONCURRENT_CALLS", 1)
+    mount = guest_chat.for_visitors(MOUNT, _Guard(_allowed()), WORDS)  # type: ignore[arg-type]
+    assert mount.gate is not None and mount.on_call_end is not None
+    first, second = replace(mount, user="guest:a"), replace(mount, user="guest:b")
+    assert await mount.gate(_conn("websocket"), chat=first) is None
+    assert await mount.gate(_conn("websocket"), chat=second) == "busy"
+    # A typed turn takes no call slot.
+    assert await mount.gate(_conn("http"), chat=second) is None
+    await mount.on_call_end(first, "page")
+    assert await mount.gate(_conn("websocket"), chat=second) is None
+
+
+async def test_a_signed_in_user_takes_no_guest_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "AI_GUEST_CONCURRENT_CALLS", 1)
+    mount = guest_chat.for_visitors(MOUNT, _Guard(_allowed()), WORDS)  # type: ignore[arg-type]
+    assert mount.gate is not None
+    call = _conn("websocket")
+    for _ in range(3):
+        assert await mount.gate(call, chat=replace(mount, user="7")) is None
+    assert await mount.gate(call, chat=replace(mount, user="guest:a")) is None
+{%- endif %}

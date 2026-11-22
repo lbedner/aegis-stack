@@ -16,7 +16,7 @@ import asyncio
 import pytest
 
 from app.core.cache import CacheService
-from tests._fake_redis import FakeRedis
+from tests._fake_redis import on_fake_redis
 
 
 class TestCacheService:
@@ -201,7 +201,7 @@ class TestCappedLists:
     ) -> None:
         cache = CacheService()
         if backend == "redis":
-            cache._redis, cache._store = FakeRedis(), None  # type: ignore[assignment]
+            on_fake_redis(cache)
         pushed_out = [
             await cache.push("replays:recent", value, keep=2, ttl=60)
             for value in ({"n": 1}, {"n": 2}, {"n": 3})
@@ -218,6 +218,28 @@ class TestCappedLists:
         await cache.push("replays:recent", 1, keep=5, ttl=1)
         monkeypatch.setattr("app.core.cache.time.time", lambda: 10**12)
         assert await cache.listed("replays:recent") == []
+
+
+class TestCounts:
+    """A number a key that every process adds to in one step, lapsing a
+    while after it was first counted: what a cap across processes counts."""
+
+    @pytest.mark.parametrize("backend", ["memory", "redis"])
+    async def test_each_count_adds_and_says_the_total(self, backend: str) -> None:
+        cache = CacheService()
+        if backend == "redis":
+            on_fake_redis(cache)
+        totals = [await cache.count("limit:a", by, ttl=60) for by in (1, 2, -1)]
+        assert totals == [1, 3, 2]
+        assert await cache.count("limit:b", 0, ttl=60) == 0
+
+    async def test_a_count_lapses_from_its_first(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cache = CacheService()
+        await cache.count("limit:a", 1, ttl=1)
+        monkeypatch.setattr("app.core.cache.time.time", lambda: 10**12)
+        assert await cache.count("limit:a", 1, ttl=1) == 1
 
 
 class TestUnreadableEntries:

@@ -1,5 +1,5 @@
 {% extends "pages/auth/_layout.html" %}
-{% from "components/macros/form.html" import submit_button %}
+{% from "components/macros/form.html" import button_classes, or_divider, submit_button %}
 {% from "components/auth_macros.html" import auth_field, auth_banner %}
 
 {% block title %}Sign in - {{ project_name }}{% endblock %}
@@ -33,6 +33,20 @@
 
     {{ submit_button("Sign in", "Signing in…") }}
   </form>
+
+  {% set guest_key = guest_sign_in() %}
+  {% if guest_key is not none %}
+  {{ or_divider() }}
+  {# A session of its own on the shared guest account; Cloudflare's widget
+     only when its keys are set. #}
+  <form action="/login/guest" method="post" class="space-y-3">
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    {% if guest_key %}
+    <div class="cf-turnstile" data-sitekey="{{ guest_key }}" data-theme="dark" x-data="humanCheck"></div>
+    {% endif %}
+    <button type="submit" class="{{ button_classes('default') }} w-full">Continue as guest</button>
+  </form>
+  {% endif %}
 </div>
 
 {% endblock %}

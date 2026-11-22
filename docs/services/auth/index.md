@@ -334,6 +334,64 @@ API clients (CLIs, server-to-server) keep using
 `Authorization: Bearer ...`, the cookie path is parallel, not
 exclusive.
 
+## Guest Sign-In
+
+`auth[guest]` lets anyone in without signing up: "Continue as guest" on
+`/login` signs the visitor in to one shared guest account. Each click is a
+session of its own, so visitors on that account are told apart by session,
+never by user.
+
+```bash
+aegis init my-app --services auth[guest] --components database,htmx
+```
+
+- `POST /api/v1/auth/guest` starts the session (`source="guest"`), with the
+  cookies every sign-in sets. Its refresh token lives
+  `GUEST_SESSION_HOURS` (24) from its last use, not
+  `REFRESH_TOKEN_EXPIRE_DAYS`.
+- One address may start `RATE_LIMIT_GUEST_MAX` guest sessions per
+  `RATE_LIMIT_GUEST_WINDOW` seconds (5 an hour), counted across processes
+  (`app/core/limits.py`); past that it answers 429.
+- Set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` and the button sits
+  behind Cloudflare Turnstile; a failed check answers 403 and starts
+  nothing. Blank keys turn the check off.
+- The guest account (`guest@example.com`, which no one can sign up with)
+  is made on first use, with a random password kept nowhere. It never takes
+  the first-user admin seat, and its role cannot be changed.
+- A guest is no member: every route that resolves "the signed-in user"
+  refuses it (403 `guest_account`) unless the route lets guests in. Guests
+  may use `/me`, sign out, and list or end their own session only; profile,
+  users, orgs, tokens and anything owned by user id are refused, and
+  `get_optional_user` (so every page) sees a guest as signed out. What a
+  guest owns is keyed by `get_visitor` (`guest:<session>`). A route of your
+  own opens to guests with `get_current_user_from_token(..., guests=True)`.
+- Deactivate the guest account to close guest sign-in (403 `guest_closed`).
+- Overseer's Sessions page shows a guest's session as "Guest".
+
+What a guest owns elsewhere is keyed by its session too
+(`app/core/visitor.py`): a guest's owner id is `guest:<session id>`, a
+signed-in user's is the user id, and `get_visitor` (`app/services/auth/deps.py`)
+reads it off the request. With the AI service, `web_frontend/guest_chat.py`
+turns a chat mount into one guests can use:
+
+```python
+from app.components.web_frontend.guest_chat import Refusals, for_visitors
+from app.services.ai.domains.chat.chat_kit import BudgetGuard
+
+ASK = for_visitors(
+    ChatSurface(path="/ask", user="", surface="ask", calls=True),
+    BudgetGuard("chat:", 1.00, guest_session_usd=0.25, all_guests_usd=20.0),
+    Refusals(spent="...", shared="...", busy="..."),
+)
+```
+
+Each guest then holds its own conversations, spends from its own daily
+ceiling (`guest_session_usd`), and all guests together from one more
+(`all_guests_usd`); a signed-in user on the mount keeps the per-user
+budget. Guests together hold at most `AI_GUEST_CONCURRENT_CALLS` live calls
+(3). Every refusal is the mount's own words, and a refused call leaves the
+conversation in text.
+
 ## Next Steps
 
 | Topic | Description |

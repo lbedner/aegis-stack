@@ -151,6 +151,8 @@ class TemplateGenerator:
         # ``auth[rbac,oauth]`` etc.). Defaults off so projects that
         # don't ask for it don't pay for the extra routes and deps.
         self.include_oauth: bool = False
+        # ``auth[guest]``: one shared guest account, a session per visitor.
+        self.include_auth_guest: bool = False
 
         # Extract auth level (and oauth modifier) from auth[...] format in services
         self.auth_level = AuthLevels.BASIC  # Default to basic
@@ -162,6 +164,7 @@ class TemplateGenerator:
                     self.auth_level = auth_config.level
                     self._user_specified_auth_level = True
                     self.include_oauth = auth_config.oauth
+                    self.include_auth_guest = auth_config.guest
                 break
 
         # Extract insights sources + per_user flag from insights[...] format
@@ -334,6 +337,7 @@ class TemplateGenerator:
             # with ``auth[rbac,oauth]`` etc.). Defaults off so existing
             # flows aren't surprised by extra routes and dependencies.
             AnswerKeys.AUTH_OAUTH: "yes" if self.include_oauth else "no",
+            AnswerKeys.AUTH_GUEST: "yes" if self.include_auth_guest else "no",
             AnswerKeys.PAYMENT_PROVIDER: PaymentProviders.DEFAULT,
             # Insights source flags
             AnswerKeys.INSIGHTS_GITHUB: "yes"

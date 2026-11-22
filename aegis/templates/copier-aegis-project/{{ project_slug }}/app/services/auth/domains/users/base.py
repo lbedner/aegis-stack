@@ -26,6 +26,12 @@ class RestoreConflictError(Exception):
     """
 
 
+class FixedRoleError(ValueError):
+    """Raised by ``update_user`` on a role change to an account whose role
+    is fixed: the shared guest account (``auth[guest]``), which every
+    visitor holds. The endpoint layer translates this into a 400."""
+
+
 class UserServiceBase:
     """The session every user-service mixin reads, and the core reads
     they call back into.

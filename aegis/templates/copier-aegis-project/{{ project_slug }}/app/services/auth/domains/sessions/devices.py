@@ -43,8 +43,11 @@ class DevicesMixin:
         )
         await self.db.exec(stmt)  # type: ignore[call-overload]
 
-    async def list_active_for_user(self, user_id: int) -> list[RefreshToken]:
-        """Return all currently-live refresh rows for a user.
+    async def list_active_for_user(
+        self, user_id: int, family_id: str | None = None
+    ) -> list[RefreshToken]:
+        """Return all currently-live refresh rows for a user (only those
+        of session ``family_id`` when given).
 
         Returns every row (not collapsed by family). Use
         :meth:`list_sessions` for the session-shaped view consumed by
@@ -55,10 +58,14 @@ class DevicesMixin:
             RefreshToken.revoked_at.is_(None),  # type: ignore[union-attr]
             RefreshToken.expires_at > utcnow(),
         )
+        if family_id is not None:
+            stmt = stmt.where(RefreshToken.family_id == family_id)
         result = await self.db.exec(stmt)
         return list(result.all())
 
-    async def list_sessions(self, user_id: int) -> list[RefreshToken]:
+    async def list_sessions(
+        self, user_id: int, family_id: str | None = None
+    ) -> list[RefreshToken]:
         """Return one live row per ``family_id`` — i.e. one row per
         active device session.
 
@@ -66,7 +73,7 @@ class DevicesMixin:
         UA/IP/last_used_at reflect the latest rotation. Ordered by
         ``last_used_at`` desc (nulls fall back to ``created_at``).
         """
-        rows = await self.list_active_for_user(user_id)
+        rows = await self.list_active_for_user(user_id, family_id)
         by_family: dict[str, RefreshToken] = {}
         for row in rows:
             current = by_family.get(row.family_id)

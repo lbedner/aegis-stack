@@ -22,6 +22,7 @@ class AuthServiceConfig:
     level: str
     engine: str | None = None
     oauth: bool = False
+    guest: bool = False
 
 
 def parse_auth_service_config(service_string: str) -> AuthServiceConfig:
@@ -31,6 +32,7 @@ def parse_auth_service_config(service_string: str) -> AuthServiceConfig:
         level=parsed["level"],
         engine=parsed.get("engine"),
         oauth=bool(parsed.get("oauth", False)),
+        guest=bool(parsed.get("guest", False)),
     )
 
 

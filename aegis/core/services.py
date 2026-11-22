@@ -183,6 +183,13 @@ SERVICES: dict[str, ServiceSpec] = {
                     when=lambda opts: bool(opts.get(AnswerKeys.AUTH_OAUTH)),
                 ),
                 RouterWiring(
+                    module="app.components.backend.api.auth.guest",
+                    symbol="router",
+                    alias="guest_router",
+                    prefix="/api/v1",
+                    when=lambda opts: bool(opts.get(AnswerKeys.AUTH_GUEST)),
+                ),
+                RouterWiring(
                     module="app.components.backend.api.orgs.router",
                     symbol="router",
                     alias="org_router",
@@ -268,8 +275,8 @@ SERVICES: dict[str, ServiceSpec] = {
             ORG_MIGRATION,
             AUTH_TOKENS_MIGRATION,
         ],
-        # Bracket-syntax options: auth[level, engine, oauth]
-        # e.g. auth[rbac], auth[org,postgres], auth[basic,oauth]
+        # Bracket-syntax options: auth[level, engine, oauth, guest]
+        # e.g. auth[rbac], auth[org,postgres], auth[basic,oauth], auth[guest]
         options=[
             OptionSpec(
                 name="level",
@@ -297,6 +304,13 @@ SERVICES: dict[str, ServiceSpec] = {
                 mode=OptionMode.FLAG,
                 choices=["oauth"],
                 answer_key=AnswerKeys.AUTH_OAUTH,
+                default=False,
+            ),
+            OptionSpec(
+                name="guest",
+                mode=OptionMode.FLAG,
+                choices=["guest"],
+                answer_key=AnswerKeys.AUTH_GUEST,
                 default=False,
             ),
         ],
@@ -392,6 +406,14 @@ SERVICES: dict[str, ServiceSpec] = {
                 "include_oauth": [
                     "app/components/backend/api/auth/oauth.py",
                     "app/components/frontend/controls/auth/oauth_button.py",
+                ],
+                # Guest sign-in: one shared account, a session per visitor.
+                "include_auth_guest": [
+                    "app/components/backend/api/auth/guest.py",
+                    "app/services/auth/domains/sessions/guest.py",
+                    "app/services/auth/settings.py",
+                    "app/components/backend/security/turnstile.py",
+                    "tests/api/test_guest_sign_in.py",
                 ],
                 # The web frontend's auth pages: sign-in and registration,
                 # Overseer's login, refusal and Auth page. Overseer itself

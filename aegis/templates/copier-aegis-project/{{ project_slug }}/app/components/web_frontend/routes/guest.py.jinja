@@ -1,0 +1,45 @@
+{%- if include_auth_guest -%}
+"""The sign-in page's "Continue as guest" (``auth[guest]``)."""
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import RedirectResponse
+
+from app.components.backend.api.auth.guest import guest_sign_in as api_guest_sign_in
+from app.components.backend.security import turnstile
+from app.components.web_frontend.rendering import refused_sign_in
+from app.core.audit import AuditEmitter, get_audit
+from app.core.formatting import site_path
+from app.services.auth.deps import get_refresh_service, get_user_service
+from app.services.auth.service import RefreshService, UserService
+
+router = APIRouter()
+
+
+@router.post("/login/guest", include_in_schema=False)
+async def guest_submit(
+    request: Request,
+    next: Annotated[str, Form()] = "",
+    human: Annotated[str | None, Form(alias=turnstile.FIELD)] = None,
+    user_service: UserService = Depends(get_user_service),
+    refresh_service: RefreshService = Depends(get_refresh_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> RedirectResponse:
+    """The sign-in page's guest button: the API's guest sign-in, with
+    its cookies on the redirect back to ``next``."""
+    redirect = RedirectResponse(url=site_path(next, "/"), status_code=303)
+    try:
+        await api_guest_sign_in(
+            request=request,
+            response=redirect,
+            human=human,
+            users=user_service,
+            refresh_service=refresh_service,
+            audit=audit,
+        )
+    except HTTPException as exc:
+        reason = "guest_limited" if exc.status_code == 429 else str(exc.detail)
+        return refused_sign_in("/login", reason, next)
+    return redirect
+{%- endif %}

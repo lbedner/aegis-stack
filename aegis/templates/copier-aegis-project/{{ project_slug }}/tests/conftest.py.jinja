@@ -247,7 +247,7 @@ def _no_background_sampling(monkeypatch: pytest.MonkeyPatch) -> None:
     """The live charts' samplers (``app.core.series``) poll Docker and
     Ollama: an app started in a test samples nothing, and each test's
     sampled history starts empty."""
-    from app.core import series
+    from app.core import limits, series
     from app.core.cache import CacheService
     from app.core.series_store import SeriesStore
 
@@ -260,6 +260,8 @@ def _no_background_sampling(monkeypatch: pytest.MonkeyPatch) -> None:
     cache, history = CacheService(), SeriesStore()
     monkeypatch.setattr(series, "run", idle)
     monkeypatch.setattr(series, "get_cache", lambda: cache)
+    # Caps (``app.core.limits``) count from zero in every test too.
+    monkeypatch.setattr(limits, "get_cache", lambda: cache)
     monkeypatch.setattr(series, "get_store", lambda: history)
 
 

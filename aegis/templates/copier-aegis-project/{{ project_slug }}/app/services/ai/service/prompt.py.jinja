@@ -119,6 +119,21 @@ def _history_start(lengths: list[int], budget: int) -> int:
 
 
 {% if ai_framework == "pydantic-ai" -%}
+def replayed(messages: list[ConversationMessage]) -> list[ConversationMessage]:
+    """The thread's turns history replays: what the user and the assistant
+    said, nothing else. A window's start counts these."""
+    return [m for m in messages if m.role in (MessageRole.USER, MessageRole.ASSISTANT)]
+
+
+def steps_ahead(msg: ConversationMessage) -> str:
+    """What a reply's turn did, on its own line ahead of its words
+    (``steps_line``), so the next turn sees what the last one ran; "" for
+    anything else."""
+    steps = steps_line(msg.metadata.get("tool_trace") or [])
+    on_reply = msg.role == MessageRole.ASSISTANT and steps
+    return f"Assistant steps: {steps}\n" if on_reply else ""
+
+
 def history_lines(messages: list[ConversationMessage]) -> list[str]:
     """The thread as history replays it, one line per message: who said it
     and what, what a reply's turn did ahead of its words (``steps_line``),
@@ -127,15 +142,11 @@ def history_lines(messages: list[ConversationMessage]) -> list[str]:
     does replayed history."""
     lines: list[str] = []
     day: date | None = None
-    for msg in messages:
+    for msg in replayed(messages):
         if msg.role == MessageRole.USER:
             line = f"User: {msg.content}"
-        elif msg.role == MessageRole.ASSISTANT:
-            said = f"Assistant: {msg.content}"
-            steps = steps_line(msg.metadata.get("tool_trace") or [])
-            line = f"Assistant steps: {steps}\n{said}" if steps else said
         else:
-            continue
+            line = f"{steps_ahead(msg)}Assistant: {msg.content}"
         if (on := msg.timestamp.date()) != day:
             day = on
             line = f"{_day_line(on)}\n{line}"
@@ -223,6 +234,7 @@ class PromptMixin(ContextsMixin):
         context_window: int | None = None,
         readings: list[Reading] | None = None,
         right_now: str | None = None,
+        seeded: int = 0,
     ) -> tuple[Any, str]:
         """
         Create agent for request and build conversation context.
@@ -281,6 +293,7 @@ class PromptMixin(ContextsMixin):
             history_budget=history_budget,
             readings=readings,
             right_now=right_now,
+            seeded=seeded,
         )
 
         # Stamp the shape for the ``context`` tool: an agent asked what
@@ -299,6 +312,7 @@ class PromptMixin(ContextsMixin):
         history_budget: int | None = None,
         readings: list[Reading] | None = None,
         right_now: str | None = None,
+        seeded: int = 0,
     ) -> str:
         """
         Build conversation context for AI from message history.
@@ -351,18 +365,21 @@ class PromptMixin(ContextsMixin):
             history_budget=budget,
             messages_kept=len(lines) - start,
             messages_dropped=start,
-            summary_chars=len(earlier_summary),
+            summary=earlier_summary,
 {%- if ai_backend != "memory" %}
             fold_to=seen.fold_to,
 {%- endif %}
         )
 
-        history = "\n".join(lines[start:])
+        # The thread's latest ``seeded`` turns ride as past turns (GPT-Live's
+        # seed, which its backend reads): here, they would be read twice.
+        end = len(replayed(conversation.messages)) - seeded
+        history = "\n".join(lines[start:end])
         # A call opening on the thread so far has no question: the history
         # alone. The first message of a thread goes as it was typed.
         question = (
             (f"User: {latest_message.content}" if history else latest_message.content)
-            if asking and latest_message is not None
+            if asking and latest_message is not None and not seeded
             else None
         )
         return "\n\n".join(

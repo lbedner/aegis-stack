@@ -36,6 +36,7 @@
     cut: false, // its reply was spoken over and is not yet done
     turns: false, // the provider reports when you start and stop
     owed: false, // your turn ended: its answer is coming
+    chooses: false, // it answers when it chooses to, not every turn (GPT-Live)
   });
 
   const counting = (s) =>
@@ -58,6 +59,7 @@
     };
     switch (event.type) {
       case 'begin': // the call is up
+        s.chooses = Boolean(event.chooses);
         break;
       case 'speech':
         s.hearing = event.on;
@@ -72,12 +74,12 @@
         // ponytail: an answer that never comes holds the count until its
         // turn ends ('reply'); a timeout if a provider ever drops a turn.
         s.hearing = false;
-        s.owed = true;
+        s.owed = !s.chooses;
         break;
       case 'heard': // your transcript is done: the turn's end only where
         // the provider reports none (Gemini); elsewhere it can come late
         s.hearing = false;
-        if (!s.turns) s.owed = true;
+        if (!s.turns && !s.chooses) s.owed = true;
         break;
       case 'words': // words of yours: the count starts over - and the goodbye
         // is off, unless they were said before it began (a late transcript)

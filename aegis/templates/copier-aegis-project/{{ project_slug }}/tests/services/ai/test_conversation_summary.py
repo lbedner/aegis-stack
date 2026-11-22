@@ -266,3 +266,67 @@ class TestATurnDoesNotUndoTheFold:
         stored = await manager.get_conversation(conversation.id)
         assert stored is not None
         assert stored.metadata[summary.SUMMARY_KEY] == {"text": "new", "through": 30}
+
+
+class TestEveryTurnFolds:
+    """A typed turn queued its fold as it was saved; a call never did, so
+    a thread only ever talked on kept no summary of what fell out
+    (2026-11-22). ``_build_turn`` queues it, whichever way the turn was
+    asked, and hands back the window GPT-Live's voice is seeded with."""
+
+    async def _built(
+        self, monkeypatch: pytest.MonkeyPatch, fold_to: int
+    ) -> tuple[Any, list[Any]]:
+        from types import SimpleNamespace
+
+        from app.services.ai.domains.chat import agent_loader
+        from app.services.ai.domains.chat.self_context import record_turn_context
+        from app.services.ai.domains.chat.user_memory import UserContext
+        import app.services.ai.domains.llm.catalog as catalog
+        from app.services.ai.service import turn
+
+        async def memory(_: str) -> UserContext:
+            return UserContext(memory=None, readings=[])
+
+        async def modules(*_: Any, **__: Any) -> None:
+            return None
+
+        async def window(_: Any) -> int:
+            return 200_000
+
+        async def prepare(_: Any, **__: Any) -> tuple[Any, str]:
+            begin_turn_context()
+            record_turn_context(messages_dropped=3, summary="S", fold_to=fold_to)
+            return None, ""
+
+        folded: list[Any] = []
+        monkeypatch.setattr(turn, "build_user_memory_context", memory)
+        monkeypatch.setattr(turn, "render_context_modules", modules)
+        monkeypatch.setattr(catalog, "context_window_for", window)
+        monkeypatch.setattr(turn, "enqueue_fold", lambda *args: args)
+        monkeypatch.setattr(turn, "background", folded.append)
+        ai = SimpleNamespace(
+            config=SimpleNamespace(model="m"),
+            # With RAG, what this turn alone brings (``_this_turn``).
+            _this_turn=lambda _rag, now: now,
+        )
+        ai._prepare_agent_and_context = prepare
+        setup = await turn.TurnMixin._build_turn(
+            ai,  # type: ignore[arg-type]
+            Conversation(id="c", provider=AIProvider.OLLAMA, model="m"),
+            agent_loader.default_agent_config(),
+            user_id="u",
+        )
+        return setup, folded
+
+    async def test_a_turn_queues_the_fold_its_window_found_due(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        assert (await self._built(monkeypatch, fold_to=4))[1] == [("c", 4)]
+        assert (await self._built(monkeypatch, fold_to=0))[1] == []
+
+    async def test_a_turn_hands_back_its_history_window(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        setup, _ = await self._built(monkeypatch, fold_to=0)
+        assert (setup.history_start, setup.history_summary) == (3, "S")

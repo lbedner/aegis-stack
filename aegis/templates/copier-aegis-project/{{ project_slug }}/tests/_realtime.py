@@ -26,6 +26,7 @@ ENGINE = SimpleNamespace(
     llm=SimpleNamespace(
         model_id="gemini-3.8-live",
         title="Gemini 3.8 Live",
+        mode="realtime",
         served_by=SimpleNamespace(slug="google"),
     ),
 )
@@ -35,6 +36,7 @@ class FakeSession:
     audio_input_sample_rate = 16_000
     audio_output_sample_rate = 24_000
     speaks_after_audio = False  # its voice waits for the caller's first audio
+    profile: dict[str, Any] = {}  # what the model is (``RealtimeModelProfile``)
 
     def __init__(
         self,
@@ -53,6 +55,7 @@ class FakeSession:
         self.interrupted: list[int] = []  # where each answer was cut off
         self.played_audio_bytes = 0
         self.usage = SimpleNamespace(input_tokens=100, output_tokens=40)
+        self.messages: list[Any] = []  # the session's, as Pydantic AI keeps them
         self._heard: asyncio.Event | None = None
         self._asked: asyncio.Event | None = None
         self._closed: asyncio.Event | None = None
@@ -63,6 +66,9 @@ class FakeSession:
             setattr(self, name, asyncio.Event())
         flag: asyncio.Event = getattr(self, name)
         return flag
+
+    def all_messages(self) -> list[Any]:
+        return self.messages
 
     async def _until(self, name: str) -> bool:
         """Until this flag is set or the call is closed; whether it closed."""

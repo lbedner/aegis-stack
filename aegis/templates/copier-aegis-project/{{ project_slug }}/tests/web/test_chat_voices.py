@@ -213,7 +213,7 @@ class TestCalls:
         self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
     ) -> None:
         calls.append("gpt-realtime-2.1")
-        html = hx.get(VOICES).text
+        html = hx.get(chat_calls.address(VOICES, chat_calls.ONE, chat_calls.ONE)).text
 
         assert one(html, "[data-calls]").get("data-call-mode") == chat_calls.ONE
         rows = select(html, "[data-call-model]")
@@ -222,11 +222,64 @@ class TestCalls:
         assert current.get("data-call-model") == "gpt-realtime-2.1"
         (part,) = select(html, "[data-call-part]")
         assert text(one(part, "[data-name]")) == "GPT Realtime 2.1"
-        # Marin is an OpenAI voice: the call speaks in it.
-        assert "speaks as marin" in text(part)
         assert one(html, "[data-call-summary]") is not None
-        # The voices stay in view: the replies said in chat use one.
-        assert select(html, "[data-voice-profile]")
+
+    # Two requests (the dialog, then what it opens), each reading once:
+    # the test takes 2 on purpose, so 3 would be one read too many.
+    @pytest.mark.queryspy(threshold=3)
+    def test_the_dialog_shows_the_pick_and_opens_its_list_on_a_click(
+        self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
+    ) -> None:
+        """What calls run on is one card: its list of every model opens
+        from it, and closes again from it."""
+        calls.append("gpt-realtime-2.1")
+        html = hx.get(VOICES).text
+
+        (part,) = select(html, "[data-call-part]")
+        assert text(one(part, "[data-name]")) == "GPT Realtime 2.1"
+        assert not select(html, "[data-call-model]")
+        opens = chat_calls.address(VOICES, chat_calls.ONE, chat_calls.ONE)
+        assert part.get("hx-get") == opens
+        (opened,) = select(hx.get(opens).text, "[data-call-part]")
+        assert opened.get("hx-get") == chat_calls.address(VOICES, chat_calls.ONE)
+
+    @pytest.mark.parametrize(
+        ("model", "line"),
+        [
+            # OpenAI's realtime model takes her voice, style and speed.
+            ("gpt-realtime-2.1", "On GPT Realtime 2.1: Marin · her style · 1.2×"),
+            # Gemini takes her style; she has no Gemini voice, and it has
+            # no speed to set.
+            (LIVE, "On Gemini Live: Marin has no Gemini voice yet · her style"),
+        ],
+    )
+    def test_speaks_as_says_what_of_her_the_call_takes(
+        self,
+        hx: TestClient,
+        voices: dict[str, VoiceProfile],
+        calls: list[str],
+        model: str,
+        line: str,
+    ) -> None:
+        calls.append(model)
+        speaks = one(hx.get(VOICES).text, "[data-speaks-as]")
+
+        assert text(one(speaks, "[data-name]")) == "Marin"
+        assert text(one(speaks, "[data-speaking]")) == line
+        assert one(speaks, "button[data-speak]").get("data-speak") == (
+            f"{VOICES}/{voices['marin'].id}/preview"
+        )
+
+    def test_speaks_as_switches_to_another_voice(
+        self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
+    ) -> None:
+        calls.append("gpt-realtime-2.1")
+        speaks = one(hx.get(VOICES).text, "[data-speaks-as]")
+
+        picks = [
+            (text(b), b.get("hx-post")) for b in select(speaks, "[data-voice-pick]")
+        ]
+        assert picks == [("Nova, plain", f"{VOICES}/{voices['nova'].id}/active")]
 
     def test_a_chain_shows_what_hears_thinks_and_speaks(
         self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
@@ -236,7 +289,9 @@ class TestCalls:
         cloud chat model, a model that cannot call tools and one that does
         not chat are not offered."""
         calls.append(LOCAL)
-        html = hx.get(VOICES).text
+        html = hx.get(
+            chat_calls.address(VOICES, chat_calls.CHAIN, chat_calls.THINKS)
+        ).text
 
         assert one(html, "[data-calls]").get("data-call-mode") == chat_calls.CHAIN
         parts = {
@@ -256,8 +311,8 @@ class TestCalls:
             one(html, f'[data-call-model="{LOCAL}"]')
         )
         assert "in the cloud" in text(one(html, "[data-call-summary]"))
-        # Speaks is the voice: its list opens there, not under Thinks.
-        assert not select(html, "[data-voice-profile]")
+        speaking = text(one(html, "[data-speaks-as] [data-speaking]"))
+        assert speaking == "On OpenAI: Marin · her style · 1.2×"
 
     def test_switching_to_a_chain_with_nothing_local_picked_asks_for_one(
         self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
@@ -270,15 +325,15 @@ class TestCalls:
         assert not select(html, "[data-call-summary]")
         assert not select(html, "[data-call-model][aria-current=true]")
 
-    def test_speaks_opens_the_voices(
+    def test_speaks_opens_every_voice(
         self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
     ) -> None:
+        """Speaks is the voice: its card opens every voice."""
         calls.append(LOCAL)
-        url = chat_calls.address(VOICES, chat_calls.CHAIN, chat_calls.SPEAKS)
-        html = hx.get(url).text
+        html = hx.get(VOICES).text
 
-        assert len(select(html, "[data-voice-profile]")) == 2
-        assert not select(html, "[data-call-model]")
+        speaks = one(html, f'[data-call-part="{chat_calls.SPEAKS}"]')
+        assert speaks.get("hx-get") == f"{VOICES}/manage"
 
     def test_hears_lists_the_hearing_models_the_voices_marked(
         self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
@@ -325,8 +380,9 @@ class TestCalls:
         _, siblings = oob(response.text)
         chip = [e for e in siblings if e.get("id") == "chat-voice"]
         assert [text(e) for e in chip] == ["Calls: GPT Realtime 2.1"]
-        current = one(response.text, "[data-call-model][aria-current=true]")
-        assert current.get("data-call-model") == "gpt-realtime-2.1"
+        part = one(response.text, "[data-call-part] [data-name]")
+        assert text(part) == "GPT Realtime 2.1"
+        assert not select(response.text, "[data-call-model]")
 
     def test_a_model_billed_by_time_is_priced_by_the_minute(
         self,
@@ -364,11 +420,16 @@ class TestCalls:
         calls: list[str],
     ) -> None:
         """Marin has no Gemini voice: the call would speak Gemini's own, and
-        the part says so rather than naming a voice that is not hers."""
+        the dialog says so rather than naming a voice that is not hers."""
         calls.append(LIVE)
-        (part,) = select(hx.get(VOICES).text, "[data-call-part]")
+        html = hx.get(VOICES).text
 
-        assert "Marin has no Gemini voice yet" in text(part)
+        assert "Marin has no Gemini voice yet" in text(one(html, "[data-speaks-as]"))
+        gemini = one(html, '[data-voice-card] [data-engine="gemini"]')
+        assert "Not set" in text(gemini)
+        assert one(gemini, "a[data-engine-pick]").get("href") == (
+            f"/overseer/services/ai/voice?profile={voices['marin'].id}"
+        )
 
     def test_a_refused_pick_says_why(
         self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
@@ -379,10 +440,15 @@ class TestCalls:
 
 
 class TestTheDialog:
+    # Two requests (the dialog, then what it opens), each reading once:
+    # the test takes 2 on purpose, so 3 would be one read too many.
+    @pytest.mark.queryspy(threshold=3)
     def test_lists_every_voice_and_marks_the_active_one(
         self, hx: TestClient, voices: dict[str, VoiceProfile]
     ) -> None:
-        html = hx.get(VOICES).text
+        manage = one(hx.get(VOICES).text, "[data-manage-voices]")
+        assert manage.get("hx-get") == f"{VOICES}/manage"
+        html = hx.get(f"{VOICES}/manage").text
         none(html, "html")
         rows = select(html, "[data-voice-profile]")
         assert [text(r.cssselect("[data-name]")[0]) for r in rows] == [
@@ -392,6 +458,9 @@ class TestTheDialog:
         active = one(html, "[data-voice-profile][aria-current=true]")
         assert active.get("data-voice-profile") == str(voices["marin"].id)
 
+    # Two requests (the dialog, then what it opens), each reading once:
+    # the test takes 2 on purpose, so 3 would be one read too many.
+    @pytest.mark.queryspy(threshold=3)
     def test_a_preview_shows_what_it_is_doing(
         self, hx: TestClient, voices: dict[str, VoiceProfile]
     ) -> None:
@@ -399,6 +468,7 @@ class TestTheDialog:
         equalizer while it plays. A speaker never records."""
         for html in (
             hx.get(VOICES).text,
+            hx.get(f"{VOICES}/manage").text,
             hx.get(f"{VOICES}/{voices['marin'].id}/edit").text,
         ):
             for button in select(html, "button[data-speak]"):
@@ -412,11 +482,37 @@ class TestTheDialog:
     def test_every_voice_can_be_previewed(
         self, hx: TestClient, voices: dict[str, VoiceProfile]
     ) -> None:
-        html = hx.get(VOICES).text
+        html = hx.get(f"{VOICES}/manage").text
         previews = [b.get("data-speak") for b in select(html, "button[data-speak]")]
         assert previews == [
             f"{VOICES}/{v.id}/preview" for v in (voices["marin"], voices["nova"])
         ]
+
+
+class TestTheVoiceCard:
+    """The voice in use, beside the call: her style and speed, her voice
+    on each engine (each heard on its own), and the terms every voice
+    says its way."""
+
+    def test_it_shows_her_and_her_voice_on_each_engine(
+        self, hx: TestClient, voices: dict[str, VoiceProfile]
+    ) -> None:
+        card = one(hx.get(VOICES).text, "[data-voice-card]")
+        marin = voices["marin"].id
+
+        assert text(one(card, "[data-name]")) == "Marin"
+        assert (
+            text(one(card, "[data-style]")) == "Style: Voice Affect: Warm. · Speed 1.2×"
+        )
+        openai = one(card, '[data-engine="openai"]')
+        assert "Marin" in text(openai)
+        assert one(openai, "button[data-speak]").get("data-speak") == (
+            f"{VOICES}/{marin}/preview?engine=openai"
+        )
+        assert "Not set" in text(one(card, '[data-engine="gemini"]'))
+        said = one(card, "[data-pronunciations]")
+        assert said.get("hx-get") == f"{VOICES}/pronunciation"
+        assert "Shared by every voice" in text(said)
 
 
 class TestSwitching:
@@ -437,14 +533,12 @@ class TestSwitching:
         primary, siblings = oob(response.text)
         chip = [e for e in siblings if e.get("id") == "chat-voice"]
         assert [text(e) for e in chip] == ["Voice: Nova, plain"]
-        current = [
-            e
+        named = [
+            text(e)
             for root in primary
-            for e in root.cssselect("[data-voice-profile][aria-current=true]")
+            for e in root.cssselect("[data-voice-card] [data-name]")
         ]
-        assert [e.get("data-voice-profile") for e in current] == [
-            str(voices["nova"].id)
-        ]
+        assert named == ["Nova, plain"]
 
     def test_a_missing_voice_is_a_404(
         self, hx: TestClient, voices: dict[str, VoiceProfile]
@@ -652,6 +746,40 @@ class TestPreviewing:
         )
         assert request.text == chat_voices.design.PREVIEW_TEXT
         assert settings.TTS_VOICE == active  # previewing does not switch
+
+    async def test_a_preview_on_an_engine_is_her_voice_there(
+        self,
+        client: TestClient,
+        voices: dict[str, VoiceProfile],
+        monkeypatch: pytest.MonkeyPatch,
+        async_db_session: AsyncSession,
+    ) -> None:
+        """Her Kokoro voice is heard on Kokoro, whatever the call setup
+        speaks on."""
+        heard: list[Any] = []
+
+        class _TTS:
+            def __init__(self, voice_settings: Any) -> None:
+                heard.append(voice_settings)
+
+            async def synthesize(self, request: Any) -> Any:
+                return SimpleNamespace(audio=b"ID3", media_type="audio/mpeg")
+
+        monkeypatch.setattr(chat_voices, "TTSService", _TTS)
+        marin = voices["marin"]
+        marin.voices = {**marin.voices, "local_server": "local_server:af_heart"}
+        async_db_session.add(marin)
+        await async_db_session.commit()
+
+        url = f"{VOICES}/{marin.id}/preview?engine=local_server"
+        assert client.get(url).status_code == 200
+        (used,) = heard
+        assert (used.TTS_PROVIDER, used.TTS_VOICE, used.TTS_MODEL) == (
+            "local_server",
+            "local_server:af_heart",
+            "kokoro",
+        )
+        assert settings.TTS_PROVIDER == "openai"  # the setup untouched
 
 
 def _setup_form(**changes: str) -> dict[str, str]:

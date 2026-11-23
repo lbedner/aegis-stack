@@ -159,11 +159,19 @@ async def speak_with(session: AsyncSession, settings: Any, model_id: str) -> Cal
 
 
 def settings_for(
-    profile: VoiceProfile, settings: Any, setup: CallSetup | None = None
+    profile: VoiceProfile,
+    settings: Any,
+    setup: CallSetup | None = None,
+    engine: str | None = None,
 ) -> Any:
     """A copy of ``settings`` sounding as ``profile`` (on ``setup`` where
-    given) - for a preview, which must not change the voice in use."""
-    return _speaking(settings.model_copy(update=setting_values(profile, setup)))
+    given; on ``engine``, her voice there, where she has one) - for a
+    preview, which must not change the voice in use."""
+    update = setting_values(profile, setup)
+    if engine and (voice := profile.voices.get(engine)):
+        model = speaking_model(voice, update.get("TTS_MODEL", settings.TTS_MODEL))
+        update |= {"TTS_PROVIDER": engine, "TTS_MODEL": model}
+    return _speaking(settings.model_copy(update=update))
 
 
 class VoiceProfileError(ValueError):

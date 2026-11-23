@@ -19,6 +19,7 @@ from app.services.ai.domains.voice.catalog import (
     get_stt_providers,
     get_tts_model,
     get_tts_providers,
+    voice_name,
 )
 from app.services.ai.models import AIProvider
 from app.services.ai.models.provider_names import provider_label
@@ -67,15 +68,42 @@ def unvoiced(voice: VoiceProfile, provider_id: str) -> str:
     return f"{voice.name} has no {found.name if found else provider_id} voice yet"
 
 
-def speaks_as(model: str, voice: VoiceProfile | None) -> str:
-    """What a realtime ``model`` speaks in: the voice's own for its vendor,
-    else a note that she has none there, else the model's own voice."""
+def speaking(
+    voice: VoiceProfile, settings: Any, model: str | None = None
+) -> dict[str, Any]:
+    """What of her a call takes: her voice on what speaks it (a realtime
+    ``model``, else the setup's TTS), a note where she has none there
+    (``voiced`` False), and her style and speed where it takes them.
+    Every engine takes her style; speed, OpenAI's realtime models (not
+    GPT-Live) and a chain's TTS (``realtime_calls``)."""
     from app.services.ai.domains.voice import live_engines
 
-    if voice and (said := live_engines.call_voice(model, voice.voices)):
-        return f"speaks as {said}"
-    by = live_engines.voiced_by(model)
-    return unvoiced(voice, by.value) if voice and by else "speaks in its own voice"
+    if model:
+        provider = by.value if (by := live_engines.voiced_by(model)) else None
+        said = live_engines.call_voice(model, voice.voices)
+        paced = model.startswith("openai:") and not live_engines.is_gpt_live(model)
+    else:
+        provider = _models(settings)["tts_provider"]
+        said = voice.voices.get(provider)
+        paced = True
+    takes = ["her style"] if voice.tts_instructions else []
+    if paced:
+        takes.append(f"{voice.tts_speed:g}×")
+    if said or provider is None:
+        return {
+            "said": voice_name(said) if said else "its own voice",
+            "voiced": True,
+            "takes": takes,
+        }
+    return {"said": unvoiced(voice, provider), "voiced": False, "takes": takes}
+
+
+def speaks_as(model: str, voice: VoiceProfile | None) -> str:
+    """What a realtime ``model`` speaks in, as one line (``speaking``)."""
+    if voice is None:
+        return "speaks in its own voice"
+    line = speaking(voice, None, model)
+    return f"speaks as {line['said']}" if line["voiced"] else line["said"]
 
 
 def _local(providers: list[Any], provider_id: str) -> bool:

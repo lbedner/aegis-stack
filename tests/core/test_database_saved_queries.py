@@ -6,17 +6,23 @@ database-only stack, which ships no alembic, makes it with ``create_all``."""
 from aegis.constants import ComponentNames
 from aegis.core.components import COMPONENTS
 from aegis.core.migration_generator import (
+    DATABASE_AUDIT_MIGRATION,
     DATABASE_MIGRATION,
     get_services_needing_migrations,
 )
 from aegis.core.template_generator import TemplateGenerator
 
 
-def test_a_database_migrates_its_saved_queries_last() -> None:
+def test_a_database_migrates_its_saved_queries_then_its_audit_log_last() -> None:
+    """The audit log is its own revision, so a project that already has the
+    database's gets it as one more on update."""
     context = TemplateGenerator(
         "demo", ["database", "deploy", "mcp"]
     ).get_template_context()
-    assert get_services_needing_migrations(context)[-1] == "database"
+    assert get_services_needing_migrations(context)[-2:] == [
+        "database",
+        "database_audit",
+    ]
 
 
 def test_a_stack_that_migrates_nothing_else_gets_no_revision_for_it() -> None:
@@ -28,8 +34,9 @@ def test_a_stack_that_migrates_nothing_else_gets_no_revision_for_it() -> None:
 
 def test_the_component_declares_its_migration_and_files() -> None:
     spec = COMPONENTS[ComponentNames.DATABASE]
-    assert spec.migrations == [DATABASE_MIGRATION]
+    assert spec.migrations == [DATABASE_MIGRATION, DATABASE_AUDIT_MIGRATION]
     assert DATABASE_MIGRATION.stamp_signature == ("table", "saved_query")
     assert "app/components/database" in spec.files.primary
     assert "tests/components/test_database_saved.py" in spec.files.primary
     assert "tests/components/test_database_stored.py" in spec.files.primary
+    assert "tests/components/test_audit_log.py" in spec.files.primary

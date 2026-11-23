@@ -2,6 +2,8 @@
 auth) ends one of this database's connections, and every attempt is
 audited. SQLite has nothing to end: its holder's container restarts."""
 
+from unittest.mock import AsyncMock
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -59,3 +61,25 @@ def test_sqlite_has_no_connection_to_end(
     monkeypatch.setattr(db_transactions, "is_postgres", lambda: False)
     assert client.post(URL.format(pid=41)).status_code == 409
     assert audit.events[0]["outcome"] == "refused"
+
+
+def test_the_audit_log_is_read_newest_first_by_kind_and_actor(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.components.database import audit as log
+    from app.components.database.models.audit import AuditEvent
+
+    recent = AsyncMock(
+        return_value=[
+            AuditEvent(id=1, event_type="auth.login", actor_email="a@example.com")
+        ]
+    )
+    monkeypatch.setattr(log, "recent", recent)
+    as_admin(client)
+    response = client.get(
+        "/api/v1/database/audit", params={"kind": "auth.", "actor": "a@example.com"}
+    )
+    assert response.status_code == 200
+    [row] = response.json()
+    assert (row["event_type"], row["actor_email"]) == ("auth.login", "a@example.com")
+    recent.assert_awaited_once_with(200, kind="auth.", actor="a@example.com")

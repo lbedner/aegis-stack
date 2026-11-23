@@ -1,15 +1,31 @@
-"""Generic audit event emitter with pluggable backends."""
+"""Audit events: each one a log line, and a row in the audit log where the
+stack has the database component (``app.components.database.audit``).
 
+The row is written off the caller, in a session of its own: it survives the
+caller's rollback, and the caller never waits on it (on SQLite, a caller
+holding its session would wait on itself). A write that fails is logged,
+never raised; a process waits for the rest as it ends (``concurrency.drain``).
+"""
+
+from collections.abc import Callable, Coroutine
 from datetime import UTC, datetime
 import getpass
 import logging
 from typing import Any
 
+from app.core.concurrency import background
+from app.core.discovery import optional
+
 logger = logging.getLogger("audit")
 
 
+def keeper() -> Callable[[dict[str, Any]], Coroutine[object, object, None]] | None:
+    """What keeps an event beside its log line, where the stack has one."""
+    return optional("app.components.database.audit", "keep")
+
+
 class AuditEmitter:
-    """Emit structured audit events. Default backend: structured logging."""
+    """Emit structured audit events: a log line, and a row where kept."""
 
     async def emit(
         self,
@@ -18,7 +34,7 @@ class AuditEmitter:
         actor_id: int | None = None,
         actor_email: str | None = None,
         target_type: str | None = None,
-        target_id: int | None = None,
+        target_id: int | str | None = None,
         org_id: int | None = None,
         ip_address: str | None = None,
         detail: str | None = None,
@@ -52,6 +68,9 @@ class AuditEmitter:
         # Remove None values for cleaner output
         event = {k: v for k, v in event.items() if v is not None}
         logger.info(f"AUDIT: {event_type}", extra={"audit": event})
+        keep = keeper()
+        if keep is not None:
+            background(keep(event), finish=True)  # a failure is logged there
 
 
 # Singleton instance

@@ -334,11 +334,11 @@ async def startup_database_init() -> None:
 {% endif %}
 
 {% if database_engine == "postgres" and not needs_migrations %}
-        # No migrations needed - create tables directly via SQLModel
-        from sqlmodel import SQLModel
+        # No migrations needed - create tables directly via SQLModel, with
+        # their schemas (the audit log's ``audit``)
+        from app.components.backend.startup.schema_recovery import create_tables
 
-        from app.core.db import engine
-        SQLModel.metadata.create_all(engine)
+        create_tables()
         logger.info("Database tables created/verified (PostgreSQL)")
 {% endif %}
 

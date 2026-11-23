@@ -1,19 +1,36 @@
-"""Overseer's write action on the database, behind ``get_admin_actor``:
+"""The database's API: its audit log, read behind ``get_admin_reader``
+(``audit.recent``); and Overseer's write action, behind ``get_admin_actor``:
 end one of its Postgres connections, rolling back the transaction it holds
 (``db_transactions.end``). Every attempt is audited (who, which connection,
 how it went), refused ones included. SQLite has no connection to end: its
 holder's container restarts instead (``deploy.router``).
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
 from app.components.backend.api.utils import audit_admin_action
+from app.components.database import audit as audit_log
+from app.components.database.models.audit import AuditEvent
 from app.core.audit import AuditEmitter, get_audit
-from app.services.shared.deps import Actor, get_admin_actor
+from app.services.shared.deps import Actor, get_admin_actor, get_admin_reader
 from app.services.system import db_transactions
 
 router = APIRouter(prefix="/database", tags=["database"])
+
+
+@router.get(
+    "/audit",
+    response_model=list[AuditEvent],
+    dependencies=[Depends(get_admin_reader)],
+)
+async def audit_events(
+    limit: int = Query(200, ge=1, le=audit_log.MOST),
+    kind: str | None = Query(None, description="Event types starting with this"),
+    actor: str | None = Query(None, description="The actor's email or user id"),
+) -> list[AuditEvent]:
+    """The newest audited actions."""
+    return await audit_log.recent(limit, kind=kind, actor=actor)
 
 
 class Ended(BaseModel):

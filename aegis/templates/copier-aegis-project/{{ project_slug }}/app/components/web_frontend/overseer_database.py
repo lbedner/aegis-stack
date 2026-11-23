@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.core import series
 from app.core.config import settings
-from app.core.formatting import counted, format_span
+from app.core.formatting import counted, format_relative_time, format_span
 from app.services.system import ui_database, ui_logs
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_database_subtitle
@@ -56,6 +56,7 @@ SECTIONS = (
             "engine": "Engine",
             "activity": "Slow & locked",
             "transactions": "Transactions",
+            "audit": "Audit",
         },
     ),
 )
@@ -85,7 +86,27 @@ async def section_context(
             "transactions_events": EVENTS,
             "transactions_event": EVENT,
         }
+    elif section == "audit":
+        context["audit"] = await audit_rows()
     return context
+
+
+async def audit_rows() -> list[dict[str, Any]]:
+    """The newest audited actions as the table shows them, filtered on the
+    page (``filter_input``)."""
+    from app.components.database import audit  # ships with a database
+
+    return [
+        {
+            "at": format_relative_time(row.at),
+            "event": row.event_type,
+            "actor": row.actor,
+            "target": row.target,
+            "outcome": row.context.get("outcome"),
+            "detail": row.detail,
+        }
+        for row in await audit.recent()
+    ]
 
 
 async def transactions() -> dict[str, Any]:

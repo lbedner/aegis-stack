@@ -435,6 +435,21 @@ DATABASE_MIGRATION = ServiceMigrationSpec(
     stamp_signature=("table", "saved_query"),
 )
 
+# The audit log (``app/components/database/models/audit.py``): who did what,
+# from every ``AuditEmitter.emit``. Its own revision, right after the
+# database's, so a project that already has that one gets it on update;
+# its own Postgres schema like the secrets' and deploy history's.
+DATABASE_AUDIT_MIGRATION = ServiceMigrationSpec(
+    service_name="database_audit",
+    description="The audit log: one row per audited action",
+    schema="audit",
+    stamp_signature=("table", "audit.audit_event"),
+)
+
+# The database component's own revisions, in order: every run that migrates
+# anything (a plugin's included) carries them first or last.
+DATABASE_OWN = ["database", "database_audit"]
+
 
 # The runner component's queue and tokens were meetings' until any service
 # could ask a run: both tables' rows carry over, ids included. A run was
@@ -1079,7 +1094,7 @@ def generate_plugin_migrations(
         return []
     return generate_revisions(
         project_path,
-        ["database", *(m.service_name for m in migrations)],
+        [*DATABASE_OWN, *(m.service_name for m in migrations)],
         restore_data=True,
         specs={m.service_name: m for m in migrations},
     )
@@ -1204,10 +1219,11 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
             and on(AnswerKeys.include_key(name))
         )
 
-    # The database component's own table (saved queries): last, and only
-    # where something else migrates; otherwise ``create_all`` makes it.
+    # The database component's own tables (saved queries, then the audit
+    # log): last, and only where something else migrates; otherwise
+    # ``create_all`` makes them.
     if services and include_database_on:
-        services.append("database")
+        services.extend(DATABASE_OWN)
 
     # Per-user vs shared insights is one folded migration — generation
     # picks the shape from the context flag (see ``generate_migration``).

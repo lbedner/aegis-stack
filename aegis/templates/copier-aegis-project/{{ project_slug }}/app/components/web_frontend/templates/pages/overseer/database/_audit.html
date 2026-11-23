@@ -1,0 +1,22 @@
+{# The audit log (overseer_database.audit_rows): who did what, newest
+   first, as AuditEmitter.emit was told it; the filter narrows the rows on
+   the page. #}
+{% from "components/macros/form.html" import filter_input %}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+<div id="database-audit" class="space-y-3">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <p class="text-xs text-aegis-muted">The newest audited actions: sign-ins, admin changes, secrets, connections ended. Credentials are redacted before a row is kept.</p>
+    {{ filter_input("#database-audit tbody", placeholder="Filter by event, actor or detail") }}
+  </div>
+  {% call card(None) %}
+    {{ data_table([
+      {"key": "at", "label": "When"},
+      {"key": "event", "label": "Event", "kind": "code"},
+      {"key": "actor", "label": "Actor"},
+      {"key": "target", "label": "Target"},
+      {"key": "outcome", "label": "Outcome"},
+      {"key": "detail", "label": "Detail", "wrap": True},
+    ], audit, empty="Nothing audited yet") }}
+  {% endcall %}
+</div>

@@ -34,6 +34,7 @@ import redis.asyncio as aioredis  # noqa: E402
 
 from app.components.worker import arq_hooks  # noqa: E402
 from app.components.worker.runtime import check_queues  # noqa: E402
+from app.core.concurrency import drain  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.core.constants import QueueName  # noqa: E402
 from app.core.log import setup_logging  # noqa: E402
@@ -71,6 +72,7 @@ async def main(queue: str) -> None:
     finally:
         pause.cancel()
         await worker.close()
+        await drain(timeout=5)  # its audit rows, before the loop ends
         await redis.aclose()
 
 

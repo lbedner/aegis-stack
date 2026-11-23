@@ -141,6 +141,7 @@ class TestSections:
             "Engine",
             "Slow & locked",
             "Transactions",
+            "Audit",
             "Container",
             "Logs",
             "Settings",
@@ -1029,6 +1030,54 @@ class TestTransactions:
         assert form.get("hx-post") == overseer_database.END_API.format(pid=41)
 
 
+class TestAudit:
+    def test_the_audit_log_reads_newest_first_with_how_it_went(
+        self, sqlite: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.components.database import audit
+        from app.components.database.models.audit import AuditEvent
+
+        rows = [
+            AuditEvent(
+                id=2,
+                at=datetime(2026, 11, 23, 9, 30),
+                event_type="database.connection_end",
+                actor_email="ops@example.com",
+                target_type="connection",
+                target_id="41",
+                detail="Ended connection 41",
+                context={"outcome": "ended"},
+            ),
+            AuditEvent(
+                id=1,
+                at=datetime(2026, 11, 23, 9, 0),
+                event_type="auth.login",
+                actor_id=7,
+            ),
+        ]
+
+        monkeypatch.setattr(audit, "recent", AsyncMock(return_value=rows))
+        html = _get(sqlite, "audit")
+        shown = table_text(html, "#database-audit table")
+        assert [(r["Event"], r["Actor"], r["Outcome"]) for r in shown] == [
+            ("database.connection_end", "ops@example.com", "ended"),
+            ("auth.login", "7", "-"),
+        ]
+        assert shown[0]["Target"] == "connection 41"
+        assert shown[0]["Detail"] == "Ended connection 41"
+        one(html, "#database-audit input[data-filter]")
+
+    def test_nothing_audited_says_so(
+        self, sqlite: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.components.database import audit
+
+        monkeypatch.setattr(audit, "recent", AsyncMock(return_value=[]))
+        assert "Nothing audited yet" in text(
+            one(_get(sqlite, "audit"), "#database-audit")
+        )
+
+
 @pytest.mark.parametrize("module", ["overseer_database", "ui_database"])
 def test_the_page_imports_what_ships_with_a_database_where_it_uses_it(
     module: str,
@@ -1041,6 +1090,7 @@ def test_the_page_imports_what_ships_with_a_database_where_it_uses_it(
     import inspect
 
     database_only = {
+        "app.components.database.audit",
         "app.core.db_activity",
         "app.services.system.db_transactions",
         "app.services.system.db_activity_search",

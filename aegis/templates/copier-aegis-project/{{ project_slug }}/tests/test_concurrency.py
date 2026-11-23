@@ -189,6 +189,43 @@ class TestBackground:
 
         assert cleaned == ["done"] and not concurrency._background
 
+    async def test_drain_lets_what_must_finish_finish_first(self) -> None:
+        """Work started with ``finish`` (an audit row) is waited for, not
+        cancelled; the rest is cancelled after it."""
+        free = asyncio.Event()
+        ended: list[str] = []
+
+        async def row() -> None:
+            await free.wait()
+            ended.append("row")
+
+        async def loop() -> None:
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                ended.append("loop cancelled")
+                raise
+
+        concurrency.background(row(), finish=True)
+        concurrency.background(loop())
+        await asyncio.sleep(0)
+        asyncio.get_running_loop().call_later(0.01, free.set)
+
+        await concurrency.drain(timeout=1)
+
+        assert ended == ["row", "loop cancelled"]
+
+    async def test_settle_waits_only_for_what_must_finish(self) -> None:
+        done: list[str] = []
+
+        async def row() -> None:
+            await asyncio.sleep(0)
+            done.append("row")
+
+        concurrency.background(row(), finish=True)
+        await concurrency.settle()
+        assert done == ["row"]
+
 
 class TestClosing:
     """A stream that would stay open (a page's live SSE) ends as the server

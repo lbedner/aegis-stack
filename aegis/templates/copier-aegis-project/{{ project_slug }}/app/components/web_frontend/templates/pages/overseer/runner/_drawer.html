@@ -1,12 +1,13 @@
 {# One run in the drawer: what was asked, in its asker's words, then how
-   it goes (_drawer_live.html, followed over SSE while it goes, the
-   stream closed once it is back) and what the agent was sent, folded
+   it goes (_drawer_live.html, followed over SSE while it, or a push of
+   its branch, goes, the stream closed once both are back) and what the
+   agent was sent, folded
    (overseer_runner.drawer). #}
 {% from "components/macros/layout.html" import card, code_block, dialog_title, fold %}
 <div class="space-y-4">
   {{ dialog_title(title, ids) }}
-  <div class="space-y-4"{% if going %} hx-ext="sse" sse-connect="{{ events }}" sse-close="{{ done }}"{% endif %}>
-    <div class="space-y-4"{% if going %} sse-swap="{{ event }}" hx-swap="innerHTML"{% endif %}>{% include "pages/overseer/runner/_drawer_live.html" %}</div>
+  <div class="space-y-4"{% if follow %} hx-ext="sse" sse-connect="{{ events }}" sse-close="{{ done }}"{% endif %}>
+    <div class="space-y-4"{% if follow %} sse-swap="{{ event }}" hx-swap="innerHTML"{% endif %}>{% include "pages/overseer/runner/_drawer_live.html" %}</div>
   </div>
   {% call card("Prompt", id="run-prompt") %}
   {% call fold("Show prompt") %}{{ code_block(prompt, wrap=True) }}{% endcall %}

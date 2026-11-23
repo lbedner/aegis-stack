@@ -9,19 +9,19 @@ The walk below covers every route behind either dependency and every
 Overseer route that is not a read, so a write added later is refused
 without remembering to be."""
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from importlib.util import find_spec
 from pathlib import Path
 import re
 from typing import Any
 
 from fastapi import FastAPI
-from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 import pytest
 
 from app.core.config import settings
+from app.core.route_auth import route_uses_dependency
 from app.services.shared.deps import (
     NO_AUTH_REFUSAL,
     get_admin_actor,
@@ -42,12 +42,6 @@ def _operator_deps() -> set[Callable[..., Any]]:
     return found
 
 
-def _calls(dependant: Dependant) -> Iterator[Any]:
-    for dep in dependant.dependencies:
-        yield dep.call
-        yield from _calls(dep)
-
-
 OVERSEER = ("/overseer", "/partials/overseer")
 READS = {"GET", "HEAD", "OPTIONS"}
 
@@ -55,7 +49,7 @@ READS = {"GET", "HEAD", "OPTIONS"}
 def _writes(route: APIRoute, wanted: set[Callable[..., Any]]) -> set[str]:
     """``route``'s methods that make a change: all of them behind an
     operator dependency, any but a read under Overseer."""
-    if wanted & set(_calls(route.dependant)):
+    if any(route_uses_dependency(route, dep) for dep in wanted):
         return set(route.methods)
     if not route.path.startswith(OVERSEER) or route.path in _public():
         return set()
@@ -174,7 +168,7 @@ def test_with_auth_nothing_is_refused_here() -> None:
 
 
 PAGES = Path("app/components/web_frontend/templates/pages/overseer")
-WRITES = re.compile(r'hx-(?:post|put|delete|patch)=|hx_dialog_post\(|method="post"')
+WRITES = re.compile(r'hx-(?:post|put|delete|patch)=|hx_\w*post\w*\(|method="post"')
 FORMS = re.compile(r"<form\b.*?</form>", re.S)
 
 
@@ -214,3 +208,6 @@ def test_the_scan_sees_an_unmarked_control() -> None:
     assert not unmarked_writes(
         '<form hx-post="/x"><button data-write>Go</button></form>'
     )
+    # Written by the hx helpers that post, whichever.
+    assert unmarked_writes("<form {{ hx_drawer_post(url) }}><button>Go</button></form>")
+    assert unmarked_writes('{{ action("Go", hx_post_swap(url, "#row")) }}')

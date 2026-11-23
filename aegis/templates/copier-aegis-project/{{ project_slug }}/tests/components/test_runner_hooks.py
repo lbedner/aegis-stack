@@ -3,11 +3,13 @@ settings that make Claude Code post each step to the app, and what an
 event says the run is doing."""
 
 import json
+from pathlib import Path
+import subprocess
 from typing import Any
 
 import pytest
 
-from app.components.runner import hooks
+from app.components.runner import hooks, protocol
 from tests._cli import invoke
 from tests._runner import WHERE, step
 
@@ -111,6 +113,41 @@ def test_the_settings_post_each_step_to_the_app_with_the_runners_token() -> None
         assert hook["headers"] == {"Authorization": f"Bearer ${hooks.TOKEN_ENV}"}
         assert hook["allowedEnvVars"] == [hooks.TOKEN_ENV]
         assert hook["timeout"] <= 5
+
+
+def _stop_check(repo: Path, again: bool) -> str:
+    """What a build's own Stop hook says when its agent ends a turn in
+    ``repo`` (``again``: the agent already sent back once)."""
+    (_, group) = hooks.settings("http://app", commit=True)["hooks"]["Stop"]
+    ((hook,),) = [group["hooks"]]
+    assert hook["type"] == "command"
+    event = {"hook_event_name": "Stop", "cwd": str(repo), "stop_hook_active": again}
+    done = subprocess.run(
+        hook["command"],
+        shell=True,
+        input=json.dumps(event),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return done.stdout.strip()
+
+
+def test_a_build_ending_its_turn_with_work_not_committed_is_sent_back_once(
+    tmp_path: Path,
+) -> None:
+    """A Push sends commits: an agent that would stop with its work not
+    committed is told to commit it, once; a second stop goes through,
+    so one that cannot (its checks fail) says why instead of looping."""
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    assert _stop_check(repo, again=False) == ""
+
+    (repo / "NOTES.md").write_text("built")
+
+    said = json.loads(_stop_check(repo, again=False))
+    assert said == {"decision": "block", "reason": protocol.COMMIT_ASKED}
+    assert _stop_check(repo, again=True) == ""
 
 
 def test_the_cli_prints_the_settings_for_an_app() -> None:

@@ -45,6 +45,13 @@ NO_ANSWER_ASKED = (
     "If you find no answer, say why, then end with a line that says only "
     f"{NO_ANSWER_MARK}"
 )
+# What work on a branch is told: a Push sends its commits (what the runner
+# counts as ``unpushed``), and the push is its owner's, at a press.
+COMMIT_ASKED = (
+    "Commit your work on this branch as a single commit once its checks pass, "
+    "never amending a commit already pushed. Do not push it or open a pull "
+    "request: its owner does."
+)
 # A repository on GitHub, as its owner and name say it (``acme/app``).
 GITHUB_REPO = r"[\w.-]+/[\w.-]+?"
 

@@ -1,8 +1,9 @@
 """Where a run's work is kept, and how it reaches GitHub: the worktree of
 its branch under the runner's worktrees folder (``kept``) or a fresh one
 for a question (``fresh``), the commits it has not pushed (``unpushed``),
-and its branch pushed with a token (``push``) and its pull request opened
-(``pull_request``). Every git step has ``GIT_SECONDS`` and nobody to ask."""
+brought up to the branch on GitHub (``catch_up``), and its branch pushed
+with a token (``push``) and its pull request opened (``pull_request``).
+Every git step has ``GIT_SECONDS`` and nobody to ask."""
 
 import base64
 from collections.abc import Iterator
@@ -34,6 +35,12 @@ class WorktreeRefusedError(ValueError):
 UNPUSHED = ("HEAD", "--not", "--remotes")
 
 
+def _tracked(branch: str) -> str:
+    """Where the runner knows ``branch`` as GitHub has it: what a fetch and
+    a push write, and ``UNPUSHED`` counts against."""
+    return f"refs/remotes/origin/{branch}"
+
+
 def unpushed(path: Path) -> int | None:
     """How many of the branch's commits no remote branch has, as the
     remotes were last fetched; None where git cannot say, which never
@@ -42,17 +49,49 @@ def unpushed(path: Path) -> int | None:
     return int(counted.stdout.strip()) if counted.returncode == 0 else None
 
 
+def _signed(token: str | None) -> dict[str, str] | None:
+    """git's environment carrying ``token`` to GitHub over HTTPS, never on
+    a command line; none without one (a public repository reads without)."""
+    if not token:
+        return None
+    basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    return {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
+        "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {basic}",
+    }
+
+
+def catch_up(path: Path, slug: str, branch: str, token: str | None) -> None:
+    """``branch``'s worktree at ``path`` brought up to the branch on GitHub,
+    where it is there and moved on (its base merged in there, say): read
+    over HTTPS (a checkout's own remote may be one the runner cannot
+    reach), and what is not pushed yet rebased onto it. A rebase that
+    cannot go is undone, so the push after says why."""
+    tracked = _tracked(branch)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        read = git(
+            path,
+            "fetch",
+            "--quiet",
+            GITHUB_GIT.format(slug=slug),
+            f"+refs/heads/{branch}:{tracked}",
+            check=False,
+            env=_signed(token),
+        )
+        if read.returncode:  # not on GitHub yet
+            return
+        if git(
+            path, "rebase", "--quiet", "--autostash", tracked, check=False
+        ).returncode:
+            git(path, "rebase", "--abort", check=False)
+
+
 def push(path: Path, slug: str, branch: str, token: str) -> None:
     """``branch`` pushed to GitHub over HTTPS with ``token``, and the
     remote's branch known to be there, so nothing is left to push. The
     repository's hooks, which its agent may have written, are not run with
     the token in git's environment."""
-    basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
-    env = {
-        "GIT_CONFIG_COUNT": "1",
-        "GIT_CONFIG_KEY_0": "http.https://github.com/.extraheader",
-        "GIT_CONFIG_VALUE_0": f"AUTHORIZATION: basic {basic}",
-    }
     where = GITHUB_GIT.format(slug=slug)
     git(
         path,
@@ -61,9 +100,9 @@ def push(path: Path, slug: str, branch: str, token: str) -> None:
         "--no-verify",
         where,
         f"HEAD:refs/heads/{branch}",
-        env=env,
+        env=_signed(token),
     )
-    git(path, "update-ref", f"refs/remotes/origin/{branch}", "HEAD")
+    git(path, "update-ref", _tracked(branch), "HEAD")
 
 
 async def pull_request(
@@ -98,7 +137,8 @@ async def pull_request(
 def git(
     repo: Path, *args: str, check: bool = True, env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
-    """``git`` in ``repo``, with nobody to ask and ``GIT_SECONDS`` to
+    """``git`` in ``repo``, with nobody to ask (no stdin, and no prompt:
+    git asks for credentials on the terminal) and ``GIT_SECONDS`` to
     answer, ``env`` added to the runner's; a refusal raises with what git
     said."""
     return subprocess.run(
@@ -108,7 +148,7 @@ def git(
         text=True,
         check=check,
         timeout=GIT_SECONDS,
-        env={**os.environ, **env} if env else None,
+        env={**os.environ, "GIT_TERMINAL_PROMPT": "0", **(env or {})},
     )
 
 
@@ -157,9 +197,7 @@ def kept(repo: Path, ref: str, home: Path, branch: str) -> Path:
             )
         return path
     _fetch(repo)
-    there = _has(repo, f"refs/heads/{branch}") or _has(
-        repo, f"refs/remotes/origin/{branch}"
-    )
+    there = _has(repo, f"refs/heads/{branch}") or _has(repo, _tracked(branch))
     _add(
         repo,
         *(

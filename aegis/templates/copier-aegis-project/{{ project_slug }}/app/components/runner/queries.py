@@ -161,37 +161,6 @@ async def spend(db: AsyncSession, run_id: int, cost: float) -> None:
     )
 
 
-def _others_in_session(run_id: int) -> list[Any]:
-    """Clauses keeping runs to the other runs of this run's session: none
-    for a run in no session."""
-    its = (
-        select(RunnerRun.session_id)
-        .where(col(RunnerRun.id) == run_id)
-        .scalar_subquery()
-    )
-    return [col(RunnerRun.session_id) == its, col(RunnerRun.id) != run_id]
-
-
-async def taken_in_session(db: AsyncSession, run_id: int) -> bool:
-    """Whether a runner took an earlier run of this run's session: the
-    agent may have begun the session then."""
-    query = select(RunnerRun.id).where(
-        *_others_in_session(run_id),
-        col(RunnerRun.id) < run_id,
-        col(RunnerRun.claimed_at).is_not(None),
-    )
-    return (await db.exec(query.limit(1))).first() is not None
-
-
-async def cost_of_session(db: AsyncSession, run_id: int) -> float:
-    """What the other runs of this run's session have cost, together:
-    every one that answered before it, whichever was asked first."""
-    query = select(func.coalesce(func.sum(col(RunnerRun.cost)), 0.0)).where(
-        *_others_in_session(run_id)
-    )
-    return float((await db.exec(query)).one())
-
-
 async def fail_overdue(
     db: AsyncSession, now: datetime, claimed_before: datetime, result: str
 ) -> int:
@@ -370,20 +339,33 @@ async def going(
     return (await db.exec(query)).first()
 
 
+def _pushes_of(run: RunnerRun) -> list[Any]:
+    """Clauses keeping runs to the pushes of ``run``'s branch asked since
+    it, about its subject."""
+    return [
+        *_about(run.subject_kind, [run.subject_id]),
+        RunnerRun.action == PUSH,
+        RunnerRun.branch == run.branch,
+        col(RunnerRun.id) > run.id,
+    ]
+
+
 async def pushed(db: AsyncSession, run: RunnerRun) -> RunnerRun | None:
-    """The latest push of ``run``'s branch asked since it, about its
-    subject, if any."""
+    """The push of ``run``'s branch since it that says where its commits
+    are: one that went (they are on GitHub from then, whatever a push
+    after it says), else the latest asked."""
     query = (
         select(RunnerRun)
-        .where(
-            *_about(run.subject_kind, [run.subject_id]),
-            RunnerRun.action == PUSH,
-            RunnerRun.branch == run.branch,
-            col(RunnerRun.id) > run.id,
-        )
-        .order_by(col(RunnerRun.id).desc())
+        .where(*_pushes_of(run))
+        .order_by((col(RunnerRun.status) == DONE).desc(), col(RunnerRun.id).desc())
         .limit(1)
     )
+    return (await db.exec(query)).first()
+
+
+async def pushing(db: AsyncSession, run: RunnerRun) -> RunnerRun | None:
+    """The push of ``run``'s branch since it still going, if one is."""
+    query = select(RunnerRun).where(*_pushes_of(run), col(RunnerRun.status).in_(GOING))
     return (await db.exec(query)).first()
 
 
@@ -398,6 +380,29 @@ async def answered(
         col(RunnerRun.status).in_((DONE, FAILED)),
     )
     return {s: (status, result) for s, status, result in (await db.exec(query)).all()}
+
+
+async def went(
+    db: AsyncSession,
+    kind: str,
+    subject_ids: list[str],
+    action: str,
+    *,
+    owner_user_id: int | None,
+) -> dict[str, int]:
+    """These subjects' latest runs of ``action`` that went (done), the
+    owner's: each one's id, by subject."""
+    query = (
+        select(RunnerRun.subject_id, func.max(RunnerRun.id))
+        .where(
+            *_about(kind, subject_ids),
+            owner_clause(RunnerRun.owner_user_id, owner_user_id),
+            RunnerRun.action == action,
+            RunnerRun.status == DONE,
+        )
+        .group_by(col(RunnerRun.subject_id))
+    )
+    return dict((await db.exec(query)).all())
 
 
 async def drop(

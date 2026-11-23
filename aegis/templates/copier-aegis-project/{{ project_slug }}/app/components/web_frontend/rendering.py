@@ -87,6 +87,11 @@ templates.env.globals["spark_box"] = f"0 0 {series.SPARK_WIDTH} {series.SPARK_HE
 templates.env.filters.update(FILTERS)
 
 
+# The bodies of the one modal and the one side drawer (layout.html's
+# ``dialog`` and ``drawer``), which their openers and forms answer into.
+DIALOG_BODY, DRAWER_BODY = "#dialog-body", "#drawer-body"
+
+
 def hx_dialog(url: str, extra: str = "") -> Markup:
     """The attributes for "open this in the one modal" (pattern 4), so no
     template has to remember which element the dialog swaps into.
@@ -101,7 +106,7 @@ def hx_dialog(url: str, extra: str = "") -> Markup:
     a row-form's opener ("I can't open a new one until I refresh").
     Saying ``innerHTML`` here costs nothing and cannot be borrowed
     against, and it fixes every opener at once."""
-    return hx_into(url, "#dialog-body", extra)
+    return hx_into(url, DIALOG_BODY, extra)
 
 
 def hx_drawer(url: str) -> Markup:
@@ -109,14 +114,14 @@ def hx_drawer(url: str) -> Markup:
     is edited in beside the page, without the address bar naming it (the
     list-driven ``drawer_sync`` does that). Same stated swap as
     ``hx_dialog``, for the same reason."""
-    return hx_into(url, "#drawer-body")
+    return hx_into(url, DRAWER_BODY)
 
 
-def hx_into(url: str, target: str, extra: str = "") -> Markup:
-    """The attributes for "get ``url`` into ``target``": its swap stated
-    (``hx_dialog`` says why), ``extra`` riding along."""
+def hx_into(url: str, target: str, extra: str = "", *, verb: str = "get") -> Markup:
+    """The attributes for "get ``url`` into ``target``" (or ``verb`` it):
+    its swap stated (``hx_dialog`` says why), ``extra`` riding along."""
     return Markup(
-        f'hx-get="{escape(url)}" hx-target="{target}" hx-swap="innerHTML" {extra}'
+        f'hx-{verb}="{escape(url)}" hx-target="{target}" hx-swap="innerHTML" {extra}'
     )
 
 
@@ -125,9 +130,13 @@ def hx_dialog_post(url: str) -> Markup:
     the answer back into the dialog, which is how a 422 re-renders the
     form with its errors (pattern 1 inside pattern 4). States its swap
     for the same reason ``hx_dialog`` does."""
-    return Markup(
-        f'hx-post="{escape(url)}" hx-target="#dialog-body" hx-swap="innerHTML"'
-    )
+    return hx_into(url, DIALOG_BODY, verb="post")
+
+
+def hx_drawer_post(url: str) -> Markup:
+    """``hx_dialog_post`` for the side drawer: the answer is the drawer the
+    form or button was pressed in, never the modal over it."""
+    return hx_into(url, DRAWER_BODY, verb="post")
 
 
 def hx_post(url: str, extra: str = "") -> Markup:
@@ -315,6 +324,7 @@ templates.env.globals["hx_replace"] = hx_replace
 templates.env.globals["hx_dialog"] = hx_dialog
 templates.env.globals["hx_drawer"] = hx_drawer
 templates.env.globals["hx_dialog_post"] = hx_dialog_post
+templates.env.globals["hx_drawer_post"] = hx_drawer_post
 
 
 PAGE_LAYOUT = "layouts/page.html"

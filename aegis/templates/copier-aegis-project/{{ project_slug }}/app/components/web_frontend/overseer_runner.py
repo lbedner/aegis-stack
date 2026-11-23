@@ -51,7 +51,7 @@ from .rendering import (
     chips,
     drawer_state,
     fragment,
-    hx_dialog_post,
+    hx_drawer_post,
     status_cell,
     with_query,
 )
@@ -143,9 +143,8 @@ async def _push(
     there, how the push asked since went (``pushed``, else read) and what
     it said (its pull request's link, once done), and the button while no
     push is going or done; None when its runner counted nothing to push.
-
-    ponytail: the drawer says "Pushing" until it is read again; streamed
-    over the drawer's SSE when a push is slow enough to watch."""
+    The drawer follows a push that goes, as it does a run (``drawer``'s
+    ``follow``)."""
     if not run.unpushed:
         return None
     pushed = pushed or await runs.pushed(db, run)
@@ -154,7 +153,7 @@ async def _push(
         "unpushed": run.unpushed,
         "status": "going" if status in GOING else status,
         "result": pushed.result if pushed else None,
-        "post": hx_dialog_post(push_url(run.id)) if status in (None, FAILED) else None,  # type: ignore[arg-type]
+        "post": hx_drawer_post(push_url(run.id)) if status in (None, FAILED) else None,  # type: ignore[arg-type]
     }
 
 
@@ -352,9 +351,11 @@ async def drawer(
     db: Any, run: RunnerRun, pushed: RunnerRun | None = None
 ) -> dict[str, Any]:
     """``run`` whole, with the push of its branch just asked, if one was;
-    followed (``events``) while it goes."""
+    followed (``events``) while it goes, or while that push does."""
+    going, push = run.status in GOING, await _push(db, run, pushed)
     return {
-        "going": run.status in GOING,
+        "going": going,
+        "follow": going or bool(push and push["status"] == "going"),
         "events": events_url(run.id or 0),
         "event": RUN_EVENT,
         "done": RUN_DONE,
@@ -377,15 +378,16 @@ async def drawer(
             ("Session", run.session_id),
         ],
         **_did(await runs.steps(db, run.id or 0)),
-        "push": await _push(db, run, pushed),
+        "push": push,
         "prompt": run.prompt,
         "result": run.result,
     }
 
 
 def drawer_events(run_id: int, max_frames: int | None = None) -> AsyncIterator[str]:
-    """A run's drawer over SSE: what changes while it goes, sent again only
-    when it does, until it is back (``until_done``). Its runner posts by
+    """A run's drawer over SSE: what changes while it, or a push of its
+    branch, goes, sent again only when it does, until both are back
+    (``until_done``). Its runner posts by
     HTTP and nothing announces a change, so the run is read each round.
 
     ponytail: each round reads and renders its whole session (up to
@@ -398,6 +400,6 @@ def drawer_events(run_id: int, max_frames: int | None = None) -> AsyncIterator[s
             context = None if run is None else await drawer(db, run)
         if context is None:
             return {}, False
-        return {RUN_EVENT: fragment(DRAWER_LIVE, **context)}, context["going"]
+        return {RUN_EVENT: fragment(DRAWER_LIVE, **context)}, context["follow"]
 
     return until_done(live, RUN_DONE, LIVE_SECONDS, max_frames)

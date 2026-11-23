@@ -1,7 +1,8 @@
-"""Inference commands, on the speech server the component tracks
-(``app.core.speech_server``), as Overseer > Inference > Speech and the
-inference API:
+"""Inference commands, on the engines the component tracks, as Overseer >
+Inference and the inference API:
 
+- ``inference status`` - every engine: what it holds, its memory, who runs
+  on it, and how to add one the app lacks (``inference.overview``).
 - ``inference speech`` - what it reports, and its voices by accent and gender.
 - ``inference speak "a line" -v af_heart`` - the line said, into an MP3.
 - ``inference speech-model unload|reload`` - its model out of memory, or back.
@@ -24,6 +25,7 @@ from urllib.parse import urlsplit
 import typer
 
 from app.cli import theme
+from app.components.inference import overview
 from app.components.inference.llamacpp import LlamaCppEngine, router_command
 from app.components.inference.ollama_library import link_ollama as link
 from app.core import speech_server
@@ -31,9 +33,25 @@ from app.core.config import settings
 
 app = typer.Typer(
     name="inference",
-    help="The local inference servers: the speech server, and llama.cpp's models.",
+    help="The local inference engines: their status, the speech server, and llama.cpp's models.",
     no_args_is_help=True,
 )
+
+
+@app.command()
+async def status() -> None:
+    """Every engine: what it holds, its memory, and who runs on it."""
+    found = await overview.current_overview(serving=False)
+    for row in found.engines:
+        said = theme.good if row.available else theme.warn
+        where = f" at {row.url}" if row.url else ""
+        said(f"{row.name} ({row.job}){where}")
+        typer.echo(f"  Loaded: {overview.holds_said(row)}")
+        typer.echo(f"  Memory: {overview.memory_said(row)}")
+        typer.echo(f"  Used by: {overview.used_by_said(row)}")
+    typer.echo(f"{overview.REPORTED}: {overview.total_said(found)}")
+    for engine in found.to_add:
+        typer.echo(f"Add {engine.name} ({engine.job}): {engine.how} {engine.command}")
 
 
 def _url() -> str:

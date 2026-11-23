@@ -9,7 +9,8 @@ import logging
 import time
 from typing import Any
 
-from ..models import AudioInput, STTProvider, TranscriptionResult
+from .. import local
+from ..models import LOCAL_PACKAGES, AudioInput, STTProvider, TranscriptionResult
 from .config import STTConfig, get_stt_config
 from .providers import BaseSTTProvider, get_stt_provider
 
@@ -158,6 +159,8 @@ class STTService:
 
         try:
             result = await provider.transcribe(audio)
+            if provider.provider_type in LOCAL_PACKAGES:  # its model is in memory
+                local.LOADED.add(provider.provider_type)
 
             logger.debug(
                 f"Transcription complete: {len(result.text)} chars, "

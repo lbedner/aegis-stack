@@ -30,10 +30,10 @@ API = "/api/v1/voice"
 # A voice said: by the voice in the path, or as a field beside the line.
 SAY = f"{API}/preview"
 PREVIEW = f"{SAY}/"
-# The speech server's own page (Inference > Speech), where the inference
+# The speech server's own page (Inference > Kokoro-FastAPI), where the inference
 # component tracks it: what it reports of itself, its model, its charts.
 SPEECH_PAGE = discovery.optional(
-    "app.components.web_frontend.overseer_inference", "SPEECH_PAGE"
+    "app.components.web_frontend.overseer_inference_speech", "SPEECH_PAGE"
 )
 
 

@@ -1,6 +1,6 @@
 """The inference API (``api/inference.py``): the speech server as it
 answers, a line said in one of its voices, and its model unloaded or
-reloaded. Overseer's Speech section plays and moves through it; the
+reloaded. Its Overseer page plays and moves through it; the
 ``inference`` CLI calls the same client. The client is faked here; its own
 requests are ``tests/core/test_speech_server.py``'s."""
 
@@ -9,7 +9,7 @@ import pytest
 
 from app.core import speech_server
 from tests._audit import as_admin
-from tests._fake_ollama import SPEECH_READY, speaking
+from tests._fake_ollama import RUNNING, SPEECH_READY, serve, speaking
 
 API = "/api/v1/inference/speech"
 
@@ -96,3 +96,18 @@ def test_without_a_server_it_says_how_to_set_one(admin: TestClient) -> None:
 
     assert answer.status_code == 404
     assert "SPEECH_BASE_URL" in answer.json()["detail"]
+
+
+def test_every_engine_is_in_the_status(
+    admin: TestClient, speech: list[tuple[str, ...]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``GET /inference`` lists every engine, as Overseer's overview does."""
+    serve(monkeypatch)
+
+    answer = admin.get("/api/v1/inference")
+
+    assert answer.status_code == 200
+    rows = {r["id"]: r for r in answer.json()["engines"]}
+    assert set(rows) >= {"ollama", speech_server.SLUG}
+    assert rows["ollama"]["loaded"][0]["name"] == RUNNING.name
+    assert answer.json()["reported_bytes"] == RUNNING.size_vram

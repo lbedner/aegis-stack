@@ -163,6 +163,24 @@ async def test_with_no_cache_a_reader_has_this_processs_hops(
     assert seen[("service:ai", "component:database")].count == 1
 
 
+async def test_with_no_cache_a_flush_keeps_its_counts_and_does_not_raise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A command run from a shell with Redis down: the flush in the
+    background cannot write, and says so as a warning, not a traceback."""
+
+    class _Down:
+        async def set(self, key: str, value: object, ttl: int) -> None:
+            raise ConnectionError("no redis")
+
+    monkeypatch.setattr(edges, "get_cache", lambda: _Down())
+    edges.hop("component:database", via=["service:ai"], ms=10)
+
+    await edges.flush()
+
+    assert _seen() == {("service:ai", "component:database"): 1}
+
+
 # Calls out over HTTP ---------------------------------------------------------
 
 

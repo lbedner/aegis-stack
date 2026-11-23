@@ -289,6 +289,17 @@ async def latest_prompt_change_id(session: AsyncSession) -> int | None:
     return (await session.exec(select(func.max(AgentPromptChange.id)))).one()
 
 
+async def active_agents(session: AsyncSession) -> Sequence[Agent]:
+    """The active agents, ordered by slug, without their tools."""
+    return (
+        await session.exec(
+            select(Agent)
+            .where(col(Agent.is_active))
+            .order_by(Agent.slug)  # type: ignore[arg-type]
+        )
+    ).all()
+
+
 async def all_agents(session: AsyncSession) -> Sequence[Agent]:
     """Every agent, tools loaded, ordered by slug."""
     return (

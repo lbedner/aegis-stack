@@ -111,6 +111,8 @@ class LlamaCppEngine(BaseInferenceEngine):
     DEFAULT_URL = "http://localhost:8080"
     START = " ".join(router_command("<folder>", 8080, 32768))
     ADD_MODEL = "a .gguf in its --models-dir (make llama links Ollama's in)"
+    # ``/metrics`` counts tokens and requests, never memory.
+    REPORTS_MEMORY = False
 
     async def _read(
         self,

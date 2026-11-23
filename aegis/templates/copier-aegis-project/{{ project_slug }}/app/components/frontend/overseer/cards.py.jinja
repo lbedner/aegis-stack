@@ -231,7 +231,7 @@ def create_component_card(
             return RunnerCard(component_data).build()
 {% endif %}
 {% if ollama_mode != "none" %}
-        elif component_name == ComponentName.OLLAMA:
+        elif component_name == ComponentName.INFERENCE:
             return InferenceCard(component_data).build()
 {% endif %}
 {% if include_scheduler %}

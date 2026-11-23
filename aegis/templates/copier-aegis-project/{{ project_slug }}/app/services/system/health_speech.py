@@ -1,7 +1,7 @@
 """The speech server the inference component tracks, as a health status:
 up or down, and the voices and models it lists. It rides the inference
-check (``health_ollama``) as a sub-component, so ``health``,
-``/health/detailed`` and the map carry it with Ollama.
+check (``health_inference``) as a sub-component, so ``health``,
+``/health/detailed`` and the map carry it with the text engine.
 """
 
 from app.core import speech_server
@@ -11,7 +11,7 @@ from app.core.speech_server import SpeechServerReading
 
 from .models import ComponentStatus, ComponentStatusType
 
-SPEECH = "speech"
+SPEECH = speech_server.SLUG
 
 
 def speech_status(reading: SpeechServerReading) -> ComponentStatus:

@@ -134,5 +134,5 @@ class InferenceCard:
             content=self._create_card_content(),
             border_color=border_color,
             component_data=self.component_data,
-            component_name=ComponentName.OLLAMA,
+            component_name=ComponentName.INFERENCE,
         )

@@ -1,13 +1,16 @@
-"""The inference component's API: the speech server it tracks
+"""The inference component's API: every engine it tracks (``overview``, as
+Overseer > Inference and ``inference status`` show them), the speech server
 (``app.core.speech_server``) as it answers, a line said in one of its
-voices, and its model unloaded or loaded again. Overseer > Inference >
-Speech plays its voices and moves its model here; the ``inference`` CLI
-calls the same client.
+voices, and its model unloaded or loaded again. Its Overseer page plays
+its voices and moves its model here; the ``inference`` CLI calls the same
+client.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 
+from app.components.inference import overview
+from app.components.inference.overview import InferenceOverview
 from app.core import speech_server
 from app.core.config import settings
 from app.core.speech_server import SpeechServerReading
@@ -28,6 +31,17 @@ def _refused(exc: speech_server.SpeechServerError) -> HTTPException:
     server's (502)."""
     code = status.HTTP_409_CONFLICT if exc.flag else status.HTTP_502_BAD_GATEWAY
     return HTTPException(code, str(exc))
+
+
+@router.get(
+    "",
+    response_model=InferenceOverview,
+    dependencies=[Depends(get_admin_reader)],
+)
+async def engines() -> InferenceOverview:
+    """Every engine: its job, whether it answers, what it holds, the memory
+    it reports and who runs on it, and how to add one the app lacks."""
+    return await overview.current_overview()
 
 
 @router.get(

@@ -17,6 +17,7 @@ from app.components.frontend.controls.tabs import PulseTabs
 from app.components.inference.activity import get_inference_activity
 from app.core.constants import ComponentName
 from app.core.log import logger
+from app.services.system.health_inference import inference_status
 from app.services.system.models import ComponentStatus
 
 from ...cards.card_utils import get_status_detail
@@ -180,7 +181,12 @@ class InferenceDetailDialog(BaseDetailPopup):
         """
         from app.components.inference.sampler import current_status
 
-        fresh_status = await current_status(fresh=not only_if_changed)
+        engine = await current_status(fresh=not only_if_changed)
+        # The check with this engine read now, the others as last checked.
+        held = self._component_data.sub_components
+        fresh_status = inference_status(
+            engine, *(e for name, e in held.items() if name != engine.name)
+        )
 
         snapshot = _data_snapshot(fresh_status)
         if only_if_changed and snapshot == self._snapshot:
@@ -196,7 +202,7 @@ class InferenceDetailDialog(BaseDetailPopup):
         # already fresh, so hand it to the card it describes.
         apply_one = self._page.data.get("update_component")
         if apply_one is not None:
-            await apply_one(ComponentName.OLLAMA, fresh_status)
+            await apply_one(ComponentName.INFERENCE, fresh_status)
         self._page.update()
 
     def _apply(self, fresh_status: ComponentStatus) -> None:

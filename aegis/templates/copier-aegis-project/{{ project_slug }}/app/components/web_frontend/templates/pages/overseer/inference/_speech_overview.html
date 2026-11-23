@@ -1,0 +1,9 @@
+{# The speech server the inference component tracks, as its sampler reads
+   it: what it reports of itself and where the app reaches it (``_speech_body``,
+   re-sent over SSE every tick while open), and its memory, requests and the
+   app's calls to it charted live. #}
+{% from "pages/overseer/_macros.html" import live_charts %}
+<div id="speech" class="space-y-4" hx-ext="sse" sse-connect="{{ speech_charts.events }}">
+  <div sse-swap="{{ speech_event }}" hx-target="this">{% include "pages/overseer/inference/_speech_body.html" %}</div>
+  {{ live_charts(speech_charts, "#speech", request.url.path) }}
+</div>

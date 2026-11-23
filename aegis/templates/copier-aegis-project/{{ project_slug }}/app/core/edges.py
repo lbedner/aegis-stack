@@ -240,8 +240,13 @@ def _flush_soon(now: float) -> None:
 
 async def flush() -> None:
     """This process's counts, whole, under its own key for this build."""
-    if _seen:
+    if not _seen:
+        return
+    try:
         await get_cache().set(_key(frames.process()), _snapshot(), KEEP_SECONDS)
+    except CACHE_ERRORS as exc:
+        # No cache (a shell, CI): the counts stay this process's own.
+        logger.warning("Observed calls: the cache did not take them", error=str(exc))
 
 
 def _snapshot() -> dict[str, dict[str, float]]:

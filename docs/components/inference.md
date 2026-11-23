@@ -86,9 +86,26 @@ ollama pull llama3.1
 
 - **`app/components/inference/`**: `engine.py`, the one interface; `ollama.py` and `llamacpp.py`, async clients for each server's models, running models, and (Ollama) load and unload; `activity.py`, an in-memory record of models moving in and out of memory.
 - **Settings:** `INFERENCE_ENGINE`; `OLLAMA_BASE_URL` or `LLAMACPP_BASE_URL` (defaulted from the placement), `OLLAMA_BASE_URL_LOCAL` for CLI commands run on the host, `OLLAMA_HOST_PORT` / `LLAMACPP_HOST_PORT` for the port `make serve` publishes, `OLLAMA_API_KEY` for a server behind auth.
-- **A health check** on the system status: server reachable, installed and running models, VRAM in use.
+- **A health check** on the system status, named `inference`, with each engine under it by name (`ollama` or `llamacpp`, and `kokoro_fastapi` where a speech server is set): reachable, installed and running models, VRAM in use.
+- **Overseer > Inference** (with the htmx frontend):
+    - **Overview:** a row per engine, with its job, whether it answers, what it holds, its memory and who runs on it (the agents whose model it serves, the voice that speaks or listens through it). One bar shows the memory the engines report together.
+    - **Engines it lacks** are listed with the command or `.env` address that adds them, never an install button.
+    - **A page per engine**, grouped by job in the menu: the text engine's Overview, Models (load and unload) and Activity, and the speech server's Overview and Voices. Container and Logs follow where the engines run in docker.
+    - **An "In the app" row** appears where `ai[voice]` loads a model into the webserver (in-app Kokoro, Parakeet, faster-whisper), with the webserver's own memory.
+- **The same on the CLI and API:** `my-app inference status` and `GET /api/v1/inference` list every engine as the overview does.
 - **A dashboard card and modal**: installed models with load and unload, and an activity tab of recent loads and evictions.
 - **The LLM catalog** lists the installed models when the AI service is present (`my-app llm sync --source local`).
+
+Each engine reports memory its own way, and a row that reports none says why rather than show 0:
+
+| Engine | Memory it reports |
+|---|---|
+| Ollama | Each loaded model's |
+| llama.cpp | None (`/metrics` counts tokens and requests) |
+| Kokoro-FastAPI | Its whole process, with `ENABLE_DEBUG_ENDPOINTS` on |
+| In the app | The webserver's whole process, read on the webserver only |
+
+The bar adds up what the engines report. It is not the machine's total: the webserver runs in Docker and sees the VM's memory, not the host's.
 
 ## A speech server
 
@@ -108,10 +125,10 @@ An installed inference takes one later the same way: `aegis add inference[kokoro
 
 The answer sets `SPEECH_BASE_URL`'s default; `.env` can point it anywhere. With an address set:
 
-- **Overseer > Inference > Speech** shows the server whole, read once a second while it is open:
+- **Overseer > Inference > Kokoro-FastAPI** shows the server whole, read once a second while it is open:
     - **Figures:** its version, whether its model is loaded, the device it runs on, requests in flight, its memory and its voices.
     - **Server:** where the app reaches it, its backend and models (OpenAI's model names it answers to, for OpenAI's clients, listed apart as aliases), how long it has been idle, when it unloads, its threads. Unload and Reload move its model out of memory and back.
-    - **Voices** by accent and gender. Press one to hear a line from the server itself, with or without `ai[voice]`.
+    - **Voices** (its own tab) by accent and gender. Press one to hear a line from the server itself, with or without `ai[voice]`.
     - **Charts:** its memory, its requests in flight, and how long each line took, as a whole file or a stream until its first audio (the page's own and `ai[voice]`'s).
 - **The CLI and API** do the same: `my-app inference speech`, `my-app inference speak "a line" -v af_heart -o line.mp3`, `my-app inference speech-model unload|reload`; `GET /api/v1/inference/speech`, `GET /api/v1/inference/speech/say?voice=`, `POST /api/v1/inference/speech/{unload,reload}`.
 - **The health check** carries it under the inference check (`my-app health status`, `/health/detailed`).

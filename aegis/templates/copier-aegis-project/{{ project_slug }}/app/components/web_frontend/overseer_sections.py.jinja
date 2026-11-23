@@ -149,7 +149,7 @@ def _optional_pages() -> dict[tuple[str, str], SectionedPage]:
     try:
         from . import overseer_inference
 
-        pages[("components", ComponentName.OLLAMA)] = SectionedPage(
+        pages[("components", ComponentName.INFERENCE)] = SectionedPage(
             "inference", overseer_inference.SECTIONS, overseer_inference.section_context
         )
     except ImportError:  # no inference component in this project

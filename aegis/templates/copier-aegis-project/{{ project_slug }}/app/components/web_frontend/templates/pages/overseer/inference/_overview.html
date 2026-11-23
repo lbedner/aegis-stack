@@ -1,17 +1,33 @@
-{# What Ollama is serving right now, and where the app reaches it. #}
-{% from "components/macros/layout.html" import card, stats_strip, facts, badge %}
-{% from "components/macros/feedback.html" import empty_state %}
+{# Every engine the inference component tracks (``inference.overview``): a
+   row each with its job, state, what it holds, its memory and who runs on
+   it; one bar of the memory they report; and how to add an engine the app
+   lacks, a command or an address, never a button. #}
+{% from "components/macros/layout.html" import card, segment_bar, command %}
+{% from "components/macros/table.html" import data_table %}
 <div class="space-y-4">
-  {{ stats_strip(figures, id="inference-figures") }}
-  {% include "pages/overseer/inference/_unreachable.html" %}
-  <div class="grid gap-4 lg:grid-cols-2">
-    {% call card("In memory", "Models the server holds warm, ready to answer.") %}
-      {% if loaded %}
-      <div class="flex flex-wrap gap-2">{% for name in loaded %}{{ badge(name, "ok") }}{% endfor %}</div>
-      {% elif not unreachable %}
-      {{ empty_state("Nothing loaded", "A model loads on its first request, or from Models.") }}
-      {% endif %}
-    {% endcall %}
-    {% call card("Server") %}{{ facts(server) }}{% endcall %}
-  </div>
+  {% call card(None, id="inference-engines") %}
+    {{ data_table([
+      {"key": "engine", "label": "Engine", "kind": "link", "target": "#overseer-main"},
+      {"key": "job", "label": "Job"},
+      {"key": "state", "label": "State", "kind": "status"},
+      {"key": "loaded", "label": "Loaded", "wrap": True},
+      {"key": "memory", "label": "Memory", "wrap": True},
+      {"key": "used_by", "label": "Used by", "wrap": True},
+    ], engines) }}
+  {% endcall %}
+  {% call card("Memory", "What each engine reports it holds; the machine's own total is not read from inside Docker.") %}
+    {{ segment_bar(memory, reported_label, reported, id="inference-memory") }}
+  {% endcall %}
+  {% if to_add %}
+  {% call card("Add an engine", id="inference-add") %}
+    <ul class="space-y-3">
+      {% for engine in to_add %}
+      <li data-add-engine="{{ engine.name }}" class="space-y-1">
+        <p class="text-sm text-aegis-text">{{ engine.name }} <span class="text-aegis-muted">({{ engine.job }})</span>: {{ engine.how }}</p>
+        {{ command(engine.command) }}
+      </li>
+      {% endfor %}
+    </ul>
+  {% endcall %}
+  {% endif %}
 </div>

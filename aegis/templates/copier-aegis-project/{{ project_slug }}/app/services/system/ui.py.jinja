@@ -109,7 +109,7 @@ def get_component_title(component_name: str) -> str:
         ComponentName.MCP: "MCP",
         {%- endif %}
         {%- if include_inference %}
-        ComponentName.OLLAMA: "Inference",
+        ComponentName.INFERENCE: "Inference",
         {%- endif %}
         {%- if include_ai %}
         "service_ai": "AI",
@@ -180,7 +180,7 @@ def get_component_label(component_name: str) -> str:
         ComponentName.SCHEDULER: "APScheduler",
         {%- endif %}
         {%- if include_inference %}
-        ComponentName.OLLAMA: inference_engine_class().LABEL,
+        ComponentName.INFERENCE: inference_engine_class().LABEL,
         {%- endif %}
         {%- if include_ai %}
         "service_ai": "LLM Provider",

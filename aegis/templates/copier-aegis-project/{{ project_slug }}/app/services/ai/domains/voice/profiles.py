@@ -351,6 +351,12 @@ async def active_settings(session: AsyncSession, settings: Any) -> Any:
     webserver applies them at startup (``load_active``). The saved
     pronunciations come with the voice, as they do there."""
     await pronunciations.load(session)
+    return await profile_settings(session, settings)
+
+
+async def profile_settings(session: AsyncSession, settings: Any) -> Any:
+    """``settings`` in the active profile's voice, as it is saved (no
+    pronunciations loaded: what it speaks and hears through)."""
     active = await active_profile(session)
     if active is None:
         return settings

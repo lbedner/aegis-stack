@@ -5,7 +5,7 @@ and the Flet Ollama modal (``current_status``). It is also the one reader
 that notices models loading and leaving (``get_inference_activity``): Ollama
 has no event API, so each reading's running set is diffed with the last.
 
-The speech server is read the same way (``SPEECH``) for Inference > Speech.
+The speech server is read the same way (``SPEECH``) for its own page.
 """
 
 import httpx
@@ -81,7 +81,7 @@ REQUESTS = "requests"
 async def read_speech() -> Sample:
     """The speech server now (``app.core.speech_server``): its process's
     memory and its requests in flight for the charts, where it reports them,
-    and the reading whole for the Speech section; nothing where none is
+    and the reading whole for its page; nothing where none is
     set."""
     from app.core.config import settings
 
@@ -134,13 +134,13 @@ async def current_status(*, fresh: bool = False) -> ComponentStatus:
     """The server as a health status: the sampler's reading, which the Flet
     modal shows while open instead of polling Ollama itself; ``fresh`` (right
     after the modal's own load or unload) reads it now."""
-    from app.services.system.health_ollama import ollama_status
+    from app.services.system.health_inference import engine_status
 
     try:
         server, url = (await read()).latest if fresh else await series.reading(SAMPLER)
     except httpx.HTTPError as exc:  # /api/ps failed after /api/tags answered
         logger.warning("ollama.status_read_failed", error=str(exc))
-        return ollama_status(
+        return engine_status(
             InferenceServerStatus(available=False), get_inference_engine().base_url
         )
-    return ollama_status(server, url)
+    return engine_status(server, url)

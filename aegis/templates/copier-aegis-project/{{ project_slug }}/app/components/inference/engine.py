@@ -137,6 +137,8 @@ class BaseInferenceEngine(ABC):
     DEFAULT_URL: ClassVar[str]  # where it is when the settings do not say
     START: ClassVar[str]  # how a person starts it, for a page it does not answer
     ADD_MODEL: ClassVar[str]  # how a model gets onto it, for an empty model list
+    # Whether it reports the memory each model it holds takes.
+    REPORTS_MEMORY: ClassVar[bool] = True
 
     def __init__(
         self,

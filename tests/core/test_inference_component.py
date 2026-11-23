@@ -98,7 +98,7 @@ def test_only_a_speech_server_in_docker_ships_a_container() -> None:
 
 
 def test_the_speech_container_reports_all_it_can() -> None:
-    """Overseer > Inference > Speech shows its model and its process only
+    """Overseer > Inference > Kokoro-FastAPI shows its model and its process only
     where Kokoro-FastAPI was started with the flags that open them."""
     found = _compose(inference_speech="kokoro_fastapi")
     environment = found["services"]["kokoro-fastapi"]["environment"]

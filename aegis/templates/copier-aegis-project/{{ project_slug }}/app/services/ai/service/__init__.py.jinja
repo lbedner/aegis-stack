@@ -31,6 +31,7 @@ if TYPE_CHECKING:
         serialize_agent,
         update_agent,
     )
+    from app.services.ai.domains.chat.engine_users import engine_users
 {%- endif %}
     from app.services.ai.domains.chat.attachments import (
         MAX_ATTACHMENTS,

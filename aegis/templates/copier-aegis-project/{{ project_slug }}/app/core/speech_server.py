@@ -2,7 +2,7 @@
 or any at SPEECH_BASE_URL): where this process reaches it, what it lists and
 reports of itself, a line said in one of its voices, and its model unloaded
 or reloaded. The one client for it: the inference component tracks it (its
-health, its sampler, Overseer > Inference > Speech, the ``inference`` CLI
+health, its sampler, Overseer > Inference > Kokoro-FastAPI, the ``inference`` CLI
 and API) and ai[voice] lists its voices.
 
 A server with OpenAI's API alone reports its models and voices; what
@@ -56,10 +56,13 @@ DEBUG = "ENABLE_DEBUG_ENDPOINTS"
 REPORTS = {"web/config": None, "dev/model": DEV, "debug/threads": DEBUG}
 # What each flag opens, for the reader told to turn it on.
 OPENS = {DEV: "its model's state, unload and reload", DEBUG: "its memory and threads"}
-UNSET = (
-    f"No speech server is set: run {NAME} and set SPEECH_BASE_URL, or add "
-    "inference[kokoro_fastapi]."
-)
+# How an app gets one: an address, or the stack's own.
+ADD = f"aegis add inference[{SLUG}]"
+HOW_TO_ADD = f"Run {NAME} and set SPEECH_BASE_URL in .env, or add it to the stack"
+UNSET = f"No speech server is set. {HOW_TO_ADD}: {ADD}."
+# The engine id of a speech model loaded into the app's own process (the
+# inference overview's "In the app" row; the voice says which it uses).
+IN_APP = "in_app"
 # Kokoro's voice names say their accent and gender (``af_heart``).
 ACCENTS = {
     "a": "General American",
@@ -190,16 +193,23 @@ def figures(reading: SpeechServerReading) -> list[tuple[str, str]]:
     )
 
 
+def own_models(reading: SpeechServerReading) -> list[str]:
+    """The models it holds: OpenAI's names are aliases where it has one of
+    its own."""
+    own = [m for m in reading.models if m not in OPENAI_MODELS]
+    return own or list(reading.models)
+
+
 def facts(reading: SpeechServerReading) -> list[tuple[str, str]]:
     """The rest of what it reports, labelled, leaving out what it does not:
     Overseer's Server card and the CLI's. OpenAI's model names are aliases
     where the server has a model of its own."""
-    own = [m for m in reading.models if m not in OPENAI_MODELS]
-    aliases = [m for m in reading.models if m in OPENAI_MODELS] if own else []
+    own = own_models(reading)
+    aliases = [m for m in reading.models if m not in own]
     return _shown(
         [
             ("Backend", reading.backend),
-            ("Models", ", ".join(own or reading.models)),
+            ("Models", ", ".join(own)),
             ("Aliases", ", ".join(aliases)),
             ("Idle for", format_span(reading.idle_seconds)),
             ("Unloads in", format_span(reading.unloads_in)),

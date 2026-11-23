@@ -1,0 +1,11 @@
+{# One engine's page: its tab row, then the tab shown
+   (``overseer_inference._engine``: ``<job>_<tab>.html``), or how to set
+   the engine up where the app has none (``unset``). #}
+{% from "components/macros/layout.html" import section_tabs %}
+{% from "components/macros/feedback.html" import empty_state %}
+{{ section_tabs(tabs, page.labels[current] ~ " tabs") }}
+{% if unset %}
+{{ empty_state("No " ~ page.labels[current], unset) }}
+{% else %}
+{% include tab_partial %}
+{% endif %}

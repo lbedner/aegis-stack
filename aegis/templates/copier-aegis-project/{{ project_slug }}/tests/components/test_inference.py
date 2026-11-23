@@ -15,7 +15,7 @@ from app.components.inference.ollama import OllamaEngine
 from app.core import series, speech_server
 from app.core.config import settings
 from app.core.speech_server import SpeechServerReading
-from app.services.system.health_ollama import check_ollama_health
+from app.services.system.health_inference import check_inference_health
 from app.services.system.models import ComponentStatusType
 from tests._fake_ollama import (
     ROUTES,
@@ -268,9 +268,10 @@ class TestSpeechServer:
     ) -> None:
         self._answers(monkeypatch, SPEECH_READY)
 
-        status = await check_ollama_health()
+        status = await check_inference_health()
 
-        speech = status.sub_components["speech"]
+        speech = status.sub_components[speech_server.SLUG]
+        assert status.name == "inference"
         assert status.message.startswith(RUNNING.name)
         assert speech.status == ComponentStatusType.HEALTHY
         assert "2 voices" in speech.message
@@ -281,7 +282,7 @@ class TestSpeechServer:
     ) -> None:
         self._answers(monkeypatch, SPEECH_DOWN)
 
-        speech = (await check_ollama_health()).sub_components["speech"]
+        speech = (await check_inference_health()).sub_components[speech_server.SLUG]
 
         assert speech.status == ComponentStatusType.UNHEALTHY
 
@@ -295,17 +296,69 @@ class TestSpeechServer:
         serve(monkeypatch, Failing)
         self._answers(monkeypatch, SPEECH_READY)
 
-        status = await check_ollama_health()
+        status = await check_inference_health()
 
         assert status.status == ComponentStatusType.UNHEALTHY
-        assert status.sub_components["speech"].status == ComponentStatusType.HEALTHY
+        assert (
+            status.sub_components[OllamaEngine.NAME].status
+            == ComponentStatusType.UNHEALTHY
+        )
+        assert (
+            status.sub_components[speech_server.SLUG].status
+            == ComponentStatusType.HEALTHY
+        )
 
     async def test_without_an_address_there_is_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(settings, "SPEECH_BASE_URL", None)
 
-        assert (await check_ollama_health()).sub_components == {}
+        status = await check_inference_health()
+
+        assert list(status.sub_components) == [OllamaEngine.NAME]
+
+    async def test_each_engine_is_a_sub_component_named_for_it(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The check is the component's; each engine under it is named as
+        its ``inference[...]`` is, and says what it holds."""
+        self._answers(monkeypatch, SPEECH_READY)
+
+        status = await check_inference_health()
+
+        assert list(status.sub_components) == [OllamaEngine.NAME, speech_server.SLUG]
+        engine = status.sub_components[OllamaEngine.NAME]
+        assert engine.metadata["running_models"][0]["name"] == RUNNING.name
+        assert status.status == engine.status
+
+    async def test_the_check_reads_as_its_text_engine(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Every reader of the check (the status table, the diagram, the
+        card) finds the text engine's version and models on the check itself."""
+        self._answers(monkeypatch, SPEECH_READY)
+
+        status = await check_inference_health()
+
+        assert status.metadata == status.sub_components[OllamaEngine.NAME].metadata
+        assert status.metadata["version"]
+
+    async def test_an_engine_that_cannot_be_built_is_unhealthy_not_raised(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.components import inference
+
+        def broken() -> None:
+            raise RuntimeError("no engine")
+
+        monkeypatch.setattr(inference, "get_inference_engine", broken)
+        self._answers(monkeypatch, SPEECH_READY)
+
+        status = await check_inference_health()
+
+        engine = status.sub_components[settings.INFERENCE_ENGINE]
+        assert engine.status == ComponentStatusType.UNHEALTHY
+        assert speech_server.SLUG in status.sub_components
 
 
 def test_the_inference_page_charts_come_with_the_component() -> None:

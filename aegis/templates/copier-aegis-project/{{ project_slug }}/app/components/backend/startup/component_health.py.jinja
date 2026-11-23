@@ -84,10 +84,10 @@ async def startup_hook() -> None:
     {% endif %}
 
     {%- if ollama_mode != "none" %}
-    # Register Ollama health check (local LLM infrastructure)
-    from app.services.system.health import check_ollama_health
-    register_health_check(ComponentName.OLLAMA, check_ollama_health)
-    logger.info("Ollama component health check registered")
+    # Register the inference health check (the local engines)
+    from app.services.system.health import check_inference_health
+    register_health_check(ComponentName.INFERENCE, check_inference_health)
+    logger.info("Inference component health check registered")
     {%- endif %}
 
     {%- if include_ingress %}

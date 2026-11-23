@@ -304,7 +304,7 @@ STACK_COMBINATIONS = [
             "app/components/frontend/dashboard/cards/inference_card.py",
             "app/components/inference/ollama.py",
             "tests/components/test_inference.py",
-            "app/services/system/health_ollama.py",
+            "app/services/system/health_inference.py",
             "tests/components/frontend/test_inference_model_table.py",
         ],
         expected_docker_services=["webserver"],
@@ -320,7 +320,7 @@ STACK_COMBINATIONS = [
         expected_files=[
             "app/components/inference/ollama.py",
             "app/components/inference/activity.py",
-            "app/services/system/health_ollama.py",
+            "app/services/system/health_inference.py",
             "tests/components/test_inference.py",
         ],
         expected_docker_services=["webserver", "ollama"],
@@ -336,7 +336,7 @@ STACK_COMBINATIONS = [
         expected_files=[
             "app/components/inference/llamacpp.py",
             "tests/_fake_llamacpp.py",
-            "app/services/system/health_ollama.py",
+            "app/services/system/health_inference.py",
         ],
         expected_docker_services=["webserver", "llamacpp"],
         expected_pyproject_deps=["fastapi", "flet", "pydantic-ai"],
@@ -344,14 +344,14 @@ STACK_COMBINATIONS = [
     StackCombination(
         name="inference_speech",
         # A speech server beside Ollama, both in docker: its container, its
-        # health under the inference check, and the Overseer's Speech section.
+        # health under the inference check, and its Overseer page.
         components=["htmx", "inference[docker,kokoro_fastapi]"],
         services=[],
         description="Inference in docker with a speech server",
         expected_files=[
             "app/core/speech_server.py",
             "app/services/system/health_speech.py",
-            "app/components/web_frontend/templates/pages/overseer/inference/_speech.html",
+            "app/components/web_frontend/templates/pages/overseer/inference/_speech_overview.html",
             "tests/core/test_speech_server.py",
         ],
         expected_docker_services=["webserver", "ollama", "kokoro-fastapi"],

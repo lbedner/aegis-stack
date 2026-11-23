@@ -4,7 +4,7 @@ Loading an Ollama model updates that modal immediately and leaves its
 dashboard card stale for up to thirty seconds. The workaround has been
 ``trigger_dashboard_refresh``, which repaints the entire board to change
 one card - and the modal already has the answer in hand, because it
-calls ``check_ollama_health()`` in-process and holds the resulting
+calls ``check_inference_health()`` in-process and holds the resulting
 ``ComponentStatus``.
 
 So one component can be applied on its own. The whole-dashboard refresh
@@ -56,7 +56,7 @@ class Harness:
 
 COMPONENTS = {
     "backend": status("backend"),
-    "ollama": status("ollama", running_models_count=0),
+    "inference": status("inference", running_models_count=0),
     "redis": status("redis"),
 }
 
@@ -69,10 +69,10 @@ class TestApplyingOneComponent:
         h.built.clear()
 
         await h.dashboard.update_component(
-            "ollama", status("ollama", running_models_count=1)
+            "inference", status("inference", running_models_count=1)
         )
 
-        assert h.built == ["ollama"]
+        assert h.built == ["inference"]
 
     @pytest.mark.asyncio
     async def test_the_other_cards_keep_their_identity(self) -> None:
@@ -83,7 +83,7 @@ class TestApplyingOneComponent:
         keep = {"backend": h.cards[0], "redis": h.cards[2]}
 
         await h.dashboard.update_component(
-            "ollama", status("ollama", running_models_count=1)
+            "inference", status("inference", running_models_count=1)
         )
 
         assert h.cards[0] is keep["backend"]
@@ -94,21 +94,23 @@ class TestApplyingOneComponent:
         h = Harness()
         await h.full_refresh(COMPONENTS)
 
-        await h.dashboard.update_component("ollama", status("ollama", "unhealthy"))
+        await h.dashboard.update_component(
+            "inference", status("inference", "unhealthy")
+        )
 
-        assert h.cards[1].content.value == "ollama:unhealthy"
+        assert h.cards[1].content.value == "inference:unhealthy"
 
     @pytest.mark.asyncio
     async def test_the_card_stays_in_its_slot(self) -> None:
         h = Harness()
         await h.full_refresh(COMPONENTS)
 
-        await h.dashboard.update_component("ollama", status("ollama", "warning"))
+        await h.dashboard.update_component("inference", status("inference", "warning"))
 
         assert len(h.cards) == 3
         assert [c.content.value.split(":")[0] for c in h.cards] == [
             "backend",
-            "ollama",
+            "inference",
             "redis",
         ]
 
@@ -121,11 +123,11 @@ class TestItAgreesWithTheFullRefresh:
         had just updated."""
         h = Harness()
         await h.full_refresh(COMPONENTS)
-        fresh = status("ollama", running_models_count=1)
-        await h.dashboard.update_component("ollama", fresh)
+        fresh = status("inference", running_models_count=1)
+        await h.dashboard.update_component("inference", fresh)
         h.built.clear()
 
-        await h.full_refresh(dict(COMPONENTS, ollama=fresh))
+        await h.full_refresh(dict(COMPONENTS, inference=fresh))
 
         assert h.built == []
 
@@ -137,14 +139,14 @@ class TestItAgreesWithTheFullRefresh:
         h = Harness()
         await h.full_refresh(COMPONENTS)
         await h.dashboard.update_component(
-            "ollama", status("ollama", running_models_count=1)
+            "inference", status("inference", running_models_count=1)
         )
         h.built.clear()
 
         await h.full_refresh(COMPONENTS)  # health says zero again
 
-        assert h.built == ["ollama"]
-        assert h.cards[1].content.value == "ollama:healthy"
+        assert h.built == ["inference"]
+        assert h.cards[1].content.value == "inference:healthy"
 
 
 class TestWhenItCannotApply:
@@ -164,6 +166,6 @@ class TestWhenItCannotApply:
         """A modal can be open before the first refresh has run."""
         h = Harness()
 
-        await h.dashboard.update_component("ollama", status("ollama"))
+        await h.dashboard.update_component("inference", status("inference"))
 
         assert h.cards == []

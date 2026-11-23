@@ -34,7 +34,7 @@ def test_a_service_talks_to_what_it_imports(tmp_path: Path) -> None:
     )
     assert calls.talks_to(package, (), source_index.at(tmp_path)) == [
         "component:cache",
-        "component:ollama",
+        "component:inference",
         "service:blog",
     ]
 

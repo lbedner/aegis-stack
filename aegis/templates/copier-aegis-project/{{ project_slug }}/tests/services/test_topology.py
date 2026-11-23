@@ -137,7 +137,7 @@ EVERY = (
     "queue",
     "cache",
     "storage",
-    "ollama",
+    "inference",
     "browser",
     "web_frontend",
     "frontend",
@@ -153,7 +153,7 @@ def test_the_full_stack_is_drawn_as_it_always_was() -> None:
     assert found.tiers == [
         ["ingress"],
         ["backend", "worker", "scheduler"],
-        ["database", "queue", "cache", "storage", "ollama", "browser"],
+        ["database", "queue", "cache", "storage", "inference", "browser"],
     ]
     assert found.links == [
         ("ingress", "backend"),
@@ -161,7 +161,7 @@ def test_the_full_stack_is_drawn_as_it_always_was() -> None:
         ("backend", "queue"),
         ("backend", "cache"),
         ("backend", "storage"),
-        ("backend", "ollama"),
+        ("backend", "inference"),
         ("backend", "browser"),
         ("worker", "queue"),
         ("worker", "database"),
@@ -184,7 +184,7 @@ def test_the_full_stacks_flow_is_as_it_always_was() -> None:
         ["backend", "scheduler"],
         ["queue"],
         ["worker"],
-        ["cache", "storage", "ollama", "browser", "database"],
+        ["cache", "storage", "inference", "browser", "database"],
     ]
     assert ("queue", "worker") in found.links and ("worker", "queue") not in found.links
 

@@ -1,6 +1,6 @@
 """``inference``: the speech server as it answers, a line said into an MP3,
-and its model unloaded or reloaded; the client the inference API and
-Overseer > Inference > Speech call, faked here."""
+and its model unloaded or reloaded; the client the inference API and its
+Overseer page call, faked here."""
 
 from pathlib import Path
 
@@ -8,7 +8,7 @@ import pytest
 
 from app.core import speech_server
 from tests._cli import invoke
-from tests._fake_ollama import SPEECH_READY, speaking
+from tests._fake_ollama import RUNNING, SPEECH_READY, serve, speaking
 
 
 @pytest.fixture(autouse=True)
@@ -235,3 +235,22 @@ def test_kokoro_without_a_checkout_says_how_to_get_one(
 
     assert result.exit_code != 0
     assert "SPEECH_SERVER_DIR" in result.output and "git clone" in result.output
+
+
+def test_status_lists_every_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``inference status`` shows each engine as Overseer's overview does,
+    and says where one reports no memory rather than print 0."""
+    serve(monkeypatch)
+    speaking(
+        monkeypatch,
+        SPEECH_READY.model_copy(update={"closed": ["ENABLE_DEBUG_ENDPOINTS"]}),
+    )
+
+    result = invoke(["inference", "status"])
+
+    assert result.exit_code == 0, result.output
+    assert "Ollama" in result.output and RUNNING.name in result.output
+    assert "4.2 GB" in result.output
+    assert speech_server.NAME in result.output
+    assert "ENABLE_DEBUG_ENDPOINTS=true" in result.output
+    assert "aegis add inference[llamacpp]" in result.output

@@ -38,7 +38,7 @@ RADIAL_POSITIONS: dict[str, tuple[float, float]] = {
     ComponentName.WORKER: (-0.45, -0.35),  # Upper-left
     ComponentName.SCHEDULER: (0.45, -0.35),  # Upper-right
     ComponentName.DATABASE: (-0.50, 0.0),  # Left
-    ComponentName.OLLAMA: (0.50, 0.0),  # Right
+    ComponentName.INFERENCE: (0.50, 0.0),  # Right
     ComponentName.CACHE: (-0.15, 0.30),  # Bottom-center-left
     ComponentName.STORAGE: (-0.50, -0.25),  # Left, above database
     "service_auth": (0.15, 0.30),  # Bottom-center-right
@@ -73,8 +73,8 @@ def get_connections(components: dict[str, ComponentStatus]) -> list[tuple[str, s
             connections.append((ComponentName.BACKEND, name))
 
     # Inference → AI Service
-    if ComponentName.OLLAMA in components and "service_ai" in components:
-        connections.append((ComponentName.OLLAMA, "service_ai"))
+    if ComponentName.INFERENCE in components and "service_ai" in components:
+        connections.append((ComponentName.INFERENCE, "service_ai"))
 
     return connections
 

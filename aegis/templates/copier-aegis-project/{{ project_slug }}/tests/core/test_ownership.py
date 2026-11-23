@@ -89,8 +89,8 @@ def index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> source_index.Index
         ("app/services/ops/audit.py", Owner("component", "deploy", "ops")),
         # A part with no health check, known from its spec (``parts``).
         ("app/components/deploy/docker.py", Owner("component", "deploy")),
-        # A folder named for its CLI name: inference is Ollama's.
-        ("app/components/inference/client.py", Owner("component", "ollama")),
+        # A component's own folder: inference's.
+        ("app/components/inference/client.py", Owner("component", "inference")),
         # The app's own assembly: the server's.
         ("app/integrations/main.py", Owner("component", "backend")),
         # A component's Overseer page goes with what it shows.

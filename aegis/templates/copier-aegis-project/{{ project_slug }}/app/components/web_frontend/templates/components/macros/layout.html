@@ -37,7 +37,7 @@
   "observability": "M3 20V4 M3 20h18 M6 15l4-4 3 2 5-6 M16 7h2v2",
   "browser": "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M3 12h18 M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9 M12 3c-2.5 2.5-3.8 5.5-3.8 9s1.3 6.5 3.8 9",
   "runner": "M4 5h16v14H4z M8 10l3 2-3 2 M13 14h3",
-  "ollama": "M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z M12 12l8-4.5 M12 12v9 M12 12 4 7.5",
+  "inference": "M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z M12 12l8-4.5 M12 12v9 M12 12 4 7.5",
   "auth": "M5 10h14v11H5z M8 10V7a4 4 0 0 1 8 0v3 M12 14v3",
   "ai": "M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L3 11l6.8-2.2L12 2z M19 18v4 M17 20h4",
   "comms": "M4 4h16v12H9l-5 4V4z M7 8h10 M7 12h7",
@@ -595,6 +595,26 @@
   </li>
   {% endfor %}
 </ol>
+{% endmacro %}
+
+{# One bar split by share: each segment ``{label, value, ratio, dot}``,
+   drawn in its chart-ramp colour (``dot``, as ``chart_dot`` marks it) and
+   named under the bar, beside ``total``. A part with no ``ratio`` takes no
+   room in the bar and is named with its value (memory a server does not
+   report, said as such). #}
+{% macro segment_bar(segments, label, total, id=None) %}
+<div {% if id %}id="{{ id }}"{% endif %} class="space-y-2">
+  <div class="flex items-baseline justify-between gap-3 text-sm">
+    <span class="font-medium text-aegis-text">{{ label }}</span>
+    <span class="font-semibold tabular-nums text-aegis-text">{{ total }}</span>
+  </div>
+  <div class="flex h-2 w-full overflow-hidden rounded bg-aegis-border/60" role="img" aria-label="{{ label }}: {{ total }}">
+    {%- for s in segments if s.ratio %}<div data-segment="{{ s.label }}" class="h-2" style="width: {{ (s.ratio * 100)|round(1) }}%; background: var(--aegis-chart-{{ s.dot }})" title="{{ s.label }}: {{ s.value }}"></div>{% endfor -%}
+  </div>
+  <ul class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-aegis-muted">
+    {%- for s in segments %}<li data-legend>{% if s.ratio %}{{ chart_dot(s.dot) }}{% endif %}{{ s.label }} <span class="text-aegis-text tabular-nums">{{ s.value }}</span></li>{% endfor -%}
+  </ul>
+</div>
 {% endmacro %}
 
 {# Tabs: sibling views of one page, Pulse's underline recipe (the same

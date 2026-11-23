@@ -297,6 +297,20 @@ CODE_MODE_TOOL_CALLS_LIMIT = 16
 TOOL_OUTPUT_CHAR_LIMIT = 16_000
 
 
+def sandboxed_tools(config: AgentConfig) -> frozenset[str]:
+    """The tools a code-mode agent calls from its scripts, none without code
+    mode. Reads go in the sandbox (slicing a payload in code is the point);
+    writes stay native so they surface as their own tool call. A tool
+    declares its own effect at registration (effect != "read") - memory
+    saves and queue proposals both ride this, and the next write tool just
+    declares itself."""
+    if not config.code_mode:
+        return frozenset()
+    from app.core.tools import native_write_tool_names
+
+    return frozenset(config.tool_names) - native_write_tool_names()
+
+
 def agent_capabilities(config: AgentConfig) -> list[Any]:
     """The pydantic-ai capabilities a config grants; shared by BOTH chat
     runtimes (chat_kit's ``build_chat_agent`` and the service's
@@ -311,15 +325,11 @@ def agent_capabilities(config: AgentConfig) -> list[Any]:
 
         from app.core.tools import native_write_tool_names
 
-        # Reads go in the sandbox (slicing a payload in code is the point);
-        # writes stay native so they surface as their own tool call. A
-        # tool declares its own effect at registration (effect != "read") -
-        # memory saves and queue proposals both ride this, and the next
-        # write tool just declares itself.
         native = native_write_tool_names()
+        sandboxed = sandboxed_tools(config)
         capabilities.append(
             CodeMode(
-                tools=[name for name in config.tool_names if name not in native],
+                tools=[name for name in config.tool_names if name in sandboxed],
                 # Explicit, not Monty's 30 s / 256 MiB: the sandbox shares
                 # the webserver process with every other request.
                 resource_limits={

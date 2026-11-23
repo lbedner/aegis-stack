@@ -24,6 +24,7 @@ from app.services.ai.service import (
     ProviderError,
     StreamingMessage,
     waiting_reason,
+    watch_prefill,
 )
 
 HEADERS = {
@@ -85,26 +86,34 @@ async def _events(
         acted.append(action)
 
     # Quiet after a tool's frame is the tool at work, not the model
-    # thinking: no reason, and its engine is not asked.
+    # thinking: no reason, and its engine is not asked. Thinking's own row
+    # names no tool.
     tool_running = False
 
     async def why() -> str | None:
         return None if tool_running else await waiting_reason()
+
+    # A prompt being read says how far it is, as the server tells it.
+    prefill = watch_prefill()
+
+    def reading() -> str | None:
+        return None if tool_running else prefill.label()
 
     try:
         with page_stage(page, send):
             yield event(
                 "connect", {"status": "connected", "message": "Streaming started"}
             )
-            async for chunk in announce_waiting(chunks, explain=why):
+            async for chunk in announce_waiting(chunks, explain=why, live=reading):
                 if isinstance(chunk, Waiting):
                     yield _waiting(chunk)
                     continue
                 for action in acted:
                     yield event("page", action)
                 acted.clear()
-                tool_running = (chunk.metadata or {}).get("event") == "tool"
-                if tool_running:
+                meta = chunk.metadata or {}
+                tool_running = meta.get("event") == "tool" and bool(meta.get("tool"))
+                if meta.get("event") == "tool":
                     yield _tool(chunk)
                     continue
                 yield _chunk(chunk)

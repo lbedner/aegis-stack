@@ -50,11 +50,24 @@ def _told(name: str, func: ToolFunc) -> ToolFunc:
     def told(exc: ValueError) -> Refused:
         return Refused(error=f"{type(exc).__name__}: {exc}")
 
+    defaults = {
+        key: param.default
+        for key, param in inspect.signature(func).parameters.items()
+        if param.default is not inspect.Parameter.empty
+    }
+
+    def given(kwargs: dict[str, Any]) -> dict[str, Any]:
+        """The arguments the caller gave: a default filled in is not one,
+        so the step reads as the call was written."""
+        return {
+            k: v for k, v in kwargs.items() if k not in defaults or v != defaults[k]
+        }
+
     if inspect.iscoroutinefunction(func):
 
         @functools.wraps(func)
         async def answer(*args: Any, **kwargs: Any) -> Any:
-            steps.heard(name)
+            steps.heard(name, given(kwargs))
             try:
                 return await func(*args, **kwargs)
             except ValueError as exc:
@@ -64,7 +77,7 @@ def _told(name: str, func: ToolFunc) -> ToolFunc:
 
     @functools.wraps(func)
     def answer_sync(*args: Any, **kwargs: Any) -> Any:
-        steps.heard(name)
+        steps.heard(name, given(kwargs))
         try:
             return func(*args, **kwargs)
         except ValueError as exc:

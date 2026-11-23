@@ -2,9 +2,11 @@
 {% if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
 
 
+import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from contextlib import asynccontextmanager
+from dataclasses import replace
 import inspect
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -14,12 +16,14 @@ from pydantic_ai.messages import (
     FunctionToolResultEvent,
     PartStartEvent,
     TextPart,
+    ThinkingPart,
     ToolCallPart,
     ToolReturnPart,
 )
 from pydantic_ai.run import AgentRunResultEvent
 import pytest
 
+from app.core import steps
 from app.services.ai.domains.chat.agent_loader import AgentConfig, default_agent_config
 from app.services.ai.domains.chat.prompts import LEGACY_SYSTEM_PROMPT
 from app.services.ai.domains.chat.user_memory import UserContext
@@ -43,12 +47,28 @@ class _FakeResult:
 
 
 class _FakeEventStream:
-    def __aiter__(self) -> "AsyncIterator[Any]":
+    def __init__(self, released: asyncio.Event | None = None) -> None:
+        self.released = released
+
+    def __aiter__(self) -> AsyncIterator[Any]:
         return self._events()
 
-    async def _events(self) -> "AsyncIterator[Any]":
+    async def _events(self) -> AsyncIterator[Any]:
         yield PartStartEvent(index=0, part=TextPart(content="Let me check. "))
         yield FunctionToolCallEvent(part=ToolCallPart(tool_name="lookup", args="{}"))
+        yield FunctionToolCallEvent(
+            part=ToolCallPart(
+                tool_name="run_code",
+                args={"code": "await ledger(months=3)"},
+                tool_call_id="c1",
+            )
+        )
+        # The script running: each tool it calls is heard as it starts
+        # (``resolve_tools``), the script still going.
+        steps.heard("ledger", {"months": 3})
+        if self.released is not None:
+            await self.released.wait()
+        steps.heard("accounts", {})
         # run_code completing: its metadata carries the sandbox-dispatched
         # nested calls (the harness's code-mode ToolReturn shape).
         yield FunctionToolResultEvent(
@@ -85,13 +105,18 @@ def _built(agent: Any) -> Any:
 
 
 class _FakeAgent:
-    def __init__(self, heard: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        heard: dict[str, Any] | None = None,
+        released: asyncio.Event | None = None,
+    ) -> None:
         self.heard = {} if heard is None else heard
+        self.released = released
 
     @asynccontextmanager
-    async def run_stream_events(self, prompt: str) -> "AsyncIterator[Any]":
+    async def run_stream_events(self, prompt: str) -> AsyncIterator[Any]:
         self.heard["message"] = prompt
-        yield _FakeEventStream()
+        yield _FakeEventStream(self.released)
 
 
 def _custom_config(**overrides: object) -> AgentConfig:
@@ -140,6 +165,13 @@ def harness(
 
     monkeypatch.setattr(prompt_module, "get_agent", fake_get_agent)
     return service, recorder, captured, monkeypatch
+
+
+def _scripting() -> AgentConfig:
+    """An agent in code mode whose scripts read the ledger and accounts."""
+    return replace(
+        default_agent_config(), code_mode=True, tool_names=["ledger", "accounts"]
+    )
 
 
 def _stub_resolve(
@@ -875,7 +907,7 @@ class TestToolUseSurfacing:
         self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
     ) -> None:
         service, _recorder, _captured, monkeypatch = harness
-        _stub_resolve(monkeypatch, default_agent_config())
+        _stub_resolve(monkeypatch, _scripting())
 
         chunks = [chunk async for chunk in service.stream_chat("hello")]
 
@@ -884,14 +916,84 @@ class TestToolUseSurfacing:
             for chunk in chunks
             if (chunk.metadata or {}).get("event") == "tool"
         ]
-        # The direct call, then run_code's nested dispatches in call order.
+        # The direct call, the script, then its reads in call order.
         assert [chunk.metadata["tool"] for chunk in tool_chunks] == [
             "lookup",
+            "run_code",
             "ledger",
             "accounts",
         ]
-        assert tool_chunks[1].metadata["args"] == '{"months": 3}'
+        assert tool_chunks[2].metadata["args"] == '{"months": 3}'
+        assert tool_chunks[2].metadata["label"].startswith("└ ")
         assert all(chunk.content == "" for chunk in tool_chunks)
+
+    async def test_a_scripts_read_shows_while_the_script_runs(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """A local model's script ran for minutes with its trail empty: its
+        reads showed only once it was done. Each shows as it starts."""
+        service, _recorder, _captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, _scripting())
+        released = asyncio.Event()
+        monkeypatch.setattr(
+            prompt_module, "get_agent", _built(_FakeAgent(released=released))
+        )
+
+        seen: list[str] = []
+        async with asyncio.timeout(5):
+            async for chunk in service.stream_chat("hello"):
+                tool = (chunk.metadata or {}).get("tool")
+                if tool:
+                    seen.append(tool)
+                if tool == "ledger":
+                    released.set()  # the script goes on only once it showed
+
+        assert seen == ["lookup", "run_code", "ledger", "accounts"]
+
+    async def test_a_tool_the_model_calls_itself_is_its_own_row_once(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """Without code mode every tool is the model's own call: its event's
+        row, never a second one under a script."""
+        service, _recorder, _captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, default_agent_config())
+
+        chunks = [chunk async for chunk in service.stream_chat("hello")]
+
+        tools = [c.metadata["tool"] for c in chunks if (c.metadata or {}).get("tool")]
+        assert tools == ["lookup", "run_code"]
+
+    async def test_the_model_thinking_is_a_step(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """A local model thinks for minutes before its first call, and the
+        trail said nothing: thinking is a row of its own."""
+        service, _recorder, _captured, monkeypatch = harness
+
+        class _Thinking(_FakeAgent):
+            @asynccontextmanager
+            async def run_stream_events(self, prompt: str) -> AsyncIterator[Any]:
+                class _Events:
+                    def __aiter__(self) -> AsyncIterator[Any]:
+                        return self._events()
+
+                    async def _events(self) -> AsyncIterator[Any]:
+                        yield PartStartEvent(index=0, part=ThinkingPart(content=""))
+                        yield PartStartEvent(index=1, part=TextPart(content="ok"))
+                        yield AgentRunResultEvent(result=_FakeResult())
+
+                yield _Events()
+
+        monkeypatch.setattr(prompt_module, "get_agent", _built(_Thinking()))
+
+        chunks = [chunk async for chunk in service.stream_chat("hello")]
+
+        notices = [
+            c.metadata for c in chunks if (c.metadata or {}).get("event") == "tool"
+        ]
+        assert notices == [
+            {"event": "tool", "tool": "", "args": "", "label": steps.THINKING}
+        ]
 
     async def test_final_chunk_carries_the_full_tool_trace(
         self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]

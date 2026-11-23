@@ -7341,7 +7341,14 @@
   With one slot, a long conversation's fold (its running summary, written on the worker as old turns leave the history) is a request of its own and replaces the chat's cached prompt, so the chat's next turn reads its prompt afresh: once per cut, not per turn. Give the <code>summarizer</code> agent row another model, or run a second slot, to keep the chat's cache.</li>
 <li><code>--metrics</code>: Prometheus counters at <code>/metrics</code>.</li>
 </ul>
-<p>In docker, the <code>llamacpp</code> service downloads <code>LLAMACPP_MODEL</code> (a Hugging Face <code>repo[:quant]</code>, default <code>ggml-org/Qwen3-1.7B-GGUF</code>) into a volume on its first start and serves it at <code>LLAMACPP_CONTEXT</code> (default 32768).</p>
+<p>To keep memory free on a GPU, add <code>--models-memory-margin &lt;MiB&gt;</code> to <code>LLAMACPP_ARGS</code>: the router unloads the least recently used model until a new one fits with that much to spare.</p>
+<p>In docker, the <code>llamacpp</code> service is a router too:</p>
+<ul>
+<li>It serves every model in its download cache and in <code>/models/local</code> (the <code>llamacpp-models</code> volume), at <code>LLAMACPP_CONTEXT</code> (default 32768). Overseer &gt; Inference loads and frees each one.</li>
+<li>It holds one model at a time (<code>--models-max 1</code>). The container's 8G holds one small model with its context, so loading another frees the last.</li>
+<li>On its first start it downloads <code>LLAMACPP_MODEL</code> (a Hugging Face <code>repo[:quant]</code>, default <code>ggml-org/Qwen3-1.7B-GGUF</code>) and loads it under that name, which is the <code>AI_MODEL</code> chat starts on.</li>
+<li>To add a <code>.gguf</code>: <code>docker compose cp &lt;model.gguf&gt; llamacpp:/models/local/</code>, then restart the service.</li>
+</ul>
 <h3 id="switching-engines">Switching engines</h3>
 <p>The engine holds nothing of the project's (its models live where it keeps them), so an installed component switches in place. The AI service's local provider moves with it, the placement stays, and everything that branches on the engine re-renders:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>llamacpp<span class="o">]</span><span class="w">   </span><span class="c1"># an Ollama project, now on llama.cpp</span>

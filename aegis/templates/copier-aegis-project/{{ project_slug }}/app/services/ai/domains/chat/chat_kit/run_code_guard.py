@@ -1,15 +1,26 @@
 """The guard around code mode's ``run_code`` (``agent_capabilities``).
 
-One script per user at a time, and a script that failed calling a write
-tool (writes stay out of the sandbox) is told to call it directly.
+One script per user at a time, a script that failed calling a write tool
+(writes stay out of the sandbox) is told to call it directly, and the
+tool asks for one script per answer rather than a REPL.
 """
 
 import asyncio
+from dataclasses import replace
 import re
 from typing import Any
 import weakref
 
 from app.core.tools import RUN_CODE
+
+# The harness describes run_code as a REPL, which invites a peek-then-compute
+# pair of calls; each call is a whole model turn over the whole context.
+_REPL = "State is preserved between calls (REPL-style)."
+ONE_SCRIPT = (
+    "Send ONE complete script per answer: every read it needs (loops and "
+    "several reads are fine), then the computation. Each read's return "
+    "shape is typed below: never print one to peek at it first."
+)
 
 # How the sandbox says a name is not there: its checker before the script
 # runs, or the interpreter when it does.
@@ -56,14 +67,31 @@ def run_code_guard(granted: frozenset[str]) -> Any:
     (``current_user_id``, bound by every chat runtime); calls with none
     bound (MCP) share a single lock. And a script that failed calling one
     of the write tools in ``granted`` is told to call it directly
-    (``native_write_hint``).
+    (``native_write_hint``). Its description asks for ``ONE_SCRIPT``.
     """
-    from pydantic_ai.capabilities import AbstractCapability
+    from pydantic_ai.capabilities import AbstractCapability, CapabilityOrdering
     from pydantic_ai.exceptions import ToolRetryError
+    from pydantic_ai.toolsets import PreparedToolset
+    from pydantic_ai_harness import CodeMode
 
     from app.services.ai.domains.chat.user_memory import current_user_id
 
+    async def _one_script(ctx: Any, tool_defs: list[Any]) -> list[Any]:
+        return [
+            replace(tool, description=tool.description.replace(_REPL, ONE_SCRIPT))
+            if tool.name == RUN_CODE and tool.description
+            else tool
+            for tool in tool_defs
+        ]
+
     class _RunCodeGuard(AbstractCapability[Any]):
+        # Outside CodeMode, the only layer whose tools include run_code.
+        def get_ordering(self) -> CapabilityOrdering:
+            return CapabilityOrdering(position="outermost", wraps=[CodeMode])
+
+        def get_wrapper_toolset(self, toolset: Any) -> Any:
+            return PreparedToolset(toolset, _one_script)
+
         async def wrap_tool_execute(
             self, ctx: Any, *, call: Any, tool_def: Any, args: Any, handler: Any
         ) -> Any:

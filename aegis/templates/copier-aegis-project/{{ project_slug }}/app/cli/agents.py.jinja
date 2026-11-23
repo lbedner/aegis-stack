@@ -62,6 +62,12 @@ async def _set_prompt(slug: str, prompt: str, note: str) -> None:
     await update_agent(slug, {"system_prompt": prompt}, source="cli", note=note)
 
 
+async def _set_code_mode(slug: str, on: bool) -> None:
+    from app.services.ai.service import update_agent
+
+    await update_agent(slug, {"code_mode": on}, source="cli")
+
+
 async def _load_modules() -> list[ContextModule]:
     from app.core.db import get_async_session
     from app.services.ai.service import list_context_modules
@@ -189,6 +195,27 @@ async def test_agent(
 
 def _error(message: str) -> None:
     console.print(f"[{theme.ERROR}]{message}[/{theme.ERROR}]")
+
+
+@app.command("code-mode", help=lazy_t("agents.help_code_mode"))
+async def set_code_mode(
+    slug: str = typer.Argument(...),
+    on: bool = typer.Option(..., "--on/--off"),
+) -> None:
+    import sys
+
+    from app.services.ai.service import (
+        AgentNotFoundError,
+        InvalidAgentUpdateError,
+    )
+
+    try:
+        await _set_code_mode(slug, on)
+    except (AgentNotFoundError, InvalidAgentUpdateError) as e:
+        _error(str(e))
+        sys.exit(1)
+    key = "agents.code_mode_on" if on else "agents.code_mode_off"
+    console.print(theme.good_text(t(key, slug=slug)))
 
 
 @prompt_app.command("set", help=lazy_t("agents.prompt_help_set"))

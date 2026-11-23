@@ -24,10 +24,16 @@ from app.core.chat_transcript import (
     first_code_line,
     script_of,
     trail_label,
+    under_script,
 )
 from app.core.tools import get_tool, result_text
 {%- else %}
-from app.core.chat_transcript import first_code_line, script_of, trail_label
+from app.core.chat_transcript import (
+    first_code_line,
+    script_of,
+    trail_label,
+    under_script,
+)
 {%- endif %}
 from app.services.ai.models import StreamingMessage
 
@@ -54,10 +60,13 @@ def tool_notice(
     conversation_id: str | None,
     stream_delta: bool,
     args: Any = "",
+    inside: bool = False,
 ) -> StreamingMessage:
     """A content-free chunk naming a tool call, for the UI trail: its
     arguments previewed, and its trail line (``trail_label``), read from
-    the whole call while a script's first comment is still there."""
+    the whole call while a script's first comment is still there; marked
+    under its script (``under_script``) when a script dispatched it."""
+    label = trail_label(tool_name, args)
     return StreamingMessage(
         content="",
         is_final=False,
@@ -68,7 +77,7 @@ def tool_notice(
             "event": "tool",
             "tool": tool_name,
             "args": call_args_preview(args),
-            "label": trail_label(tool_name, args),
+            "label": under_script(label) if inside else label,
         },
     )
 

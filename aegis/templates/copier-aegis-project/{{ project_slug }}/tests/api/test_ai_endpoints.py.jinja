@@ -484,6 +484,19 @@ class TestUserMemoryEndpoints:
             response = client.delete("/api/v1/ai/user-memory/7")
 
         assert response.status_code == 404
+
+
+def test_an_agent_update_sets_code_mode(client: TestClient) -> None:
+    with (
+        patch(
+            "app.services.ai.service.update_agent", AsyncMock(return_value=object())
+        ) as update,
+        patch("app.services.ai.service.serialize_agent", return_value={}),
+    ):
+        response = client.patch("/api/v1/ai/agents/assistant", json={"code_mode": True})
+
+    assert response.status_code == 200, response.text
+    update.assert_awaited_once_with("assistant", {"code_mode": True})
 {% endif %}
 
 

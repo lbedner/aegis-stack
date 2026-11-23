@@ -43,7 +43,7 @@ from app.services.ai.service.trace import call_args_preview, sandbox_calls
 from .server import TEXT_CAP, McpStep, reachable, sandbox_steps
 
 NAME = RUN_CODE
-# The harness describes a REPL; each MCP call is its own run.
+# Each MCP call is its own run: no state for `restart` to reset.
 FRESH = "Over MCP every call starts fresh: nothing carries over from an earlier call."
 
 

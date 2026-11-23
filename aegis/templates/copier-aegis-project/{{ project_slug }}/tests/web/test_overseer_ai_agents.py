@@ -100,6 +100,7 @@ def test_the_drawer_edits_the_definition(
     assert one(form, "input[name=name]").get("value") == "Illiana"
     assert "careful with money" in text(one(form, "textarea[name=system_prompt]"))
     assert one(form, "input[name=is_active]").get("checked") is not None
+    assert one(form, "input[name=code_mode]").get("checked") is None
     grants = text(one(html, "#ai-agent-grants"))
     assert "search_transactions" in grants
     assert "Extends" in grants and "assistant" in grants
@@ -195,6 +196,7 @@ def test_saving_an_agent_sends_only_its_fields(
             "temperature": "0.5",
             "max_tokens": "",
             "system_prompt": "Be brief.",
+            "code_mode": "on",
         },
     )
     assert response.status_code == 200, response.text
@@ -202,6 +204,7 @@ def test_saving_an_agent_sends_only_its_fields(
     assert slug == "illiana" and changes["temperature"] == 0.5
     assert changes["model_id"] is None and changes["max_tokens"] is None
     assert changes["is_active"] is False  # an unticked box is off
+    assert changes["code_mode"] is True
     assert triggers(response)["toast"]["tone"] == "ok"
 
 

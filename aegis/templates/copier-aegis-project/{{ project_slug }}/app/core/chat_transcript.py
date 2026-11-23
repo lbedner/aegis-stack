@@ -19,7 +19,7 @@ from typing import Any
 
 from app.core.config import settings
 from app.core.formatting import counted
-from app.core.steps import doing
+from app.core.steps import SCRIPT, doing
 from app.core.tools import card_tool_names, result_data
 
 # Rendered while text is still arriving; dropped from the final render.
@@ -177,7 +177,31 @@ def trail_label(name: str, args: Any) -> str:
         return doing(name, text if script is None else script)
     if script is None:
         return tool_label(name, text)
-    return f"{name}: {first_code_line(script)}".rstrip()
+    # A script by its first comment, what it is for: the reads under it
+    # (``under_script``) say what it called. Without one, its first code.
+    said = doing(name, script)
+    return f"{name}: {first_code_line(script) if said == SCRIPT else said}".rstrip()
+
+
+def under_script(label: str) -> str:
+    """A trail line for a read a script dispatched: marked under its
+    script, so it never reads as a call of the model's own."""
+    return f"└ {label}"
+
+
+def trail_rows(trace: list[dict[str, Any]], url: str = "") -> list[dict[str, Any]]:
+    """A stored reply's trail as the live one showed it: a row per call of
+    the model's, and under a script the reads it dispatched (``inside``),
+    each opening its call's run (``run``, its index; ``url``)."""
+    rows: list[dict[str, Any]] = []
+    for i, entry in enumerate(trace):
+        run = {"run": i, "url": f"{url}/runs/{i}", "failed": False}
+        rows.append(run | {"label": trace_label(entry), "failed": trace_failed(entry)})
+        rows.extend(
+            run | {"label": under_script(trace_label(read)), "inside": True}
+            for read in entry.get("nested") or []
+        )
+    return rows
 
 
 def trace_label(entry: dict[str, Any]) -> str:

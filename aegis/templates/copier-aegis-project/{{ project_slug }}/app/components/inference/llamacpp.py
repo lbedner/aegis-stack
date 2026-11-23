@@ -10,13 +10,15 @@ the Ollama-shaped ``models`` list beside it has every field empty, and
 A router (``--models-dir``; ``/props`` says ``role: router``) serves every
 model in that folder and in llama.cpp's download cache, loading and freeing
 them on request (``/models/load``, ``/models/unload``). Its ``/v1/models``
-gives each one's status and trained context; what one is beyond that is
-known only once it is loaded.
+gives each one's status and trained context; what one can do is read from
+its own ``/props?model=``, and only for a loaded one: asking of an unloaded
+one loads it.
 """
 
 import asyncio
 import shlex
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 
@@ -52,12 +54,17 @@ def _warm(entry: dict[str, Any]) -> bool:
 
 
 def _served(
-    listing: dict[str, Any], props: dict[str, Any]
+    listing: dict[str, Any],
+    props: dict[str, Any],
+    loaded: dict[str, dict[str, Any]] | None = None,
 ) -> list[tuple[InferenceModel, bool, int]]:
     """Each model, whether it is in memory, and the context it serves
-    (``meta.n_ctx``; a router knows only the trained one, unloaded)."""
+    (``meta.n_ctx``; a router knows only the trained one, unloaded). What
+    it can do is the server's ``props`` on a single-model server; on a
+    router, its own (``loaded``), unknown (None) for one not loaded."""
     models = []
     for entry in listing.get("data", []):
+        own = props if loaded is None else loaded.get(entry["id"])
         meta = entry.get("meta") or {}
         params = meta.get("n_params") or 0
         model = InferenceModel(
@@ -73,7 +80,7 @@ def _served(
                 or 0,
                 embedding_length=meta.get("n_embd") or 0,
             ),
-            capabilities=_capabilities(props),
+            capabilities=None if own is None else _capabilities(own),
         )
         models.append((model, _warm(entry), meta.get("n_ctx") or 0))
     return models
@@ -105,13 +112,24 @@ class LlamaCppEngine(BaseInferenceEngine):
     START = " ".join(router_command("<folder>", 8080, 32768))
     ADD_MODEL = "a .gguf in its --models-dir (make llama links Ollama's in)"
 
-    async def _read(self) -> tuple[dict[str, Any], dict[str, Any]]:
-        """``/v1/models`` and ``/props``, read together."""
+    async def _read(
+        self,
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, dict[str, Any]] | None]:
+        """``/v1/models`` and ``/props``, read together, and on a router
+        each loaded model's own props (``_served``)."""
         async with self._client() as client:
             listing, props = await asyncio.gather(
                 self._get(client, "/v1/models"), self._get(client, "/props")
             )
-        return listing, props
+            if not _routing(listing):
+                return listing, props, None
+            warm = [e["id"] for e in listing["data"] if _warm(e)]
+            # ponytail: one freed between the listing and this ask is loaded
+            # again by it; a status re-check per model if that ever bites.
+            own = await asyncio.gather(
+                *(self._get(client, f"/props?{urlencode({'model': m})}") for m in warm)
+            )
+        return listing, props, dict(zip(warm, own, strict=True))
 
     async def fetch_models(self) -> list[InferenceModel]:
         return [model for model, _, _ in _served(*await self._read())]
@@ -137,10 +155,10 @@ class LlamaCppEngine(BaseInferenceEngine):
         "unavailable". A single-model server's one model is loaded; a
         router's are as it says, and it loads and frees them."""
         try:
-            listing, props = await self._read()
+            listing, props, loaded = await self._read()
         except (httpx.HTTPError, ValueError):
             return InferenceServerStatus(available=False)
-        served = _served(listing, props)
+        served = _served(listing, props, loaded)
         return InferenceServerStatus(
             available=True,
             version=props.get("build_info"),

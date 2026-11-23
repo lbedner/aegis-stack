@@ -23,17 +23,14 @@ class PronunciationError(ValueError):
 async def load(session: AsyncSession) -> None:
     """Put the saved rows to work over the list in code."""
     spoken.use_saved(
-        spoken.Pronunciation(term=row.term, say=row.say, ipa=row.ipa)
-        for row in await saved(session)
+        spoken.Pronunciation(term=row.term, say=row.say) for row in await saved(session)
     )
 
 
-async def save(
-    session: AsyncSession, term: str, say: str, ipa: str | None = None
-) -> None:
+async def save(session: AsyncSession, term: str, say: str) -> None:
     """Say ``term`` as ``say`` from the next thing said: a new row, or the
     row already saved for that term changed."""
-    term, say, ipa = term.strip(), say.strip(), (ipa or "").strip() or None
+    term, say = term.strip(), say.strip()
     if not term or not say:
         raise PronunciationError(NEEDS_BOTH)
     if len(term) > TERM_LENGTH:
@@ -41,9 +38,9 @@ async def save(
     key = spoken.term_key(term)
     row = await queries.pronunciation_of(session, key)
     if row is None:
-        row = VoicePronunciation(key=key, term=term, say=say, ipa=ipa)
+        row = VoicePronunciation(key=key, term=term, say=say)
     else:
-        row.term, row.say, row.ipa, row.updated_at = term, say, ipa, utcnow()
+        row.term, row.say, row.updated_at = term, say, utcnow()
     session.add(row)
     await session.commit()
     await load(session)

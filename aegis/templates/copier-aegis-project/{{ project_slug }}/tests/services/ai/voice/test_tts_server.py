@@ -98,7 +98,7 @@ async def test_each_call_is_charted_for_the_speech_page(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """How long a whole file took, and a stream until its first audio
-    (Overseer > Inference > Speech)."""
+    (Overseer > Inference > Kokoro-FastAPI)."""
     charted: list[str] = []
 
     async def chart(kind: str, seconds: float) -> None:

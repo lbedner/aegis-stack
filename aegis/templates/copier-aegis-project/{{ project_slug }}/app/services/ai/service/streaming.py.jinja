@@ -304,6 +304,7 @@ class StreamingMixin(ChatMixin):
                                     message_id=message_id,
                                     conversation_id=conversation.id,
                                     stream_delta=stream_delta,
+                                    inside=True,
                                 )
                             continue
                         elif isinstance(event, AgentRunResultEvent):

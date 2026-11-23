@@ -419,6 +419,38 @@ class TestLLMPickerGating:
             "public-model",
         ]
 
+    def test_a_model_billed_by_time_carries_its_rate(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A live voice model bills by the second: the list says so, or
+        every picker shows it a token price that is never the bill."""
+        llm_router = importlib.import_module("app.components.backend.api.llm.routes")
+        from app.services.ai.domains.llm.llm_service import LLMListResult
+
+        async def fake_list_models(**kwargs: Any) -> list[LLMListResult]:
+            return [
+                LLMListResult(
+                    model_id="gemini-live",
+                    title="Gemini Live",
+                    vendor="google",
+                    family=None,
+                    color="",
+                    context_window=8192,
+                    input_price=None,
+                    output_price=None,
+                    per_second=0.001,
+                    released_on=None,
+                    mode="realtime",
+                )
+            ]
+
+        monkeypatch.setattr(llm_router, "list_models", fake_list_models)
+
+        response = client.get("/api/v1/llm/models")
+        assert response.status_code == 200, response.text
+        [model] = response.json()
+
+        assert model["per_second"] == 0.001
 
 
 class TestUserMemoryEndpoints:
@@ -484,6 +516,19 @@ class TestUserMemoryEndpoints:
             response = client.delete("/api/v1/ai/user-memory/7")
 
         assert response.status_code == 404
+
+
+def test_an_agent_update_sets_code_mode(client: TestClient) -> None:
+    with (
+        patch(
+            "app.services.ai.service.update_agent", AsyncMock(return_value=object())
+        ) as update,
+        patch("app.services.ai.service.serialize_agent", return_value={}),
+    ):
+        response = client.patch("/api/v1/ai/agents/assistant", json={"code_mode": True})
+
+    assert response.status_code == 200, response.text
+    update.assert_awaited_once_with("assistant", {"code_mode": True})
 {% endif %}
 
 

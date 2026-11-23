@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha1
+from typing import Any
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -26,6 +27,7 @@ from app.services.system.models import (
 from app.services.system.ui import get_component_title, registry_key
 
 from .overseer_access import Db, Viewer
+from .rendering import with_query
 
 # Records what a section did with the app's data, as the viewer, from where
 # they asked (``audit_admin_action``): an event, how it went, its detail,
@@ -99,9 +101,25 @@ class NavItem:
         return f"status-{self.group}-{digest}"
 
 
-def page_url(group: str, name: str) -> str:
-    """An installed entry's Overseer page."""
-    return f"/overseer/{group}/{quote(name, safe='')}"
+def page_url(group: str, name: str, section: str | None = None) -> str:
+    """An installed entry's Overseer page, or one ``section`` of it."""
+    url = f"/overseer/{group}/{quote(name, safe='')}"
+    return url if section is None else f"{url}/{quote(section, safe='')}"
+
+
+def tab_links(
+    url: str, tabs: Mapping[str, str], current: str, default: str
+) -> list[dict[str, Any]]:
+    """A section's tab row (``section_tabs``) at ``url``: each tab's label,
+    its address (``?tab=``, none for ``default``) and whether it is shown."""
+    return [
+        {
+            "label": label,
+            "url": with_query(url, tab=None if key == default else key),
+            "active": key == current,
+        }
+        for key, label in tabs.items()
+    ]
 
 
 def build_navigation(status: SystemStatus | None) -> dict[str, list[NavItem]]:

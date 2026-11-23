@@ -28,6 +28,7 @@ from app.services.ai.domains.voice.catalog import (
     speaking_model,
     speeds,
     steers,
+    voice_name,
 )
 from app.services.ai.domains.voice.delivery import (
     DIALS,
@@ -52,7 +53,7 @@ from app.services.ai.domains.voice.overview import (
 )
 from app.services.ai.domains.voice.traits import family_of, language_of
 from app.services.ai.domains.voice.tts.config import get_tts_config
-from app.services.ai.models.voice import VoiceProfile
+from app.services.ai.models.voice import CallSetup, VoiceProfile
 
 SPEED_RANGE = (TTS_SPEED_MIN, TTS_SPEED_MAX)
 # A profile's editor, in three steps: who it is, how it talks, a last look.
@@ -172,10 +173,30 @@ class DesignView(Frozen):
     form: dict[str, str]
 
 
-def _voice_of(profile: VoiceProfile) -> str:
-    """The voice a profile speaks in: its own, else its provider's default
-    (one seeded from a .env that names no voice)."""
-    return get_tts_config(profiles.settings_for(profile, app_settings)).get_voice()
+def _voice_of(profile: VoiceProfile, setup: CallSetup | None = None) -> str:
+    """The voice a profile speaks in: its own on the call setup's speaking
+    provider, else its first, else that provider's default (one seeded
+    from a .env that names no voice)."""
+    spoken = profiles.settings_for(profile, app_settings, setup)
+    if spoken.TTS_VOICE is None and (
+        first := next(iter(profile.voices.values()), None)
+    ):
+        return first
+    return get_tts_config(spoken).get_voice()
+
+
+def voice_engines(profile: VoiceProfile) -> list[dict[str, Any]]:
+    """Her voice on each speaking provider (``VoiceProfile.voices``), None
+    where she has none yet: the designer picks one."""
+    return [
+        {
+            "provider": p.id,
+            "name": p.name,
+            "local": p.is_local,
+            "voice": voice_name(v) if (v := profile.voices.get(p.id)) else None,
+        }
+        for p in get_tts_providers()
+    ]
 
 
 async def _voices(chosen: str) -> tuple[list[VoiceChoice], list[LockedProvider]]:
@@ -258,13 +279,15 @@ async def design_view(
     where given, else on what the profile has; the Voice step's search the
     one ``query`` asks for (``finder``)."""
     profile = await _profile(db, profile_id)
+    setup = await profiles.call_setup(db)
+    on = setup.tts_model if setup else app_settings.TTS_MODEL
     shown = picked or Design(
-        voice=_voice_of(profile),
-        model=profile.tts_model,
+        voice=_voice_of(profile, setup),
+        model=on,
         delivery=Delivery(**(profile.tts_delivery or {})),
         speed=profile.tts_speed,
     )
-    model = speaking_model(shown.voice, shown.model or profile.tts_model) or ""
+    model = speaking_model(shown.voice, shown.model or on) or ""
     spoken, accent = get_voice(shown.voice), "accent" in steers(model)
     voices, locked = await _voices(shown.voice)
     chosen = next((v for v in voices if v.id == shown.voice), None)
@@ -349,16 +372,18 @@ def _said(exc: ValidationError) -> list[str]:
     return [e["msg"].removeprefix("Value error, ") for e in exc.errors()]
 
 
+def _spoken_on(picked: Design, model: str | None) -> str:
+    """The model a design is heard on: its own, else ``model`` where that
+    speaks the voice, else one that does."""
+    return speaking_model(picked.voice, picked.model or model) or ""
+
+
 def _columns(picked: Design, model: str | None) -> dict[str, Any]:
-    """The profile's columns a design sets: the voice, its provider and a
-    model that speaks it, the speed it takes, the choices and the text they
-    make."""
-    voice = get_voice(picked.voice)
-    spoken_on = speaking_model(picked.voice, picked.model or model) or ""
+    """The profile's columns a design sets besides the voice itself
+    (``profiles.give_voice``): the speed it takes on the model it is heard
+    on, the choices and the text they make."""
+    spoken_on = _spoken_on(picked, model)
     return {
-        "tts_voice": picked.voice,
-        "tts_provider": voice.provider_id if voice else None,
-        "tts_model": spoken_on or None,
         "tts_speed": _fit(picked.speed, spoken_on),
         "tts_delivery": picked.delivery.model_dump(),
         "tts_instructions": compose(
@@ -379,22 +404,37 @@ async def save_design(
     db: AsyncSession, profile_id: int | None, picked: Design, service: Any
 ) -> VoiceProfile:
     """``picked`` on the profile, in use at once when it is the active one
-    (``service`` drops the speech services built from the old values)."""
+    (``service`` drops the speech services built from the old values): the
+    voice hers on its provider, heard on the model it was designed on where
+    the call setup speaks that provider (``profiles.give_voice``)."""
     profile = await _profile(db, profile_id)
-    saved = await profiles.update(db, profile.id, **_columns(picked, profile.tts_model))  # type: ignore[arg-type]
+    setup = await profiles.seeded_setup(db, app_settings)
+    saved, setup = await profiles.give_voice(
+        db,
+        setup,
+        profile,
+        picked.voice,
+        picked.model,
+        **_columns(picked, setup.tts_model),
+    )
     if saved.is_active:
-        profiles.apply(saved, app_settings, service)
+        profiles.apply(saved, app_settings, service, setup)
     return saved
 
 
 def design_settings(picked: Design, settings: Any) -> Any:
-    """``settings`` speaking as ``picked`` would, for hearing it unsaved."""
+    """``settings`` speaking as ``picked`` would, on a model that speaks
+    it, for hearing it unsaved."""
+    voice = get_voice(picked.voice)
+    provider = voice.provider_id if voice else settings.TTS_PROVIDER
     columns = _columns(picked, settings.TTS_MODEL)
     return settings.model_copy(
-        update={
-            profiles.SETTINGS[column]: value
-            for column, value in columns.items()
-            if column in profiles.SETTINGS
+        update={profiles.VOICE[c]: v for c, v in columns.items() if c in profiles.VOICE}
+        | {
+            "TTS_VOICES": {**settings.TTS_VOICES, provider: picked.voice},
+            "TTS_VOICE": picked.voice,
+            "TTS_PROVIDER": provider,
+            "TTS_MODEL": _spoken_on(picked, settings.TTS_MODEL) or None,
         }
     )
 
@@ -404,12 +444,15 @@ async def profile_summaries(db: AsyncSession) -> list[ProfileSummary]:
     from ``.env`` when there is none yet)."""
     await profiles.seeded_active(db, app_settings)
     every = await profiles.list_profiles(db)
+    setup = await profiles.call_setup(db)
     return [
         ProfileSummary(
             id=p.id,  # type: ignore[arg-type]
             name=p.name,
             voice=(
-                found.name if (found := get_voice(spoken := _voice_of(p))) else spoken
+                found.name
+                if (found := get_voice(spoken := _voice_of(p, setup)))
+                else spoken
             ),
             style=(
                 STYLES[style].label

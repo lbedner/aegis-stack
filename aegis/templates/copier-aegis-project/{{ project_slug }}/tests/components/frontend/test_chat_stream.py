@@ -103,7 +103,7 @@ class TestToolEvents:
     def test_trace_label_previews_scripts_and_args(self) -> None:
         assert trace_label(
             {"tool": "run_code", "code": "# setup\ntx = await ledger()\nx"}
-        ) == "run_code: tx = await ledger()"
+        ) == "run_code: setup"
         assert trace_label({"tool": "ledger", "args": '{"months": 3}'}) == (
             "ledger(months=3)"
         )

@@ -119,13 +119,15 @@ class FakeClient(OllamaEngine):
 def serve(
     monkeypatch: pytest.MonkeyPatch, client: type[FakeClient] = FakeClient
 ) -> None:
-    """Answer every caller of ``get_inference_engine`` with ``client``,
-    and start the activity tracker afresh."""
+    """Answer every caller of ``get_inference_engine`` with ``client``, the
+    app's engine being the one it is (a llama.cpp stack's too), and start
+    the activity tracker afresh."""
     from app.components import inference
     from app.components.inference import activity
     from app.core.config import settings
 
-    monkeypatch.setitem(inference.ENGINES, settings.INFERENCE_ENGINE, client)
+    monkeypatch.setattr(settings, "INFERENCE_ENGINE", client.NAME)
+    monkeypatch.setitem(inference.ENGINES, client.NAME, client)
     monkeypatch.setattr(activity, "_tracker", activity.ActivityTracker())
 
 
@@ -141,8 +143,15 @@ ROUTES = {
 
 
 def serving(routes: dict[str, Any]) -> Callable[[httpx.Request], httpx.Response]:
-    """A ``MockTransport`` handler answering each path from ``routes``."""
-    return lambda request: httpx.Response(200, json=routes[request.url.path])
+    """A ``MockTransport`` handler answering each path from ``routes``, a
+    path with its query first where ``routes`` has it."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        path, query = request.url.path, request.url.query.decode()
+        key = f"{path}?{query}" if f"{path}?{query}" in routes else path
+        return httpx.Response(200, json=routes[key])
+
+    return answer
 
 
 def down(request: httpx.Request) -> httpx.Response:

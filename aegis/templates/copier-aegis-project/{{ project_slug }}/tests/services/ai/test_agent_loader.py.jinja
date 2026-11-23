@@ -474,6 +474,34 @@ class TestAWriteCalledFromAScript:
         assert ("`save_memory` is its own tool" in told) is hinted
 
 
+async def test_run_code_asks_for_one_script_not_a_repl() -> None:
+    """Every extra run_code is another model call over the whole context,
+    seconds each on a local model, so the tool must not invite a REPL."""
+    from pydantic_ai import Agent as PydanticAgent
+    from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
+    from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+    from app.services.ai.domains.chat.chat_kit.run_code_guard import ONE_SCRIPT
+    from app.services.ai.domains.chat.tools import resolve_tools
+
+    offered: dict[str, str] = {}
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        offered.update({t.name: t.description or "" for t in info.function_tools})
+        return ModelResponse(parts=[TextPart("done")])
+
+    config = _code_mode("lookup")
+    agent = PydanticAgent(
+        FunctionModel(model),
+        tools=resolve_tools(config.tool_names),
+        capabilities=agent_capabilities(config),
+    )
+    await agent.run("hi")
+
+    assert "REPL" not in offered["run_code"]
+    assert ONE_SCRIPT in offered["run_code"]
+
+
 class TestCodeModeLimits:
     """Scripts run inside the webserver process, and any chat can start
     one: each is held to the configured time and memory, and a user runs

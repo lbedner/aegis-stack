@@ -174,6 +174,28 @@ async def test_a_router_reports_the_context_a_model_was_trained_for() -> None:
     assert model.size == 0
 
 
+async def test_a_router_says_what_a_loaded_model_can_do_and_never_loads_one_to_ask() -> (
+    None
+):
+    """A router's own ``/props`` says nothing of a model: a loaded one's
+    come from its props by name. An unloaded one's are unknown (None), not
+    asked, since asking would load it."""
+    asked: list[str] = []
+    answer = serving(_fake_llamacpp.ROUTER)
+
+    def recorded(request: httpx.Request) -> httpx.Response:
+        asked.append(str(request.url))
+        return answer(request)
+
+    models = await _engine("llamacpp", recorded).fetch_models()
+    can = {m.name: m.capabilities for m in models}
+
+    assert can[_fake_llamacpp.MODEL] is not None
+    assert "tools" in can[_fake_llamacpp.MODEL]
+    assert can[_fake_llamacpp.OTHER] is None
+    assert not [url for url in asked if "llama3.1" in url]
+
+
 async def test_llama_server_reports_what_the_ollama_shaped_list_leaves_empty() -> None:
     """Size, context and quantization come from ``data[].meta``, not from
     the Ollama-shaped ``models`` list beside it, whose fields are empty."""

@@ -782,7 +782,12 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/services/ai/domains/chat/cards.py",
                     "app/services/ai/domains/chat/path_card.py",
                     "app/services/ai/domains/chat/agent_registry.py",
+                    # Who runs on each local engine (Overseer > Inference).
+                    "app/services/ai/domains/chat/engine_users.py",
+                    "tests/services/ai/test_engine_users.py",
                     "app/services/ai/domains/voice/profiles.py",
+                    "app/services/ai/domains/voice/engine_use.py",
+                    "tests/services/ai/voice/test_engine_use.py",
                     "app/services/ai/domains/voice/pronunciations.py",
                     "app/services/ai/domains/voice/design.py",
                     "app/services/ai/domains/voice/queries.py",

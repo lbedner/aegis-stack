@@ -166,7 +166,7 @@ PARTS: dict[str, Part] = {
         containers=("webserver",),
         tier=1,
         page="server",
-        depends_on=("database", "queue", "cache", "storage", "ollama", "browser"),
+        depends_on=("database", "queue", "cache", "storage", "inference", "browser"),
         hosts=True,
         order=10,
         description="FastAPI on uvicorn or granian, lifecycle hooks, in-memory request metrics, API load testing for every route",
@@ -290,6 +290,54 @@ PARTS: dict[str, Part] = {
         order=30,
         description="Flet, ships with the Overseer system dashboard",
     ),
+    "inference": Part(
+        kind="component",
+        category=Category.AI,
+        cli="inference",
+        marker="app/components/inference/ollama.py",
+        containers=("ollama", "llamacpp", "kokoro-fastapi"),
+        tier=2,
+        page="inference",
+        order=110,
+        description="Local AI models via Ollama or llama.cpp, speech via Kokoro",
+        options=(
+            Option(
+                name="engine",
+                mode="single",
+                choices=("ollama", "llamacpp"),
+                default="ollama",
+                answer="inference_engine",
+            ),
+            Option(
+                name="placement",
+                mode="single",
+                choices=("host", "docker"),
+                default="host",
+                answer="inference_placement",
+                about=(
+                    (
+                        "host",
+                        "Use the one already running on this machine. The default.",
+                    ),
+                    ("docker", "Run it as a container in the project's compose stack."),
+                ),
+            ),
+            Option(
+                name="speech",
+                mode="single",
+                choices=("none", "kokoro_fastapi"),
+                default="none",
+                answer="inference_speech",
+                about=(
+                    ("none", "No speech server. The default."),
+                    (
+                        "kokoro_fastapi",
+                        "Text to speech for ai[voice], where the model server runs.",
+                    ),
+                ),
+            ),
+        ),
+    ),
     "ingress": Part(
         kind="component",
         category=Category.COMPUTE,
@@ -341,54 +389,6 @@ PARTS: dict[str, Part] = {
         marker="app/components/backend/middleware/logfire_tracing.py",
         order=100,
         description="Pydantic Logfire tracing + metrics + logging",
-    ),
-    "ollama": Part(
-        kind="component",
-        category=Category.AI,
-        cli="inference",
-        marker="app/components/inference/ollama.py",
-        containers=("ollama", "llamacpp", "kokoro-fastapi"),
-        tier=2,
-        page="inference",
-        order=110,
-        description="Local AI models via Ollama or llama.cpp, speech via Kokoro",
-        options=(
-            Option(
-                name="engine",
-                mode="single",
-                choices=("ollama", "llamacpp"),
-                default="ollama",
-                answer="inference_engine",
-            ),
-            Option(
-                name="placement",
-                mode="single",
-                choices=("host", "docker"),
-                default="host",
-                answer="inference_placement",
-                about=(
-                    (
-                        "host",
-                        "Use the one already running on this machine. The default.",
-                    ),
-                    ("docker", "Run it as a container in the project's compose stack."),
-                ),
-            ),
-            Option(
-                name="speech",
-                mode="single",
-                choices=("none", "kokoro_fastapi"),
-                default="none",
-                answer="inference_speech",
-                about=(
-                    ("none", "No speech server. The default."),
-                    (
-                        "kokoro_fastapi",
-                        "Text to speech for ai[voice], where the model server runs.",
-                    ),
-                ),
-            ),
-        ),
     ),
     "payment": Part(
         kind="service",

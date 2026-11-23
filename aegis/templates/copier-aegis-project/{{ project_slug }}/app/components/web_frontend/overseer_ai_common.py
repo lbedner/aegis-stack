@@ -15,6 +15,7 @@ from app.services.ai.service import AIProvider, provider_label
 # Voice and a database, as the chat surface reads them: one home.
 from .chat_surface import PERSISTED
 from .overseer_nav import page_url
+from .overseer_nav import tab_links as nav_tab_links
 from .rendering import with_query
 
 # RAG is file-based (Chroma), so it needs no database: offered wherever
@@ -35,16 +36,8 @@ def section_url(section: str, **query: str | list[str] | None) -> str:
 def tab_links(
     section: str, tabs: Mapping[str, str], current: str, default: str
 ) -> list[dict[str, Any]]:
-    """A section's tab row (``section_tabs``): each tab's label, its address
-    (``?tab=``, none for ``default``) and whether it is the one shown."""
-    return [
-        {
-            "label": label,
-            "url": section_url(section, tab=None if key == default else key),
-            "active": key == current,
-        }
-        for key, label in tabs.items()
-    ]
+    """One of the AI page's sections' tab row (``overseer_nav.tab_links``)."""
+    return nav_tab_links(section_url(section), tabs, current, default)
 
 
 async def get_current_config() -> Any:

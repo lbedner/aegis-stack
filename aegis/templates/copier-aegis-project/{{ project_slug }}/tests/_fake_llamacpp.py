@@ -6,6 +6,7 @@ does, every field empty, which the engine must not read.
 """
 
 from typing import Any
+from urllib.parse import urlencode
 
 MODEL = "qwen2.5:7b"  # what ``--alias`` names it; the GGUF's path otherwise
 
@@ -82,4 +83,7 @@ ROUTER: dict[str, Any] = {
     },
     "/models/load": {"success": True},
     "/models/unload": {"success": True},
+    # A loaded model's own props, asked by name; asking for an unloaded one
+    # would load it (``models_autoload``), so it is never asked.
+    f"/props?{urlencode({'model': MODEL})}": ROUTES["/props"],
 }

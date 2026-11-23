@@ -1,9 +1,8 @@
 {#- aegis: no-backup -#}
 """
-Ollama health check for {{ project_name }}.
-
-Extracted from the system health module; registered via the same
-register_health_check machinery.
+The inference health check for {{ project_name }}: one check for the
+component, each engine it tracks a sub-component named for its server (the
+text engine by its ``inference[...]`` name, the speech server by its slug).
 """
 {% if ollama_mode != "none" %}
 from __future__ import annotations
@@ -11,6 +10,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from app.core.config import settings
 from app.core.constants import ComponentName
 from app.core.log import logger
 
@@ -21,35 +21,40 @@ if TYPE_CHECKING:
     from app.components.inference.engine import InferenceServerStatus
 
 
-async def check_ollama_health() -> ComponentStatus:
-    """Ollama's health and running models, with the speech server the
-    component tracks as a sub-component, read beside it: one of the two
-    failing leaves the other's reading."""
-    status, speech = await asyncio.gather(_ollama_health(), check_speech_health())
-    if speech is not None:
-        status.sub_components[speech.name] = speech
-    return status
+async def check_inference_health() -> ComponentStatus:
+    """Every engine the component tracks, read together so one failing
+    leaves the others' readings: the app's text engine, and the speech
+    server where one is set."""
+    engine, speech = await asyncio.gather(_engine_health(), check_speech_health())
+    return inference_status(engine, *([] if speech is None else [speech]))
 
 
-async def _ollama_health() -> ComponentStatus:
+def inference_status(
+    engine: ComponentStatus, *others: ComponentStatus
+) -> ComponentStatus:
+    """The check from its engines' statuses: it reads as the text engine
+    (the app's chat runs on it, and every reader of the check finds its
+    version and models here), each engine a sub-component under it."""
+    return ComponentStatus(
+        name=ComponentName.INFERENCE,
+        status=engine.status,
+        message=engine.message,
+        response_time_ms=None,
+        metadata=engine.metadata,
+        sub_components={e.name: e for e in (engine, *others)},
+    )
+
+
+async def _engine_health() -> ComponentStatus:
     try:
         from app.components.inference import get_inference_engine
 
         engine = get_inference_engine()
-        return ollama_status(await engine.get_server_status(), engine.base_url)
-
-    except ImportError:
-        return ComponentStatus(
-            name=ComponentName.OLLAMA,
-            status=ComponentStatusType.UNHEALTHY,
-            message="Inference client not available",
-            response_time_ms=None,
-            metadata={"error": "inference component not installed"},
-        )
+        return engine_status(await engine.get_server_status(), engine.base_url)
     except Exception as e:
         logger.error(f"Inference health check failed: {e}")
         return ComponentStatus(
-            name=ComponentName.OLLAMA,
+            name=settings.INFERENCE_ENGINE,
             status=ComponentStatusType.UNHEALTHY,
             message=f"Inference health check failed: {str(e)}",
             response_time_ms=None,
@@ -57,8 +62,8 @@ async def _ollama_health() -> ComponentStatus:
         )
 
 
-def ollama_status(
-    server_status: InferenceServerStatus, ollama_url: str
+def engine_status(
+    server_status: InferenceServerStatus, base_url: str
 ) -> ComponentStatus:
     """A server reading as a health status: the check's, and the Flet
     modal's from the inference sampler's last reading. Named for the app's
@@ -68,13 +73,13 @@ def ollama_status(
     engine = inference_engine_class()
     if not server_status.available:
         return ComponentStatus(
-            name=ComponentName.OLLAMA,
+            name=engine.NAME,
             status=ComponentStatusType.UNHEALTHY,
             message=f"{engine.LABEL} server not reachable",
             response_time_ms=None,
             metadata={
                 "available": False,
-                "base_url": ollama_url,
+                "base_url": base_url,
                 "error": "Connection failed",
             },
         )
@@ -118,13 +123,13 @@ def ollama_status(
         message = f"{engine.LABEL} running but no models installed"
 
     return ComponentStatus(
-        name=ComponentName.OLLAMA,
+        name=engine.NAME,
         status=status,
         message=message,
         response_time_ms=None,
         metadata={
             "available": True,
-            "base_url": ollama_url,
+            "base_url": base_url,
             "version": server_status.version,
             "running_models": running_models_info,
             "running_models_count": len(server_status.running_models),

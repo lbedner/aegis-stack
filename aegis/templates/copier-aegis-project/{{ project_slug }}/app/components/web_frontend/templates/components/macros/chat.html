@@ -149,7 +149,7 @@
     <details class="group/trail mb-1" data-trail-fold>
       <summary class="list-none cursor-pointer inline-flex items-center gap-1.5 text-aegis-muted">
         {{ assistant_name(assistant, message.agent_url) }}
-        <span class="text-xxs opacity-0 group-hover/bubble:opacity-100 group-open/trail:opacity-100 transition-opacity">{{ message.trail|length }} {{ "step" if message.trail|length == 1 else "steps" }}</span>
+        <span class="text-xxs opacity-0 group-hover/bubble:opacity-100 group-open/trail:opacity-100 transition-opacity">{% set steps = message.trail|rejectattr("inside")|list|length %}{{ steps }} {{ "step" if steps == 1 else "steps" }}</span>
         {{ icon("chevron-down", "w-3 h-3 opacity-0 group-hover/bubble:opacity-100 group-open/trail:opacity-100 group-open/trail:rotate-180 transition", 2) }}
       </summary>
       {{ trail_rows(message.trail) }}

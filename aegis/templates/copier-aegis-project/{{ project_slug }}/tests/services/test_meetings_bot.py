@@ -721,7 +721,12 @@ async def test_it_speaks_in_the_stacks_active_voice(
     worker never loads it at startup as the webserver does."""
     tts = pytest.importorskip("app.services.ai.domains.voice.tts")
     ai = pytest.importorskip("app.services.ai.service")
-    async_db_session.add(ai.VoiceProfile(name="Hers", is_active=True, tts_voice="nova"))
+    # Hers on whatever provider the call setup speaks (from .env here).
+    async_db_session.add(
+        ai.VoiceProfile(
+            name="Hers", is_active=True, voices={settings.TTS_PROVIDER: "nova"}
+        )
+    )
     await async_db_session.commit()
     asked: list[tuple[str, str]] = []
 

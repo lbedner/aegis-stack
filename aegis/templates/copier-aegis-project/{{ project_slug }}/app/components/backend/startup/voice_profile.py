@@ -1,4 +1,5 @@
-"""Put the active voice profile, and how it says terms, to work at startup.
+"""Put the call setup and the active voice profile, and how it says terms,
+to work at startup.
 
 The voice is table data, like the active model (``llm_active_model``): the
 first boot seeds a profile from ``.env``, and from then on the active row is
@@ -27,7 +28,7 @@ async def startup_hook() -> Any:
         logger.info(
             "Voice profile applied: %s (%s, %s)",
             active.name,
-            active.tts_voice,
-            active.tts_model,
+            settings.TTS_VOICE,
+            settings.TTS_MODEL,
         )
     return None

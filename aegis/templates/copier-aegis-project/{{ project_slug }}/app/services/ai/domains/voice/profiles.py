@@ -1,10 +1,14 @@
-"""Voice profiles: which one is active, and putting it to work.
+"""Voice profiles and the call setup: which voice is active, and putting
+both to work.
 
-The active profile is applied onto the running settings, the way the active
-model is, so everything that already reads ``settings.TTS_*`` / ``STT_*`` /
-``VOICE_*`` follows it unchanged. The speech services read their config once
-when built, so applying a profile also drops them for the next call to
-rebuild.
+Two rows meet on the running settings, the way the active model does: the
+call setup (``CallSetup``: what a call runs on, how it behaves) and the
+active voice (``VoiceProfile``: how she sounds, with a voice per speaking
+provider). Everything that already reads ``settings.TTS_*`` / ``STT_*`` /
+``VOICE_*`` follows them unchanged; ``TTS_VOICE`` is the voice's for the
+setup's speaking provider. Picking a model changes the setup, never the
+voice. The speech services read their config once when built, so applying
+either also drops them for the next call to rebuild.
 """
 
 from typing import Any, get_args
@@ -18,61 +22,90 @@ from app.core.voice_settings import (
     WorkingSound,
 )
 from app.services.ai.domains.voice import pronunciations, queries
-from app.services.ai.domains.voice.catalog import get_stt_model, get_stt_models
-from app.services.ai.models.voice import VoiceProfile
+from app.services.ai.domains.voice.catalog import (
+    get_stt_model,
+    get_stt_models,
+    get_tts_model,
+    get_tts_voices,
+    get_voice,
+    speaking_model,
+)
+from app.services.ai.models.voice import CallSetup, VoiceProfile
 
 # The first profile, seeded from ``.env``.
 SEEDED_NAME = "Default"
 
-# Profile column -> the setting it drives. One table, read both ways: to
-# seed a profile from .env and to put a profile onto the settings.
-SETTINGS = {
+# Column -> the setting it drives, one table per row: read both ways, to
+# seed from .env and to put the row onto the settings.
+SETUP = {
     "stt_provider": "STT_PROVIDER",
     "stt_model": "STT_MODEL",
     "tts_provider": "TTS_PROVIDER",
     "tts_model": "TTS_MODEL",
-    "tts_voice": "TTS_VOICE",
-    "tts_speed": "TTS_SPEED",
-    "tts_instructions": "TTS_INSTRUCTIONS",
     "reply": "VOICE_REPLY",
     "working_sound": "VOICE_WORKING_SOUND",
     "live_idle_seconds": "VOICE_LIVE_IDLE_SECONDS",
     "live_engine": "VOICE_LIVE_ENGINE",
 }
+VOICE = {
+    "voices": "TTS_VOICES",
+    "tts_speed": "TTS_SPEED",
+    "tts_instructions": "TTS_INSTRUCTIONS",
+}
+# What a new voice copies from the active one: how it sounds, the
+# designer's choices included.
+COPIED = (*VOICE, "tts_delivery")
 
 
-# What the profile form may say (the voice itself, its model, speed and
-# delivery, is put together in the voice designer: ``design``).
-STT_MODELS = tuple(m.id for m in get_stt_models())
-REPLIES = get_args(Reply)
-WORKING_SOUNDS = get_args(WorkingSound)
+def setting_values(
+    profile: VoiceProfile | None = None, setup: CallSetup | None = None
+) -> dict[str, Any]:
+    """The settings ``profile`` and ``setup`` drive, by setting name."""
+    values: dict[str, Any] = {}
+    if setup is not None:
+        values |= {key: getattr(setup, column) for column, key in SETUP.items()}
+    if profile is not None:
+        values |= {key: getattr(profile, column) for column, key in VOICE.items()}
+    return values
+
+
+def _speaking(settings: Any) -> Any:
+    """``settings`` with ``TTS_VOICE`` the voice's for its provider, else
+    None (the provider's own default)."""
+    settings.TTS_VOICE = settings.TTS_VOICES.get(settings.TTS_PROVIDER)
+    return settings
+
+
+# What the call setup's form may say (what a call runs on is picked from
+# the voice dialog's lists: ``chat_models.use_for_calls``, Hears, Speaks).
 # What each picked column of the form may be: what it checks, what it offers.
 CHOICES = {
-    "stt_model": STT_MODELS,
-    "reply": REPLIES,
-    "working_sound": WORKING_SOUNDS,
+    "stt_model": tuple(m.id for m in get_stt_models()),
+    "reply": get_args(Reply),
+    "working_sound": get_args(WorkingSound),
 }
 IDLE_RANGE = (0, LIVE_IDLE_MAX_SECONDS)
 
 
 def form_choices() -> dict[str, list[dict[str, Any]]]:
-    """The edit form's options, from the one list each (``CHOICES``)."""
+    """The setup form's options, from the one list each (``CHOICES``)."""
     return {
         column: [{"id": v, "name": v} for v in allowed]
         for column, allowed in CHOICES.items()
     }
 
 
-def parse_form(form: Any) -> tuple[dict[str, Any], list[str]]:
-    """A profile's edit form as column values, and what is wrong with it.
-    The live engine is not on the form: the voice dialog's Calls list picks
-    it (``chat_models.use_for_calls``); nor is the voice: the designer puts
-    it together."""
-    errors: list[str] = []
+def parse_name(form: Any) -> tuple[dict[str, Any], list[str]]:
+    """A voice's edit form (its name: how it sounds is put together in the
+    voice designer, ``design``), and what is wrong with it."""
     name = str(form.get("name") or "").strip()
-    if not name:
-        errors.append(NEEDS_NAME)
-    values: dict[str, Any] = {"name": name}
+    return {"name": name}, [] if name else [NEEDS_NAME]
+
+
+def parse_form(form: Any) -> tuple[dict[str, Any], list[str]]:
+    """The call setup's form as column values, and what is wrong with it."""
+    errors: list[str] = []
+    values: dict[str, Any] = {}
     for column, allowed in CHOICES.items():
         value = str(form.get(column) or "")
         if value not in allowed:
@@ -99,22 +132,46 @@ def hearing(model_id: str) -> dict[str, str]:
     return {"stt_model": model_id, "stt_provider": heard.provider_id} if heard else {}
 
 
-async def hear_with(
-    session: AsyncSession, profile_id: int, model_id: str
-) -> VoiceProfile:
-    """``profile_id`` hearing with ``model_id`` (the call setup's Hears)."""
+def speaking(model_id: str) -> dict[str, str]:
+    """The columns a speaking model sets: it and its own provider; none for
+    a model the catalog does not know or one with no voices. The voice it
+    speaks in stays the voice's."""
+    found = get_tts_model(model_id)
+    if not (found and get_tts_voices(model_id=model_id)):
+        return {}
+    return {"tts_model": model_id, "tts_provider": found.provider_id}
+
+
+async def hear_with(session: AsyncSession, settings: Any, model_id: str) -> CallSetup:
+    """The call setup hearing with ``model_id`` (its Hears)."""
     columns = hearing(model_id)
     if not columns:
         raise VoiceProfileError(f"{model_id} is not a hearing model.")
-    return await update(session, profile_id, **columns)
+    return await set_up(session, settings, **columns)
 
 
-def settings_for(profile: VoiceProfile, settings: Any) -> Any:
-    """A copy of ``settings`` speaking as ``profile`` - for a preview, which
-    must not change the voice in use."""
-    return settings.model_copy(
-        update={key: getattr(profile, column) for column, key in SETTINGS.items()}
-    )
+async def speak_with(session: AsyncSession, settings: Any, model_id: str) -> CallSetup:
+    """The call setup speaking with ``model_id`` (its Speaks)."""
+    columns = speaking(model_id)
+    if not columns:
+        raise VoiceProfileError(f"{model_id} is not a speaking model.")
+    return await set_up(session, settings, **columns)
+
+
+def settings_for(
+    profile: VoiceProfile,
+    settings: Any,
+    setup: CallSetup | None = None,
+    engine: str | None = None,
+) -> Any:
+    """A copy of ``settings`` sounding as ``profile`` (on ``setup`` where
+    given; on ``engine``, her voice there, where she has one) - for a
+    preview, which must not change the voice in use."""
+    update = setting_values(profile, setup)
+    if engine and (voice := profile.voices.get(engine)):
+        model = speaking_model(voice, update.get("TTS_MODEL", settings.TTS_MODEL))
+        update |= {"TTS_PROVIDER": engine, "TTS_MODEL": model}
+    return _speaking(settings.model_copy(update=update))
 
 
 class VoiceProfileError(ValueError):
@@ -132,33 +189,75 @@ async def _refuse_taken(session: AsyncSession, name: str) -> None:
 
 list_profiles = queries.all_profiles
 active_profile = queries.active_profile
+call_setup = queries.call_setup
+
+
+def _from_settings(settings: Any) -> dict[str, Any]:
+    """A first voice's columns, from .env: its voice on its provider."""
+    voice = settings.TTS_VOICE
+    return {column: getattr(settings, key) for column, key in VOICE.items()} | {
+        "voices": {settings.TTS_PROVIDER: voice} if voice else {}
+    }
 
 
 async def seed_from_settings(
     session: AsyncSession, settings: Any
 ) -> VoiceProfile | None:
-    """The first profile, from .env, made active - only when there is none.
-    Returns it, or None when profiles already exist (they are the app's)."""
+    """The call setup and a first profile, from .env, made active - each
+    only when there is none. Returns the profile, or None when profiles
+    already exist (they are the app's)."""
+    await seeded_setup(session, settings)
+    return await _seeded_profile(session, settings)
+
+
+async def _seeded_profile(session: AsyncSession, settings: Any) -> VoiceProfile | None:
+    """A first profile from .env, made active, when there is none."""
     if await queries.any_profile(session):
         return None
-    seeded = VoiceProfile(
-        name=SEEDED_NAME,
-        is_active=True,
-        **{column: getattr(settings, key) for column, key in SETTINGS.items()},
-    )
+    seeded = VoiceProfile(name=SEEDED_NAME, is_active=True, **_from_settings(settings))
     session.add(seeded)
     await session.commit()
     return seeded
 
 
+async def seeded_setup(session: AsyncSession, settings: Any) -> CallSetup:
+    """The call setup, seeded from ``settings`` (``.env``) when there is
+    none yet. One read."""
+    setup = await queries.call_setup(session)
+    if setup is None:
+        setup = CallSetup(
+            **{column: getattr(settings, key) for column, key in SETUP.items()}
+        )
+        session.add(setup)
+        await session.commit()
+    return setup
+
+
+async def set_up(session: AsyncSession, settings: Any, **changes: Any) -> CallSetup:
+    """``changes`` on the call setup (seeded from ``settings`` first when
+    there is none)."""
+    return await _change(session, await seeded_setup(session, settings), changes)
+
+
+async def _change(
+    session: AsyncSession, setup: CallSetup, changes: dict[str, Any]
+) -> CallSetup:
+    for column, value in changes.items():
+        setattr(setup, column, value)
+    setup.updated_at = utcnow()
+    session.add(setup)
+    await session.commit()
+    return setup
+
+
 async def create(session: AsyncSession, *, name: str, **changes: Any) -> VoiceProfile:
-    """A new, inactive profile: the active one's values, with ``changes``."""
+    """A new, inactive profile: how the active one sounds, with ``changes``."""
     name = name.strip()
     if not name:
         raise VoiceProfileError(NEEDS_NAME)
     await _refuse_taken(session, name)
     base = await active_profile(session)
-    values = {column: getattr(base, column) for column in SETTINGS} if base else {}
+    values = {column: getattr(base, column) for column in COPIED} if base else {}
     values.update(changes)
     made = VoiceProfile(name=name, is_active=False, **values)
     session.add(made)
@@ -183,6 +282,37 @@ async def update(
     return profile
 
 
+async def give_voice(
+    session: AsyncSession,
+    setup: CallSetup,
+    profile: VoiceProfile,
+    voice_id: str,
+    model: str | None = None,
+    **columns: Any,
+) -> tuple[VoiceProfile, CallSetup]:
+    """``voice_id`` made ``profile``'s on its provider, the others kept,
+    with ``columns`` (a design's speed and delivery), in one write. Where
+    the call setup speaks that provider it moves to a model that speaks the
+    voice (``model`` where it does, else its own where it does, else one
+    that does): a voice picked for the engine in use is heard. A voice for
+    another engine leaves the setup be."""
+    voice = get_voice(voice_id)
+    if voice is None:
+        raise VoiceProfileError(f"{voice_id} is not in the voice catalog.")
+    for column, value in columns.items():
+        setattr(profile, column, value)
+    profile.voices = {**profile.voices, voice.provider_id: voice.id}
+    profile.updated_at = utcnow()
+    session.add(profile)
+    if voice.provider_id == setup.tts_provider:
+        on = speaking_model(voice.id, model or setup.tts_model)
+        if on and on != setup.tts_model:
+            setup.tts_model, setup.updated_at = on, utcnow()
+            session.add(setup)
+    await session.commit()
+    return profile, setup
+
+
 async def activate(session: AsyncSession, profile_id: int) -> list[VoiceProfile]:
     """Make ``profile_id`` the one active profile. Returns every profile, so
     a caller showing the list does not read it again. (Sessions keep objects
@@ -199,40 +329,57 @@ async def activate(session: AsyncSession, profile_id: int) -> list[VoiceProfile]
     return profiles
 
 
-def apply(profile: VoiceProfile, settings: Any, service: Any) -> None:
-    """Put ``profile`` onto the running ``settings``, and drop the speech
-    services ``service`` built from the old values."""
-    for column, key in SETTINGS.items():
-        setattr(settings, key, getattr(profile, column))
+def apply(
+    profile: VoiceProfile | None,
+    settings: Any,
+    service: Any,
+    setup: CallSetup | None = None,
+) -> None:
+    """Put ``profile`` (and ``setup``, where given) onto the running
+    ``settings``, and drop the speech services ``service`` built from the
+    old values."""
+    for key, value in setting_values(profile, setup).items():
+        setattr(settings, key, value)
+    _speaking(settings)
     service._stt_service = None
     service._tts_service = None
 
 
 async def active_settings(session: AsyncSession, settings: Any) -> Any:
-    """``settings`` in the active profile's voice: what anything headless (a
-    worker, the CLI) speaks and hears with, as only the webserver applies
-    the profile at startup (``load_active``). The saved pronunciations come
-    with the voice, as they do there."""
+    """``settings`` in the active voice, on the call setup: what anything
+    headless (a worker, the CLI) speaks and hears with, as only the
+    webserver applies them at startup (``load_active``). The saved
+    pronunciations come with the voice, as they do there."""
     await pronunciations.load(session)
+    return await profile_settings(session, settings)
+
+
+async def profile_settings(session: AsyncSession, settings: Any) -> Any:
+    """``settings`` in the active profile's voice, as it is saved (no
+    pronunciations loaded: what it speaks and hears through)."""
     active = await active_profile(session)
-    return settings if active is None else settings_for(active, settings)
+    if active is None:
+        return settings
+    return settings_for(active, settings, await queries.call_setup(session))
 
 
 async def seeded_active(session: AsyncSession, settings: Any) -> VoiceProfile:
     """The active profile, a first one seeded from ``settings`` (``.env``)
     when there is none yet."""
-    await seed_from_settings(session, settings)
+    if (active := await active_profile(session)) is not None:
+        return active
+    await _seeded_profile(session, settings)
     return await active_profile(session)  # type: ignore[return-value]
 
 
 async def load_active(
     session: AsyncSession, settings: Any, service: Any
 ) -> VoiceProfile | None:
-    """At startup: seed a first profile from .env if there is none, then run
-    on the active one, saying terms the saved way. After the first boot the
-    table wins over .env."""
+    """At startup: seed the call setup and a first profile from .env where
+    there are none, then run on them, saying terms the saved way. After the
+    first boot the tables win over .env."""
     await pronunciations.load(session)
+    setup = await seeded_setup(session, settings)
     active = await seeded_active(session, settings)
-    if active is not None:
-        apply(active, settings, service)
+    apply(active, settings, service, setup)
     return active

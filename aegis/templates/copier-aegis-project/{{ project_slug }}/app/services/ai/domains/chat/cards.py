@@ -343,9 +343,14 @@ async def draw_card(kind: str, payload: dict[str, Any]) -> Drawn | Refused:
           (Server, Authentication, Cache): each one you name lights on
           the card as it is read or heard
 
-    Compute the data first, then call this with the kind and the data
-    (from your script, in code mode) - it displays what you give it and
-    computes nothing itself.
+    Compute the data first, then call this with the kind and the data -
+    it displays what you give it and computes nothing itself. In code
+    mode it ends the script that computed the data, its kind picked in
+    code from those rows, never in a later run and never skipped for not
+    having seen them:
+        rows = [{"label": k, "value": v} for k, v in counts.items()]
+        if len(rows) >= 3:
+            await draw_card("bar", {"title": "Errors by service", "rows": rows})
 
     Pass data only: layout and colours belong to the kind. A unit is "money"
     (integer cents), "percent" (0 to 100: "86.1" for 86.1%) or "count";

@@ -73,11 +73,11 @@ async def activate(profile_id: int, db: Any = Depends(_session)) -> VoiceOvervie
     return await voice_overview(db)
 
 
-
 @router.get("/pronunciation", response_model=list[Pronunciation])
 async def pronunciation() -> list[Pronunciation]:
     """How every voice says terms: the defaults, an app's own, the saved."""
     return pronunciation_list()
+
 
 if KEEPS_PROFILES:
     # The voice designer (``design``): a profile's voice put together, heard
@@ -171,7 +171,7 @@ if KEEPS_PROFILES:
     ) -> list[Pronunciation]:
         """Say ``said.term`` its way from the next thing said."""
         try:
-            await pronunciations.save(db, said.term, said.say, said.ipa)
+            await pronunciations.save(db, said.term, said.say)
         except pronunciations.PronunciationError as exc:
             raise HTTPException(422, str(exc)) from None
         return pronunciation_list()

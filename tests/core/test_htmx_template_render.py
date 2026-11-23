@@ -434,6 +434,7 @@ class TestWebFrontendScaffolding:
                 "popover_panel",
                 "progress",
                 "ranked_rows",
+                "segment_bar",
                 "resource_bar",
                 "section_tabs",
                 "sidebar_icon",

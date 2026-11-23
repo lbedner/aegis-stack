@@ -7,7 +7,7 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
-from app.services.ai.domains.voice import design
+from app.services.ai.domains.voice import design, profiles
 from app.services.ai.domains.voice.delivery import compose, styled
 from app.services.ai.models.voice import VoiceProfile
 from tests._voice_catalog import keep_voice_settings, only_profile
@@ -35,11 +35,15 @@ async def test_the_designer_opens_on_the_profile(
     assert view.instructions == compose(view.delivery)
 
 
+# Each step reads the call setup once (as each request does); the
+# test takes 2 on purpose, so 3 would be one read too many.
+@pytest.mark.queryspy(threshold=3)
 async def test_saving_puts_the_voice_and_its_delivery_on_the_profile(
     async_db_session: AsyncSession, hers: VoiceProfile
 ) -> None:
-    """Marin is not spoken on tts-1: saving it moves the profile to a model
-    that speaks it. The choices are kept, and the text they make is sent."""
+    """Marin is not spoken on tts-1: saving her moves the call setup,
+    which speaks on OpenAI, to a model that speaks her. The choices are
+    kept, and the text they make is sent."""
     picked = design.Design(voice="marin", delivery=styled("calm"), speed=1.1)
 
     await design.save_design(
@@ -49,12 +53,10 @@ async def test_saving_puts_the_voice_and_its_delivery_on_the_profile(
         SimpleNamespace(_stt_service=None, _tts_service=None),
     )
     await async_db_session.refresh(hers)
+    setup = await profiles.call_setup(async_db_session)
 
-    assert (hers.tts_voice, hers.tts_model, hers.tts_speed) == (
-        "marin",
-        "gpt-realtime-2.1-mini",
-        1.1,
-    )
+    assert (hers.voices, hers.tts_speed) == ({"openai": "marin"}, 1.1)
+    assert setup is not None and setup.tts_model == "gpt-realtime-2.1-mini"
     assert hers.tts_instructions == compose(styled("calm"))
     assert hers.tts_delivery == styled("calm").model_dump()
     assert settings.TTS_VOICE == "marin"  # in use at once
@@ -116,14 +118,19 @@ async def test_a_provider_without_its_key_is_one_line_not_its_voices(
     )
 
 
+# Each step reads the call setup once (as each request does); the
+# test takes 3 on purpose, so 4 would be one read too many.
+@pytest.mark.queryspy(threshold=4)
 async def test_a_profile_with_no_voice_opens_on_its_own_providers(
     async_db_session: AsyncSession, hers: VoiceProfile
 ) -> None:
     """Seeded from a .env that names a provider and no voice: its provider's
     default, not OpenAI's."""
-    hers.tts_provider, hers.tts_model, hers.tts_voice = "local_server", "kokoro", None
+    hers.voices = {}
     async_db_session.add(hers)
-    await async_db_session.commit()
+    await profiles.set_up(
+        async_db_session, settings, tts_provider="local_server", tts_model="kokoro"
+    )
 
     view = await design.design_view(async_db_session, hers.id, None)
     [summary] = await design.profile_summaries(async_db_session)
@@ -131,6 +138,9 @@ async def test_a_profile_with_no_voice_opens_on_its_own_providers(
     assert (view.voice, summary.voice) == ("local_server:af_heart", "af_heart")
 
 
+# Each step reads the call setup once (as each request does); the
+# test takes 2 on purpose, so 3 would be one read too many.
+@pytest.mark.queryspy(threshold=3)
 async def test_each_profile_is_summed_up(
     async_db_session: AsyncSession, hers: VoiceProfile
 ) -> None:
@@ -170,6 +180,9 @@ async def test_the_voices_models_are_offered_each_saying_if_it_takes_instruction
     assert takes["tts-1"] is False and takes["gpt-4o-mini-tts"] is True
 
 
+# Each step reads the call setup once (as each request does); the
+# test takes 4 on purpose, so 5 would be one read too many.
+@pytest.mark.queryspy(threshold=5)
 async def test_a_model_picked_is_kept_and_one_that_cannot_speak_the_voice_is_not(
     async_db_session: AsyncSession, hers: VoiceProfile
 ) -> None:
@@ -178,13 +191,35 @@ async def test_a_model_picked_is_kept_and_one_that_cannot_speak_the_voice_is_not
         voice="marin", model="gpt-4o-mini-tts-2025-03-20", delivery=styled("calm")
     )
     await design.save_design(async_db_session, hers.id, march, noop)
-    await async_db_session.refresh(hers)
-    assert hers.tts_model == "gpt-4o-mini-tts-2025-03-20"
+    assert await _speaks_on(async_db_session) == "gpt-4o-mini-tts-2025-03-20"
 
     wrong = design.Design(voice="marin", model="tts-1", delivery=styled("calm"))
     await design.save_design(async_db_session, hers.id, wrong, noop)
+    # tts-1 does not speak marin
+    assert await _speaks_on(async_db_session) == "gpt-realtime-2.1-mini"
+
+
+# Each step reads the call setup once (as each request does); the
+# test takes 2 on purpose, so 3 would be one read too many.
+@pytest.mark.queryspy(threshold=3)
+async def test_a_voice_for_another_engine_leaves_the_setup_be(
+    async_db_session: AsyncSession, hers: VoiceProfile
+) -> None:
+    """Her Gemini voice is hers on Gemini: designing it does not move the
+    call setup off OpenAI's tts-1."""
+    noop = SimpleNamespace(_stt_service=None, _tts_service=None)
+    kore = design.Design(voice="Kore", delivery=styled("calm"))
+
+    await design.save_design(async_db_session, hers.id, kore, noop)
     await async_db_session.refresh(hers)
-    assert hers.tts_model == "gpt-realtime-2.1-mini"  # tts-1 does not speak marin
+
+    assert hers.voices == {"openai": "alloy", "gemini": "Kore"}
+    assert await _speaks_on(async_db_session) == "tts-1"
+
+
+async def _speaks_on(session: AsyncSession) -> str | None:
+    setup = await profiles.call_setup(session)
+    return setup.tts_model if setup else None
 
 
 async def test_an_accent_the_model_cannot_steer_is_left_to_the_voice(
@@ -212,6 +247,9 @@ def test_a_design_refuses_a_voice_or_speed_there_is_not() -> None:
         design.Design(voice="marin", delivery=styled("calm"), speed=10)
 
 
+# Each step reads the call setup once (as each request does); the
+# test takes 2 on purpose, so 3 would be one read too many.
+@pytest.mark.queryspy(threshold=3)
 async def test_the_speed_is_the_models_own(
     async_db_session: AsyncSession, hers: VoiceProfile
 ) -> None:

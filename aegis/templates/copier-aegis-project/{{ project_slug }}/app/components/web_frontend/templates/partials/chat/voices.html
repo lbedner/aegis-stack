@@ -1,9 +1,10 @@
 {# The assistant's voice, in the one modal: what a live call runs on (where
    the mount takes calls: ``setup``, from ``chat_calls.view``, and
-   ``calling``), the voice profiles,
-   each with a preview; switch, make one from the active, or edit one; and
-   how terms are said. ``view`` picks the piece: the composer's chip, the
-   list, one voice's form, or the pronunciation list.
+   ``calling``) and how it behaves (the call setup's form), the voice
+   profiles, each with a preview; switch, make one from the active, or
+   rename one; and how terms are said. ``view`` picks the piece: the
+   composer's chip, the list, one voice's form, the call setup's form, or
+   the pronunciation list.
    Previews play through voice.js's Listen handler ([data-speak]). #}
 {% from "components/macros/icons.html" import icon %}
 {% from "components/macros/chat.html" import call_part, model_row, voice_chip, speak_button %}
@@ -12,45 +13,109 @@
 {% from "components/macros/layout.html" import chip, dialog_title %}
 {% from "components/macros/table.html" import data_table %}
 
+{# Her voice on each engine that speaks, each heard there; where she has
+   none, the designer picks one. #}
+{% macro engine_rows(engines, preview, voice) %}
+<ul class="divide-y divide-aegis-border/60 text-sm" data-voice-engines>
+  {% for engine in engines %}
+  <li class="flex items-center justify-between gap-2 py-1.5" data-engine="{{ engine.provider }}">
+    <span class="text-aegis-text">{{ engine.name }}{% if engine.local %} <span class="text-aegis-muted">local</span>{% endif %}</span>
+    {% if engine.voice %}<span class="flex items-center gap-2 text-aegis-text">{{ engine.voice }}{{ speak_button(preview ~ "?engine=" ~ engine.provider) }}</span>
+    {% else %}<span class="flex items-center gap-2"><span class="text-aegis-amber">Not set</span>
+      <a data-engine-pick href="/overseer/services/ai/voice?profile={{ voice.id }}" class="text-xs text-aegis-teal hover:underline">Pick</a></span>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+
 {% if view == "chip" %}
 {{ voice_chip(active, path, calling) }}
 
 {% elif view == "list" %}
 {% if chip_oob %}{{ voice_chip(active, path, calling, oob=True) }}{% endif %}
+{# Two panels: the call (its setup, and who it speaks as) and the voice in
+   use (her style, her voice on each engine, the shared pronunciation).
+   Every voice, and making one, is behind Manage. #}
 <div id="voice-profiles" class="space-y-4">
-  {% if setup is not none %}
-  {{ dialog_title("Calls and voice", "What a live call with " ~ assistant ~ " runs on (a meeting's too), and the voice it speaks in. A pick takes effect on the next call, or the next thing said.") }}
-  <section class="space-y-3" data-calls data-call-mode="{{ setup.mode }}">
-    <nav class="flex flex-wrap gap-2" aria-label="How a call runs">
-      {% for m in setup.modes %}{{ chip(m.label, m.active, m.url, hx_dialog(m.url)) }}{% endfor %}
-    </nav>
-    <div class="grid gap-2 {% if setup.mode == 'chain' %}sm:grid-cols-3{% endif %}">
-      {% for part in setup.parts %}{{ call_part(part) }}{% endfor %}
+  {{ dialog_title("Calls and voice" if setup is not none else "Voice", "A pick takes effect on the next call, or the next thing said.") }}
+  <div class="grid gap-4 sm:grid-cols-2 items-start">
+  <section class="space-y-4 rounded-lg border border-aegis-border p-4">
+    {% if setup is not none %}
+    <div class="space-y-2" data-calls data-call-mode="{{ setup.mode }}">
+      <h3 class="micro-label text-aegis-muted">Setup</h3>
+      <nav class="flex flex-wrap gap-2" aria-label="How a call runs">
+        {% for m in setup.modes %}{{ chip(m.label, m.active, m.url, hx_dialog(m.url)) }}{% endfor %}
+      </nav>
+      <div class="grid gap-2 {% if setup.mode == 'chain' %}grid-cols-3{% endif %}">
+        {% for part in setup.parts %}{{ call_part(part) }}{% endfor %}
+      </div>
+      {% if setup.summary %}
+      <p data-call-summary class="text-xs text-aegis-muted">
+        <span class="{{ 'text-aegis-teal' if setup.summary.local else 'text-aegis-amber' }}">{{ setup.summary.where }}</span> · {{ setup.summary.cost }} · {{ setup.summary.wait }}</p>
+      {% endif %}
+      {% if setup.listing %}
+      <div id="call-list" data-call-list>
+      {% if setup.rows %}
+      <ul class="max-h-56 overflow-y-auto">
+        {% for row in setup.rows %}
+        {{ model_row(row, row.model_id == setup.current, setup.mark, hx_dialog_post(setup.post)) }}
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-xs text-aegis-muted">{{ setup.empty }}</p>
+      {% endif %}
+      </div>
+      {% endif %}
     </div>
-    {% if setup.summary %}
-    <p data-call-summary class="rounded border border-aegis-border px-3 py-2 text-xs text-aegis-muted">
-      <span class="{{ 'text-aegis-teal' if setup.summary.local else 'text-aegis-text' }}">{{ setup.summary.where }}</span> · {{ setup.summary.cost }} · {{ setup.summary.wait }}</p>
     {% endif %}
-    {% if setup.rows is not none %}
-    {% if setup.rows %}
-    <ul class="max-h-56 overflow-y-auto">
-      {% for row in setup.rows %}
-      {{ model_row(row, row.model_id == setup.current, setup.mark, hx_dialog_post(setup.post)) }}
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p class="text-xs text-aegis-muted">{{ setup.empty }}</p>
+    {% if active %}
+    <div class="space-y-2" data-speaks-as>
+      <h3 class="micro-label text-aegis-muted">Speaks as</h3>
+      <div class="flex items-center gap-3 rounded-lg border border-aegis-border px-3 py-2">
+        <div class="min-w-0 flex-1">
+          <details class="relative" @click.outside="$el.removeAttribute('open')">
+            <summary class="list-none cursor-pointer text-sm text-aegis-text"><span data-name>{{ active.name }}</span> ▾</summary>
+            <ul class="floating absolute left-0 top-full mt-1 z-50 min-w-48 p-1">
+              {% for voice in voices if not voice.is_active %}
+              <li><button type="button" data-voice-pick {{ hx_dialog_post(path ~ "/" ~ voice.id ~ "/active") }}
+                          class="w-full text-left px-2 py-1.5 rounded text-sm hover:bg-aegis-border/20">{{ voice.name }}</button></li>
+              {% else %}
+              <li class="px-2 py-1.5 text-xs text-aegis-muted">No other voices yet.</li>
+              {% endfor %}
+            </ul>
+          </details>
+          {% set said = setup.speaking if setup is not none else none %}
+          {% if said %}
+          <p data-speaking class="text-xs text-aegis-muted truncate">On {{ said.engine }}: <span class="{{ '' if said.voiced else 'text-aegis-amber' }}">{{ said.said }}</span>{% for t in said.takes %} · {{ t }}{% endfor %}</p>
+          {% endif %}
+        </div>
+        {{ speak_button(path ~ "/" ~ active.id ~ "/preview") }}
+      </div>
+    </div>
     {% endif %}
-    {% endif %}
+    <p class="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+      {{ action("Manage voices and pronunciation ›", hx_dialog(path ~ "/manage", "data-manage-voices")) }}
+      {% if setup is not none %}{{ action("Call settings ›", hx_dialog(path ~ "/setup", "data-call-settings")) }}{% endif %}
+    </p>
   </section>
-  {% if setup.mode == "one" %}<h3 class="micro-label text-aegis-muted">Voice</h3>{% endif %}
-  {% else %}
-  {{ dialog_title("Voice", "How " ~ assistant ~ " hears and speaks. A switch takes effect on the next thing said.") }}
+  {% if active %}
+  <section class="space-y-3 rounded-lg border border-aegis-border p-4" data-voice-card>
+    <div>
+      <p class="flex items-center justify-between gap-2"><span class="text-base text-aegis-text" data-name>{{ active.name }}</span><span class="text-xs text-aegis-teal">In use</span></p>
+      <p data-style class="text-xs text-aegis-muted line-clamp-2" title="{{ active.tts_instructions or '' }}">{% if active.tts_instructions %}Style: {{ active.tts_instructions }} · {% endif %}Speed {{ active.tts_speed }}×</p>
+    </div>
+    <h3 class="micro-label text-aegis-muted">Her voice on each engine</h3>
+    {{ engine_rows(engines, path ~ "/" ~ active.id ~ "/preview", active) }}
+    <h3 class="micro-label text-aegis-muted">Pronunciation</h3>
+    <p>{{ action("Shared by every voice · " ~ terms ~ " terms ›", hx_dialog(path ~ "/pronunciation", "data-pronunciations")) }}</p>
+  </section>
   {% endif %}
-  {# A chain's Speaks is the voice: its list shows there; one model's call
-     shows it below, for the replies spoken in chat (and the call, where
-     the model has the voice). #}
-  {% if setup is none or setup.mode == "one" or setup.list == "speaks" %}
+  </div>
+</div>
+
+{% elif view == "manage" %}
+<div id="voice-manage" class="space-y-4">
+  {{ dialog_title("Voices", "Every voice, each with a preview. A new one starts as a copy of the one in use.") }}
   {% if voices %}
   <ul class="divide-y divide-aegis-border/60">
     {% for voice in voices %}
@@ -59,7 +124,7 @@
       {{ speak_button(path ~ "/" ~ voice.id ~ "/preview") }}
       <span class="min-w-0 flex-1">
         <span class="block text-sm text-aegis-text truncate" data-name>{{ voice.name }}</span>
-        <span class="block text-xs text-aegis-muted truncate">{{ voice.tts_voice }} · {{ voice.tts_model }} · {{ voice.tts_speed }}×{% if voice.tts_instructions %} · styled{% endif %}</span>
+        <span class="block text-xs text-aegis-muted truncate">{{ voice.tts_speed }}×{% if voice.tts_instructions %} · styled{% endif %}</span>
       </span>
       {% if voice.is_active %}
       {{ icon("check", "w-4 h-4 text-aegis-teal shrink-0", 2, '', label="In use") }}
@@ -73,10 +138,8 @@
   {% else %}
   {{ empty_state("No voices yet", "The first one is made from .env when the app starts.") }}
   {% endif %}
-  {% endif %}
   <p class="flex items-center justify-between gap-2 text-xs text-aegis-muted">How every voice says terms like Traefik.
     {{ action("Pronunciation", hx_dialog(path ~ "/pronunciation", "data-pronunciations")) }}</p>
-  {# A new voice starts as a copy of the one in use, then opens to edit. #}
   <form {{ hx_dialog_post(path) }} class="flex items-end gap-2">
     {{ error_banner(errors) }}
     <label class="flex-1 block text-aegis-muted micro-label">New voice from {{ active.name if active else "the current one" }}
@@ -84,6 +147,7 @@
     </label>
     {{ primary_button("Make", type="submit") }}
   </form>
+  {{ action("Back", hx_dialog(path)) }}
 </div>
 
 {% elif view == "form" %}
@@ -91,8 +155,22 @@
   {{ dialog_title(voice.name, "In use - saving changes how it sounds now." if voice.is_active else "Not in use - preview it, then Use it from the list.") }}
   {{ error_banner(errors) }}
   {% call field("Name") %}{{ text_input("name", values.name, required=True) }}{% endcall %}
-  <p class="text-xs text-aegis-muted">Speaks as {{ voice.tts_voice or "the default voice" }}{% if voice.tts_model %} on {{ voice.tts_model }}{% endif %}.
+  {{ engine_rows(engines, path ~ "/" ~ voice.id ~ "/preview", voice) }}
+  <p class="text-xs text-aegis-muted">{{ voice.tts_speed }}×{% if voice.tts_instructions %} · styled{% endif %}.
     <a data-voice-design href="/overseer/services/ai/voice?profile={{ voice.id }}" class="text-aegis-teal hover:underline">Design the voice</a></p>
+  <div class="flex items-center justify-between gap-2">
+    {{ action("Back", hx_dialog(path)) }}
+    <span class="flex items-center gap-2">
+      {{ speak_button(path ~ "/" ~ voice.id ~ "/preview") }}
+      {{ primary_button("Save", type="submit") }}
+    </span>
+  </div>
+</form>
+
+{% elif view == "setup" %}
+<form {{ hx_dialog_post(path ~ "/setup") }} data-setup-form class="space-y-3">
+  {{ dialog_title("Call settings", "How every call behaves, whichever voice speaks. Saving changes the next call.") }}
+  {{ error_banner(errors) }}
   <div class="grid grid-cols-2 gap-3">
     {% call field("Hearing model") %}{{ select("stt_model", choices.stt_model, values.stt_model, blank=None, block=True) }}{% endcall %}
     {% call field("Reply") %}{{ select("reply", choices.reply, values.reply, blank=None, block=True) }}{% endcall %}
@@ -101,10 +179,7 @@
   </div>
   <div class="flex items-center justify-between gap-2">
     {{ action("Back", hx_dialog(path)) }}
-    <span class="flex items-center gap-2">
-      {{ speak_button(path ~ "/" ~ voice.id ~ "/preview") }}
-      {{ primary_button("Save", type="submit") }}
-    </span>
+    {{ primary_button("Save", type="submit") }}
   </div>
 </form>
 
@@ -123,10 +198,9 @@
   {# Saving a listed term changes how it is said; a new one joins the list. #}
   <form {{ hx_dialog_post(path ~ "/pronunciation") }} class="space-y-2">
     {{ error_banner(errors) }}
-    <div class="grid grid-cols-3 gap-2">
+    <div class="grid grid-cols-2 gap-2">
       {% call field("Term") %}{{ text_input("term", values.term, placeholder="e.g. Traefik", required=True) }}{% endcall %}
       {% call field("Said as") %}{{ text_input("say", values.say, placeholder="e.g. traffic", required=True) }}{% endcall %}
-      {% call field("IPA (optional)") %}{{ text_input("ipa", values.ipa, placeholder="e.g. ˈtræfɪk") }}{% endcall %}
     </div>
     <div class="flex items-center justify-between gap-2">
       {{ action("Back", hx_dialog(path)) }}

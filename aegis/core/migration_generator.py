@@ -249,9 +249,60 @@ AUTH_TOKENS_MIGRATION = ServiceMigrationSpec(
     description="Auth token tables (password reset, email verification, refresh)",
 )
 
+# A voice profile held both how a call runs and how she sounds; the run half
+# moved to ``call_setup`` (one row, made from the active profile, else the
+# first), the voice to a voice per speaking provider (``voices``): her own
+# on hers, and OpenAI's ``marin`` where hers was elsewhere, the one a call
+# there spoke all along. ``voice_pronunciation.ipa`` goes: nothing read it.
+# A database without the old columns (a fresh one) is left alone.
+_VOICE_SETUP_COLUMNS = (
+    "stt_provider, stt_model, tts_provider, tts_model, reply, working_sound, "
+    "live_idle_seconds, live_engine"
+)
+_VOICE_SETUP_CARRY_OVER = f"""\
+    import json
+
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    held = {{c["name"] for c in inspector.get_columns("voice_profile")}}
+    if "tts_voice" in held:
+        cols = "{_VOICE_SETUP_COLUMNS}"
+        op.execute(
+            f"INSERT INTO call_setup ({{cols}}, updated_at) "
+            f"SELECT {{cols}}, updated_at FROM voice_profile "
+            "WHERE NOT EXISTS (SELECT 1 FROM call_setup) "
+            "ORDER BY is_active DESC, id LIMIT 1"
+        )
+        rows = bind.execute(
+            sa.text("SELECT id, tts_provider, tts_voice FROM voice_profile")
+        ).all()
+        for row in rows:
+            voices = {{row.tts_provider: row.tts_voice}} if row.tts_voice else {{}}
+            voices.setdefault("openai", "marin")
+            bind.execute(
+                sa.text("UPDATE voice_profile SET voices = :voices WHERE id = :id"),
+                {{"voices": json.dumps(voices), "id": row.id}},
+            )
+        # By name: a project's tests read the drops as written
+        # (test_models_write_what_migrations_require).
+        with op.batch_alter_table("voice_profile") as batch:
+            batch.drop_column("stt_provider")
+            batch.drop_column("stt_model")
+            batch.drop_column("tts_provider")
+            batch.drop_column("tts_model")
+            batch.drop_column("reply")
+            batch.drop_column("working_sound")
+            batch.drop_column("live_idle_seconds")
+            batch.drop_column("live_engine")
+            batch.drop_column("tts_voice")
+    if "ipa" in {{c["name"] for c in inspector.get_columns("voice_pronunciation")}}:
+        with op.batch_alter_table("voice_pronunciation") as batch:
+            batch.drop_column("ipa")"""
+
 VOICE_MIGRATION = ServiceMigrationSpec(
     service_name="ai_voice",
-    description="AI voice tables (voice profiles and live-call engines)",
+    description="AI voice tables (voice profiles, the call setup and live-call engines)",
+    data_after=_VOICE_SETUP_CARRY_OVER,
 )
 
 EVALS_MIGRATION = ServiceMigrationSpec(

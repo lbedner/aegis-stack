@@ -17,11 +17,11 @@ def test_the_template_file_is_what_the_specs_say() -> None:
 
 def test_every_part_is_known_by_its_health_name() -> None:
     """The app names a part by its health check: the redis component is
-    the cache, htmx the web frontend, inference Ollama."""
+    the cache, htmx the web frontend; inference is its own."""
     known = {spec.name: spec.app_name for spec in COMPONENTS.values()}
     assert known["redis"] == "cache"
     assert known["htmx"] == "web_frontend"
-    assert known["inference"] == "ollama"
+    assert known["inference"] == "inference"
     assert known["worker"] == "worker"
 
 
@@ -33,7 +33,7 @@ def test_every_first_party_part_has_a_category() -> None:
     }
     assert categories["backend"] is PartCategory.COMPUTE
     assert categories["cache"] is PartCategory.DATA
-    assert categories["ollama"] is PartCategory.AI
+    assert categories["inference"] is PartCategory.AI
     assert categories["deploy"] is PartCategory.STACK
     assert categories["observability"] is PartCategory.PLATFORM
     assert categories["documents"] is PartCategory.DATA

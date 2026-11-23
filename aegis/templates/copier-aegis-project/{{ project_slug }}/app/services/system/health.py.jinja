@@ -463,7 +463,9 @@ from app.services.system.health_cache import check_cache_health  # noqa: E402, F
 from app.services.system.health_worker import check_worker_health  # noqa: E402, F401
 {%- endif %}
 {%- if ollama_mode != "none" %}
-from app.services.system.health_ollama import check_ollama_health  # noqa: E402, F401
+from app.services.system.health_inference import (  # noqa: E402, F401
+    check_inference_health,
+)
 {%- endif %}
 {%- if include_observability %}
 from app.services.system.health_observability import (  # noqa: E402, F401

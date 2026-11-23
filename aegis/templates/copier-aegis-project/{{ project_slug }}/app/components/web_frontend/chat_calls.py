@@ -3,9 +3,11 @@ voice dialog (``chat_voices``).
 
 Two ways a call can run, picked first: one model that hears and speaks by
 itself (a realtime model), or a chain, hear then think then speak (a local
-chat model between the active voice's STT and TTS: ``cascade``). A chain
+chat model between the call setup's STT and TTS: ``cascade``). A chain
 shows its three parts, each opening its own list below: Hears is the
-voice's hearing model, Thinks the model calls run on, Speaks the voice.
+setup's hearing model, Thinks the model calls run on, Speaks its speaking
+model, in the active voice. Picking any of them changes the setup, never
+the voice.
 A line under them says where the call runs, what it costs and how long a
 caller waits (``call_setup``). The mode is the model's, not stored: picking
 one of the other kind switches it.
@@ -15,10 +17,10 @@ from typing import Any
 from urllib.parse import urlencode
 
 from app.components.web_frontend import chat_models as models
-from app.core.model_picker import newest_first
+from app.core.model_picker import newest_first, one_per_base
 
 ONE, CHAIN = "one", "chain"
-MODES = {ONE: "One model hears and speaks", CHAIN: "Hear → think → speak"}
+MODES = {ONE: "One model", CHAIN: "Hear → think → speak"}
 HEARS, THINKS, SPEAKS = "hears", "thinks", "speaks"
 SLOTS = {HEARS: "Hears", THINKS: "Thinks", SPEAKS: "Speaks"}
 # What a row or a part shows of where it runs and what it can do.
@@ -55,13 +57,19 @@ async def view(
     slot: str | None = None,
 ) -> dict[str, Any]:
     """The dialog's call setup: the mode shown (``mode``, else the kind of
-    model calls run on), its parts with the open one's list, and the line
-    that sums them up. ``calling`` is the model calls run on, ``voice`` the
-    active profile."""
+    model calls run on), its parts with the open one's list (``slot``),
+    what speaks her, and the line that sums them up. ``calling`` is the
+    model calls run on, ``voice`` the active profile. A list opens unasked
+    only where nothing is picked yet; Speaks is the voice, so its card
+    opens every voice."""
     from app.core.config import settings
-    from app.services.ai.service import call_setup, live_engines, realtime_calls
+    from app.services.ai.service import call_setup, live_engines
 
-    live = newest_first(await models.call_models())
+    # A dated snapshot and the id that follows the newest are one model.
+    live = one_per_base(
+        newest_first(await models.call_models()),
+        keep=calling.model_id if calling else None,
+    )
     on = next((m for m in live if calling and m["model_id"] == calling.model_id), None)
     mode = mode if mode in MODES else (CHAIN if on and on["kind"] == "cascade" else ONE)
     kind = "realtime" if mode == ONE else "cascade"
@@ -86,26 +94,25 @@ async def view(
         for key, label in MODES.items()
     ]
     if mode == ONE:
-        voice_id = getattr(voice, "tts_voice", None)
-        said = (
-            realtime_calls.call_voice(
-                f"{shown['vendor']}:{shown['model_id']}", voice_id
-            )
-            if shown
-            else None
-        )
+        listing = slot == ONE or not shown
         one = {
             "label": "Hears, thinks and speaks",
             "name": shown["title"] if shown else PICK,
             "badges": [CLOUD] if shown else [],
-            "note": (f"speaks as {said}" if said else "speaks in its own voice")
-            if shown
-            else "",
+            "note": "",
         }
         return {
             "mode": mode,
             "modes": modes,
-            "parts": [{**one, "key": ONE, "url": address(path, ONE), "open": True}],
+            "parts": [{**one, **_opens(path, ONE, ONE, listing)}],
+            "listing": listing,
+            "speaking": _speaking(
+                voice,
+                shown["title"],
+                f"{shown['vendor']}:{shown['model_id']}",
+            )
+            if voice and shown
+            else None,
             "summary": await call_setup.one_summary(
                 shown["model_id"], shown["vendor"], wait_ms=wait
             )
@@ -116,10 +123,10 @@ async def view(
             "current": shown["model_id"] if shown else None,
             "mark": "data-call-model",
             "empty": NO_LIVE,
-            "list": None,
         }
-    slot = slot if slot in SLOTS else THINKS
-    heard = call_setup.hears(voice, settings)
+    listing = slot in (HEARS, THINKS) or not shown
+    slot = slot if slot in (HEARS, THINKS) else THINKS
+    heard = call_setup.hears(settings)
     spoken = call_setup.speaks(voice, settings)
     thinks = {
         "name": shown["title"] if shown else PICK,
@@ -135,38 +142,62 @@ async def view(
             "note": spoken.note,
         },
     }
-    lists: dict[str, Any] = {
-        HEARS: _hearing_rows(),
-        THINKS: rows,
-        SPEAKS: None,  # the voice list
-    }
+    lists: dict[str, Any] = {HEARS: _hearing_rows, THINKS: lambda: rows}
+    cards = [
+        {
+            **parts[key],
+            "label": label,
+            **_opens(path, CHAIN, key, listing and key == slot),
+        }
+        for key, label in SLOTS.items()
+    ]
+    # Speaks is the voice: its card opens every voice.
+    cards[-1]["url"] = f"{path}/manage"
     return {
         "mode": mode,
         "modes": modes,
-        "parts": [
-            {
-                **parts[key],
-                "key": key,
-                "label": label,
-                "url": address(path, CHAIN, key),
-                "open": key == slot,
-            }
-            for key, label in SLOTS.items()
-        ],
+        "parts": cards,
+        "listing": listing,
+        "speaking": _speaking(voice, _speaker(settings)) if voice else None,
         "summary": await call_setup.chain_summary(
             voice, settings, thinks_local=True, wait_ms=wait
         )
         if shown
         else None,
-        "rows": lists[slot],
+        "rows": lists[slot]() if listing else [],
         "post": f"{path}/hears" if slot == HEARS else f"{path}/calls",
         "mark": "data-hear-model" if slot == HEARS else "data-call-model",
         "empty": NO_LOCAL,
         "current": heard.model
         if slot == HEARS
         else (shown["model_id"] if shown else None),
-        "list": slot,
     }
+
+
+def _opens(path: str, mode: str, key: str, open_: bool) -> dict[str, Any]:
+    """A part's card: it opens its list, or, open, closes it."""
+    return {
+        "key": key,
+        "open": open_,
+        "url": address(path, mode) if open_ else address(path, mode, key),
+    }
+
+
+def _speaker(settings: Any) -> str:
+    """The setup's speaking provider, by name."""
+    from app.services.ai.service import get_tts_providers
+
+    provider = settings.TTS_PROVIDER
+    return next((p.name for p in get_tts_providers() if p.id == provider), provider)
+
+
+def _speaking(voice: Any, engine: str, model: str | None = None) -> dict[str, Any]:
+    """The Speaks-as line: ``engine`` named, then what of her it takes
+    (``call_setup.speaking``)."""
+    from app.core.config import settings
+    from app.services.ai.service import call_setup
+
+    return {"engine": engine, **call_setup.speaking(voice, settings, model)}
 
 
 def _badges(model: dict[str, Any]) -> list[dict[str, str]]:

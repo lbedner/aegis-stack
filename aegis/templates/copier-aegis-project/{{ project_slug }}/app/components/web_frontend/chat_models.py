@@ -23,11 +23,10 @@ from app.core.model_picker import (
     display_title,
     filter_models,
     format_context_window,
-    format_price,
     group_models,
-    is_local_model,
     lab_for_model,
     model_label,
+    model_price,
     newest_first,
 )
 
@@ -41,7 +40,6 @@ RECENT_LOOKBACK = 12
 SECTION_ROW_CAP = 30
 FLAT_ROW_CAP = 60
 CATALOG_LIMIT = 200
-MAKE_A_VOICE = "Make a voice first: a live call runs on the active voice."
 
 
 async def catalog(mode: str | None = "chat") -> list[dict[str, Any]]:
@@ -84,7 +82,7 @@ async def model_choices(
                 for m in rows
             ],
         }
-        for vendor, rows in group_models(models)
+        for vendor, rows in group_models(models, keep=current)
     ]
     if current and all(m["model_id"] != current for m in models):
         unlisted = {"id": current, "name": f"{current} (not in the catalog)"}
@@ -111,7 +109,7 @@ async def call_models() -> list[dict[str, Any]]:
 
 
 async def calling_model(db: "AsyncSession") -> Any | None:
-    """The catalog model a live call runs on now (the active profile's
+    """The catalog model a live call runs on now (the call setup's
     engine: its ``model_id`` and ``title``), or None; read on the request's
     session (``db``)."""
     from app.core.config import settings
@@ -123,7 +121,8 @@ async def calling_model(db: "AsyncSession") -> Any | None:
 
 async def use_for_calls(model_id: str) -> str | None:
     """Make ``model_id`` what a live call runs on: its engine (made when it
-    has none) on the active voice profile; why not, when it cannot be."""
+    has none) on the call setup, the voice untouched; why not, when it
+    cannot be."""
     from app.components.backend.api.ai.service import ai_service
     from app.core.config import settings
     from app.core.db import get_async_session
@@ -131,13 +130,10 @@ async def use_for_calls(model_id: str) -> str | None:
 
     async with get_async_session() as db:
         engine = await live_engines.choose(db, model_id)
-        active = await profiles.active_profile(db)
         if engine is None:
             return f"A live call cannot run on {model_id}."
-        if active is None or active.id is None:
-            return MAKE_A_VOICE
-        active = await profiles.update(db, active.id, live_engine=engine.key)
-    profiles.apply(active, settings, ai_service)
+        setup = await profiles.set_up(db, settings, live_engine=engine.key)
+    profiles.apply(None, settings, ai_service, setup)
     return None
 
 
@@ -227,18 +223,14 @@ def picker_row(
         icon_for = lab if lab and lab.casefold() != under_vendor.casefold() else None
     else:
         icon_for = lab or vendor
+    versions = model.get("versions", 1)
     facts = " · ".join(
         part
         for part in (
             # A voice model's window is not what picks it; its price is.
             None if voice else format_context_window(model.get("context_window")),
-            format_price(
-                model.get("input_price"),
-                model.get("output_price"),
-                local=is_local_model(model),
-            )
-            if priced
-            else None,
+            f"{versions} versions" if versions > 1 else None,
+            model_price(model) if priced else None,
         )
         if part
     )
@@ -267,12 +259,12 @@ def _flat(
 
 
 def _grouped(
-    models: list[dict[str, Any]], icons: dict[str, str]
+    models: list[dict[str, Any]], icons: dict[str, str], current: str
 ) -> list[dict[str, Any]]:
     """A group per vendor, each starting closed: the models in use lead the
     list among the recently used, so an opened group only pushes them down."""
     sections = []
-    for vendor, rows in group_models(models, by="vendor"):
+    for vendor, rows in group_models(models, by="vendor", keep=current):
         shown = rows[:SECTION_ROW_CAP]
         sections.append(
             {
@@ -319,7 +311,7 @@ async def picker(query: str, current: str, path: str) -> dict[str, Any]:
     else:
         # A pick leads at once: it has no usage until it answers.
         leading = [current, *await recent_ids()]
-        sections = _recent(models, leading, icons) + _grouped(models, icons)
+        sections = _recent(models, leading, icons) + _grouped(models, icons, current)
     return {
         "query": query,
         "current": current,

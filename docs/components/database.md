@@ -260,6 +260,37 @@ The **Query** section runs one SQL statement at a time, read-only, and shows its
 - Every run is recorded in the audit log (`database.query`), refused ones too, with who ran it and the statement.
 - It is shown where a table's rows are, and only to someone who may make Overseer's changes: an admin with the auth service; without it, the build that was never deployed, at localhost. The dev stack publishes its ports on localhost only (`127.0.0.1`), as does `make docs-serve`, so no one else on the network reaches them.
 
+## Audit Log
+
+Every audited action is kept as a row in `audit_event`, beside its `AUDIT:` log line: sign-ins and sign-up, admin changes to users and orgs, secrets set and deleted, settings changed from the CLI, and Overseer's actions (a connection ended, a query run or saved, rows read). Code audits an action with the emitter from `app.core.audit`:
+
+```python
+from app.core.audit import audit_emitter
+
+await audit_emitter.emit(
+    "billing.refund_issued",
+    actor_email=user.email,
+    target_type="invoice",
+    target_id=invoice.id,
+    detail="Refunded in full",
+    outcome="issued",  # any other field is kept in the row's context
+)
+```
+
+- Each row has the event type, who did it (`actor_id`, `actor_email`), what it was done to (`target_type`, `target_id`), the org, the IP address, a detail, and every other field in `context`. A row has no key to `user`: it outlives the account it names.
+- A credential in `detail` or `context` is redacted before the row is kept, by the rules error tracking uses: a field named like a secret (`api_key`, `password`, `token`), a bearer token, a key's assignment (`OPENAI_API_KEY=...`), a URL's password.
+- The row is written in a session of its own, after `emit` returns: the caller never waits on it, and a failed login is kept even when the caller's transaction rolls back. A write that fails is logged and never fails the action. Emit a success after your own commit, so the log never records an action that rolled back.
+- Before a process ends, the rows still being written are written: the webserver, a worker, the scheduler and a CLI command each wait up to 5 seconds for them as they stop (`app.core.concurrency.drain`, which waits for work started with `background(..., finish=True)` before it cancels the rest).
+- On PostgreSQL the table lives in its own `audit` schema; SQLite keeps it in the one file.
+- Nothing is pruned yet.
+
+Read it on Overseer's Database page (**Audit**: the newest 200, filtered on the page), from the API (`GET /api/v1/database/audit`, for admins, with `limit`, `kind` for event types starting with it, such as `auth.`, and `actor` for an email or user id), or from the CLI:
+
+```bash
+my-app audit list --kind auth. --limit 50
+my-app audit list --actor ops@example.com --json
+```
+
 ## Testing
 
 The component includes test fixtures for database testing:

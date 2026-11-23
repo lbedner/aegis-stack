@@ -7,6 +7,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- **An audit log that keeps its rows.** Every `AuditEmitter.emit` is now a row
+  in `audit_event` as well as its log line, wherever the stack has the
+  database component: on PostgreSQL in its own `audit` schema, through its own
+  revision (`database_audit`), so an existing project gets it on update. The
+  row is written off the caller in a session of its own, so it survives the
+  caller's rollback and never holds SQLite's write lock against it; a write
+  that fails is logged, never the action's failure. A credential in the
+  detail or the extra fields is redacted first. Read it on Overseer >
+  Database > Audit, at `GET /api/v1/database/audit` (admins; `kind`, `actor`,
+  `limit`), and with `audit list` (`--json` for a script).
+
 ## [0.21.0] - 2026-11-21
 
 ### Added

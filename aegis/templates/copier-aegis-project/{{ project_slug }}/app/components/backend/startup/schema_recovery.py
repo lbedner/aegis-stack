@@ -45,6 +45,21 @@ def _existing_tables_by_schema(inspector: Any, metadata: Any = None) -> set[str]
     return existing
 
 
+def create_tables(tables: list[Any] | None = None) -> None:
+    """``create_all`` for ``tables`` (every model's by default), their
+    Postgres schemas first: ``create_all`` makes none, so a table in a
+    component schema (``audit``, ``secrets``) would fail without them."""
+    from sqlmodel import SQLModel, text
+
+    from app.core.db import engine
+
+    chosen = tables or list(SQLModel.metadata.tables.values())
+    with engine.begin() as conn:
+        for schema in sorted({table.schema for table in chosen if table.schema}):
+            conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
+    SQLModel.metadata.create_all(engine, tables=chosen)
+
+
 def _create_missing_tables() -> None:
     """Create any model table still missing after migrations.
 
@@ -57,7 +72,7 @@ def _create_missing_tables() -> None:
     """
     try:
         from sqlalchemy import inspect as sa_inspect
-        from sqlmodel import SQLModel, text
+        from sqlmodel import SQLModel
 
         from app.core.db import engine
 
@@ -70,13 +85,7 @@ def _create_missing_tables() -> None:
         if not missing:
             return
 
-        # create_all does not create schemas; ensure non-default ones exist.
-        schemas = {table.schema for table in missing if table.schema}
-        with engine.begin() as conn:
-            for schema in schemas:
-                conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
-
-        SQLModel.metadata.create_all(engine, tables=missing)
+        create_tables(missing)
         logger.warning(
             "Created missing table(s) after migrations: "
             f"{sorted(table.name for table in missing)}"

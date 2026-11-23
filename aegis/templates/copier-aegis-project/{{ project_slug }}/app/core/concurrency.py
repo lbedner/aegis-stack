@@ -160,23 +160,39 @@ def once(build: Callable[[], R]) -> Callable[[], R]:
     return result
 
 
-# Work in flight that no one waits for, held so none is collected first.
+# Work in flight that no one waits for, held so none is collected first;
+# and of it, what must finish before the process ends (``finish``).
 _background: set[asyncio.Task[None]] = set()
+_finishing: set[asyncio.Task[None]] = set()
 
 
-def background(work: Coroutine[object, object, None]) -> asyncio.Task[None]:
+def background(
+    work: Coroutine[object, object, None], *, finish: bool = False
+) -> asyncio.Task[None]:
     """Run ``work`` without waiting for it. The loop keeps only a weak
     reference to a task, so it is held here until it ends; a failure is
-    logged, never left as "exception was never retrieved"."""
+    logged, never left as "exception was never retrieved". ``finish``:
+    shutdown waits for it rather than cancel it (an audit row)."""
     task = asyncio.create_task(work)
     _background.add(task)
+    if finish:
+        _finishing.add(task)
     task.add_done_callback(_ended)
     return task
 
 
+async def settle(timeout: float | None = None) -> None:
+    """Wait for the work that must finish, at most ``timeout`` seconds."""
+    if _finishing:
+        await asyncio.wait(_finishing, timeout=timeout)
+
+
 async def drain(timeout: float) -> None:
-    """At shutdown: cancel the work still in flight and give it ``timeout``
-    seconds to finish its own cleanup."""
+    """At shutdown: let the work that must finish have ``timeout`` seconds
+    (``settle``), then cancel the rest still in flight and give it as long
+    to finish its own cleanup. Every process ends through here: the
+    webserver's shutdown, a CLI command, a worker, the scheduler."""
+    await settle(timeout)
     tasks = list(_background)
     for task in tasks:
         task.cancel()
@@ -186,6 +202,7 @@ async def drain(timeout: float) -> None:
 
 def _ended(task: asyncio.Task[None]) -> None:
     _background.discard(task)
+    _finishing.discard(task)
     if not task.cancelled() and (error := task.exception()) is not None:
         logger.error("Background task failed", task=task.get_name(), exc_info=error)
 

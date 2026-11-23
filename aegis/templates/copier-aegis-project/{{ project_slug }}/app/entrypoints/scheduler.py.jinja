@@ -19,13 +19,17 @@ else:
     install_auto_tracing(unit="scheduler")
 
 from app.components.scheduler.main import run_scheduler  # noqa: E402
+from app.core.concurrency import drain  # noqa: E402
 from app.core.log import setup_logging  # noqa: E402
 
 
 async def main() -> None:
     """Main scheduler entry point"""
     setup_logging()
-    await run_scheduler()
+    try:
+        await run_scheduler()
+    finally:
+        await drain(timeout=5)  # its audit rows, before the loop ends
 
 
 if __name__ == "__main__":

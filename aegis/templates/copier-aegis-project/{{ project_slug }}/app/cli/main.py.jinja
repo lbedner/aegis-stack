@@ -44,6 +44,7 @@ GROUPS: dict[str, tuple[str, str]] = {
     "auth": ("app.cli.auth", "app"),
     "ai": ("app.cli.ai", "app"),
     "storage": ("app.cli.storage_cli", "app"),
+    "audit": ("app.cli.audit_cli", "app"),
     "secrets": ("app.cli.secrets_cli", "app"),
     "mcp": ("app.cli.mcp_cli", "serve"),
     "mcp-tokens": ("app.cli.mcp_tokens_cli", "app"),
@@ -140,12 +141,15 @@ def main_callback(
 async def run_command(command: Coroutine[Any, Any, T]) -> T:
     """Run an async command, then close the process-shared cache on the same
     loop: closed after the loop is gone, its Redis pool is torn down by the
-    garbage collector and prints "Event loop is closed" at exit."""
+    garbage collector and prints "Event loop is closed" at exit. What the
+    command left that must finish (its audit rows) is written first."""
     from app.core.cache import get_cache
+    from app.core.concurrency import drain
 
     try:
         return await command
     finally:
+        await drain(timeout=5)
         await get_cache().aclose()
 
 

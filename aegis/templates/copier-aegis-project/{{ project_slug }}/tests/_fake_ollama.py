@@ -141,8 +141,15 @@ ROUTES = {
 
 
 def serving(routes: dict[str, Any]) -> Callable[[httpx.Request], httpx.Response]:
-    """A ``MockTransport`` handler answering each path from ``routes``."""
-    return lambda request: httpx.Response(200, json=routes[request.url.path])
+    """A ``MockTransport`` handler answering each path from ``routes``, a
+    path with its query first where ``routes`` has it."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        path, query = request.url.path, request.url.query.decode()
+        key = f"{path}?{query}" if f"{path}?{query}" in routes else path
+        return httpx.Response(200, json=routes[key])
+
+    return answer
 
 
 def down(request: httpx.Request) -> httpx.Response:

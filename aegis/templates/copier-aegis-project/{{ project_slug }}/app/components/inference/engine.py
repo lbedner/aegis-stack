@@ -60,7 +60,8 @@ class InferenceModel(BaseModel):
     # e.g., ["completion", "tools", "vision", "thinking"]. "tools" is the
     # one that decides whether a model can drive an agent at all - a model
     # without it cannot call anything, however good its prose is.
-    capabilities: list[str] = []
+    # None where the engine cannot say until the model is loaded.
+    capabilities: list[str] | None = []
 
     @computed_field
     @property

@@ -173,7 +173,7 @@ def model_rows(server: InferenceServerStatus) -> list[dict[str, Any]]:
             )
             or "-",
             "context": format_context_window(m.details.context_length) or "-",
-            "can": ", ".join(c for c in CAPABILITIES if c in m.capabilities) or "-",
+            "can": ", ".join(c for c in CAPABILITIES if c in (m.capabilities or ())) or "-",
             "size": f"{m.size_gb:.1f} GB" if m.size else "-",
             "modified": format_relative_time(m.modified_at),
             "state": _state(m.name, warm),

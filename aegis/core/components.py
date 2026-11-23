@@ -25,6 +25,7 @@ from ..constants import (
 from .component_files import SCHEDULER_PERSISTENCE
 from .file_manifest import FileManifest
 from .migration_generator import (
+    DATABASE_AUDIT_MIGRATION,
     DATABASE_MIGRATION,
     DEPLOY_MIGRATION,
     MCP_MIGRATION,
@@ -347,8 +348,8 @@ COMPONENTS: dict[str, ComponentSpec] = {
         marker_path="app/core/db.py",
         docker_services=["postgres"],
         # Query's saved queries and the storage catalog, in its own tables
-        # (app/components/database).
-        migrations=[DATABASE_MIGRATION],
+        # (app/components/database), and the audit log in its own schema.
+        migrations=[DATABASE_MIGRATION, DATABASE_AUDIT_MIGRATION],
         files=FileManifest(
             primary=[
                 "app/core/db.py",
@@ -358,6 +359,9 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "tests/core/test_missing_objects.py",
                 "tests/components/test_database_saved.py",
                 "tests/components/test_database_stored.py",
+                "tests/components/test_audit_log.py",
+                "app/cli/audit_cli.py",
+                "tests/cli/test_audit_cli.py",
                 "tests/components/test_schema_gaps.py",
                 "app/core/db_activity.py",
                 "tests/core/test_db_activity.py",

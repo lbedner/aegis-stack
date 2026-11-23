@@ -24,6 +24,7 @@ from app.components.worker.heartbeat import mark_busy_sync, mark_idle_sync, work
 from app.components.worker.patterns import unwrap
 from app.core import edges, run_log
 from app.core.boot import apply_saved_overrides
+from app.core.concurrency import drain
 from app.core.config import settings
 from app.core.log import logger
 from app.core.key_family import KeyFamily
@@ -170,8 +171,13 @@ class EventPublishMiddleware(dramatiq.Middleware):
 
         Stops the heartbeat thread, publishes a worker.stopped event for
         each queue, deletes heartbeat keys, and closes the Redis connection.
-        Called once when the Dramatiq worker process is shutting down.
+        Called once when the Dramatiq worker process is shutting down,
+        while the AsyncIO middleware's loop still runs (it stops after):
+        what its actors left that must finish (audit rows) finishes there.
         """
+        loop = get_event_loop_thread()
+        if loop is not None:
+            loop.run_coroutine(drain(timeout=5))
         self._stop_event.set()
         if self._heartbeat_thread:
             self._heartbeat_thread.join(timeout=5)

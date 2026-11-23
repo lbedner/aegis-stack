@@ -243,6 +243,16 @@ def _fresh_system_status_cache():
 
 
 @pytest.fixture(autouse=True)
+def _audit_logs_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An audited action in a test logs its line and keeps no row, so no
+    write outlives its test: the audit log's own tests
+    (``tests/components/test_audit_log.py``) keep them."""
+    from app.core import audit
+
+    monkeypatch.setattr(audit, "keeper", lambda: None)
+
+
+@pytest.fixture(autouse=True)
 def _no_background_sampling(monkeypatch: pytest.MonkeyPatch) -> None:
     """The live charts' samplers (``app.core.series``) poll Docker and
     Ollama: an app started in a test samples nothing, and each test's

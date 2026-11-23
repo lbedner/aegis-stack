@@ -20,6 +20,7 @@ from app.components.worker.heartbeat import mark_busy, mark_idle, worker_id
 from app.components.worker.patterns import unwrap
 from app.core import edges, run_log
 from app.core.boot import apply_saved_overrides
+from app.core.concurrency import drain
 from app.core.config import settings
 from app.core.log import logger
 
@@ -78,8 +79,10 @@ class EventPublishMiddleware(TaskiqMiddleware):
 
         Publishes a worker.stopped event to the Redis Stream and closes
         the Redis connection. Called once when the TaskIQ worker process
-        is shutting down, after all in-flight tasks have completed.
+        is shutting down, after all in-flight tasks have completed: what
+        they left that must finish (audit rows) finishes first.
         """
+        await drain(timeout=5)
         if self._redis:
             await runtime.stop_reporting(self._redis, self._reporting, worker_id())
             self._reporting = None

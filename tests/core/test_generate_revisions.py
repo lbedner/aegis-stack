@@ -121,7 +121,8 @@ def test_a_plugins_revisions_follow_the_database_components(tmp_path: Path) -> N
     """A plugin's tables can point at the component's own (a key into
     ``stored_object``), so the component's revision comes first: on a
     project that predates a table of its own, the run writes it before the
-    plugin's revision points at it."""
+    plugin's revision points at it. The audit log's comes with it: a plugin
+    may be the first thing that migrates."""
     _versions(tmp_path)
     run = Mock(return_value=Mock(returncode=0, stderr="", stdout=""))
     spec = Mock(
@@ -130,7 +131,7 @@ def test_a_plugins_revisions_follow_the_database_components(tmp_path: Path) -> N
     with patch("aegis.core.migration_generator.subprocess.run", run):
         generate_plugin_migrations(tmp_path, spec)
 
-    assert run.call_args.args[0][-2:] == ["database", "crawler"]
+    assert run.call_args.args[0][-3:] == ["database", "database_audit", "crawler"]
 
 
 def test_a_plugins_data_runs_in_its_revision(tmp_path: Path) -> None:

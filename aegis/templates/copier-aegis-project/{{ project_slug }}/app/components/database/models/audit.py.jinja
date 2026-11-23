@@ -1,0 +1,61 @@
+"""The audit log's one table: an audited action per row, as
+``AuditEmitter.emit`` was told it (``app.components.database.audit``).
+
+No key to ``user``: a row outlives the account it names.
+{%- if database_engine == "postgres" %}
+
+Lives in its own ``audit`` Postgres schema, apart from service tables.
+{%- endif %}
+"""
+
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import JSON, Column, DateTime, Integer, String, Text
+from sqlmodel import Field, SQLModel
+
+from app.core.time import utcnow
+
+
+class AuditEvent(SQLModel, table=True):
+    """Who did what, to what, from where: ``context`` holds the rest."""
+
+    __tablename__ = "audit_event"
+{%- if database_engine == "postgres" %}
+    __table_args__ = {"schema": "audit"}
+{%- endif %}
+
+    id: int | None = Field(default=None, primary_key=True)
+    at: datetime = Field(
+        default_factory=utcnow, sa_column=Column(DateTime, nullable=False, index=True)
+    )
+    event_type: str = Field(sa_column=Column(String(120), nullable=False))
+    actor_id: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
+    actor_email: str | None = Field(
+        default=None, sa_column=Column(String(320), nullable=True, index=True)
+    )
+    target_type: str | None = Field(
+        default=None, sa_column=Column(String(64), nullable=True)
+    )
+    # A user's id or a session's: kept as text, whatever its kind.
+    target_id: str | None = Field(
+        default=None, sa_column=Column(String(64), nullable=True)
+    )
+    org_id: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
+    ip_address: str | None = Field(
+        default=None, sa_column=Column(String(64), nullable=True)
+    )
+    detail: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    context: dict[str, Any] = Field(
+        default_factory=dict, sa_column=Column(JSON, nullable=False)
+    )
+
+    @property
+    def actor(self) -> str | None:
+        """Who did it, as a reader names them: their email, else their id."""
+        return self.actor_email or (str(self.actor_id) if self.actor_id else None)
+
+    @property
+    def target(self) -> str | None:
+        """What it was done to: its kind and id (``connection 41``)."""
+        return " ".join(filter(None, (self.target_type, self.target_id))) or None

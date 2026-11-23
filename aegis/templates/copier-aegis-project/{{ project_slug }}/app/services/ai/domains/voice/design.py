@@ -28,6 +28,7 @@ from app.services.ai.domains.voice.catalog import (
     speaking_model,
     speeds,
     steers,
+    voice_name,
 )
 from app.services.ai.domains.voice.delivery import (
     DIALS,
@@ -191,9 +192,8 @@ def voice_engines(profile: VoiceProfile) -> list[dict[str, Any]]:
         {
             "provider": p.id,
             "name": p.name,
-            "voice": (found.name if (found := get_voice(v)) else v)
-            if (v := profile.voices.get(p.id))
-            else None,
+            "local": p.is_local,
+            "voice": voice_name(v) if (v := profile.voices.get(p.id)) else None,
         }
         for p in get_tts_providers()
     ]

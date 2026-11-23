@@ -408,6 +408,12 @@ def get_voice(voice_id: str) -> VoiceInfo | None:
     )
 
 
+def voice_name(voice_id: str) -> str:
+    """A voice as a reader knows it: the catalog's name, else its id."""
+    found = get_voice(voice_id)
+    return found.name if found else voice_id
+
+
 def get_tts_model(model_id: str) -> ModelInfo | None:
     """A speech model by id; None for one the catalog does not know."""
     return _MODELS_BY_ID.get(model_id)

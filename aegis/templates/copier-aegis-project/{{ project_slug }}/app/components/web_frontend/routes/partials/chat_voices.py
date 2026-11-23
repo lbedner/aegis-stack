@@ -2,11 +2,13 @@
 
 A voice chip sits in the composer beside the model chip, naming what a
 live call runs on where the mount takes calls (else the voice). It opens
-the one dialog, which picks what calls run on, as the parts a call is made
-of (``chat_calls``: one model, or hear, think, speak) and how it behaves
-(the call setup's form), lists the voice profiles (each with a preview),
-switches the active one, makes a new one from the active, and renames one;
-and keeps the one list of how terms are said (``spoken``), for every voice.
+the one dialog, in two panels: the call (what it runs on, as the parts a
+call is made of - ``chat_calls``: one model, or hear, think, speak - and
+who it speaks as, switched there) and the voice in use (her style, her
+voice on each engine, each heard there). Behind them: how a call behaves
+(the call setup's form), every voice (Manage: each with a preview, a new
+one from the active, a rename), and the one list of how terms are said
+(``spoken``), for every voice.
 The setup and the active voice are applied onto the running settings
 (``profiles.apply``), so the next thing said uses them - no ``.env`` edit,
 no restart. Picking what a call runs on changes the setup, never the
@@ -63,10 +65,12 @@ def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
         on: Any | None = None,
         mode: str | None = None,
         slot: str | None = None,
+        view: str = "list",
     ) -> Response:
-        """The dialog's list, ``on`` what calls run on where the caller
-        has read it already; ``mode`` and ``slot`` what the call setup
-        shows (``chat_calls.view``)."""
+        """The dialog's two panels (or, ``view`` "manage", every voice),
+        ``on`` what calls run on where the caller has read it already;
+        ``mode`` and ``slot`` what the call setup shows
+        (``chat_calls.view``)."""
         if rows is None:
             rows = await profiles.list_profiles(db)
         on = on or await calling(db)
@@ -75,16 +79,16 @@ def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
             request,
             TEMPLATE,
             status_code=422 if errors else 200,
-            view="list",
+            view=view,
             voices=rows,
             path=voices_path,
-            assistant=await chat.assistant_name(mount, db),
             active=active,
-            speaking=settings.TTS_PROVIDER,
+            engines=design.voice_engines(active) if active else [],
+            terms=len(pronunciation_list()),
             setup=await chat_calls.view(
                 db, voices_path, voice=active, calling=on, mode=mode, slot=slot
             )
-            if calls
+            if calls and view == "list"
             else None,
             calling=on,
             chip_oob=chip,
@@ -143,6 +147,13 @@ def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
         db: AsyncSession = Depends(get_async_db),
     ) -> Response:
         return await listing_response(request, db, mode=mode, slot=slot)
+
+    @router.get("/voices/manage", response_class=HTMLResponse)
+    async def manage_voices(
+        request: Request, db: AsyncSession = Depends(get_async_db)
+    ) -> Response:
+        """Every voice, each with a preview, Use and Edit; and a new one."""
+        return await listing_response(request, db, view="manage")
 
     # Before the per-voice routes: "pronunciation" is no voice id.
     def said_response(
@@ -298,7 +309,7 @@ def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
             made = await profiles.create(db, name=name)
         except profiles.VoiceProfileError as error:
             return await listing_response(
-                request, db, errors=[str(error)], new_name=name
+                request, db, errors=[str(error)], new_name=name, view="manage"
             )
         return form_response(request, made)
 
@@ -332,10 +343,13 @@ def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
 
     @router.get("/voices/{profile_id}/preview")
     async def preview_voice(
-        profile_id: int, db: AsyncSession = Depends(get_async_db)
+        profile_id: int,
+        engine: str | None = None,
+        db: AsyncSession = Depends(get_async_db),
     ) -> Response:
         """The preview passage in THIS profile's voice, whichever one is
-        active."""
-        tts = TTSService(profiles.settings_for(await owned(db, profile_id), settings))
+        active: on ``engine``, her voice there."""
+        profile = await owned(db, profile_id)
+        tts = TTSService(profiles.settings_for(profile, settings, engine=engine))
         said = await chat.synthesize(design.PREVIEW_TEXT, tts=tts)
         return Response(content=said.audio, media_type=said.media_type)

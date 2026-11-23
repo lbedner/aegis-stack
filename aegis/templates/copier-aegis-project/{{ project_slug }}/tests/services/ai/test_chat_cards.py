@@ -140,6 +140,19 @@ class TestDrawing:
         for name in cards.kind_names():
             assert f"- {name}" in (draw_card.__doc__ or "")
 
+    def test_its_example_call_runs_in_code_mode(self) -> None:
+        """Code mode's tools take keywords only: an example passing kind and
+        payload by position is copied as written and refused ("does not
+        accept positional arguments"), a retry per card."""
+        import ast
+        import re
+
+        calls = re.findall(r"await (draw_card\(.*\))", draw_card.__doc__ or "")
+        assert calls
+        for call in calls:
+            parsed = ast.parse(call, mode="eval").body
+            assert isinstance(parsed, ast.Call) and not parsed.args, call
+
     def test_a_table_names_its_label_column_or_leaves_it_unnamed(self) -> None:
         """Columns naming only the values (the shape a model keeps writing)
         draw with the label column unnamed, not a refusal and a second

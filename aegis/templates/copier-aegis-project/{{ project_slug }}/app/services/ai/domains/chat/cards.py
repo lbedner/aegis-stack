@@ -350,7 +350,7 @@ async def draw_card(kind: str, payload: dict[str, Any]) -> Drawn | Refused:
     having seen them:
         rows = [{"label": k, "value": v} for k, v in counts.items()]
         if len(rows) >= 3:
-            await draw_card("bar", {"title": "Errors by service", "rows": rows})
+            await draw_card(kind="bar", payload={"title": "Errors", "rows": rows})
 
     Pass data only: layout and colours belong to the kind. A unit is "money"
     (integer cents), "percent" (0 to 100: "86.1" for 86.1%) or "count";

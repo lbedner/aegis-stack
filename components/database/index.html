@@ -2145,6 +2145,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#audit-log" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Audit Log
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#testing" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7479,6 +7490,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#audit-log" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Audit Log
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#testing" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7731,17 +7753,42 @@ drifted, replay the revisions onto a scratch database and diff:</p>
 <li>Every run is recorded in the audit log (<code>database.query</code>), refused ones too, with who ran it and the statement.</li>
 <li>It is shown where a table's rows are, and only to someone who may make Overseer's changes: an admin with the auth service; without it, the build that was never deployed, at localhost. The dev stack publishes its ports on localhost only (<code>127.0.0.1</code>), as does <code>make docs-serve</code>, so no one else on the network reaches them.</li>
 </ul>
+<h2 id="audit-log">Audit Log</h2>
+<p>Every audited action is kept as a row in <code>audit_event</code>, beside its <code>AUDIT:</code> log line: sign-ins and sign-up, admin changes to users and orgs, secrets set and deleted, settings changed from the CLI, and Overseer's actions (a connection ended, a query run or saved, rows read). Code audits an action with the emitter from <code>app.core.audit</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.audit</span><span class="w"> </span><span class="kn">import</span> <span class="n">audit_emitter</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="k">await</span> <span class="n">audit_emitter</span><span class="o">.</span><span class="n">emit</span><span class="p">(</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="s2">&quot;billing.refund_issued&quot;</span><span class="p">,</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    <span class="n">actor_email</span><span class="o">=</span><span class="n">user</span><span class="o">.</span><span class="n">email</span><span class="p">,</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    <span class="n">target_type</span><span class="o">=</span><span class="s2">&quot;invoice&quot;</span><span class="p">,</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>    <span class="n">target_id</span><span class="o">=</span><span class="n">invoice</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>    <span class="n">detail</span><span class="o">=</span><span class="s2">&quot;Refunded in full&quot;</span><span class="p">,</span>
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>    <span class="n">outcome</span><span class="o">=</span><span class="s2">&quot;issued&quot;</span><span class="p">,</span>  <span class="c1"># any other field is kept in the row&#39;s context</span>
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="p">)</span>
+</span></code></pre></div>
+<ul>
+<li>Each row has the event type, who did it (<code>actor_id</code>, <code>actor_email</code>), what it was done to (<code>target_type</code>, <code>target_id</code>), the org, the IP address, a detail, and every other field in <code>context</code>. A row has no key to <code>user</code>: it outlives the account it names.</li>
+<li>A credential in <code>detail</code> or <code>context</code> is redacted before the row is kept, by the rules error tracking uses: a field named like a secret (<code>api_key</code>, <code>password</code>, <code>token</code>), a bearer token, a key's assignment (<code>OPENAI_API_KEY=...</code>), a URL's password.</li>
+<li>The row is written in a session of its own, after <code>emit</code> returns: the caller never waits on it, and a failed login is kept even when the caller's transaction rolls back. A write that fails is logged and never fails the action. Emit a success after your own commit, so the log never records an action that rolled back.</li>
+<li>Before a process ends, the rows still being written are written: the webserver, a worker, the scheduler and a CLI command each wait up to 5 seconds for them as they stop (<code>app.core.concurrency.drain</code>, which waits for work started with <code>background(..., finish=True)</code> before it cancels the rest).</li>
+<li>On PostgreSQL the table lives in its own <code>audit</code> schema; SQLite keeps it in the one file.</li>
+<li>Nothing is pruned yet.</li>
+</ul>
+<p>Read it on Overseer's Database page (<strong>Audit</strong>: the newest 200, filtered on the page), from the API (<code>GET /api/v1/database/audit</code>, for admins, with <code>limit</code>, <code>kind</code> for event types starting with it, such as <code>auth.</code>, and <code>actor</code> for an email or user id), or from the CLI:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>my-app<span class="w"> </span>audit<span class="w"> </span>list<span class="w"> </span>--kind<span class="w"> </span>auth.<span class="w"> </span>--limit<span class="w"> </span><span class="m">50</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>my-app<span class="w"> </span>audit<span class="w"> </span>list<span class="w"> </span>--actor<span class="w"> </span>ops@example.com<span class="w"> </span>--json
+</span></code></pre></div>
 <h2 id="testing">Testing</h2>
 <p>The component includes test fixtures for database testing:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># tests/conftest.py provides:</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">db_session</span><span class="p">():</span>
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="c1"># Provides isolated test database session</span>
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    <span class="c1"># Automatically rolls back after each test</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># tests/conftest.py provides:</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">db_session</span><span class="p">():</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="c1"># Provides isolated test database session</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="c1"># Automatically rolls back after each test</span>
 </span></code></pre></div>
 <p><strong>Test Infrastructure:</strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Quick health check</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>make<span class="w"> </span>health-detailed
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Quick health check</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>make<span class="w"> </span>health-detailed
 </span></code></pre></div>
 <ul>
 <li>In-memory test databases</li>

@@ -27,8 +27,9 @@ SANDBOX_RULES = f"""\
 
 run_code is NOT a REPL. Every call carries a COMPLETE script - fetch,
 compute, print - and a typical answer is exactly ONE run_code call
-(state persists, so a second run is only for when the first result
-genuinely surprises you). Six one-line calls is a defect, not caution.
+(a second run is only for when the first fails or genuinely surprises
+you). Every call is another full model turn: six one-line calls is a
+defect, not caution.
 
 One complete script looks like:
 
@@ -62,8 +63,11 @@ use `isinstance(x, dict)` or `.get()` instead. If a script fails with \
 a type error, REWRITE the flagged line - do not resubmit it.
 - Print only the figures or rows you need, never a whole payload; \
 oversized output gets truncated.
-- State persists between run_code calls: print a value's shape first, \
-then compute against the real keys in the next call."""
+- The first script's output must be enough to answer: print beside the \
+result whatever you would check next (a read's `total` or `note`, a row \
+count), never confirm it in a second run.
+- If `draw_card` is among your functions, end that same script with it \
+(its description shows how): never skip it, never draw in a later run."""
 
 
 def with_sandbox_rules(prompt: str, *, code_mode: bool) -> str:

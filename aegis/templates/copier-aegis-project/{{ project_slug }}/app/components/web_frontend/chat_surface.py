@@ -31,8 +31,8 @@ from app.core.chat_transcript import (
     readable,
     strip_attachment_marker,
     trace_failed,
-    trace_label,
     trace_output,
+    trail_rows,
 )
 from app.core.pages import Page
 
@@ -346,14 +346,7 @@ def settled(
             if a.get("key")
         ],
         "pastes": paste_chips(chat, meta.get("pastes") or []),
-        "trail": [
-            {
-                "label": trace_label(e),
-                "failed": trace_failed(e),
-                "url": f"{url}/runs/{i}",
-            }
-            for i, e in enumerate(meta.get("tool_trace") or [])
-        ],
+        "trail": trail_rows(meta.get("tool_trace") or [], url),
         "changes": change_urls(meta.get("tool_trace") or []),
         "cards": drawn_card_urls(chat, meta.get("tool_trace") or []),
         "footer": footer_line(meta),

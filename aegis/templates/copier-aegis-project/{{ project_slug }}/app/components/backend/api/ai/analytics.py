@@ -85,6 +85,7 @@ class AgentUpdateRequest(BaseModel):
     max_tokens: int | None = None
     system_prompt: str | None = None
     is_active: bool | None = None
+    code_mode: bool | None = None
 
 
 @router.get("/agents")

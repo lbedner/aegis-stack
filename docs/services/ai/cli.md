@@ -22,6 +22,7 @@ my-app ai sentiment       # Conversation sentiment statistics
 my-app agents list             # All agents with their grants
 my-app agents show <slug>      # One agent's full definition
 my-app agents test <slug>      # One chat turn as the agent
+my-app agents code-mode <slug> --on   # Its reads run in one script (--off: plain tools)
 my-app context-modules list     # Context module catalog
 my-app context-modules show <slug>  # One module's definition
 
@@ -259,6 +260,15 @@ my-app agents test support -m "What are your hours?"
 ```
 
 Runs one turn the way chat does (the agent's tools, context modules and code mode, usage recorded) in a conversation of its own, deleted after, and prints the reply.
+
+### agents code-mode
+
+```bash
+my-app agents code-mode assistant --on
+my-app agents code-mode assistant --off
+```
+
+Turns an agent's code mode on or off: on, its reads run inside one `run_code` script per answer; off, it calls each tool directly. The next turn uses it. The same switch is the agent drawer's "Code mode" checkbox in Overseer and `code_mode` on `PATCH /api/v1/ai/agents/{slug}`.
 
 ### context-modules list / show
 

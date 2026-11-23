@@ -92,7 +92,6 @@ async def agent_context(db: Any, slug: str) -> dict[str, Any] | None:
                 "Knowledge bases",
                 ", ".join(map(str, agent.get("knowledge_base_ids") or [])) or None,
             ),
-            ("Code mode", "On" if agent.get("code_mode") else None),
             ("Extends", agent.get("extends")),
         ],
     }
@@ -112,6 +111,7 @@ def parse_agent_form(form: dict[str, str]) -> dict[str, Any]:
         "max_tokens": form_number(form.get("max_tokens"), "Max tokens"),
         "system_prompt": form.get("system_prompt") or None,
         "is_active": form.get("is_active") == "on",
+        "code_mode": form.get("code_mode") == "on",
     }
 
 

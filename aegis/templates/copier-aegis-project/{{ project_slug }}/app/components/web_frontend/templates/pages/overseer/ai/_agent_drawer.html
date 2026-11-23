@@ -27,6 +27,7 @@
       {% call field("Temperature") %}{{ text_input("temperature", agent.temperature, placeholder="Default") }}{% endcall %}
       {% call field("Max tokens") %}{{ text_input("max_tokens", agent.max_tokens, placeholder="Default", autofocus=(focus == "max_tokens")) }}{% endcall %}
     </div>
+    {{ checkbox("code_mode", agent.code_mode, "Code mode: reads run in one script") }}
     {% endcall %}
     {% call form_section("System prompt") %}{{ textarea("system_prompt", agent.system_prompt or "", rows=10, attrs='aria-label="System prompt"') }}{% endcall %}
     {{ form_footer("Save", attrs="data-write") }}

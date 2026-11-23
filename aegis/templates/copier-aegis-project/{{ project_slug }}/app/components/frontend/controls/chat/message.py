@@ -11,8 +11,9 @@ from app.components.frontend.controls.dialog import DialogHandle, StyledAlertDia
 from app.components.frontend.controls.markdown import markdown_control
 from app.components.frontend.controls.text import LabelText, SecondaryText
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.chat_transcript import trail_rows
 
-from .stream import footer_line, trace_failed, trace_label, trace_output
+from .stream import footer_line, trace_output
 
 # Long messages wrap well before the far edge; short ones hug their side.
 _ALIGN_INSET = 96
@@ -164,17 +165,20 @@ class ChatMessageBubble(ft.Container):
     # -- expandable tool trace ---------------------------------------------
 
     def set_tool_trace(self, trace: list[dict[str, Any]]) -> None:
-        """Rebuild the trail from the persisted trace: one clickable line
-        per call, expanding to the full script and its output."""
-        self._trail.controls = [self._trace_row(entry) for entry in trace]
+        """Rebuild the trail from the persisted trace as the live one showed
+        it (``trail_rows``): a clickable line per call, the reads a script
+        dispatched under it, each expanding to its call's script and output."""
+        self._trail.controls = [
+            self._trace_row(row, trace[row["run"]]) for row in trail_rows(trace)
+        ]
         self._trail.visible = bool(trace)
         if self.page:
             self._trail.update()
 
-    def _trace_row(self, entry: dict[str, Any]) -> ft.Control:
-        failed = trace_failed(entry)
+    def _trace_row(self, row: dict[str, Any], entry: dict[str, Any]) -> ft.Control:
+        failed = row["failed"]
         label = SecondaryText(
-            trace_label(entry),
+            row["label"],
             size=Theme.Typography.BODY_SMALL,
             no_wrap=True,
             selectable=False,

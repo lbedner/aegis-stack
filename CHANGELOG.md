@@ -190,6 +190,14 @@
   `runner`) still reads `.env.meetings-runner` and the `MEETINGS_RUNNER_*`
   names until they are moved to `.env.runner`. The dev service's container
   and logs moved from the Meetings page to Overseer > Runner.
+- **llama.cpp in docker serves several models.** `inference[llamacpp,docker]`'s
+  `llamacpp` service is a llama-server router, as `make llama` is on the
+  host: it serves its download cache and `/models/local` (the
+  `llamacpp-models` volume), one model in memory at a time
+  (`--models-max 1`), and Overseer > Inference loads and frees each. It
+  downloads `LLAMACPP_MODEL` on its first start and loads it under that
+  name, so `AI_MODEL` is unchanged. `LLAMACPP_MODEL` is now a setting, so
+  setting it in `.env` no longer stops the app booting.
 
 ### Fixed
 

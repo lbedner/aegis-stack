@@ -8,6 +8,7 @@ service's ``ollama`` provider pulls it in; ``ollama_mode`` survives only as a
 value aegis derives from the component, never asked.
 """
 
+import re
 from typing import Any
 
 import pytest
@@ -17,6 +18,7 @@ from aegis.core.components import COMPONENTS, ComponentType
 from aegis.core.option_spec import compute_auto_requires, parse_options
 from aegis.core.services import SERVICES
 from aegis.core.template_generator import TemplateGenerator
+from tests.core._compose import load
 
 
 def test_inference_is_an_infrastructure_component() -> None:
@@ -98,16 +100,7 @@ def test_only_a_speech_server_in_docker_ships_a_container() -> None:
 def test_the_speech_container_reports_all_it_can() -> None:
     """Overseer > Inference > Speech shows its model and its process only
     where Kokoro-FastAPI was started with the flags that open them."""
-    import yaml
-
-    found = yaml.safe_load(
-        _render(
-            "docker-compose.yml.jinja",
-            include_inference=True,
-            ollama_mode="docker",
-            inference_speech="kokoro_fastapi",
-        )
-    )
+    found = _compose(inference_speech="kokoro_fastapi")
     environment = found["services"]["kokoro-fastapi"]["environment"]
     assert environment["ALLOW_DEV_UNLOAD"] == environment["ENABLE_DEBUG_ENDPOINTS"]
     assert environment["ALLOW_DEV_UNLOAD"] == "true"
@@ -248,23 +241,60 @@ def test_llamacpp_in_docker_runs_its_own_container() -> None:
     assert "llamacpp" not in context("inference[llamacpp]")["docker_services"]
 
 
-def test_the_llamacpp_service_is_llama_server_with_the_chat_flags() -> None:
-    import yaml
-
-    found = yaml.safe_load(
+def _compose(**answers: object) -> dict[str, Any]:
+    """The compose file of a project with inference in docker."""
+    return load(
         _render(
             "docker-compose.yml.jinja",
             include_inference=True,
             ollama_mode="docker",
-            inference_engine="llamacpp",
+            **answers,
         )
     )
+
+
+def test_the_llamacpp_service_is_llama_server_with_the_chat_flags() -> None:
+    found = _compose(inference_engine="llamacpp")
     assert "ollama" not in found["services"]
     service = found["services"]["llamacpp"]
     assert service["image"].startswith("ghcr.io/ggml-org/llama.cpp:server")
     assert {"--jinja", "--metrics", "-np"} <= set(service["command"])
     assert "llamacpp-data" in found["volumes"]
     assert found["services"]["webserver"]["depends_on"]["llamacpp"]
+
+
+def test_the_llamacpp_service_is_a_router_that_starts_on_llamacpp_model() -> None:
+    """Several models, each loaded and freed on request; LLAMACPP_MODEL is
+    a preset the router downloads and loads at start, under its own name."""
+    found = _compose(inference_engine="llamacpp")
+    service = found["services"]["llamacpp"]
+    command = service["command"]
+    assert command[command.index("--models-max") + 1] == "1"
+    assert not {"-hf", "-m", "--alias"} & set(command)
+    # A router refuses a folder that is not there; a mount always is.
+    folder = command[command.index("--models-dir") + 1]
+    mounts = dict(v.split(":")[::-1] for v in service["volumes"])
+    assert mounts[folder] in found["volumes"]
+    preset_path = command[command.index("--models-preset") + 1]
+    mount = next(c for c in service["configs"] if c["target"] == preset_path)
+    preset = found["configs"][mount["source"]]["content"]
+    assert "load-on-startup = true" in preset
+    # Its first model is LLAMACPP_MODEL, defaulted as the setting is (Settings
+    # refuses a .env key it does not declare), and the router lists it under
+    # that name, the one chat starts on.
+    default = re.search(r"^\[\$\{LLAMACPP_MODEL:-(.+)\}\]$", preset, re.M)
+    assert default
+    settings = _render("app/core/speech_settings.py.jinja", include_inference=True)
+    env = _render(
+        ".env.example.jinja",
+        include_inference=True,
+        inference_engine="llamacpp",
+        inference_placement="docker",
+        ollama_mode="docker",
+        ai_providers="llamacpp",
+    )
+    assert f'LLAMACPP_MODEL: str = "{default[1]}"' in settings
+    assert f"\nAI_MODEL={default[1]}\n" in env
 
 
 def test_the_settings_name_the_engine_and_where_llama_server_is() -> None:

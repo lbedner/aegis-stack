@@ -53,14 +53,14 @@ def test_a_saved_row_wins_over_the_default_and_adds_its_own() -> None:
     spoken.use_saved(
         [
             Pronunciation(term="redis", say="ree-dis"),
-            Pronunciation(term="Illiana", say="ill-ee-ah-na", ipa="ɪliˈɑːnə"),
+            Pronunciation(term="Illiana", say="ill-ee-ah-na"),
         ]
     )
 
     found = {p.term.lower(): p for p in spoken.pronunciation_list()}
 
     assert found["redis"].say == "ree-dis"
-    assert found["illiana"].ipa == "ɪliˈɑːnə"
+    assert found["illiana"].say == "ill-ee-ah-na"
     assert found["traefik"].say == "traffic"
     assert spoken.pronounced("Redis and Illiana") == "ree-dis and ill-ee-ah-na"
 

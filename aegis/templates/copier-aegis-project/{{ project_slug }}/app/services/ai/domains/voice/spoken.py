@@ -62,14 +62,12 @@ def to_spoken(text: str, max_chars: int = 4096) -> str:
 
 
 class Pronunciation(BaseModel):
-    """How one term is said: ``say`` as plain spelling any voice reads, and
-    ``ipa`` kept for a provider's own dictionary (none reads it yet)."""
+    """How one term is said: ``say`` as plain spelling any voice reads."""
 
     model_config = FIGURES
 
     term: str
     say: str
-    ipa: str | None = None
 
     @property
     def key(self) -> str:
@@ -96,13 +94,11 @@ _registered: dict[str, Pronunciation] = {}
 _saved: dict[str, Pronunciation] = {}
 
 
-def register_pronunciation(
-    term: str, say: str, ipa: str | None = None, *, replace: bool = False
-) -> None:
+def register_pronunciation(term: str, say: str, *, replace: bool = False) -> None:
     """Add an app's own term to the list. Raises ValueError on a term
     already registered unless ``replace=True``, so two modules can't
     silently fight over one."""
-    said = Pronunciation(term=term, say=say, ipa=ipa)
+    said = Pronunciation(term=term, say=say)
     if not replace and said.key in _registered:
         claimed = _registered[said.key].term
         raise ValueError(f"Pronunciation of {claimed!r} is already registered")

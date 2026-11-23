@@ -100,6 +100,8 @@ class ModelResponse(BaseModel):
     context_window: int
     input_price: float | None
     output_price: float | None
+    # USD a second, for a model billed by time (a live voice model).
+    per_second: float | None = None
     released_on: str | None
     # What kind of model: "chat", or a voice kind ("realtime", ...).
     mode: str = "chat"
@@ -290,22 +292,10 @@ async def get_models(
                 include_disabled=include_disabled,
                 mode=mode,
             )
-        return [
-            ModelResponse(
-                model_id=m.model_id,
-                title=m.title,
-                vendor=m.vendor,
-                family=m.family,
-                color=m.color,
-                context_window=m.context_window,
-                input_price=m.input_price,
-                output_price=m.output_price,
-                released_on=m.released_on,
-                mode=m.mode,
-                supports_tools=m.supports_tools,
-            )
-            for m in results
-        ]
+        # The row's own fields, every one the response names: a field copied
+        # by hand here was a field one day left out (``per_second``).
+        fields = set(ModelResponse.model_fields)
+        return [ModelResponse(**m.model_dump(include=fields)) for m in results]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list models: {e}")
 

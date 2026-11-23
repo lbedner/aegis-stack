@@ -40,6 +40,10 @@ class VoiceSettings(SpeechServerSettings):
     TTS_VOICE: str | None = (
         None  # Voice: alloy, echo, fable, onyx, nova, shimmer. None = alloy
     )
+    # The voice on each speaking provider (a TTS provider id -> its voice
+    # id): the active profile's. TTS_VOICE is the one for TTS_PROVIDER, and a
+    # live call speaks the one for its vendor (``live_engines.call_voice``).
+    TTS_VOICES: dict[str, str] = Field(default_factory=dict)
     # Sent to the model as ``speed`` (it used to be read and never sent).
     TTS_SPEED: float = Field(default=1.0, ge=TTS_SPEED_MIN, le=TTS_SPEED_MAX)
     # How it is said - tone, emotion, pacing - sent as ``instructions``

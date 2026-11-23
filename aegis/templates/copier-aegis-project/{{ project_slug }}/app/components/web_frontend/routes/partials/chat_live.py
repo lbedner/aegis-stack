@@ -310,7 +310,7 @@ def live_router(
             subject=bound.subject,
             surface=bound.surface,
             agent_slug=_answers(bound),
-            voice=settings.TTS_VOICE,
+            voice=settings,
             admin=admin,
         )
 

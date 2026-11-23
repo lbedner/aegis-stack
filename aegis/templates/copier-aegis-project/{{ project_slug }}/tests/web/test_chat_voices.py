@@ -1,9 +1,10 @@
 """The voice, switched and tuned from the chat surface.
 
 The composer carries a voice chip beside the model chip; it opens the one
-dialog, which lists the voice profiles with a preview each, switches the
-active one, makes a new one from the active, and edits one. What changes
-applies to the next thing said, with no restart. Tested on the Overseer's
+dialog, which picks what a call runs on (the call setup), lists the voice
+profiles with a preview each, switches the active one, makes a new one from
+the active, and renames one. What changes applies to the next thing said,
+with no restart; picking a model never changes the voice. Tested on the Overseer's
 mount; every mount gets the same routes under its own path.
 """
 
@@ -22,8 +23,8 @@ from app.components.web_frontend.overseer_ai_chat import OVERSEER
 from app.components.web_frontend.routes.partials import chat_voices
 from app.core.config import settings
 from app.services.ai.domains.voice import profiles
-from app.services.ai.models.voice import VoiceProfile
-from tests._voice_catalog import keep_voice_settings
+from app.services.ai.models.voice import CallSetup, VoiceProfile
+from tests._voice_catalog import keep_voice_settings, no_voices
 from tests.web.dom import none, one, oob, select, text, triggers
 from tests.web.overseer import AI, on_session, sign_in, status_with
 
@@ -78,6 +79,14 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
                 "model_id": "gpt-realtime-2.1",
                 "title": "GPT Realtime 2.1",
                 "vendor": "openai",
+                "input_price": 4.0,
+                "output_price": 16.0,
+            },
+            # A dated snapshot of the one above: one row with it.
+            {
+                "model_id": "gpt-realtime-2.1-2026-08-28",
+                "title": "GPT Realtime 2.1 2026 08 28",
+                "vendor": "openai",
             },
         ]
         chat = [
@@ -131,28 +140,43 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return picked
 
 
+# What the call setup is in these tests: OpenAI hears and speaks.
+SETUP = {
+    "stt_provider": "openai_whisper",
+    "stt_model": "gpt-transcribe",
+    "tts_provider": "openai",
+    "tts_model": "gpt-4o-mini-tts-2025-03-20",
+}
+
+
 @pytest.fixture
 async def voices(async_db_session: AsyncSession) -> dict[str, VoiceProfile]:
-    for row in await profiles.list_profiles(async_db_session):
-        await async_db_session.delete(row)
-    await async_db_session.commit()
+    """Marin (in use, styled) and Nova, on a call setup that speaks on
+    OpenAI, applied to the running settings as the app's startup does."""
+    await no_voices(async_db_session)
+    setup = CallSetup(**SETUP)
     marin = VoiceProfile(
         name="Marin",
         is_active=True,
-        stt_model="gpt-transcribe",
-        tts_model="gpt-4o-mini-tts-2025-03-20",
-        tts_voice="marin",
+        voices={"openai": "marin"},
         tts_speed=1.2,
         tts_instructions="Voice Affect: Warm.",
     )
-    nova = VoiceProfile(
-        name="Nova, plain", tts_model="gpt-4o-mini-tts", tts_voice="nova"
-    )
-    async_db_session.add_all([marin, nova])
+    nova = VoiceProfile(name="Nova, plain", voices={"openai": "nova"})
+    async_db_session.add_all([setup, marin, nova])
     await async_db_session.commit()
     await async_db_session.refresh(marin)
     await async_db_session.refresh(nova)
+    service = SimpleNamespace(_stt_service=None, _tts_service=None)
+    profiles.apply(marin, settings, service, setup)
     return {"marin": marin, "nova": nova}
+
+
+async def _setup(session: AsyncSession) -> CallSetup:
+    setup = await profiles.call_setup(session)
+    assert setup is not None
+    await session.refresh(setup)
+    return setup
 
 
 class TestTheChip:
@@ -273,32 +297,78 @@ class TestCalls:
         calls: list[str],
         async_db_session: AsyncSession,
     ) -> None:
-        """The active voice hears with it, by its own provider, at once:
-        a call and the replies said in chat both."""
+        """The call setup hears with it, by its own provider, at once: a
+        call and the replies said in chat both."""
         calls.append(LOCAL)
         response = hx.post(f"{VOICES}/hears", data={"model_id": "large-v3"})
 
-        await async_db_session.refresh(voices["marin"])
-        assert (voices["marin"].stt_model, voices["marin"].stt_provider) == (
-            "large-v3",
-            "faster_whisper",
-        )
+        setup = await _setup(async_db_session)
+        assert (setup.stt_model, setup.stt_provider) == ("large-v3", "faster_whisper")
         assert settings.STT_MODEL == "large-v3"
         hears = one(response.text, f'[data-call-part="{chat_calls.HEARS}"]')
         assert text(one(hears, "[data-name]")) == "Large v3"
         assert chat_calls.LOCAL["label"] in text(hears)
 
-    def test_a_pick_sets_what_calls_run_on(
-        self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
+    async def test_a_pick_sets_what_calls_run_on_and_leaves_the_voice(
+        self,
+        hx: TestClient,
+        voices: dict[str, VoiceProfile],
+        calls: list[str],
+        async_db_session: AsyncSession,
     ) -> None:
+        before = voices["marin"].model_dump()
         response = hx.post(f"{VOICES}/calls", data={"model_id": "gpt-realtime-2.1"})
 
         assert calls == ["gpt-realtime-2.1"]
+        await async_db_session.refresh(voices["marin"])
+        assert voices["marin"].model_dump() == before
         _, siblings = oob(response.text)
         chip = [e for e in siblings if e.get("id") == "chat-voice"]
         assert [text(e) for e in chip] == ["Calls: GPT Realtime 2.1"]
         current = one(response.text, "[data-call-model][aria-current=true]")
         assert current.get("data-call-model") == "gpt-realtime-2.1"
+
+    def test_a_model_billed_by_time_is_priced_by_the_minute(
+        self,
+        hx: TestClient,
+        voices: dict[str, VoiceProfile],
+        calls: list[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """As the summary adds a call up: a row billed by the second says
+        what a minute costs, not a token price that was never the bill;
+        one billed by its tokens keeps them. A dated snapshot is a version
+        of its model, not a row of its own."""
+        from app.components.web_frontend import chat_models as models
+
+        listed = models.call_models
+
+        async def timed() -> list[dict[str, Any]]:
+            return [
+                {**m, "per_second": 0.001} if m["model_id"] == LIVE else m
+                for m in await listed()
+            ]
+
+        monkeypatch.setattr(models, "call_models", timed)
+        html = hx.get(VOICES).text
+
+        assert "$0.06 a minute" in text(one(html, f'[data-call-model="{LIVE}"]'))
+        openai = text(one(html, '[data-call-model="gpt-realtime-2.1"]'))
+        assert "$4 / $16" in openai and "2 versions" in openai
+        assert not select(html, '[data-call-model="gpt-realtime-2.1-2026-08-28"]')
+
+    def test_a_voice_with_none_for_the_models_vendor_says_so(
+        self,
+        hx: TestClient,
+        voices: dict[str, VoiceProfile],
+        calls: list[str],
+    ) -> None:
+        """Marin has no Gemini voice: the call would speak Gemini's own, and
+        the part says so rather than naming a voice that is not hers."""
+        calls.append(LIVE)
+        (part,) = select(hx.get(VOICES).text, "[data-call-part]")
+
+        assert "Marin has no Gemini voice yet" in text(part)
 
     def test_a_refused_pick_says_why(
         self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
@@ -360,7 +430,8 @@ class TestSwitching:
 
         assert response.status_code == 200
         assert settings.TTS_VOICE == "nova"  # applied to the running app
-        assert settings.TTS_MODEL == "gpt-4o-mini-tts"
+        # on the call setup's model: switching the voice does not move it
+        assert settings.TTS_MODEL == "gpt-4o-mini-tts-2025-03-20"
         active = await profiles.active_profile(async_db_session)
         assert active is not None and active.name == "Nova, plain"
         primary, siblings = oob(response.text)
@@ -396,7 +467,11 @@ class TestMaking:
             for p in await profiles.list_profiles(async_db_session)
             if p.name == "Marin, faster"
         )
-        assert (made.tts_voice, made.tts_speed, made.is_active) == ("marin", 1.2, False)
+        assert (made.voices, made.tts_speed, made.is_active) == (
+            {"openai": "marin"},
+            1.2,
+            False,
+        )
         # It opens straight into its own edit form.
         assert (
             one(response.text, "form[data-voice-form]").get("hx-post")
@@ -412,41 +487,88 @@ class TestMaking:
 
 
 class TestEditing:
-    def test_the_form_holds_what_the_designer_does_not_and_opens_it(
+    def test_the_form_names_her_voice_on_each_engine_and_opens_the_designer(
         self, hx: TestClient, voices: dict[str, VoiceProfile]
     ) -> None:
-        """The voice itself (which one, its model, speed and delivery) is
-        put together in the voice designer, one place; the form keeps the
-        rest and opens the designer on this profile."""
+        """How she sounds (which voice on each engine, speed, delivery) is
+        put together in the voice designer, one place; the form names it
+        and opens the designer on this profile. How a call behaves is the
+        call setup's, not here."""
         form = one(
             hx.get(f"{VOICES}/{voices['marin'].id}/edit").text, "form[data-voice-form]"
         )
-        for column in ("stt_model", "reply", "working_sound"):
-            one(form, f"select[name={column}]")
-        for column in ("tts_voice", "tts_model", "tts_speed", "tts_instructions"):
+        for column in ("stt_model", "reply", "working_sound", "live_engine"):
             assert not form.cssselect(f"[name={column}]"), column
+        engines = {e.get("data-engine"): text(e) for e in select(form, "[data-engine]")}
+        assert "Marin" in engines["openai"] and "Not set" in engines["gemini"]
         design = one(form, "a[data-voice-design]")
         assert (
             design.get("href")
             == f"/overseer/services/ai/voice?profile={voices['marin'].id}"
         )
 
-    async def test_saving_the_active_voice_applies_it(
+    async def test_renaming_keeps_how_she_sounds(
+        self,
+        hx: TestClient,
+        voices: dict[str, VoiceProfile],
+        async_db_session: AsyncSession,
+    ) -> None:
+        marin = voices["marin"]
+        response = hx.post(f"{VOICES}/{marin.id}", data={"name": "Marin, warm"})
+
+        assert response.status_code == 200
+        await async_db_session.refresh(marin)
+        assert (marin.name, marin.voices) == ("Marin, warm", {"openai": "marin"})
+
+    def test_a_voice_needs_a_name(
+        self, hx: TestClient, voices: dict[str, VoiceProfile]
+    ) -> None:
+        response = hx.post(f"{VOICES}/{voices['marin'].id}", data={"name": " "})
+        assert response.status_code == 422
+        one(response.text, "form[data-voice-form] [role=alert]")
+
+
+class TestCallSettings:
+    """How every call behaves, whichever voice speaks: the call setup's
+    form, opened from the dialog."""
+
+    def test_the_dialog_opens_it(
+        self, hx: TestClient, voices: dict[str, VoiceProfile]
+    ) -> None:
+        link = one(hx.get(VOICES).text, "[data-call-settings]")
+        assert link.get("hx-get") == f"{VOICES}/setup"
+        form = one(hx.get(f"{VOICES}/setup").text, "form[data-setup-form]")
+        for column in ("stt_model", "reply", "working_sound"):
+            one(form, f"select[name={column}]")
+        assert [
+            i.get("value") for i in form.cssselect("input[name=live_idle_seconds]")
+        ] == ["30"]
+
+    # Each step reads the call setup once (as each request does); the
+    # test takes 2 on purpose, so 3 would be one read too many.
+    @pytest.mark.queryspy(threshold=3)
+    async def test_saving_applies_it(
         self,
         hx: TestClient,
         voices: dict[str, VoiceProfile],
         async_db_session: AsyncSession,
     ) -> None:
         response = hx.post(
-            f"{VOICES}/{voices['marin'].id}",
-            data=_form(voices["marin"], stt_model="whisper-1"),
+            f"{VOICES}/setup",
+            data=_setup_form(stt_model="whisper-1", live_idle_seconds="0"),
         )
 
         assert response.status_code == 200
-        assert settings.STT_MODEL == "whisper-1"
-        await async_db_session.refresh(voices["marin"])
-        assert voices["marin"].stt_model == "whisper-1"
+        assert (settings.STT_MODEL, settings.VOICE_LIVE_IDLE_SECONDS) == (
+            "whisper-1",
+            0,  # never
+        )
+        assert (await _setup(async_db_session)).stt_model == "whisper-1"
+        assert settings.TTS_VOICE == "marin"  # the voice untouched
 
+    # Each step reads the call setup once (as each request does); the
+    # test takes 2 on purpose, so 3 would be one read too many.
+    @pytest.mark.queryspy(threshold=3)
     async def test_a_hearing_model_brings_its_provider(
         self,
         hx: TestClient,
@@ -457,68 +579,16 @@ class TestEditing:
         provider: an OpenAI model kept beside Parakeet would be asked of
         Parakeet."""
         hx.post(
-            f"{VOICES}/{voices['marin'].id}",
-            data=_form(voices["marin"], stt_model="nemo-parakeet-tdt-0.6b-v3"),
+            f"{VOICES}/setup",
+            data=_setup_form(stt_model="nemo-parakeet-tdt-0.6b-v3"),
         )
 
-        await async_db_session.refresh(voices["marin"])
-        assert voices["marin"].stt_provider == "parakeet"
-
-    def test_the_form_holds_the_live_dead_air_limit(
-        self, hx: TestClient, voices: dict[str, VoiceProfile]
-    ) -> None:
-        form = one(
-            hx.get(f"{VOICES}/{voices['marin'].id}/edit").text, "form[data-voice-form]"
-        )
-        assert [
-            i.get("value") for i in form.cssselect("input[name=live_idle_seconds]")
-        ] == ["30"]
-
-    def test_the_live_dead_air_limit_is_saved_and_applied(
-        self, hx: TestClient, voices: dict[str, VoiceProfile]
-    ) -> None:
-        response = hx.post(
-            f"{VOICES}/{voices['marin'].id}",
-            data=_form(voices["marin"], live_idle_seconds="0"),
-        )
-        assert response.status_code == 200
-        assert settings.VOICE_LIVE_IDLE_SECONDS == 0  # 0: never
-
-    async def test_saving_another_voice_leaves_the_active_one_alone(
-        self, hx: TestClient, voices: dict[str, VoiceProfile]
-    ) -> None:
-        before = settings.STT_MODEL
-        hx.post(
-            f"{VOICES}/{voices['nova'].id}",
-            data=_form(voices["nova"], stt_model="whisper-1"),
-        )
-        assert settings.STT_MODEL == before
-
-    async def test_the_live_engine_is_picked_with_the_models_not_here(
-        self,
-        hx: TestClient,
-        voices: dict[str, VoiceProfile],
-        async_db_session: AsyncSession,
-    ) -> None:
-        """One place picks what a call runs on (the dialog's Calls list);
-        the voice form neither offers it nor loses it on a save."""
-        marin = voices["marin"]
-        form = one(hx.get(f"{VOICES}/{marin.id}/edit").text, "form[data-voice-form]")
-        assert form.cssselect("select[name=live_engine]") == []
-        marin.live_engine = "gpt-realtime-2.1"
-        async_db_session.add(marin)
-        await async_db_session.commit()
-
-        hx.post(f"{VOICES}/{marin.id}", data=_form(marin, tts_voice="coral"))
-
-        await async_db_session.refresh(marin)
-        assert marin.live_engine == "gpt-realtime-2.1"
+        assert (await _setup(async_db_session)).stt_provider == "parakeet"
 
     @pytest.mark.parametrize(
         "change",
         [
             {"stt_model": "ghost"},
-            {"name": ""},
             {"live_idle_seconds": "-1"},
             {"live_idle_seconds": "601"},
             {"live_idle_seconds": "soon"},
@@ -527,11 +597,9 @@ class TestEditing:
     def test_nonsense_is_a_422_that_keeps_the_form(
         self, hx: TestClient, voices: dict[str, VoiceProfile], change: dict[str, str]
     ) -> None:
-        response = hx.post(
-            f"{VOICES}/{voices['marin'].id}", data=_form(voices["marin"], **change)
-        )
+        response = hx.post(f"{VOICES}/setup", data=_setup_form(**change))
         assert response.status_code == 422
-        one(response.text, "form[data-voice-form] [role=alert]")
+        one(response.text, "form[data-setup-form] [role=alert]")
 
 
 class TestPreviewing:
@@ -580,19 +648,18 @@ class TestPreviewing:
         preview_settings, request = heard
         assert (preview_settings.TTS_VOICE, preview_settings.TTS_MODEL) == (
             "nova",
-            "gpt-4o-mini-tts",
+            "gpt-4o-mini-tts-2025-03-20",
         )
         assert request.text == chat_voices.design.PREVIEW_TEXT
         assert settings.TTS_VOICE == active  # previewing does not switch
 
 
-def _form(profile: VoiceProfile, **changes: str) -> dict[str, str]:
+def _setup_form(**changes: str) -> dict[str, str]:
     values = {
-        "name": profile.name,
-        "stt_model": profile.stt_model or "",
-        "reply": profile.reply,
-        "working_sound": profile.working_sound,
-        "live_idle_seconds": str(profile.live_idle_seconds),
+        "stt_model": SETUP["stt_model"],
+        "reply": "live",
+        "working_sound": "typing",
+        "live_idle_seconds": "30",
     }
     values.update(changes)
     return values

@@ -20,5 +20,4 @@ class VoicePronunciation(SQLModel, table=True):
     key: str = Field(unique=True, index=True, max_length=TERM_LENGTH)
     term: str = Field(max_length=TERM_LENGTH)
     say: str = Field(max_length=200)
-    ipa: str | None = Field(default=None, max_length=200)
     updated_at: datetime = Field(default_factory=utcnow)

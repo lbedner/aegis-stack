@@ -1,10 +1,12 @@
 """The model picker's pure display and grouping helpers."""
 
 from app.core.model_picker import (
+    base_model,
     family_display_name,
     group_models,
     model_label,
     newest_first,
+    one_per_base,
 )
 
 
@@ -31,6 +33,44 @@ class TestNewestFirst:
         ordered = newest_first(models)
 
         assert [m["model_id"] for m in ordered] == ["new", "old", "undated"]
+
+
+class TestOnePerBase:
+    """A dated snapshot and the id that follows the newest are one model:
+    one row, saying how many versions it holds."""
+
+    def test_a_dated_snapshot_is_a_version_of_its_base(self) -> None:
+        assert base_model("gpt-realtime-mini-2025-12-15") == "gpt-realtime-mini"
+        assert base_model("gpt-4o-mini-tts-20250320") == "gpt-4o-mini-tts"
+        assert base_model("gpt-live-1") == "gpt-live-1"
+
+    def test_versions_fold_into_the_base_or_the_one_in_use(self) -> None:
+        models = [
+            {"model_id": "gpt-realtime-mini-2025-12-15"},
+            {"model_id": "gemini-live"},
+            {"model_id": "gpt-realtime-mini"},
+        ]
+
+        folded = one_per_base(models)
+        kept = one_per_base(models, keep="gpt-realtime-mini-2025-12-15")
+
+        assert [(m["model_id"], m["versions"]) for m in folded] == [
+            ("gpt-realtime-mini", 2),
+            ("gemini-live", 1),
+        ]
+        assert kept[0]["model_id"] == "gpt-realtime-mini-2025-12-15"
+
+    def test_a_picker_group_holds_each_model_once(self) -> None:
+        models = [
+            {"model_id": "gpt-4o-2024-08-06", "vendor": "openai"},
+            {"model_id": "gpt-4o", "vendor": "openai"},
+        ]
+
+        [(_, rows)] = group_models(models, keep="gpt-4o-2024-08-06")
+
+        assert [(m["model_id"], m["versions"]) for m in rows] == [
+            ("gpt-4o-2024-08-06", 2)
+        ]
 
 
 class TestGroupModels:

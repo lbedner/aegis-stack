@@ -1,5 +1,5 @@
-"""Reads for the voice domain: which profiles exist, which is active, and
-how terms are said."""
+"""Reads for the voice domain: which profiles exist, which is active, the
+call setup, and how terms are said."""
 
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
@@ -8,10 +8,16 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.models.conversation import ConversationMessage
 from app.services.ai.models.llm import LargeLanguageModel, LLMOrg
 from app.services.ai.models.voice import (
+    CallSetup,
     LiveEngine,
     VoiceProfile,
     VoicePronunciation,
 )
+
+
+async def call_setup(session: AsyncSession) -> CallSetup | None:
+    """The call setup (there is one), None before it is seeded."""
+    return (await session.exec(select(CallSetup))).first()
 
 
 async def all_profiles(session: AsyncSession) -> list[VoiceProfile]:

@@ -235,6 +235,12 @@ EXAMPLES: dict[str, dict[str, str]] = {
               {"label": "load_test", "count": "3 workers", "value": "1,204", "ratio": 1.0},
               {"label": "system", "count": "1 worker", "value": "310", "ratio": 0.26},
             ]) }}""",
+        "segment_bar": """
+            {{ segment_bar([
+              {"label": "Ollama", "value": "4.2 GB", "ratio": 0.84, "dot": 1},
+              {"label": "Kokoro-FastAPI", "value": "812.0 MB", "ratio": 0.16, "dot": 2},
+              {"label": "llama.cpp", "value": "Not reported", "ratio": 0},
+            ], "Memory the engines report", "5.0 GB") }}""",
         "tab_bar": """
             {% call tab_bar("Example tabs") %}
               {{ tab_item("Overview", active=True, href="#macro-tab_bar") }}

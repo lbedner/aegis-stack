@@ -140,7 +140,7 @@ async def check_ai_service_health() -> ComponentStatus:
 
             # Add Ollama-specific health info when using Ollama provider
             # NOTE: Detailed model/VRAM info is reported by
-            # check_ollama_health() (component check). Here we only do a
+            # check_inference_health() (component check). Here we only do a
             # lightweight availability check to avoid redundant timeout
             # costs.
             ollama_url = settings.ollama_base_url_effective

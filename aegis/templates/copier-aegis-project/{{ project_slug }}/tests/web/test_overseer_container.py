@@ -575,7 +575,7 @@ def test_each_row_sizes_its_own_nodes() -> None:
     small stack's nodes stop at a node's size. Each row spreads across the
     whole width."""
     installed = ["ingress", "backend", "worker", "scheduler"]
-    data = ["database", "cache", "storage", "ollama"]
+    data = ["database", "cache", "storage", "inference"]
     found = overseer_map.layout([_entry(key) for key in installed + data])
     bottom = max(n["top"] for n in found["map_nodes"])
     row = [n for n in found["map_nodes"] if n["top"] == bottom]

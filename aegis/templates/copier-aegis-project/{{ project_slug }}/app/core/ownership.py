@@ -14,8 +14,8 @@ The rules, in order, for a path under ``app``:
 2. ``components/backend/api/<x>``: the service, service domain or component
    of that name, else the one service its folder (or flat file) imports, else
    the backend.
-3. ``components/<x>/`` (a folder named for its CLI name too: ``inference``
-   is ``ollama``), but an Overseer page (``overseer_<x>.py``,
+3. ``components/<x>/`` (a folder named for its CLI name too: ``redis``
+   is ``cache``), but an Overseer page (``overseer_<x>.py``,
    ``pages/overseer/<x>/``) goes with what it shows.
 4. ``core/<m>.py`` that says which component it fronts (``FRONTS``).
 5. ``models/<m>.py`` that says which part it belongs to (``PART_OF``: the
@@ -61,7 +61,7 @@ def page_of_part(name: str) -> str:
 
 _PAGE = "overseer_"
 _SERVICES = "app.services."
-# A part by its CLI name, where that is not its own (``inference``).
+# A part by its CLI name, where that is not its own (``redis``).
 _BY_CLI = {part.cli: name for name, part in PARTS.items() if part.cli != name}
 
 
@@ -229,8 +229,8 @@ def _component(parts: list[str], index: source_index.Index) -> Owner | None:
 
 
 def _by_cli(folder: str) -> str:
-    """The part a component folder named for its CLI name is (``inference``
-    is ``ollama``), else the folder's own name."""
+    """The part a component folder named for its CLI name is (``redis``
+    is ``cache``), else the folder's own name."""
     return _BY_CLI.get(folder, folder)
 
 

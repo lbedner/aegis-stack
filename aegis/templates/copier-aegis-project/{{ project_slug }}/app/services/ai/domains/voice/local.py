@@ -58,16 +58,26 @@ def fetched(url: str, cache_dir: Path) -> Path:
     return path
 
 
+# The in-process providers this process has loaded a model for, by id (a
+# loader's module is named for its provider, ``tts/kokoro.py``; the whisper
+# providers once ``STTService`` has transcribed with one): what Overseer >
+# Inference's "In the app" row says is in memory.
+LOADED: set[str] = set()
+
+
 def loaded_once(load: Callable[..., Any]) -> Callable[..., Any]:
     """``load`` run once per argument for the whole process, however many
     threads ask at once: a model is seconds and hundreds of MB to load,
     and the meetings bot hears several speakers together."""
     loaded = cache(load)
     lock = threading.Lock()
+    provider = load.__module__.rpartition(".")[2]
 
     def model(*args: str) -> Any:
         with lock:  # ponytail: per loader, so two models of one load in turn
-            return loaded(*args)
+            found = loaded(*args)
+        LOADED.add(provider)
+        return found
 
     return model
 

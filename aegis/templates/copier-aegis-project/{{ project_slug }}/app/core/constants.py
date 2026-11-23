@@ -43,7 +43,7 @@ class ComponentName(StrEnum):
     MCP = "mcp"
     BROWSER = "browser"
     RUNNER = "runner"
-    OLLAMA = "ollama"
+    INFERENCE = "inference"
     DEPLOY = "deploy"
 
 

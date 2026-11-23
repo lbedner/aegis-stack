@@ -119,7 +119,7 @@ class ServerTTSProvider(OpenAITTSProvider):
         return super()._speech_kwargs(request) | {"voice": voice}
 
     async def synthesize(self, request: SpeechRequest) -> SpeechResult:
-        """The whole file, charted with how long it took (Inference > Speech)."""
+        """The whole file, charted with how long it took (its Inference page)."""
         started = time.perf_counter()
         said = await super().synthesize(request)
         await speech_server.charted("file", time.perf_counter() - started)

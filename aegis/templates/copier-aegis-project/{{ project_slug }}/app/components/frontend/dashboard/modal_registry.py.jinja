@@ -156,7 +156,7 @@ def modal_registry() -> dict[str, type[ft.Container]]:
         ComponentName.RUNNER: RunnerDetailDialog,
         {%- endif %}
         {%- if ollama_mode != "none" %}
-        ComponentName.OLLAMA: InferenceDetailDialog,
+        ComponentName.INFERENCE: InferenceDetailDialog,
         {%- endif %}
         {%- if include_redis %}
         ComponentName.CACHE: RedisDetailDialog,

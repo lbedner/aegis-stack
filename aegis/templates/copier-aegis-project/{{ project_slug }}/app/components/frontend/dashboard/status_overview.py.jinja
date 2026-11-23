@@ -58,7 +58,7 @@ def get_component_display_info(
         return ("Cache", "Redis")
 {% if ollama_mode != "none" %}
 
-    elif component_name == ComponentName.OLLAMA:
+    elif component_name == ComponentName.INFERENCE:
         from app.components.inference import inference_engine_class
 
         subtitle = inference_engine_class().titled(metadata.get("version"))
@@ -255,7 +255,7 @@ class StatusOverviewPanel(ft.Container):
             ComponentName.DATABASE,
 {% endif %}
 {% if ollama_mode != "none" %}
-            ComponentName.OLLAMA,
+            ComponentName.INFERENCE,
 {% endif %}
 {% if include_redis %}
             ComponentName.CACHE,

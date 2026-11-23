@@ -210,7 +210,7 @@ TTS_PROVIDER=local_server   # its voice defaults to local_server:af_heart
 
 With the inference component, `inference[kokoro_fastapi]` sets that
 address for you, or ships the server as a container, and Overseer >
-Inference > Speech shows the server whole: its model, its memory, its
+Inference > Kokoro-FastAPI shows the server whole: its model, its memory, its
 voices to play, and how long each line takes, this provider's included
 ([Inference](../../components/inference.md#a-speech-server); the two flags
 open its model and its process to it). The provider's rows on Voice >

@@ -538,7 +538,7 @@ class TestInferenceCleanup:
         "app/components/inference/activity.py",
         "app/components/frontend/dashboard/cards/inference_card.py",
         "app/components/frontend/dashboard/modals/inference_modal/dialog.py",
-        "app/services/system/health_ollama.py",
+        "app/services/system/health_inference.py",
     )
 
     def _project(self, tmp_path: Path) -> Path:

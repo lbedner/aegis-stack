@@ -7384,10 +7384,46 @@
 <ul>
 <li><strong><code>app/components/inference/</code></strong>: <code>engine.py</code>, the one interface; <code>ollama.py</code> and <code>llamacpp.py</code>, async clients for each server's models, running models, and (Ollama) load and unload; <code>activity.py</code>, an in-memory record of models moving in and out of memory.</li>
 <li><strong>Settings:</strong> <code>INFERENCE_ENGINE</code>; <code>OLLAMA_BASE_URL</code> or <code>LLAMACPP_BASE_URL</code> (defaulted from the placement), <code>OLLAMA_BASE_URL_LOCAL</code> for CLI commands run on the host, <code>OLLAMA_HOST_PORT</code> / <code>LLAMACPP_HOST_PORT</code> for the port <code>make serve</code> publishes, <code>OLLAMA_API_KEY</code> for a server behind auth.</li>
-<li><strong>A health check</strong> on the system status: server reachable, installed and running models, VRAM in use.</li>
+<li><strong>A health check</strong> on the system status, named <code>inference</code>, with each engine under it by name (<code>ollama</code> or <code>llamacpp</code>, and <code>kokoro_fastapi</code> where a speech server is set): reachable, installed and running models, VRAM in use.</li>
+<li><strong>Overseer &gt; Inference</strong> (with the htmx frontend):<ul>
+<li><strong>Overview:</strong> a row per engine, with its job, whether it answers, what it holds, its memory and who runs on it (the agents whose model it serves, the voice that speaks or listens through it). One bar shows the memory the engines report together.</li>
+<li><strong>Engines it lacks</strong> are listed with the command or <code>.env</code> address that adds them, never an install button.</li>
+<li><strong>A page per engine</strong>, grouped by job in the menu: the text engine's Overview, Models (load and unload) and Activity, and the speech server's Overview and Voices. Container and Logs follow where the engines run in docker.</li>
+<li><strong>An "In the app" row</strong> appears where <code>ai[voice]</code> loads a model into the webserver (in-app Kokoro, Parakeet, faster-whisper), with the webserver's own memory.</li>
+</ul>
+</li>
+<li><strong>The same on the CLI and API:</strong> <code>my-app inference status</code> and <code>GET /api/v1/inference</code> list every engine as the overview does.</li>
 <li><strong>A dashboard card and modal</strong>: installed models with load and unload, and an activity tab of recent loads and evictions.</li>
 <li><strong>The LLM catalog</strong> lists the installed models when the AI service is present (<code>my-app llm sync --source local</code>).</li>
 </ul>
+<p>Each engine reports memory its own way, and a row that reports none says why rather than show 0:</p>
+<table>
+<thead>
+<tr>
+<th>Engine</th>
+<th>Memory it reports</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ollama</td>
+<td>Each loaded model's</td>
+</tr>
+<tr>
+<td>llama.cpp</td>
+<td>None (<code>/metrics</code> counts tokens and requests)</td>
+</tr>
+<tr>
+<td>Kokoro-FastAPI</td>
+<td>Its whole process, with <code>ENABLE_DEBUG_ENDPOINTS</code> on</td>
+</tr>
+<tr>
+<td>In the app</td>
+<td>The webserver's whole process, read on the webserver only</td>
+</tr>
+</tbody>
+</table>
+<p>The bar adds up what the engines report. It is not the machine's total: the webserver runs in Docker and sees the VM's memory, not the host's.</p>
 <h2 id="a-speech-server">A speech server</h2>
 <p>A speech server runs beside Ollama, where Ollama runs, and <code>ai[voice]</code> speaks through it. Kokoro-FastAPI is the one so far: Kokoro-82M, text to speech only.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>kokoro_fastapi<span class="o">]</span><span class="w">          </span><span class="c1"># Kokoro-FastAPI on the host</span>
@@ -7417,10 +7453,10 @@
 </table>
 <p>The answer sets <code>SPEECH_BASE_URL</code>'s default; <code>.env</code> can point it anywhere. With an address set:</p>
 <ul>
-<li><strong>Overseer &gt; Inference &gt; Speech</strong> shows the server whole, read once a second while it is open:<ul>
+<li><strong>Overseer &gt; Inference &gt; Kokoro-FastAPI</strong> shows the server whole, read once a second while it is open:<ul>
 <li><strong>Figures:</strong> its version, whether its model is loaded, the device it runs on, requests in flight, its memory and its voices.</li>
 <li><strong>Server:</strong> where the app reaches it, its backend and models (OpenAI's model names it answers to, for OpenAI's clients, listed apart as aliases), how long it has been idle, when it unloads, its threads. Unload and Reload move its model out of memory and back.</li>
-<li><strong>Voices</strong> by accent and gender. Press one to hear a line from the server itself, with or without <code>ai[voice]</code>.</li>
+<li><strong>Voices</strong> (its own tab) by accent and gender. Press one to hear a line from the server itself, with or without <code>ai[voice]</code>.</li>
 <li><strong>Charts:</strong> its memory, its requests in flight, and how long each line took, as a whole file or a stream until its first audio (the page's own and <code>ai[voice]</code>'s).</li>
 </ul>
 </li>

@@ -32,10 +32,10 @@ from app.components.backend.api.ai.service import ai_service
 from app.services.ai.domains.spend import calls
 from app.services.ai.domains.spend import recording as usage_recording
 from app.services.ai.domains.voice.call_turns import END_CALL, TurnLog, save_turn
+from app.services.ai.domains.voice.live_engines import call_voice
 from app.services.ai.domains.voice.realtime_calls import (
     CALL_TOOLS,
     RESUME_WINDOW,
-    call_voice,
     resumed,
 )
 from app.services.ai.models import AIProvider, MessageRole
@@ -44,6 +44,18 @@ from tests._session import opens
 from tests._voice_catalog import seed_voice_catalog
 
 USER = "7"
+
+
+def _voice(
+    voices: dict[str, str] | None = None,
+    speed: float = 1.0,
+    style: str | None = None,
+) -> SimpleNamespace:
+    """Settings sounding as a voice: hers on each provider, her speed, her
+    delivery."""
+    return SimpleNamespace(
+        TTS_VOICES=voices or {}, TTS_SPEED=speed, TTS_INSTRUCTIONS=style
+    )
 
 
 def _turn() -> list[object]:
@@ -304,6 +316,28 @@ class TestACallKnowsWhoSheIs:
         assert 'Say "Traefik" as "traffic".' in told
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("model", ["openai:gpt-live-1", "google:gemini-3.8-live"])
+    async def test_the_model_that_speaks_takes_her_delivery(
+        self, monkeypatch: pytest.MonkeyPatch, model: str
+    ) -> None:
+        """Her style is hers on every engine: a model that speaks for
+        itself is told it with the call manners (GPT-Live's voice as its
+        own, every other engine ahead of her prompt), in her voice there."""
+        voice = _voice({"openai": "marin", "gemini": "Kore"}, style="Warm, dry.")
+        _, realtime = await _built(
+            monkeypatch, model=model, instructions="Keep it short.", voice=voice
+        )
+
+        told = (
+            realtime["model_settings"].get("openai_live_instructions")
+            or realtime["system_prompt"]
+        )
+        assert "Warm, dry." in told
+        settings = realtime["model_settings"]
+        spoken = settings.get("openai_voice") or settings.get("google_voice")
+        assert spoken == ("marin" if model.startswith("openai") else "Kore")
+
+    @pytest.mark.asyncio
     async def test_gpt_lives_voice_hears_the_thread_as_the_turns_it_was(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -472,9 +506,8 @@ async def _built(
         SimpleNamespace(_build_turn=build_turn),
         conversation=conversation,
         agent_slug=None,
-        voice=None,
         user_id=USER,
-        **{"model": "google:gemini-3.8-live", **asked},
+        **{"model": "google:gemini-3.8-live", "voice": _voice(), **asked},
     )
     return built, realtime | {"system_prompt": prompts[0], "slug": slug}
 
@@ -749,7 +782,6 @@ class TestTheLedger:
         assert row.total_cost == pytest.approx(0.10)  # two minutes at $0.05
         assert row.audio_seconds == pytest.approx(120)
 
-
     @pytest.mark.asyncio
     async def test_the_work_it_hands_off_is_billed_by_its_tokens(
         self, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
@@ -821,13 +853,23 @@ class TestTheSettings:
             _model_settings,
         )
 
-        assert _model_settings("openai:gpt-realtime-2.1", "cedar", 1200) == {
+        voice = _voice({"openai": "cedar"}, speed=1.2)
+        assert _model_settings("openai:gpt-realtime-2.1", voice, 1200) == {
             "openai_voice": "cedar",
             "input_transcription_model": INPUT_TRANSCRIPTION,
+            "openai_output_speed": 1.2,
             "openai_input_noise_reduction": "far_field",
             "openai_turn_detection": {"type": "semantic_vad", "eagerness": "low"},
             "max_tokens": 1200,
         }
+
+    def test_openai_speaks_no_faster_than_it_can(self) -> None:
+        """OpenAI's realtime models take 0.25-1.5; the voice's own range is
+        wider."""
+        from app.services.ai.domains.voice.realtime_calls import _model_settings
+
+        found = _model_settings("openai:gpt-realtime-2.1", _voice(speed=2.0), None)
+        assert found["openai_output_speed"] == 1.5
 
     def test_openai_takes_no_turn_for_a_noise(self) -> None:
         """A laptop's keys and room set off OpenAI's default detector: it
@@ -835,7 +877,7 @@ class TestTheSettings:
         Noise filtered for a laptop mic; a turn ends when the thought does."""
         from app.services.ai.domains.voice.realtime_calls import _model_settings
 
-        found = _model_settings("openai:gpt-realtime-2.1", None, None)
+        found = _model_settings("openai:gpt-realtime-2.1", _voice(), None)
         assert found["openai_input_noise_reduction"] == "far_field"
         assert found["openai_turn_detection"]["type"] == "semantic_vad"
 
@@ -844,7 +886,8 @@ class TestTheSettings:
         OpenAI's settings would name a voice it does not have."""
         from app.services.ai.domains.voice.realtime_calls import _model_settings
 
-        assert _model_settings("google:gemini-3.8-live", "cedar", 1200) == {
+        voice = _voice({"openai": "cedar"})
+        assert _model_settings("google:gemini-3.8-live", voice, 1200) == {
             "max_tokens": 1200,
             "google_vad": {
                 "start_sensitivity": "low",
@@ -853,22 +896,31 @@ class TestTheSettings:
             },
         }
 
-    def test_a_call_speaks_the_profiles_voice_where_its_engine_has_it(self) -> None:
-        """One voice for the agent: Gemini Live speaks a Gemini voice the
-        profile names (the one its spoken lines use); an engine without
-        that voice speaks its own."""
-        from app.services.ai.domains.voice.realtime_calls import (
-            OPENAI_VOICE,
-            _model_settings,
-        )
+    def test_a_call_speaks_her_voice_for_its_vendor(self) -> None:
+        """One voice, a voice per engine: Gemini Live speaks her Gemini
+        voice, OpenAI her OpenAI one, from the same profile."""
+        from app.services.ai.domains.voice.realtime_calls import _model_settings
 
+        voice = _voice({"gemini": "Kore", "openai": "marin", "kokoro": "af_heart"})
         assert (
-            _model_settings("google:gemini-3.8-live", "Kore", None)["google_voice"]
+            _model_settings("google:gemini-3.8-live", voice, None)["google_voice"]
             == "Kore"
         )
         assert (
-            _model_settings("openai:gpt-realtime-2.1", "Kore", None)["openai_voice"]
-            == OPENAI_VOICE
+            _model_settings("openai:gpt-realtime-2.1", voice, None)["openai_voice"]
+            == "marin"
+        )
+
+    def test_a_voice_with_none_for_the_vendor_leaves_the_model_its_own(self) -> None:
+        """No voice made up for her: a profile with nothing on OpenAI lets
+        the model speak its default, and the voice dialog says she has none
+        there (``chat_calls``)."""
+        from app.services.ai.domains.voice.realtime_calls import _model_settings
+
+        voice = _voice({"kokoro": "af_heart"})
+        assert "openai_voice" not in _model_settings("openai:gpt-live-1", voice, None)
+        assert "openai_voice" not in _model_settings(
+            "openai:gpt-realtime-2.1", voice, None
         )
 
     def test_gemini_waits_out_a_breath_mid_thought(self) -> None:
@@ -876,18 +928,21 @@ class TestTheSettings:
         advice against cutting in is 500-800ms of silence."""
         from app.services.ai.domains.voice.realtime_calls import _model_settings
 
-        vad = _model_settings("google:gemini-3.8-live", None, None)["google_vad"]
+        vad = _model_settings("google:gemini-3.8-live", _voice(), None)["google_vad"]
         assert vad["silence_duration_ms"] == 800
 
     def test_gpt_live_through_pydantic_ai_is_told_how_to_speak(self) -> None:
         """#274's trial: GPT-Live run by Pydantic AI. Its voice model takes
         the call manners as its own instructions (her agent's prompt goes
-        to the backend that does the work); it has no token limit and no
-        Realtime transcription setting."""
+        to the backend that does the work); it has no token limit, no
+        speed and no Realtime transcription setting."""
         from app.services.ai.domains.voice.realtime_calls import _model_settings
 
         assert _model_settings(
-            "openai:gpt-live-1", "cedar", 1200, instructions="Keep it short."
+            "openai:gpt-live-1",
+            _voice({"openai": "cedar"}, speed=1.2),
+            1200,
+            instructions="Keep it short.",
         ) == {"openai_voice": "cedar", "openai_live_instructions": "Keep it short."}
 
     def test_gemini_does_not_take_the_tv_for_you(self) -> None:
@@ -897,7 +952,7 @@ class TestTheSettings:
         about what starts a turn, quicker to end one."""
         from app.services.ai.domains.voice.realtime_calls import _model_settings
 
-        vad = _model_settings("google:gemini-3.8-live", None, None)["google_vad"]
+        vad = _model_settings("google:gemini-3.8-live", _voice(), None)["google_vad"]
         assert (vad["start_sensitivity"], vad["end_sensitivity"]) == ("low", "high")
 
 
@@ -1235,7 +1290,7 @@ def test_a_call_speaks_only_a_prebuilt_gemini_voice(
     )
     monkeypatch.setattr(library, "KEPT", {amelia.id: amelia})
 
-    assert call_voice("google:gemini-3.8-live", "Kore") == "Kore"
-    assert call_voice("google:gemini-3.8-live", "voice_en_gb_amelia") is None
-    # A cascade speaks in the profile's own TTS, whichever voice it is.
-    assert call_voice("llamacpp:qwen3.8:27b", "af_heart") == "af_heart"
+    assert call_voice("google:gemini-3.8-live", {"gemini": "Kore"}) == "Kore"
+    assert (
+        call_voice("google:gemini-3.8-live", {"gemini": "voice_en_gb_amelia"}) is None
+    )

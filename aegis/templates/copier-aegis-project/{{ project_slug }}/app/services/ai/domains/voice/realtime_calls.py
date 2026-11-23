@@ -33,17 +33,15 @@ from app.services.ai.domains.voice.call_turns import (
 )
 from app.services.ai.domains.voice.call_turns import TurnLog, end_call, save_turn
 from app.services.ai.domains.voice.cascade import connection as cascade
-from app.services.ai.domains.voice.catalog import GEMINI_PREBUILT, get_voice
-from app.services.ai.domains.voice.live_engines import is_gpt_live
-from app.services.ai.domains.voice.models import TTSProvider
+from app.services.ai.domains.voice.live_engines import call_voice, is_gpt_live
 from app.services.ai.domains.voice.spoken import pronunciation_instructions
 from app.services.ai.models import AIProvider, MessageRole
 
 # What OpenAI transcribes the caller's side with: a saved turn needs both
 # sides, and only OpenAI's realtime models need asking.
 INPUT_TRANSCRIPTION = "gpt-4o-mini-transcribe"
-# OpenAI's voice when the profile names none: its recommended one.
-OPENAI_VOICE = "marin"
+# How fast OpenAI's realtime models will speak (``openai_output_speed``).
+OPENAI_SPEEDS = (0.25, 1.5)
 # How long a dropped call stays one to pick up: a call within this of the
 # cut resumes it; after, it is a new call. The conversation is the memory;
 # this is only its age.
@@ -67,36 +65,21 @@ def _elapsed(started: datetime) -> float:
 CALL_TOOLS = FunctionToolset([end_call])
 
 
-def call_voice(model: str, voice: str | None) -> str | None:
-    """The voice a call on ``model`` speaks: the profile's ``voice`` where
-    the engine's provider has it (one voice for the agent's calls and
-    spoken lines), else OpenAI's recommended one, else (Gemini) its own,
-    None."""
-    if cascade.serves(model):
-        return voice  # it speaks in the profile's own TTS
-    spoken = get_voice(voice) if voice else None
-    by = spoken.provider_id if spoken else None
-    if model.startswith("openai:"):
-        return voice if by == TTSProvider.OPENAI else OPENAI_VOICE
-    # Gemini Live speaks its 30 prebuilt voices, not its library's others.
-    prebuilt = by == TTSProvider.GEMINI and voice in GEMINI_PREBUILT
-    return voice if model.startswith("google:") and prebuilt else None
-
-
 def _model_settings(
     model: str,
-    voice: str | None,
+    voice: Any,
     max_output_tokens: int | None,
     instructions: str | None = None,
 ) -> dict[str, Any]:
-    """The session's settings for its provider. Each speaks the profile's
-    voice where it has it (one voice for the agent's calls and spoken
-    lines), else its own; OpenAI transcribes the caller only when asked,
-    Gemini by default."""
+    """The session's settings for its provider. Each speaks the voice's
+    own for its vendor (``voice``: settings sounding as the active voice),
+    else its own; OpenAI's realtime models at the voice's speed. OpenAI
+    transcribes the caller only when asked, Gemini by default."""
     settings: dict[str, Any] = {}
-    speaks = call_voice(model, voice)
+    speaks = call_voice(model, voice.TTS_VOICES)
     if model.startswith("openai:"):
-        settings["openai_voice"] = speaks
+        if speaks:
+            settings["openai_voice"] = speaks
         if is_gpt_live(model):
             # GPT-Live's voice takes the call manners, when to hand off and
             # the running summary (``realtime_for``); its thread rides as past
@@ -106,6 +89,8 @@ def _model_settings(
                 settings["openai_live_instructions"] = instructions
             return settings
         settings["input_transcription_model"] = INPUT_TRANSCRIPTION
+        low, high = OPENAI_SPEEDS
+        settings["openai_output_speed"] = min(max(voice.TTS_SPEED, low), high)
         # Sounds took its turn: a laptop's keys and room set off the default
         # detector, so it answered noise with "what's next?" and cut in on a
         # pause mid-thought. Noise filtered for a laptop mic, and a turn
@@ -204,7 +189,7 @@ async def realtime_for(
     conversation: Any,
     model: str,
     agent_slug: str | None,
-    voice: str | None,
+    voice: Any,
     user_id: str,
     owner_user_id: int | None = None,
     subject: str | None = None,
@@ -221,13 +206,16 @@ async def realtime_for(
     ``drive`` to bind. The engine's ``instructions`` (how
     to talk on a call) lead its prompt, and ``max_output_tokens`` caps one
     reply. Without ``hang_up`` she has no ``end_call``: a call that answers
-    one question after another ends when its caller ends it. The
-    pronunciation list rides with the call manners, which reach whichever
-    model speaks on each engine."""
+    one question after another ends when its caller ends it. The voice's
+    delivery (``voice``: settings sounding as the active voice) and the
+    pronunciation list ride with the call manners, which reach whichever
+    model speaks on each engine; a chain's own speech takes the delivery
+    itself."""
     from app.services.ai.service.chat import held_agent
 
     hands_off = live_engines.LIVE_HANDS_OFF if is_gpt_live(model) else None
-    manners = (instructions, pronunciation_instructions(), hands_off)
+    style = None if cascade.serves(model) else voice.TTS_INSTRUCTIONS
+    manners = (instructions, style, pronunciation_instructions(), hands_off)
     instructions = "\n\n".join(filter(None, manners))
     # A call answers as its agent without taking the thread: typed turns
     # after it would answer as the voice model.
@@ -275,7 +263,7 @@ async def open_call(
     user_id: str,
     surface: str,
     agent_slug: str | None,
-    voice: str | None,
+    voice: Any,
     conversation: Any = None,
     owner_user_id: int | None = None,
     subject: str | None = None,
@@ -287,8 +275,9 @@ async def open_call(
     saves into (``conversation``, else a new one of ``surface``'s for
     ``user_id`` about ``subject``), her, built for it on the engine's
     model with its call manners (``realtime_for``), or the caller's
-    (``instructions``: a call with others in it, such as a meeting), and
-    the agent she is, for ``drive``."""
+    (``instructions``: a call with others in it, such as a meeting), in
+    ``voice`` (settings sounding as the active voice), and the agent she
+    is, for ``drive``."""
     model = live_engines.realtime_model(engine)
     if conversation is None:
         conversation = await ai.conversation_manager.create_conversation(
@@ -362,6 +351,7 @@ async def drive(
         if not looked and (name := calls.delegated_to(session)):
             looked = True
             delegated = await calls.realtime_price(name)
+
     # The call's ledger row, written beside the audio rather than ahead of
     # it; each bill waits for it (``row``).
     opening: asyncio.Task[int | None] | None = None

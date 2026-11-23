@@ -16,7 +16,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.ai.domains.voice import live_engines, realtime_calls
 from app.services.ai.domains.voice.cascade import connection as cascade
 from app.services.ai.domains.voice.live_engines import ENGINE_SEEDS
-from app.services.ai.domains.voice.profiles import SETTINGS
+from app.services.ai.domains.voice.profiles import SETUP
 from app.services.ai.models.voice import LiveEngine
 from tests._voice_catalog import seed_voice_catalog
 
@@ -120,7 +120,7 @@ class TestHowTheyTalk:
 
 
 def test_the_active_profile_carries_its_engine() -> None:
-    assert SETTINGS["live_engine"] == "VOICE_LIVE_ENGINE"
+    assert SETUP["live_engine"] == "VOICE_LIVE_ENGINE"
 
 
 class TestResolving:

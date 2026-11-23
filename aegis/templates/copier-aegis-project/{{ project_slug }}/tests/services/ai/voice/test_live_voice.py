@@ -19,6 +19,7 @@ from app.services.ai.domains.spend import recording as usage_recording
 from app.services.ai.domains.voice import live_voice as module
 from app.services.ai.domains.voice import realtime_calls
 from app.services.ai.domains.voice.live_voice import LiveVoice, live_voice
+from app.services.ai.models.voice import VoiceProfile
 from tests._realtime import ENGINE, VOICE, BrokenRealtime, FakeRealtime
 from tests._session import opens
 
@@ -96,9 +97,13 @@ async def test_gpt_live_spoken_to_in_text_is_never_opened(
 
     built: dict[str, Any] = {}
     gpt_live = SimpleNamespace(
-        **{**vars(ENGINE), "key": "calls", "llm": SimpleNamespace(
-            model_id="gpt-live-1", served_by=SimpleNamespace(slug="openai")
-        )}
+        **{
+            **vars(ENGINE),
+            "key": "calls",
+            "llm": SimpleNamespace(
+                model_id="gpt-live-1", served_by=SimpleNamespace(slug="openai")
+            ),
+        }
     )
 
     async def realtime_for(*args: Any, **kwargs: Any) -> Any:
@@ -144,6 +149,27 @@ async def test_her_call_is_its_owners(
 
     assert built["owner_user_id"] == 7
     assert driven["owner_user_id"] == 7
+
+
+async def test_with_no_voice_given_she_speaks_the_active_one(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A worker or bot never ran the webserver's startup: its settings
+    hold no voice map. She sounds as the active voice all the same."""
+    from tests._voice_catalog import no_voices
+
+    await no_voices(async_db_session)
+    async_db_session.add(
+        VoiceProfile(name="Hers", is_active=True, voices={"openai": "cedar"})
+    )
+    await async_db_session.commit()
+    built: dict[str, Any] = {}
+    async with _her(
+        async_db_session, monkeypatch, FakeRealtime([], after_text=True), [], built
+    ):
+        pass
+
+    assert built["voice"].TTS_VOICES == {"openai": "cedar"}
 
 
 async def test_how_she_talks_is_the_callers_else_the_engines(

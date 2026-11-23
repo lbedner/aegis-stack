@@ -15,22 +15,20 @@ from pydantic import BaseModel, ConfigDict
 from app.core import secrets
 from app.core.config import settings
 from app.core.discovery import optional
-from app.core.model_picker import format_price
+from app.core.model_picker import model_price
 
 from . import library
 from .catalog import (
     get_current_voice_config,
-    get_stt_model,
     get_stt_models,
     get_stt_providers,
-    get_tts_model,
     get_tts_models,
     get_tts_providers,
     get_tts_voices,
     get_voice,
     speaking_model,
 )
-from .models import DEFAULT_TTS_VOICES, TTSProvider, install_line, unserved
+from .models import install_line, unserved
 
 if TYPE_CHECKING:
     # Only a stack with a database has it; a voice-only one does not.
@@ -147,10 +145,8 @@ async def _prices() -> dict[str, Any]:
 
 
 def _price(row: Any) -> str | None:
-    """A catalog price as per million in and out, as every model's is shown."""
-    if row is None:
-        return None
-    return format_price(row.input_price, row.output_price)
+    """A catalog price as every picker row shows it (``model_price``)."""
+    return None if row is None else model_price(row.model_dump())
 
 
 def detail(*parts: Any) -> str:
@@ -193,9 +189,15 @@ class _Rows:
 
 
 def _in_use(
-    rows: _Rows, config: dict[str, Any], used: Any, live: Any, engine: Any
+    rows: _Rows,
+    config: dict[str, Any],
+    used: Any,
+    live: Any,
+    engine: Any,
+    active: Any = None,
 ) -> None:
-    """Speaking, listening and, where a live engine is set up, calls."""
+    """Speaking, listening and, where a live engine is set up, calls, in
+    ``active``'s voice."""
     tts, voice = config["tts_model"], config["tts_voice"]
     speaker, listener = config["tts_provider"], config["stt_provider"]
     rows.add(
@@ -219,8 +221,12 @@ def _in_use(
     )
     if engine is None:
         return
-    from .realtime_calls import call_voice
+    from .call_setup import speaks_as
+    from .cascade import connection as cascade
 
+    # A cascade speaks in the voice's own speech; a realtime model in its
+    # vendor's voice of hers.
+    model = live.realtime_model(engine)
     rows.add(
         "use",
         engine.llm.served_by.slug,
@@ -228,7 +234,9 @@ def _in_use(
         engine.key,
         provider_name=engine.llm.served_by.name,
         detail=detail(
-            call_voice(live.realtime_model(engine), voice) or "its own voice",
+            (used.TTS_VOICE or "its own voice")
+            if cascade.serves(model)
+            else speaks_as(model, active),
             f"reply {used.VOICE_REPLY}",
             f"check in {used.VOICE_LIVE_IDLE_SECONDS}s",
         ),
@@ -315,7 +323,8 @@ async def voice_overview(db: "AsyncSession | None") -> VoiceOverview:
     keeps = profiles is not None and db is not None
     every = await profiles.list_profiles(db) if keeps else []
     active = next((p for p in every if p.is_active), None)
-    used = profiles.settings_for(active, settings) if active else settings
+    setup = await profiles.call_setup(db) if keeps else None
+    used = profiles.settings_for(active, settings, setup) if active else settings
     engines = await live.enabled(db) if live is not None and db is not None else []
     engine = live.pick(engines, used.VOICE_LIVE_ENGINE) if engines else None
     config = get_current_voice_config(used)
@@ -328,7 +337,7 @@ async def voice_overview(db: "AsyncSession | None") -> VoiceOverview:
     for vendor in vendors:
         missing.setdefault(vendor, missing_from(_vendor_key(vendor), found))
     rows = _Rows(missing, prices, keeps)
-    _in_use(rows, config, used, live, engine)
+    _in_use(rows, config, used, live, engine, active)
     _models(rows, config, engines, engine)
     _voices(rows, config)
     return VoiceOverview(
@@ -338,41 +347,36 @@ async def voice_overview(db: "AsyncSession | None") -> VoiceOverview:
     )
 
 
-def _change(profile: Any, choice: dict[str, str]) -> dict[str, Any]:
-    """A row's choice made to fit the profile: a voice brings its provider
-    and a model that speaks it; a speech model keeps the voice when it
-    speaks it, else takes its provider's; a hearing model brings its
-    provider."""
-    if voice := get_voice(choice.get("tts_voice", "")):
-        return {
-            "tts_voice": voice.id,
-            "tts_provider": voice.provider_id,
-            "tts_model": speaking_model(voice.id, profile.tts_model),
-        }
-    if model := get_tts_model(choice.get("tts_model", "")):
-        provider = TTSProvider(model.provider_id)
-        kept = speaking_model(profile.tts_voice or "", model.id) == model.id
-        return {
-            "tts_model": model.id,
-            "tts_provider": provider.value,
-            "tts_voice": profile.tts_voice if kept else DEFAULT_TTS_VOICES[provider],
-        }
-    if heard := get_stt_model(choice.get("stt_model", "")):
-        return {"stt_model": heard.id, "stt_provider": heard.provider_id}
-    if engine := choice.get("live_engine"):
-        return {"live_engine": engine}
-    raise ValueError("Nothing in the voice catalog to use")
+def _setup_change(choice: dict[str, str]) -> dict[str, Any]:
+    """A row's choice of what a call runs on, as the call setup's columns:
+    a speech or hearing model brings its provider. The voice is not the
+    setup's: the active voice speaks on whatever it picks."""
+    profiles = optional(PROFILES)
+    changes = profiles.speaking(choice.get("tts_model", "")) or profiles.hearing(
+        choice.get("stt_model", "")
+    )
+    if not changes and (engine := choice.get("live_engine")):
+        changes = {"live_engine": engine}
+    if not changes:
+        raise ValueError("Nothing in the voice catalog to use")
+    return changes
 
 
 async def use_voice(db: "AsyncSession", choice: dict[str, str], service: Any) -> str:
-    """``choice`` (a row's ``use``) on the active profile (seeded from
-    ``.env`` when there is none yet), saved and applied at once (``service``
-    drops the speech services built from the old values). What it uses now."""
+    """``choice`` (a row's ``use``) saved and applied at once (``service``
+    drops the speech services built from the old values): a voice is the
+    active voice's on its provider (seeded from ``.env`` when there is none
+    yet), a model the call setup's. What it uses now."""
     profiles = optional(PROFILES)
-    profile = await profiles.seeded_active(db, settings)
-    changes = _change(profile, choice)
-    profile = await profiles.update(db, profile.id, **changes)
-    profiles.apply(profile, settings, service)
+    if voice := get_voice(choice.get("tts_voice", "")):
+        setup = await profiles.seeded_setup(db, settings)
+        profile = await profiles.seeded_active(db, settings)
+        profile, setup = await profiles.give_voice(db, setup, profile, voice.id)
+        profiles.apply(profile, settings, service, setup)
+        return voice.id
+    changes = _setup_change(choice)
+    setup = await profiles.set_up(db, settings, **changes)
+    profiles.apply(None, settings, service, setup)
     return ", ".join(str(v) for v in changes.values())
 
 

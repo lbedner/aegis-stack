@@ -5,7 +5,11 @@ chat's picker, the Flet panel's): these shape the catalog payloads
 (``/api/v1/llm/current``, ``/api/v1/llm/models``) into what it renders.
 """
 
+import re
 from typing import Any
+
+# A dated snapshot's id: its base model's, and the date it was cut.
+_DATED = re.compile(r"-\d{4}-?\d{2}-?\d{2}$")
 
 # The composer chip is inline with the input; longer ids clip.
 _CHIP_LABEL_LIMIT = 24
@@ -31,6 +35,30 @@ def newest_first(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
     )
 
 
+def base_model(model_id: str) -> str:
+    """A model's id without a dated snapshot's date:
+    ``gpt-realtime-mini-2025-12-15`` is a version of ``gpt-realtime-mini``."""
+    return _DATED.sub("", model_id)
+
+
+def one_per_base(
+    models: list[dict[str, Any]], keep: str | None = None
+) -> list[dict[str, Any]]:
+    """``models`` with a base model's dated versions folded into one row,
+    where the first of them stood, its ``versions`` how many it holds. The
+    row is ``keep``'s where it is one of them (the one in use), else the
+    base's own id (which follows the newest), else the first."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for m in models:
+        groups.setdefault(base_model(m["model_id"]), []).append(m)
+    folded = []
+    for base, versions in groups.items():
+        ids = {m["model_id"]: m for m in versions}
+        lead = ids.get(keep or "") or ids.get(base) or versions[0]
+        folded.append({**lead, "versions": len(versions)})
+    return folded
+
+
 def family_display_name(family: str | None) -> str:
     """A catalog family slug as a group title: ``claude-3.5`` -> ``Claude 3.5``."""
     if not family:
@@ -41,9 +69,11 @@ def family_display_name(family: str | None) -> str:
 
 
 def group_models(
-    models: list[dict[str, Any]], by: str = "vendor"
+    models: list[dict[str, Any]], by: str = "vendor", keep: str | None = None
 ) -> list[tuple[str, list[dict[str, Any]]]]:
-    """Catalog rows grouped for the picker, newest models first per group.
+    """Catalog rows grouped for the picker, newest models first per group,
+    a model's dated versions one row (``one_per_base``, ``keep`` the one in
+    use).
 
     ``by="vendor"`` keys on vendor name; ``by="family"`` on the prettified
     family slug. Unknown values land in "Other", which always sorts last.
@@ -56,7 +86,7 @@ def group_models(
             key = model.get("vendor") or "Other"
         groups.setdefault(key, []).append(model)
     ordered = sorted(groups, key=lambda name: (name == "Other", name))
-    return [(name, newest_first(groups[name])) for name in ordered]
+    return [(name, one_per_base(newest_first(groups[name]), keep)) for name in ordered]
 
 
 def format_context_window(tokens: int | None) -> str:
@@ -95,10 +125,13 @@ def is_local_model(model: dict[str, Any]) -> bool:
     The local vendors are the local providers (Ollama, llama.cpp); read
     here, not imported above, because the pickers' formatters serve the
     inference pages without the AI service."""
-    from app.services.ai.service import LOCAL_PROVIDERS
+    from app.core.discovery import optional
 
+    # A stack without the AI service (the Flet picker ships in every one)
+    # runs nothing locally.
+    local = optional("app.services.ai.service", "LOCAL_PROVIDERS") or ()
     named = model.get("vendor") or model.get("provider") or ""
-    return str(named).casefold() in LOCAL_PROVIDERS
+    return str(named).casefold() in local
 
 
 UNKNOWN_PRICE = "Price unknown"
@@ -118,6 +151,18 @@ def format_price(
     if input_price is None:
         return _usd(output_price)
     return f"{_usd(input_price)} / {_usd(output_price)}"
+
+
+def model_price(model: dict[str, Any]) -> str:
+    """What a model costs as a picker row says it: by the minute where it
+    bills by time (``per_second``), else per million tokens in and out."""
+    if per_second := model.get("per_second"):
+        return format_per_minute(per_second * 60)
+    return format_price(
+        model.get("input_price"),
+        model.get("output_price"),
+        local=is_local_model(model),
+    )
 
 
 def filter_models(models: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:

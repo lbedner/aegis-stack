@@ -28,10 +28,10 @@ from app.core.model_picker import (
     display_title,
     filter_models,
     format_context_window,
-    format_price,
     group_models,
     lab_for_model,
     model_label,
+    model_price,
     newest_first,
 )
 
@@ -238,7 +238,9 @@ class ModelPickerDialog(StyledAlertDialog):
         else:
             rows = [
                 self._section(name, group)
-                for name, group in group_models(self._models, by=self._mode)
+                for name, group in group_models(
+                    self._models, by=self._mode, keep=self._active_id
+                )
             ]
         if not rows:
             rows = [SecondaryText("No models match.")]
@@ -330,7 +332,7 @@ class ModelPickerDialog(StyledAlertDialog):
             part
             for part in (
                 format_context_window(model.get("context_window")),
-                format_price(model.get("input_price"), model.get("output_price")),
+                model_price(model),
             )
             if part
         )

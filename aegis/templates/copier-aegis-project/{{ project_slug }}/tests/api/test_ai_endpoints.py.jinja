@@ -419,6 +419,38 @@ class TestLLMPickerGating:
             "public-model",
         ]
 
+    def test_a_model_billed_by_time_carries_its_rate(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A live voice model bills by the second: the list says so, or
+        every picker shows it a token price that is never the bill."""
+        llm_router = importlib.import_module("app.components.backend.api.llm.routes")
+        from app.services.ai.domains.llm.llm_service import LLMListResult
+
+        async def fake_list_models(**kwargs: Any) -> list[LLMListResult]:
+            return [
+                LLMListResult(
+                    model_id="gemini-live",
+                    title="Gemini Live",
+                    vendor="google",
+                    family=None,
+                    color="",
+                    context_window=8192,
+                    input_price=None,
+                    output_price=None,
+                    per_second=0.001,
+                    released_on=None,
+                    mode="realtime",
+                )
+            ]
+
+        monkeypatch.setattr(llm_router, "list_models", fake_list_models)
+
+        response = client.get("/api/v1/llm/models")
+        assert response.status_code == 200, response.text
+        [model] = response.json()
+
+        assert model["per_second"] == 0.001
 
 
 class TestUserMemoryEndpoints:

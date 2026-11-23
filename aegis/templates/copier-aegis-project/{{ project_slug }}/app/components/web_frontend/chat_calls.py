@@ -3,9 +3,11 @@ voice dialog (``chat_voices``).
 
 Two ways a call can run, picked first: one model that hears and speaks by
 itself (a realtime model), or a chain, hear then think then speak (a local
-chat model between the active voice's STT and TTS: ``cascade``). A chain
+chat model between the call setup's STT and TTS: ``cascade``). A chain
 shows its three parts, each opening its own list below: Hears is the
-voice's hearing model, Thinks the model calls run on, Speaks the voice.
+setup's hearing model, Thinks the model calls run on, Speaks its speaking
+model, in the active voice. Picking any of them changes the setup, never
+the voice.
 A line under them says where the call runs, what it costs and how long a
 caller waits (``call_setup``). The mode is the model's, not stored: picking
 one of the other kind switches it.
@@ -15,7 +17,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from app.components.web_frontend import chat_models as models
-from app.core.model_picker import newest_first
+from app.core.model_picker import newest_first, one_per_base
 
 ONE, CHAIN = "one", "chain"
 MODES = {ONE: "One model hears and speaks", CHAIN: "Hear → think → speak"}
@@ -59,9 +61,13 @@ async def view(
     that sums them up. ``calling`` is the model calls run on, ``voice`` the
     active profile."""
     from app.core.config import settings
-    from app.services.ai.service import call_setup, live_engines, realtime_calls
+    from app.services.ai.service import call_setup, live_engines
 
-    live = newest_first(await models.call_models())
+    # A dated snapshot and the id that follows the newest are one model.
+    live = one_per_base(
+        newest_first(await models.call_models()),
+        keep=calling.model_id if calling else None,
+    )
     on = next((m for m in live if calling and m["model_id"] == calling.model_id), None)
     mode = mode if mode in MODES else (CHAIN if on and on["kind"] == "cascade" else ONE)
     kind = "realtime" if mode == ONE else "cascade"
@@ -86,19 +92,13 @@ async def view(
         for key, label in MODES.items()
     ]
     if mode == ONE:
-        voice_id = getattr(voice, "tts_voice", None)
-        said = (
-            realtime_calls.call_voice(
-                f"{shown['vendor']}:{shown['model_id']}", voice_id
-            )
-            if shown
-            else None
-        )
         one = {
             "label": "Hears, thinks and speaks",
             "name": shown["title"] if shown else PICK,
             "badges": [CLOUD] if shown else [],
-            "note": (f"speaks as {said}" if said else "speaks in its own voice")
+            "note": call_setup.speaks_as(
+                f"{shown['vendor']}:{shown['model_id']}", voice
+            )
             if shown
             else "",
         }
@@ -119,7 +119,7 @@ async def view(
             "list": None,
         }
     slot = slot if slot in SLOTS else THINKS
-    heard = call_setup.hears(voice, settings)
+    heard = call_setup.hears(settings)
     spoken = call_setup.speaks(voice, settings)
     thinks = {
         "name": shown["title"] if shown else PICK,

@@ -146,26 +146,44 @@ async def test_each_voice_plays_on_a_model_that_speaks_it(
     )
 
 
+# Each step reads the call setup once (as each request does); the
+# test takes 3 on purpose, so 4 would be one read too many.
+@pytest.mark.queryspy(threshold=4)
 async def test_use_puts_a_voice_on_the_active_profile(
     client: TestClient, hers: VoiceProfile, async_db_session: AsyncSession
 ) -> None:
-    """A Gemini voice brings Gemini and a model that speaks it, saved and
+    """An OpenAI voice is hers on OpenAI, which the call setup speaks: it
+    moves to a model that speaks it (tts-1 does not speak marin), saved and
     in use at once."""
     response = client.post(
         f"{PARTIALS}/voice/use",
-        data={"tts_voice": "Kore"},
+        data={"tts_voice": "marin"},
         headers={"HX-Request": "true"},
     )
 
     assert response.status_code == 200, response.text
     await async_db_session.refresh(hers)
-    assert (hers.tts_provider, hers.tts_model, hers.tts_voice) == (
-        "gemini",
-        "gemini-3.8-flash-tts",
-        "Kore",
+    assert hers.voices == {"openai": "marin"}
+    setup = await profiles.call_setup(async_db_session)
+    assert setup is not None and setup.tts_model == "gpt-realtime-2.1-mini"
+    assert settings.TTS_VOICE == "marin"
+    assert "marin" in text(_rows(_voice(client), "use")[0])
+
+
+async def test_a_voice_for_another_engine_is_hers_there(
+    client: TestClient, hers: VoiceProfile, async_db_session: AsyncSession
+) -> None:
+    """A Gemini voice is hers on Gemini: the setup, speaking OpenAI, stays
+    as it is, and so does what is heard on it."""
+    client.post(
+        f"{PARTIALS}/voice/use",
+        data={"tts_voice": "Kore"},
+        headers={"HX-Request": "true"},
     )
-    assert settings.TTS_VOICE == "Kore"
-    assert "Kore" in text(_rows(_voice(client), "use")[0])
+
+    await async_db_session.refresh(hers)
+    assert hers.voices == {"openai": "alloy", "gemini": "Kore"}
+    assert settings.TTS_VOICE == "alloy"
 
 
 async def test_a_choice_not_in_the_catalog_is_the_toast(
@@ -173,7 +191,7 @@ async def test_a_choice_not_in_the_catalog_is_the_toast(
 ) -> None:
     """A row's ``use`` naming nothing the catalog has says so, and the
     profile is left as it was (a 500 before)."""
-    before = (hers.tts_provider, hers.tts_model, hers.tts_voice)
+    before = dict(hers.voices)
     response = client.post(
         f"{PARTIALS}/voice/use",
         data={"tts_voice": "no-such-voice"},
@@ -184,13 +202,13 @@ async def test_a_choice_not_in_the_catalog_is_the_toast(
     toast = triggers(response)["toast"]
     assert toast["tone"] == "error" and "voice catalog" in toast["text"]
     await async_db_session.refresh(hers)
-    assert (hers.tts_provider, hers.tts_model, hers.tts_voice) == before
+    assert hers.voices == before
 
 
 async def test_another_profile_is_made_the_one_in_use(
     client: TestClient, hers: VoiceProfile, async_db_session: AsyncSession
 ) -> None:
-    plain = VoiceProfile(name="Plain", tts_model="gpt-4o-mini-tts", tts_voice="nova")
+    plain = VoiceProfile(name="Plain", voices={"openai": "nova"})
     async_db_session.add(plain)
     await async_db_session.commit()
 
@@ -218,7 +236,7 @@ async def test_a_new_profile_starts_from_the_one_in_use(
     [made] = [
         p for p in await profiles.list_profiles(async_db_session) if p.name == "Calls"
     ]
-    assert made.tts_voice == "alloy"
+    assert made.voices == {"openai": "alloy"}
 
 
 def _editor(client: TestClient, profile: VoiceProfile, **query: str) -> str:
@@ -313,6 +331,9 @@ async def test_the_review_says_what_is_sent_and_hears_it_unsaved(
     one(html, "input[type=hidden][name=voice][value=marin]")
 
 
+# Each step reads the call setup once (as each request does); the
+# test takes 2 on purpose, so 3 would be one read too many.
+@pytest.mark.queryspy(threshold=3)
 async def test_save_puts_the_design_on_the_profile(
     client: TestClient, hers: VoiceProfile, async_db_session: AsyncSession
 ) -> None:
@@ -333,7 +354,9 @@ async def test_save_puts_the_design_on_the_profile(
 
     assert response.status_code == 200, response.text
     await async_db_session.refresh(hers)
-    assert (hers.tts_voice, hers.tts_model) == ("marin", "gpt-realtime-2.1-mini")
+    assert hers.voices == {"openai": "marin"}
+    setup = await profiles.call_setup(async_db_session)
+    assert setup is not None and setup.tts_model == "gpt-realtime-2.1-mini"
     assert hers.tts_delivery["accent"] == "british"
     assert hers.tts_instructions.endswith("Say Aegis as EE-jis.")
     assert settings.TTS_INSTRUCTIONS == hers.tts_instructions
@@ -446,6 +469,9 @@ async def test_delivery_says_the_model_and_when_it_ignores_the_choices(
     one(html, "input[type=hidden][name=model][value=tts-1]")  # carried
 
 
+# Each step reads the call setup once (as each request does); the
+# test takes 2 on purpose, so 3 would be one read too many.
+@pytest.mark.queryspy(threshold=3)
 async def test_fine_tune_offers_an_accent_only_where_the_model_steers_it(
     client: TestClient, hers: VoiceProfile, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -484,6 +510,9 @@ async def test_fine_tune_stays_open_as_the_form_redraws(
     assert 'data-fold="voice-fine-tune"' in page
 
 
+# Each step reads the call setup once (as each request does); the
+# test takes 2 on purpose, so 3 would be one read too many.
+@pytest.mark.queryspy(threshold=3)
 async def test_speed_is_offered_only_where_the_model_takes_one(
     client: TestClient, hers: VoiceProfile, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -511,6 +540,9 @@ async def test_speed_is_offered_only_where_the_model_takes_one(
     assert 'type="hidden" name="speed"' in gemini  # the saved speed rides along
 
 
+# Each step reads the call setup once (as each request does); the
+# test takes 4 on purpose, so 5 would be one read too many.
+@pytest.mark.queryspy(threshold=5)
 async def test_editing_opens_fine_tune_on_what_was_tuned(
     client: TestClient, hers: VoiceProfile, async_db_session: AsyncSession
 ) -> None:
@@ -518,8 +550,9 @@ async def test_editing_opens_fine_tune_on_what_was_tuned(
     Fine-tune picks are not hidden in a closed fold."""
     from app.services.ai.domains.voice.delivery import styled
 
+    await _speaks_marin(async_db_session, hers)
+
     async def fine_tune(delivery: dict[str, Any]) -> Any:
-        hers.tts_voice, hers.tts_model = "marin", "gpt-realtime-2.1-mini"
         hers.tts_delivery = delivery
         async_db_session.add(hers)
         await async_db_session.commit()
@@ -534,6 +567,13 @@ async def test_editing_opens_fine_tune_on_what_was_tuned(
         "open"
     ) is not None
     assert (await fine_tune(calm)).get("open") is None
+
+
+async def _speaks_marin(session: AsyncSession, hers: VoiceProfile) -> None:
+    """Hers is marin, on a model that speaks her."""
+    hers.voices = {"openai": "marin"}
+    session.add(hers)
+    await profiles.set_up(session, settings, tts_model="gpt-realtime-2.1-mini")
 
 
 def _cards(html: str) -> list[str]:
@@ -551,14 +591,15 @@ def heard(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "GOOGLE_API_KEY", "set")
 
 
+# Each step reads the call setup once (as each request does); the
+# test takes 2 on purpose, so 3 would be one read too many.
+@pytest.mark.queryspy(threshold=3)
 async def test_the_voice_step_opens_on_who_the_voice_is(
     client: TestClient, hers: VoiceProfile, heard: None, async_db_session: AsyncSession
 ) -> None:
     """Opened, the chosen voice is pinned above the search, which is for
     voices like it: its provider and accent."""
-    hers.tts_voice, hers.tts_model = "marin", "gpt-realtime-2.1-mini"
-    async_db_session.add(hers)
-    await async_db_session.commit()
+    await _speaks_marin(async_db_session, hers)
 
     html = _editor(client, hers)
 
@@ -570,6 +611,9 @@ async def test_the_voice_step_opens_on_who_the_voice_is(
     assert {"cedar", "alloy"} <= set(_cards(html))
 
 
+# Each step reads the call setup once (as each request does); the
+# test takes 2 on purpose, so 3 would be one read too many.
+@pytest.mark.queryspy(threshold=3)
 async def test_the_filters_narrow_and_a_cleared_one_stays_cleared(
     client: TestClient, hers: VoiceProfile, heard: None
 ) -> None:
@@ -581,6 +625,9 @@ async def test_the_filters_narrow_and_a_cleared_one_stays_cleared(
     assert not _ticked(every, "gender")
 
 
+# Each step reads the call setup once (as each request does); the
+# test takes 3 on purpose, so 4 would be one read too many.
+@pytest.mark.queryspy(threshold=4)
 async def test_accents_are_grouped_by_language_and_a_language_takes_them_all(
     client: TestClient, hers: VoiceProfile, heard: None
 ) -> None:
@@ -605,6 +652,9 @@ async def test_accents_are_grouped_by_language_and_a_language_takes_them_all(
     assert _cards(british) == ["fable"]
 
 
+# Each step reads the call setup once (as each request does); the
+# test takes 3 on purpose, so 4 would be one read too many.
+@pytest.mark.queryspy(threshold=4)
 async def test_the_library_is_one_search_away(
     client: TestClient, hers: VoiceProfile, heard: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:

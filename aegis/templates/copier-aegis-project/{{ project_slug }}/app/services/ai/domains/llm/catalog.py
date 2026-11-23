@@ -38,6 +38,8 @@ class CatalogModel(BaseModel):
     context_window: int
     input_price: float | None  # USD per million tokens
     output_price: float | None
+    # USD a second, for a model billed by time (a live voice model).
+    per_second: float | None = None
     released_on: str | None
     # WHO MADE IT: the publishing org, resolved at sync time. None for a
     # model the registry does not know - unmarked beats mislabelled.
@@ -150,6 +152,7 @@ def _list_result(model: LargeLanguageModel, price: LLMPrice | None) -> LLMListRe
         context_window=model.context_window,
         input_price=price.input_cost_per_token * 1_000_000 if price else None,
         output_price=price.output_cost_per_token * 1_000_000 if price else None,
+        per_second=price.input_cost_per_second if price else None,
         lab=model.made_by.name if model.made_by else None,
         lab_icon_b64=model.made_by.icon_b64 if model.made_by else None,
         released_on=model.released_on.strftime("%Y-%m-%d")
@@ -177,7 +180,8 @@ async def catalog(
 ) -> CatalogAnswer:
     """The model catalog: models this install could run, newest first, each
     with its vendor, the lab that made it, its context window and its price
-    in USD per million input and output tokens. ``text`` matches the id or
+    in USD per million input and output tokens (and a minute, for a model
+    billed by time). ``text`` matches the id or
     title, ``vendor`` the provider (openai, anthropic, ...), ``modality``
     what it takes in (vision, audio, ...). ``limit`` caps the rows (at most
     50). The active model is in your session section; this is what else

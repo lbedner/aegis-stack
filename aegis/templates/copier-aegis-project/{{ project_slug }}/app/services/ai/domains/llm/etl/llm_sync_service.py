@@ -376,7 +376,10 @@ class LLMSyncService(UpsertMixin):
             desc_parts.append(f"Quantization: {model_data.details.quantization_level}")
         desc_parts.append(f"Size: {model_data.size_gb:.1f} GB")
         description = " | ".join(desc_parts)
-        tools = "tools" in model_data.capabilities
+        # Unknown (None) where the engine cannot say: a router's unloaded
+        # model, whose known answer is kept.
+        caps = model_data.capabilities
+        tools = None if caps is None else "tools" in caps
 
         if existing:
             # Update existing model
@@ -386,7 +389,8 @@ class LLMSyncService(UpsertMixin):
                     self._update_if_changed(existing, "description", description),
                     self._update_if_changed(existing, "served_by_org_id", vendor.id),
                     self._update_if_changed(existing, "enabled", True),
-                    self._update_if_changed(existing, "supports_tools", tools),
+                    tools is not None
+                    and self._update_if_changed(existing, "supports_tools", tools),
                     bool(context_window)
                     and self._update_if_changed(
                         existing, "context_window", context_window

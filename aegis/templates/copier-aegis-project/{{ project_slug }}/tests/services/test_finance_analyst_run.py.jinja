@@ -471,6 +471,15 @@ class TestSchedulerRegistration:
         )
 
 
+    def test_each_owner_is_a_task_of_its_own(self) -> None:
+        """Every finance job works per owner, so each is a sweep: one
+        owner's slow model or failing bank holds up none of the others."""
+        from app.core.schedule import service_jobs
+
+        finance = [job for job in service_jobs() if job.app_service == "finance"]
+        assert finance and all(job.each for job in finance)
+
+
 class TestFixturesReachTheRegistry:
     def test_seeding_makes_the_agent_resolvable(self, db_session: Session) -> None:
         analyst.load_finance_agent_fixtures(db_session)

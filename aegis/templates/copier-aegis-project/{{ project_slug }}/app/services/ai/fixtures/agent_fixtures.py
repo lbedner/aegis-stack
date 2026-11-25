@@ -4,8 +4,9 @@ Seeds the default ``assistant`` agent so a fresh project behaves exactly
 like pre-registry chat: same system prompt, same sampling defaults. The
 agent loader resolves this row on DB backends and falls back to the same
 in-code definition on the memory backend, so this seed is the single DB
-source of the default agent. Beside it, the ``sentiment`` agent the batch
-scorer runs as, so its model is picked in Agents, and the app map, the
+source of the default agent. Beside it, the ``sentiment`` agent the
+scorer runs as and the ``summarizer`` the conversation fold runs as, so
+their models are picked in Agents, and the app map, the
 context module the default agent always has (``app_map``).
 """
 
@@ -15,6 +16,7 @@ from typing import Any
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, col, select
 
+from app.core import discovery
 from app.core.log import logger
 from app.core.tools import get_tool, load_tools, registered_tool_names
 from app.services.ai.domains.chat.agent_loader import (
@@ -172,6 +174,25 @@ def sentiment_agent_definition() -> dict[str, Any]:
     }
 
 
+def summarizer_agent_definition() -> dict[str, Any]:
+    """The seed row for the conversation fold (``summary.write_summary``),
+    shaped as the default agent's: the active model until someone pins one,
+    and no memory, knowledge or code of the chat's. Only where the fold is
+    (the pydantic-ai chat)."""
+    from app.services.ai.domains.chat.summary import SUMMARIZER, SUMMARY_PROMPT
+
+    return default_agent_definition() | {
+        "slug": SUMMARIZER,
+        "name": "Summarizer",
+        "description": "Folds a long conversation's older turns into its summary",
+        "category": "analysis",
+        "system_prompt": SUMMARY_PROMPT,
+        "context_modules": [],
+        "knowledge_base_ids": [],
+        "code_mode": False,
+    }
+
+
 def reviewer_agent_definition() -> dict[str, Any]:
     """The seed row for Illiana reviewing a pull request (``patterns
     review``): her persona and the reviewing, the active model, and room
@@ -191,9 +212,11 @@ def reviewer_agent_definition() -> dict[str, Any]:
 
 def built_in_agents() -> list[dict[str, Any]]:
     """Every agent the AI service seeds."""
+    folds = discovery.present("app.services.ai.domains.chat.summary")
     return [
         default_agent_definition(),
         sentiment_agent_definition(),
+        *([summarizer_agent_definition()] if folds else []),
         reviewer_agent_definition(),
     ]
 

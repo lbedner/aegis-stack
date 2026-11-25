@@ -104,7 +104,8 @@ async def _trigger_job(job_id: str, force: bool) -> bool:
     """Run a job's stored call now, recording it to execution history.
 {%- if include_worker %}
 
-    The stored call is an enqueue, so the job itself runs on the worker.
+    The stored call is an enqueue, so the job's work runs on the worker; a
+    sweep reads its items here, then queues a task each.
 {%- endif %}
     """
     manager = ScheduledTaskManager()

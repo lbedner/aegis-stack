@@ -42,16 +42,32 @@ def test_a_run_that_succeeds_logs_nothing() -> None:
         assert executor.isEnabledFor(logging.ERROR)
     finally:
         root.setLevel(previous)
-{%- if include_worker %}
 
 
-def test_the_scheduler_only_enqueues() -> None:
+def test_every_job_is_stored_as_its_id() -> None:
+    """Where a run goes (queued for a worker, or run here) is the job's to
+    decide when it fires (``ServiceJob.fire``), not the stored row's."""
     from app.components.scheduler.main import scheduled_run
 
     scheduled = _scheduled()
     for job in service_jobs():
         assert scheduled[job.id].func is scheduled_run, job.id
-        assert list(scheduled[job.id].args) == [job.id, job.task_name]
+        assert list(scheduled[job.id].args) == [job.id]
+
+
+async def test_a_run_fires_its_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.components.scheduler.main as scheduler_main
+
+    fired: list[str] = []
+
+    async def fire_service_job(job_id: str) -> None:
+        fired.append(job_id)
+
+    monkeypatch.setattr(scheduler_main, "fire_service_job", fire_service_job)
+
+    await scheduler_main.scheduled_run("demo")
+    assert fired == ["demo"]
+{%- if include_worker %}
 
 
 def test_every_enqueued_name_is_a_system_task() -> None:
@@ -59,7 +75,8 @@ def test_every_enqueued_name_is_a_system_task() -> None:
     register would be enqueued forever and run never."""
     from app.components.worker.registry import queue_tasks
 
-    missing = {job.task_name for job in service_jobs()} - set(queue_tasks("system"))
+    names = {job.handed_to for job in service_jobs()}
+    missing = names - set(queue_tasks("system"))
     assert not missing, f"scheduled but not registered on the worker: {missing}"
 
 
@@ -72,6 +89,23 @@ async def _fake_job() -> None:
 
 _RAN: list[str | None] = []
 _FAKE = ServiceJob(_fake_job, "fake", "Fake", {"trigger": "interval", "hours": 1}, timeout=123, app_service="demo")
+
+
+async def _fake_each(item: str) -> None:
+    """One of a sweep's items, recorded with the service it ran as."""
+    from structlog.contextvars import get_contextvars
+
+    _RAN.append(f"{get_contextvars().get('app_service')}:{item}")
+
+
+_SWEEP = ServiceJob(
+    _fake_job,
+    "sweep",
+    "Sweep",
+    {"trigger": "interval", "hours": 1},
+    app_service="demo",
+    each=_fake_each,
+)
 {%- if worker_backend == "arq" %}
 
 
@@ -85,6 +119,20 @@ async def test_a_worker_task_runs_its_job_under_its_own_name() -> None:
     assert task.timeout_s == 123
     await task.coroutine({})
     assert _RAN == ["demo"]
+
+
+async def test_a_sweeps_item_is_a_task_of_its_own(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.components.worker.tasks import service_jobs as job_tasks
+
+    monkeypatch.setattr(job_tasks, "service_jobs", lambda: (_SWEEP,))
+    _RAN.clear()
+    tasks = {task.name: task for task in job_tasks.service_job_tasks()}
+
+    assert set(tasks) == {"_fake_job_each"}  # the sweep itself runs here
+    await tasks["_fake_job_each"].coroutine({}, "u1")
+    assert _RAN == ["demo:u1"]
 {%- elif worker_backend == "taskiq" %}
 
 
@@ -99,6 +147,21 @@ async def test_a_worker_task_runs_its_job_under_its_own_name() -> None:
     assert task.labels["timeout"] == 123
     await task.original_func()
     assert _RAN == ["demo"]
+
+
+async def test_a_sweeps_item_is_a_task_of_its_own(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.components.worker.queues.system import broker
+    from app.components.worker.tasks import service_jobs as job_tasks
+
+    monkeypatch.setattr(job_tasks, "service_jobs", lambda: (_SWEEP,))
+    _RAN.clear()
+    tasks = job_tasks.service_job_tasks(broker)
+
+    assert set(tasks) == {"_fake_job_each"}  # the sweep itself runs here
+    await tasks["_fake_job_each"].original_func("u1")
+    assert _RAN == ["demo:u1"]
 
 
 def test_registering_leaves_the_job_function_alone() -> None:
@@ -129,17 +192,22 @@ def test_a_worker_task_runs_its_job_under_its_own_name() -> None:
     _RAN.clear()
     asyncio.run(getattr(actor.fn, "__wrapped__", actor.fn)())
     assert _RAN == ["demo"]
+
+
+def test_a_sweeps_item_is_a_task_of_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    from app.components.worker.tasks import service_jobs as job_tasks
+
+    monkeypatch.setattr(job_tasks, "service_jobs", lambda: (_SWEEP,))
+    _RAN.clear()
+    actors = job_tasks.service_job_tasks()
+
+    assert set(actors) == {"_fake_job_each"}  # the sweep itself runs here
+    actor = actors["_fake_job_each"]
+    asyncio.run(getattr(actor.fn, "__wrapped__", actor.fn)("u1"))
+    assert _RAN == ["demo:u1"]
 {%- endif %}
-{%- else %}
-
-
-def test_without_a_worker_the_scheduler_runs_each_job() -> None:
-    from app.components.scheduler.main import scheduled_run
-
-    scheduled = _scheduled()
-    for job in service_jobs():
-        assert scheduled[job.id].func is scheduled_run, job.id
-        assert list(scheduled[job.id].args) == [job.id]
 {%- endif %}
 {%- if scheduler_backend != "memory" %}
 

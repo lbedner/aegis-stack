@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.constants import QueueName
 from app.components.backend.api.ai import chat as chat_api
 from app.components.backend.api.ai.service import ai_service, lifted_turn
 from app.core.chat_transcript import readable
@@ -67,20 +68,6 @@ def store(
 def db(async_db_session: AsyncSession) -> AsyncSession:
     """The session a caller hands the paste index: the test's own."""
     return async_db_session
-
-
-@pytest.fixture
-def queued(monkeypatch: pytest.MonkeyPatch) -> list[tuple[object, ...]]:
-    """What the turn hands the worker."""
-    from app.components.worker import pools
-
-    enqueued: list[tuple[object, ...]] = []
-
-    async def enqueue(name: str, _queue: str, *args: object, **_: object) -> None:
-        enqueued.append((name, *args))
-
-    monkeypatch.setattr(pools, "enqueue_task", enqueue)
-    return enqueued
 
 
 @pytest.fixture
@@ -142,7 +129,9 @@ class TestTheTurn:
         key = content_key(b"a screen")
         handle = pastes.paste_id(key)
         assert f'shot.png #{handle}, what it showed: pasted("{handle}")' in text
-        assert queued == [("read_photo_task", "u1", key, "image/png", "shot.png")]
+        assert queued == [
+            ("read_photo_task", QueueName.SYSTEM, "u1", key, "image/png", "shot.png")
+        ]
 
     async def test_with_no_user_names_no_handle(
         self, queued: list[tuple[object, ...]]

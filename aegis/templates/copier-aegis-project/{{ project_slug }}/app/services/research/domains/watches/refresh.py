@@ -1,11 +1,11 @@
 """Running watches: ask each source, then save what came back in one pass.
 
-Every watch's source is asked first, with no transaction open; each thread
-is read once however many watches found it. Then each source's items are
-upserted together, the day's numbers kept beside them, threads linked,
-replies a re-read thread no longer holds marked, and every watch's finds
-stamped: a handful of statements per source, in bounded batches, whatever
-the number of items or watches. A watch whose source fails sits that run
+Every watch's source is asked first, the searches at once, with no
+transaction open; each thread is read once however many watches found it.
+Then each source's items are upserted together, the day's numbers kept
+beside them, threads linked, replies a re-read thread no longer holds
+marked, and every watch's finds stamped: a handful of statements per
+source, in bounded batches, whatever the number of items or watches. A watch whose source fails sits that run
 out; the others still refresh.
 """
 
@@ -36,14 +36,16 @@ from app.services.research.models import (
     ResearchNumbers,
     ResearchWatch,
 )
+from app.services.research.queries import watches_on
 
 logger = logging.getLogger(__name__)
 
 # Rows per statement: far under the ~32k bind parameters Postgres and
 # SQLite allow, at a dozen parameters a row.
 BATCH = 1_000
-# Thread reads in flight at once, per refresh: quick, and polite to a site.
-CONCURRENT_THREADS = 4
+# Requests in flight at once, per refresh (searches and thread reads):
+# quick, and polite to a site.
+CONCURRENT_READS = 4
 
 
 @dataclass
@@ -58,8 +60,16 @@ class _Fetched:
 
 
 async def refresh_every_watch(db: AsyncSession) -> dict[int, int]:
-    """Every owner's watches, for the nightly job."""
-    return await refresh_watches(db, list((await db.exec(select(ResearchWatch))).all()))
+    """Every owner's watches, in one pass (``research refresh``)."""
+    return await refresh_watches(db, await watches_on(db))
+
+
+async def refresh_source(db: AsyncSession, source: str) -> dict[int, int]:
+    """Every owner's watches on ``source``: the nightly job's one item.
+    A source shares nothing with another (items are keyed by source), so
+    each refreshes on its own, its outage or slow night costing only its
+    watches."""
+    return await refresh_watches(db, await watches_on(db, source))
 
 
 async def refresh_watches(
@@ -72,13 +82,10 @@ async def refresh_watches(
     # open across those calls would pin a pooled connection for all of them.
     await db.commit()
     now = utcnow()
-    threads: dict[tuple[str, str], list[SourceItem]] = {}
-    gate = asyncio.Semaphore(CONCURRENT_THREADS)
-    ran = [
-        (watch, items)
-        for watch in watches
-        if (items := await _fetch(watch, threads, gate)) is not None
-    ]
+    gate = asyncio.Semaphore(CONCURRENT_READS)
+    found = await asyncio.gather(*(_search(watch, gate) for watch in watches))
+    ran = [(w, items) for w, items in zip(watches, found) if items is not None]
+    threads = await _threads(ran, gate)
     by_source: dict[str, _Fetched] = {}
     for watch, items in ran:
         fetched = by_source.setdefault(watch.source, _Fetched())
@@ -115,54 +122,56 @@ async def refresh_watches(
     return {watch.id: len(items) for watch, items in ran}  # type: ignore[misc]
 
 
-async def _fetch(
-    watch: ResearchWatch,
-    threads: dict[tuple[str, str], list[SourceItem]],
-    gate: asyncio.Semaphore,
+async def _search(
+    watch: ResearchWatch, gate: asyncio.Semaphore
 ) -> list[SourceItem] | None:
-    """One watch's search, its items checked by the source, and the threads
-    it wants added to ``threads`` (each read once a run). None when the
+    """One watch's search, its items checked by the source. None when the
     source is missing or fails: nothing of this watch's is saved."""
     try:
         source = source_for(watch.source)
-        items = await source.search(source.query.model_validate(watch.query))
+        async with gate:
+            items = await source.search(source.query.model_validate(watch.query))
         for item in items:
             item.data = validated(source.data, item.data, f"{source.name} item data")
-        if watch.with_threads:
-            tops = {item.root_external_id or item.external_id for item in items} - {
-                top for (name, top) in threads if name == source.name
-            }
-
-            async def read(top: str) -> tuple[str, list[SourceItem] | None]:
-                """A thread, or None when the source can't give it (deleted,
-                not indexed yet): it is skipped, not read as empty, which
-                would mark the replies already stored under it deleted."""
-                async with gate:
-                    try:
-                        return top, await source.thread(top)
-                    except Exception:
-                        logger.warning(
-                            "Research: %s thread %s unreadable",
-                            source.name,
-                            top,
-                            exc_info=True,
-                        )
-                        return top, None
-
-            for top, replies in await asyncio.gather(*(read(top) for top in tops)):
-                if replies is None:
-                    continue
-                for item in replies:
-                    item.data = validated(
-                        source.data, item.data, f"{source.name} item data"
-                    )
-                threads[(source.name, top)] = replies
     except Exception:
         logger.warning(
             "Research: watch %s (%s) failed", watch.id, watch.source, exc_info=True
         )
         return None
     return items
+
+
+async def _threads(
+    ran: list[tuple[ResearchWatch, list[SourceItem]]], gate: asyncio.Semaphore
+) -> dict[tuple[str, str], list[SourceItem]]:
+    """Every thread a watch that reads threads found, each read once
+    however many watches found it, by ``(source, top)``."""
+    tops = {
+        (watch.source, item.root_external_id or item.external_id)
+        for watch, items in ran
+        if watch.with_threads
+        for item in items
+    }
+    read = await asyncio.gather(*(_thread(name, top, gate) for name, top in tops))
+    return {key: replies for key, replies in zip(tops, read) if replies is not None}
+
+
+async def _thread(
+    name: str, top: str, gate: asyncio.Semaphore
+) -> list[SourceItem] | None:
+    """A thread, or None when the source can't give it (deleted, not
+    indexed yet): it is skipped, not read as empty, which would mark the
+    replies already stored under it deleted."""
+    source = source_for(name)
+    try:
+        async with gate:
+            replies = await source.thread(top)
+        for item in replies:
+            item.data = validated(source.data, item.data, f"{source.name} item data")
+    except Exception:
+        logger.warning("Research: %s thread %s unreadable", name, top, exc_info=True)
+        return None
+    return replies
 
 
 def _upsert(
@@ -193,9 +202,9 @@ async def _save(
     ]
     ids: dict[str, int] = {}
     for chunk in _chunks(rows):
-        upsert = _upsert(
-            db, ResearchItem, chunk, ["source", "external_id"]
-        ).returning(col(ResearchItem.external_id), col(ResearchItem.id))
+        upsert = _upsert(db, ResearchItem, chunk, ["source", "external_id"]).returning(
+            col(ResearchItem.external_id), col(ResearchItem.id)
+        )
         ids |= dict((await db.execute(upsert)).tuples().all())
     # A reply found by search whose parent or top is not in this run.
     wanted = sorted(
@@ -238,13 +247,9 @@ async def _snapshot(
     for external_id, item in fetched.items.items():
         numbers = item.model_dump(include=set(ResearchNumbers.model_fields))
         if any(value is not None for value in numbers.values()):
-            rows.append(
-                {"item_id": ids[external_id], "as_of": now.date(), **numbers}
-            )
+            rows.append({"item_id": ids[external_id], "as_of": now.date(), **numbers})
     for chunk in _chunks(rows):
-        await db.execute(
-            _upsert(db, ResearchItemSnapshot, chunk, ["item_id", "as_of"])
-        )
+        await db.execute(_upsert(db, ResearchItemSnapshot, chunk, ["item_id", "as_of"]))
 
 
 async def _mark_vanished(db: AsyncSession, root_ids: list[int], now: datetime) -> None:

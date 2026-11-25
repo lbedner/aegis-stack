@@ -27,6 +27,12 @@ async def projects_matching(db: AsyncSession, filters: list[Any]) -> list[Projec
     return list((await db.exec(select(Project).where(*filters))).all())
 
 
+async def project_ids_matching(db: AsyncSession, filters: list[Any]) -> list[int]:
+    """The ids of every project matching ``filters``, across all owners:
+    what a collection sweep queues, one task each."""
+    return list((await db.exec(select(Project.id).where(*filters))).all())  # type: ignore[arg-type]
+
+
 async def project_by_slug(
     db: AsyncSession, slug: str, *, owner_user_id: int
 ) -> Project | None:

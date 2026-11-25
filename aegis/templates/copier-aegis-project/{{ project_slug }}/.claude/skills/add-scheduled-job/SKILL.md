@@ -37,15 +37,19 @@ if a worker is present, or `add-api-endpoint` for a synchronous route).
 1. Write the failing test first for the job function's behavior, independent
    of the schedule. Confirm it fails for the right reason.
 2. Write the job as an `async def` taking no arguments that does one unit of
-   work. A job over many items (conversations, owners, connections) only
-   sweeps: it queues a worker task per item (`pools.enqueue_task`), each
-   claimed so it is queued once (`get_cache().claim`), and the queue runs them
-   at its concurrency. It never awaits each item's work in a loop, and never
-   caps a run with a batch-size setting: `enqueue_fold` and sentiment's
-   `queue_unscored` are the shape.
+   work. A job over many items (owners, projects, connections) is a sweep:
+   the job returns the items' ids and a second function does one item in a
+   session of its own, declared as the entry's `each=` (step 3). The
+   scheduler runs the sweep and queues a worker task per item
+   (`<job>_each`, claimed so it is queued once), and the queue runs them at
+   its concurrency; without a worker the sweep does them one after another,
+   one item's failure logged and kept from the rest (the run then fails).
+   The job reads its ids with `read_items` (`app/core/schedule.py`). Never
+   await each item's work in a loop yourself, and never cap a run with a
+   batch-size setting. Finance's `jobs.py` is the shape.
 3. Add a `ServiceJob` to the service's `JOBS`: the function, a stable id, a display
    name, and the trigger as `add_job` keyword arguments (for example
-   `{"trigger": "cron", "hour": 3}`).
+   `{"trigger": "cron", "hour": 3}`); a sweep adds `each=`.
 4. Keep the job idempotent: a schedule can fire late or twice, and a failed
    write-back runs it again, so a run must be safe to repeat.
 5. Run the gates and fix anything red.

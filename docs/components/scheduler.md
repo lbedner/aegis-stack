@@ -108,16 +108,25 @@ holds for arq, TaskIQ and Dramatiq alike.
   unless its entry sets `timeout` in seconds.
 - **Run Now.** The dashboard button, the API
   (`POST /api/v1/scheduler/jobs/{id}/run`) and `tasks trigger` repeat the
-  stored call, so a manual run is an enqueue too and never runs inside the
-  webserver. The API response says where the job runs (`ran_in`).
+  stored call, so a manual run is an enqueue too and the job's work never
+  runs inside the webserver (a sweep reads its items there, then queues
+  each). The API response says where the job runs (`ran_in`).
 - **Run history.** The Scheduler page times the enqueue; the job's own run
   time and outcome are on the Worker page.
+- **Sweeps.** An entry with `each=` works over many items (owners,
+  projects, sources): its function returns their ids and `each` does one.
+  The scheduler runs the sweep itself, since it is cheap, and queues a task
+  per item (`<job>_each`, claimed so it is queued once), so the worker runs
+  them at the system queue's concurrency and one slow or failing item holds
+  up none of the rest.
 - **The heartbeat stays in the scheduler**, because it proves the
   scheduler's own loop is alive.
 
 Without a worker, the scheduler runs each job itself, and Run Now runs it in
-the process that received the request. Adding a worker later moves every
-entry onto it with no change to the list.
+the process that received the request; a sweep does its items one after
+another, one item's failure logged and kept from the rest, and the run
+recorded as failed if any did. Adding a worker later moves every entry onto
+it with no change to the list.
 
 ## Job Management
 

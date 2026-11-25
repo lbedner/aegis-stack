@@ -27,6 +27,7 @@ from app.services.research.domains.sources.registry import (
 )
 from app.services.research.domains.watches.refresh import (
     refresh_every_watch,
+    refresh_source,
     refresh_watches,
 )
 from app.services.research.models import (
@@ -40,7 +41,10 @@ from app.services.shared.queries import owner_filters
 
 if TYPE_CHECKING:
     from app.services.research.models import ResearchDay, ResearchHit  # noqa: F401
-    from app.services.research.queries import item_counts  # noqa: F401
+    from app.services.research.queries import (  # noqa: F401
+        item_counts,
+        watched_sources,
+    )
 
 # The most one search returns.
 MAX_RESULTS = 200
@@ -55,6 +59,7 @@ __all__ = [
     "WatchNotFoundError",
     "installed_sources",
     "refresh_every_watch",
+    "refresh_source",
     "register_source",
 ]
 

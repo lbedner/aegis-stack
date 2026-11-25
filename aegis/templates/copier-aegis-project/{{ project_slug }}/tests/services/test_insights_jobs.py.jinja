@@ -1,0 +1,13 @@
+{%- if insights_per_user %}
+"""Per-user insights collect a project at a time: each collection job is a
+sweep over the projects with its source configured, a task each, so one
+project's failing API holds up none of the others."""
+
+from app.core.schedule import service_jobs
+
+
+def test_each_collection_sweeps_the_projects() -> None:
+    jobs = [job for job in service_jobs() if job.app_service == "insights"]
+
+    assert jobs and all(job.each for job in jobs)
+{%- endif %}

@@ -297,6 +297,26 @@ def _no_load_cost_measuring(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
+def queued(monkeypatch: pytest.MonkeyPatch) -> list[tuple[object, ...]]:
+    """What is handed the worker, as ``(task, queue, *args)``, nothing sent;
+    each claim (``enqueue_once``) on a cache of this test's own. Skipped in
+    a stack with no worker."""
+    queue_once = pytest.importorskip("app.components.worker.queue_once")
+    from app.components.worker import pools
+    from app.core.cache import CacheService
+
+    enqueued: list[tuple[object, ...]] = []
+
+    async def enqueue(name: str, queue: str, *args: object, **_: object) -> None:
+        enqueued.append((name, queue, *args))
+
+    cache = CacheService()
+    monkeypatch.setattr(pools, "enqueue_task", enqueue)
+    monkeypatch.setattr(queue_once, "get_cache", lambda: cache)
+    return enqueued
+
+
+@pytest.fixture
 def run_log_sink() -> Generator[Any, None, None]:
     """A run log of this test's own (``run_log.MemorySink``), put back after."""
     from app.core import run_log

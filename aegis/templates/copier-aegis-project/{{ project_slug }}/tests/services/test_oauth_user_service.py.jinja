@@ -19,9 +19,10 @@ authorize-redirect machinery.
 
 import pytest
 from app.core.config import settings
+from app.core.visitor import GUEST_EMAIL
 from app.models.user import OAuthProvider, User, UserOAuthIdentity
 from app.services.auth.domains.users.accounts import RegistrationClosedError, UserService
-from sqlmodel import select
+from sqlmodel import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 
@@ -57,6 +58,28 @@ class TestUpsertFromOauth:
         assert identity.provider == OAuthProvider.GITHUB
         assert identity.provider_user_id == "123456"
         assert identity.provider_username == "newuser"
+
+{% if include_auth_rbac %}
+    @pytest.mark.asyncio
+    async def test_the_first_user_is_admin_though_the_guest_signed_in_first(
+        self, async_db_session: AsyncSession
+    ):
+        """The shared guest account never takes the operator's seat: the
+        first real sign-up is admin whichever way it comes in."""
+        await async_db_session.exec(delete(User))  # conftest may seed members
+        async_db_session.add(User(email=GUEST_EMAIL, hashed_password=""))
+        await async_db_session.commit()
+
+        user = await UserService(async_db_session).upsert_from_oauth(
+            provider=OAuthProvider.GITHUB,
+            provider_user_id="1",
+            email="operator@example.com",
+            provider_username="operator",
+            avatar_url=None,
+        )
+
+        assert user.role == "admin"
+{%- endif %}
 
     @pytest.mark.asyncio
     async def test_returns_linked_user_when_identity_exists(

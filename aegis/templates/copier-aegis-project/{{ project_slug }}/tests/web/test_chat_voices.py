@@ -345,6 +345,7 @@ class TestCalls:
         heard = one(listed, "[data-hear-model][aria-current=true]")
         assert heard.get("data-hear-model") == "gpt-transcribe"
 
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # reads back what it saved
     async def test_hears_picks_the_voices_hearing_model(
         self,
         hx: TestClient,

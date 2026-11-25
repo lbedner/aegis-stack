@@ -3,7 +3,7 @@
 from collections.abc import Iterable
 from datetime import UTC, datetime
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 
 def format_number(num: int) -> str:
@@ -352,6 +352,19 @@ def safe_filename(name: str, fallback: str = "document") -> str:
     stray newline there is header injection, not a formatting nuisance.
     """
     return _UNSAFE_FILENAME.sub("", name).strip() or fallback
+
+
+def with_query(path: str, **params: str | list[str] | None) -> str:
+    """``path`` with the given query parameters, leaving out empty ones; a
+    list (a multi-select's picks) repeats its key once per value."""
+    pairs = [
+        (key, value)
+        for key, given in params.items()
+        for value in (given if isinstance(given, list) else [given])
+        if value
+    ]
+    query = urlencode(pairs)
+    return f"{path}?{query}" if query else path
 
 
 def site_path(target: str | None, home: str = "/") -> str:

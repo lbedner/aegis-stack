@@ -10,13 +10,12 @@ from collections.abc import Iterable
 from hashlib import sha1
 import json
 from typing import Any
-from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup, escape
-from starlette.responses import RedirectResponse, Response
+from starlette.responses import Response
 
 from app.components.backend.security import honeypot
 from app.components.web_frontend.assets import COMPONENT_DIR, static_url
@@ -25,7 +24,7 @@ from app.components.web_frontend.filters import FILTERS
 from app.components.web_frontend.themes import theme_named, themes
 from app.core import series
 from app.core.config import settings
-from app.core.formatting import site_path
+from app.core.formatting import with_query
 from app.core.time import zone_named
 from app.services.shared.deps import operator_refusal
 from app.services.system import topology, ui_runtime
@@ -245,28 +244,6 @@ def drawer_state(param: str, url: str | None) -> dict[str, str | None]:
     """What a list hands ``drawer_sync``: the open item's drawer URL (None
     closes it) and the query parameter that holds the item."""
     return {"open_drawer": url, "drawer_param": param}
-
-
-def with_query(path: str, **params: str | list[str] | None) -> str:
-    """``path`` with the given query parameters, leaving out empty ones; a
-    list (a multi-select's picks) repeats its key once per value."""
-    pairs = [
-        (key, value)
-        for key, given in params.items()
-        for value in (given if isinstance(given, list) else [given])
-        if value
-    ]
-    query = urlencode(pairs)
-    return f"{path}?{query}" if query else path
-
-
-def refused_sign_in(path: str, reason: str, next: str) -> RedirectResponse:
-    """Back to the sign-in page at ``path`` saying why (``?error=``), still
-    headed for ``next``."""
-    return RedirectResponse(
-        url=with_query(path, error=reason, next=site_path(next, "") or None),
-        status_code=303,
-    )
 
 
 def chips(

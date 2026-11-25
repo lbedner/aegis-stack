@@ -7296,6 +7296,7 @@
 </table>
 <h3 id="running-llama-server">Running llama-server</h3>
 <p>On the host, <code>make llama</code> (<code>my-app inference llama</code>) serves every GGUF in <code>LLAMACPP_MODELS_DIR</code> (default <code>~/models</code>) as a router, with the flags chat needs. Ollama's models are linked in first when <code>OLLAMA_MODELS</code> (default <code>~/.ollama/models</code>) holds any, so one download serves both; <code>my-app inference link-ollama</code> links them without serving. It runs in the foreground: Ctrl-C stops it.</p>
+<p>It holds one model at a time (<code>--models-max 1</code>): picking another frees the last, since two large ones at once can fail with "Compute error". <code>make llama-unload</code> (<code>my-app inference llama-unload</code>) frees the one it holds; the next chat turn loads its own again.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>brew<span class="w"> </span>install<span class="w"> </span>llama.cpp
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>make<span class="w"> </span>llama
 </span></code></pre></div>

@@ -113,12 +113,9 @@ class TurnMixin(PromptMixin):
         # request (the agent's pin wins over the active default).
         from app.services.ai.domains.llm.catalog import context_window_for
 
-        effective_model = (
-            agent_config.model_id
-            if agent_config is not None and agent_config.model_id
-            else self.config.model
+        context_window = await context_window_for(
+            self.config.for_agent(agent_config).model
         )
-        context_window = await context_window_for(effective_model)
         history_budget = history_char_budget(context_window)
 
         # Recorded readings, read with the facts from the user's one row:

@@ -857,12 +857,22 @@ class TestChatAttribution:
     async def test_custom_agent_model_pin_overrides_active_model(
         self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
     ) -> None:
+        """Run on the model it pins, on the provider serving it, and the
+        reply says so (not the active provider beside the pinned model)."""
         service, _, captured, monkeypatch = harness
-        _stub_resolve(monkeypatch, _custom_config(model_id="gpt-4o"))
+        pinned = _custom_config(model_id="gpt-4o", provider=AIProvider.OPENAI)
+        _stub_resolve(monkeypatch, pinned)
 
-        await service.chat("hello")
+        reply = await service.chat("hello")
 
-        assert captured["config"].model == "gpt-4o"
+        assert (captured["config"].model, captured["config"].provider) == (
+            "gpt-4o",
+            AIProvider.OPENAI,
+        )
+        assert (reply.metadata["model"], reply.metadata["provider"]) == (
+            "gpt-4o",
+            AIProvider.OPENAI,
+        )
 
 
 class TestUserMemoryInjection:

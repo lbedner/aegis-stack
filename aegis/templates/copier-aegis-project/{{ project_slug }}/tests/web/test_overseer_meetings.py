@@ -271,3 +271,32 @@ async def test_who_talked_and_for_how_long_reads_as_a_list(
     ]
     assert "--aegis-chart-" in one(rows[0], "[data-dot]").get("style")
     none(rows[1], "[data-dot]")
+
+
+async def test_the_list_follows_each_meetings_status_over_sse(
+    overseer: TestClient,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The list keeps up while the page is open: the bot joins, and the row
+    reads In call without a reload."""
+    from tests._session import opens
+    from tests.web.overseer import frame_html, sent_events
+
+    meeting = await MeetingsService(async_db_session, None).request(MEET)
+    live = one(page_html(overseer, PAGE), "#meetings-live")
+    assert live.get("sse-connect") == overseer_meetings.EVENTS
+    await transition(
+        async_db_session,
+        meeting.id,  # type: ignore[arg-type]
+        MeetingStatus.IN_CALL,
+        from_=(MeetingStatus.REQUESTED,),
+    )
+    monkeypatch.setattr(overseer_meetings, "get_async_session", opens(async_db_session))
+
+    frames = await sent_events(overseer_meetings.meetings_events(max_frames=1))
+
+    (table,) = [f for f in frames if "event: meetings-table" in f]
+    row = one(frame_html(table), "#overseer-meetings tbody tr")
+    assert one(row, "[data-tone]").get("data-tone") == "ok"
+    assert "In call" in text(row)

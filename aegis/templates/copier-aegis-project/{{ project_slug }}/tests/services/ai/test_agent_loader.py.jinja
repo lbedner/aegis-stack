@@ -20,6 +20,8 @@ from app.services.ai.domains.chat.agent_loader import (
     resolve_agent,
 )
 from app.services.ai.models import Agent, AgentTool, Tool
+from app.services.ai.models.providers import AIProvider
+from tests.services.ai._catalog import listed
 
 
 @pytest.fixture(autouse=True)
@@ -68,6 +70,23 @@ class TestResolveFromDb:
             temperature=0.2,
             max_tokens=512,
         )
+
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # two agents resolved
+    async def test_a_pinned_model_runs_on_the_provider_that_serves_it(
+        self, session: AsyncSession
+    ) -> None:
+        """The agent points at a catalog row, which says who serves it, so it
+        runs there whatever the app runs on."""
+        luna = await listed(session, "gpt-6-luna", served_by="openai")
+        pulled = await listed(session, "qwen3:4b", served_by="ollama")
+        await _add_agent(session, llm_id=luna.id)
+        await _add_agent(session, slug="local", llm_id=pulled.id)
+
+        cloud = await resolve_agent("support", session=session)
+        local = await resolve_agent("local", session=session)
+
+        assert (cloud.model_id, cloud.provider) == ("gpt-6-luna", AIProvider.OPENAI)
+        assert (local.model_id, local.provider) == ("qwen3:4b", AIProvider.OLLAMA)
 
     async def test_code_mode_flag_survives_resolution(
         self, session: AsyncSession
@@ -299,7 +318,7 @@ class TestExtends:
             "slug": "writer-voice",
             "system_prompt": "Answer aloud, briefly.",
             "extends": "writer",
-            "model_id": "small-model",
+            "llm_id": (await listed(session, "small-model")).id,
             "temperature": 0.3,
             "max_tokens": 400,
         }

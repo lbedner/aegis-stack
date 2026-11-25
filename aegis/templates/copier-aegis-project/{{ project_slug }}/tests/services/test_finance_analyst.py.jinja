@@ -16,6 +16,7 @@ from app.services.ai.domains.chat.fetchers import (
     run_fetcher,
 )
 from app.services.ai.models.agents import Agent, ContextModule
+from app.services.ai.models.llm import LargeLanguageModel
 from app.services.finance.constants import ANALYST_NOTE_INSIGHT_TYPE
 from app.services.finance.domains.detection import analyst, generate_insights
 from app.services.finance.models import (
@@ -772,6 +773,7 @@ class TestFixtures:
 
         assert result.returncode == 0, result.stderr
 
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # seeded twice
     def test_an_edited_agent_survives_reseeding(self, db_session: Session) -> None:
         """Both rows are editable from the dashboard; a re-seed must not
         quietly undo the user's tuning."""
@@ -780,7 +782,7 @@ class TestFixtures:
             select(Agent).where(Agent.slug == analyst.ANALYST_AGENT_SLUG)
         ).one()
         agent.system_prompt = "Be extremely terse."
-        agent.model_id = "qwen2.5:7b"
+        agent.llm = LargeLanguageModel(model_id="qwen2.5:7b", title="Qwen 2.5")
         db_session.add(agent)
         db_session.commit()
 

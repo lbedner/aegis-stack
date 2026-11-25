@@ -10,7 +10,6 @@ of any line (``about``), she says what its speaker is talking about
 (``actions.about``)."""
 
 from typing import Any
-from weakref import WeakKeyDictionary
 
 from app.core.log import logger
 from app.services.meetings.domains.actions.live import IN_A_MEETING, LIVE
@@ -42,10 +41,6 @@ def for_the_model(heard: Excerpt) -> str:
         f"The meeting so far:\n{said_before(heard)}\n\n"
         f"{the_question(heard)}\n\n{SAY_IT}"
     )
-
-
-# What each live call has been told of the meeting so far (its lines).
-TOLD: WeakKeyDictionary[Any, set[str]] = WeakKeyDictionary()
 
 
 def _since(prompt: str, told: set[str]) -> str:
@@ -83,7 +78,8 @@ async def answer(prompt: str, owner_user_id: int | None) -> str:
     live = LIVE.get()
     if live is not None and live.open:
         try:
-            return await live.ask(_since(prompt, TOLD.setdefault(live, set())))
+            await live.up()  # a dropped call opened again first: told afresh
+            return await live.ask(_since(prompt, live.told))
         except (RuntimeError, TimeoutError) as exc:
             logger.warning(f"Her live answer failed ({exc}); she answers in chat")
     return (await _her_turn(prompt, owner_user_id, IN_A_MEETING)).content

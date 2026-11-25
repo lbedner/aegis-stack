@@ -706,6 +706,14 @@ async def test_her_live_call_is_told_only_what_it_has_not_heard(
     assert "Late." not in live.asked[1] and "Search is mine." in live.asked[1]
     assert "and search?" in live.asked[1]
 
+    live.dropped = True  # the provider ended it; the next call heard nothing
+    token = LIVE.set(live)
+    try:
+        await ask_ai.answer(ask_ai.for_the_model(then), None)
+    finally:
+        LIVE.reset(token)
+    assert "Late." in live.asked[2]  # the meeting told afresh
+
 
 # Two runs, each reading its moment and meeting: a loop by construction.
 @pytest.mark.queryspy(allow_n_plus_one=True)

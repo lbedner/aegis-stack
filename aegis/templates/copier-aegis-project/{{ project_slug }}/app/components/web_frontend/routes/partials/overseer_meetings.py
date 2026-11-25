@@ -13,10 +13,11 @@ a meeting the admin sends is the admin's own (``Mine``).
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, Request, UploadFile
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from app.components.web_frontend import overseer_meetings
 from app.components.web_frontend.meeting_agents import agents_context
+from app.components.web_frontend.overseer_live import event_stream
 from app.components.web_frontend.rendering import dialog, fragment, viewer_zone
 from app.components.web_frontend.routes.meetings import (
     meeting_context,
@@ -54,6 +55,13 @@ Every = Annotated[MeetingsService, Depends(get_every_owners_meetings)]
 Mine = Annotated[MeetingsService, Depends(get_meetings_service)]
 People = Annotated[PeopleService, Depends(get_every_owners_people)]
 Series = Annotated[SeriesService, Depends(get_every_owners_series)]
+
+
+@router.get("/events", include_in_schema=False)
+async def meetings_stream() -> StreamingResponse:
+    """The list and its figures, while the Meetings page is open."""
+    return event_stream(overseer_meetings.meetings_events())
+
 
 DRAWER = "pages/overseer/meetings/_drawer.html"
 BODY = "pages/overseer/meetings/_drawer_body.html"

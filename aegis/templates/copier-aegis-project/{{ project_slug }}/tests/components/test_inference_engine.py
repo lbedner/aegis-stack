@@ -196,6 +196,28 @@ async def test_a_router_says_what_a_loaded_model_can_do_and_never_loads_one_to_a
     assert not [url for url in asked if "llama3.1" in url]
 
 
+async def test_a_router_never_loads_a_model_freed_while_it_reads() -> None:
+    """Listed loaded, then freed (an unload) before its props are asked: the
+    ask must not load it again (``autoload=false``), and the read stands,
+    that model's capabilities unknown."""
+    answer = serving(_fake_llamacpp.ROUTER)
+    asked: list[str] = []
+
+    def freed(request: httpx.Request) -> httpx.Response:
+        asked.append(str(request.url))
+        if request.url.params.get("model"):
+            return httpx.Response(400, json={"error": "model is not loaded"})
+        return answer(request)
+
+    engine = _engine("llamacpp", freed)
+    status = await engine.get_server_status()
+    can = {m.name: m.capabilities for m in await engine.fetch_models()}
+
+    assert status.available
+    assert can[_fake_llamacpp.MODEL] is None
+    assert all("autoload=false" in url for url in asked if "model=" in url)
+
+
 async def test_llama_server_reports_what_the_ollama_shaped_list_leaves_empty() -> None:
     """Size, context and quantization come from ``data[].meta``, not from
     the Ollama-shaped ``models`` list beside it, whose fields are empty."""

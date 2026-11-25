@@ -10,6 +10,8 @@ Inference and the inference API:
   ``--models-dir`` (``app.components.inference.ollama_library``).
 - ``inference llama`` - that folder served by a llama-server router, here
   (``make llama``).
+- ``inference llama-unload`` - every model it holds out of memory
+  (``make llama-unload``).
 - ``inference kokoro`` - Kokoro-FastAPI served from its checkout, here
   (``make kokoro``).
 """
@@ -155,6 +157,23 @@ async def llama() -> None:
         os.execvp(argv[0], argv)
     except FileNotFoundError:
         theme.fail("llama-server is not installed: brew install llama.cpp")
+
+
+@app.command("llama-unload")
+async def llama_unload() -> None:
+    """Free every model llama.cpp holds in memory (the Overseer's Unload,
+    for all of them); the next turn loads its own again."""
+    engine = LlamaCppEngine()
+    status = await engine.get_server_status()
+    if not status.available:
+        theme.fail(f"No llama.cpp at {engine.base_url} (make llama)")
+    if not status.running_models:
+        theme.good("Nothing loaded")
+        return
+    for model in status.running_models:
+        if not await engine.move("unload", model.name):
+            theme.fail(f"Could not unload {model.name}")
+        theme.good(f"Unloaded {model.name}")
 
 
 def _kokoro_start() -> list[str]:

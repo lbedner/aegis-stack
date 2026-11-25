@@ -55,8 +55,8 @@ if a worker is present, or `add-api-endpoint` for a synchronous route).
 - `make check`: lint, typecheck, and test. With a worker,
   `tests/components/test_scheduler_jobs.py` fails if a scheduled name is not a
   registered worker task.
-- `patterns check`: flags a job, or a function it calls, that awaits an
-  item's work in a loop (`task.fan-out`).
+- `patterns check --strict`: blocks a job, or a function it calls, that
+  awaits an item's work in a loop (`task.fan-out`).
 
 ## Pitfalls
 

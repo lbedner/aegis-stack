@@ -140,3 +140,9 @@ def test_fan_out_points_at_the_loop() -> None:
     path, line = where.rsplit(":", 1)
     assert path.endswith("tests/components/_jobs_over_items.py")
     assert "await _answer(item)" in Path(path).read_text().splitlines()[int(line) - 1]
+
+
+def test_a_new_serial_job_holds_the_change() -> None:
+    """Gated: a new place blocks ``patterns check --strict``; the known ones
+    stand as debt."""
+    assert next(r for r in TASK.rules if r.key == "fan-out").gate

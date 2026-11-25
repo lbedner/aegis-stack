@@ -28,6 +28,7 @@ from aegis.constants import (
 from aegis.i18n import t
 
 from ..cli import brand
+from . import project_deps
 from .ai_service_parser import evals_rule
 from .auth_service_parser import auth_level_answers
 from .component_files import (
@@ -51,7 +52,10 @@ from .component_files import (
 from .component_utils import extract_base_service_name
 from .copier_manager import is_copier_project, load_copier_answers
 from .copier_updater import (
+    analyze_conflict_files,
+    conflict_lines,
     get_current_template_commit,
+    pending_path,
     template_repo_url,
     template_tree_args,
     template_tree_at_remote,
@@ -68,6 +72,10 @@ if TYPE_CHECKING:  # import cycle at runtime; see _spec_for
     from .plugins.spec import PluginSpec
 
 logger = logging.getLogger(__name__)
+
+# An add that stopped on conflicts, and the command that completes it.
+PENDING_ADD = "aegis-add-pending.json"
+FINISH_ADD = "aegis add-service --finish"
 
 # Constants
 COPIER_ANSWERS_HEADER = (
@@ -655,10 +663,9 @@ class ManualUpdater:
         answer flag is set but its tables don't exist, and the project
         boots into a SQLAlchemy ``OperationalError`` on first request.
 
-        ``add_service_command`` does this manually inline; this method
-        gives the resolver flow (``aegis add <plugin>`` resolving
-        ``required_services``) the same treatment without re-implementing
-        the migration sequence.
+        This is the resolver flow's path (``aegis add <plugin>`` resolving
+        ``required_services``); a conflict stops it as it stops
+        ``add_service_command``, finishable with ``FINISH_ADD``.
 
         Args:
             service: Service name (e.g., ``"auth"``, ``"insights"``).
@@ -677,9 +684,59 @@ class ManualUpdater:
         fail the install — matching how ``add_service_command`` handles
         the same case.
         """
-        # Lazy import — keeps ``ManualUpdater`` from pulling the
-        # migration_generator surface (and its alembic deps) at module
-        # load time. Only services-with-migrations exercise this path.
+        installed = project_deps.dependencies(self.project_path)
+        result = self.add_component(service, additional_data, run_post_gen=False)
+        if not result.success:
+            return result
+
+        conflicts = self.hold_for_conflicts([service], None, installed)
+        if conflicts:
+            result.success = False
+            result.error_message = (
+                t("update.finish_blocked", count=len(conflicts), cmd=FINISH_ADD)
+                + "\n"
+                + conflict_lines(conflicts)
+            )
+            return result
+
+        # run_migrations failure is non-fatal: the user can ``alembic
+        # upgrade head`` later.
+        self.write_schema([service])
+
+        if run_post_gen:
+            self.run_post_generation_tasks()
+        return result
+
+    def hold_for_conflicts(
+        self, services: list[str], backup_tag: str | None, installed: frozenset[str]
+    ) -> list[dict[str, str]]:
+        """The conflicts an add of ``services`` left, recorded for
+        ``FINISH_ADD`` when there are any: writing the schema imports the
+        app, and a marker breaks that import."""
+        conflicts = analyze_conflict_files(self.project_path)
+        if conflicts:
+            pending_path(self.project_path, PENDING_ADD).write_text(
+                json.dumps(
+                    {
+                        "services": services,
+                        "backup_tag": backup_tag,
+                        "installed": sorted(installed),
+                    }
+                )
+            )
+        return conflicts
+
+    def write_schema(self, services: list[str]) -> bool:
+        """Write and apply the revisions the added ``services`` call for,
+        and seed an added AI service's registry. Imports the app, so only
+        once no conflict is left. Returns whether the migrations applied.
+
+        A built-in service is held to init's rule (AI on the memory backend
+        keeps no tables, so no empty alembic/, aegis-stack#1424); a
+        plugin's is known only by its MIGRATION_SPECS entry.
+        """
+        # Lazy import: keeps ``ManualUpdater`` from pulling the
+        # migration_generator surface (and its alembic deps) at load time.
         from .migration_generator import (
             MIGRATION_SPECS,
             bootstrap_alembic,
@@ -688,38 +745,47 @@ class ManualUpdater:
             get_services_needing_migrations,
             service_has_migration,
         )
-        from .post_gen_tasks import run_migrations
+        from .post_gen_tasks import run_migrations, seed_ai_fixtures
         from .services import SERVICES
 
-        result = self.add_component(service, additional_data, run_post_gen=False)
-        if not result.success:
-            return result
-
-        # A built-in service is held to init's rule (AI on the memory
-        # backend keeps no tables, so no empty alembic/, aegis-stack#1424);
-        # a plugin's is known only by its MIGRATION_SPECS entry.
-        if service in MIGRATION_SPECS and (
-            service not in SERVICES
-            or service in get_services_needing_migrations(self.answers)
-        ):
-            alembic_dir = self.project_path / "alembic"
-            if not alembic_dir.exists():
-                bootstrap_alembic(self.project_path, self.jinja_env, self.answers)
+        needed = get_services_needing_migrations(self.answers)
+        migrating = [
+            s
+            for s in services
+            if s in MIGRATION_SPECS and (s not in SERVICES or s in needed)
+        ]
+        if not migrating:
+            return True
+        if not (self.project_path / "alembic").exists():
+            brand.accent(f"\n{t('add_service.bootstrap_alembic')}")
+            for created in bootstrap_alembic(
+                self.project_path, self.jinja_env, self.answers
+            ):
+                typer.echo(f"   {t('add_service.created_file', file=created)}")
+        for service in migrating:
+            # Answers carry the database engine, which selects the
+            # schema-qualified spec variant on Postgres.
             if not service_has_migration(self.project_path, service):
-                # Answers carry the project's database engine, which decides
-                # whether a spec's Postgres schema survives — SQLite has none.
-                generate_migration(self.project_path, service, self.answers)
-            # Level-specific revisions the new answers call for (an auth
-            # upgrade to org needs auth_rbac and auth_org).
-            generate_missing_migrations(self.project_path, self.answers)
-            # run_migrations failure is non-fatal — match
-            # add_service_command's behaviour. The user can ``alembic
-            # upgrade head`` manually later.
-            run_migrations(self.project_path, include_migrations=True)
+                written = generate_migration(self.project_path, service, self.answers)
+                if written:
+                    brand.success(
+                        f"   {t('add_service.generated_migration', name=written.name)}"
+                    )
+        # Level-specific revisions the new answers call for (an auth
+        # upgrade to org needs auth_rbac and auth_org).
+        for written in generate_missing_migrations(self.project_path, self.answers):
+            brand.success(
+                f"   {t('add_service.generated_migration', name=written.name)}"
+            )
 
-        if run_post_gen:
-            self.run_post_generation_tasks()
-        return result
+        brand.accent(f"\n{t('add_service.applying_migrations')}")
+        if not run_migrations(self.project_path, include_migrations=True):
+            return False
+        # An added AI service starts with the registry (LLM catalog and
+        # default agent) a fresh project gets.
+        if AnswerKeys.SERVICE_AI in migrating:
+            seed_ai_fixtures(self.project_path)
+        return True
 
     def remove_component(self, component: str) -> UpdateResult:
         """

@@ -35,13 +35,9 @@ from ..core.copier_updater import (
     rollback_to_backup,
     validate_clean_git_tree,
 )
-from ..core.manual_updater import ManualUpdater
+from ..core.manual_updater import FINISH_ADD, ManualUpdater
 from ..core.migration_generator import (
     MIGRATION_SPECS,
-    bootstrap_alembic,
-    generate_migration,
-    generate_missing_migrations,
-    service_has_migration,
 )
 from ..core.option_spec import (
     VariantConflictError,
@@ -56,6 +52,8 @@ from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES, get_service_dependencies
 from ..core.version_compatibility import validate_version_compatibility
 from ..i18n import lazy_t, t
+from .add_service_finish import finish_add
+from .update import echo_conflicts
 
 
 def _translated_component_desc(name: str, fallback: str) -> str:
@@ -106,6 +104,9 @@ def add_service_command(
         "-f",
         help=lazy_t("common.help_force"),
     ),
+    finish: bool = typer.Option(
+        False, "--finish", help=lazy_t("add_service.help_opt_finish")
+    ),
 ) -> None:
     """
     Add services to an existing Aegis Stack project.
@@ -135,6 +136,10 @@ def add_service_command(
     validate_copier_project(target_path, "add-service")
 
     typer.echo(t("add_service.project", path=target_path))
+
+    if finish:
+        finish_add(target_path)
+        return
 
     # Before anything is written, and for the same reason ``add``,
     # ``remove`` and ``remove-service`` do it: this command installs the
@@ -389,7 +394,7 @@ def add_service_command(
     # failure anywhere resets to this point: files, the answers file and
     # conflict markers all go back, and the add can simply be run again.
     backup_tag = create_backup_point(target_path)
-    succeeded = False
+    succeeded = pending = False
     installed = project_deps.dependencies(target_path)
     try:
         updater = ManualUpdater(target_path)
@@ -460,13 +465,13 @@ def add_service_command(
             # installed service were filtered above through installed_delta.
             service_data.update(variant_answers(service, SERVICES[base_service]))
 
-            installed = (
+            service_installed = (
                 existing_answers.get(AnswerKeys.include_key(base_service)) is True
             )
 
             # A fresh AI install takes the captured configuration; an
             # installed one keeps its own, changing only what the delta names.
-            if base_service == AnswerKeys.SERVICE_AI and not installed:
+            if base_service == AnswerKeys.SERVICE_AI and not service_installed:
                 # Use providers from interactive config, or default to openai
                 providers = ai_config.get("providers", [AIProviders.OPENAI])
                 if isinstance(providers, list):
@@ -543,76 +548,31 @@ def add_service_command(
                     f"   {t('add_service.preserved_files', count=len(result.shared_files_need_manual_merge))}"
                 )
 
-        # Generate migrations for services that need them
-        for service in services_to_add:
-            base_service = service_base_map[service]
-            if base_service not in MIGRATION_SPECS:
-                continue
-
-            # AI service only needs migrations with SQLite backend (not memory)
-            if base_service == AnswerKeys.SERVICE_AI:
-                ai_backend = ai_config.get("backend", StorageBackends.MEMORY)
-                if ai_backend == StorageBackends.MEMORY:
-                    continue  # Skip migrations for memory backend
-
-            alembic_dir = target_path / "alembic"
-            if not alembic_dir.exists():
-                brand.accent(f"\n{t('add_service.bootstrap_alembic')}")
-                created = bootstrap_alembic(
-                    target_path, updater.jinja_env, updater.answers
-                )
-                for f in created:
-                    typer.echo(f"   {t('add_service.created_file', file=f)}")
-
-            if not service_has_migration(target_path, base_service):
-                # Answers carry the database engine, which selects the
-                # schema-qualified spec variant on Postgres.
-                migration_path = generate_migration(
-                    target_path, base_service, updater.answers
-                )
-                if migration_path:
-                    brand.success(
-                        f"   {t('add_service.generated_migration', name=migration_path.name)}"
-                    )
-
-        # Level-specific revisions the new answers call for (an auth upgrade
-        # to org needs auth_rbac and auth_org).
-        for migration_path in generate_missing_migrations(target_path, updater.answers):
-            brand.success(
-                f"   {t('add_service.generated_migration', name=migration_path.name)}"
+        # A conflict left in a shared file stops here, as ``update`` does:
+        # writing the schema imports the app, and a marker breaks that
+        # import. The files and the markers stay for the user to resolve;
+        # ``--finish`` writes the schema after.
+        base_services = [service_base_map[s] for s in services_to_add]
+        conflicts = updater.hold_for_conflicts(base_services, backup_tag, installed)
+        if conflicts:
+            brand.warn(
+                "\n" + t("update.finish_blocked", count=len(conflicts), cmd=FINISH_ADD)
             )
+            echo_conflicts(conflicts)
+            succeeded = pending = True
+            return
 
-        # Auto-run migrations for services that need them
-        if services_with_migrations:
-            brand.accent(f"\n{t('add_service.applying_migrations')}")
-            from ..core.post_gen_tasks import run_migrations
-
-            migration_success = run_migrations(target_path, include_migrations=True)
-
-            if not migration_success:
-                brand.warn(t("add_service.migration_failed"))
-
-            # Seed the AI fixtures (LLM catalog + default agent) when the
-            # ai service just landed with a persistence backend; mirrors
-            # the init path so an added ai service starts with the same
-            # seeded registry a fresh project gets.
-            ai_added = any(
-                service_base_map[s] == AnswerKeys.SERVICE_AI for s in services_to_add
-            )
-            if migration_success and ai_added and ai_needs_migrations:
-                from ..core.post_gen_tasks import seed_ai_fixtures
-
-                seed_ai_fixtures(target_path)
+        if not updater.write_schema(base_services):
+            brand.warn(t("add_service.migration_failed"))
 
         brand.success(f"\n{t('add_service.success')}")
 
         # Show project map with newly added services + auto-added components highlighted
-        base_services_for_highlight = [service_base_map[s] for s in services_to_add]
         # Normalize missing_components to base names so highlight and uses are consistent
         normalized_missing = {
             extract_base_component_name(c) for c in missing_components
         }
-        all_newly_added = base_services_for_highlight + list(normalized_missing)
+        all_newly_added = base_services + list(normalized_missing)
 
         # Build uses dict for existing dependencies (components that already existed)
         uses: dict[str, list[str]] = {}
@@ -636,9 +596,7 @@ def add_service_command(
         )
 
         # Service-specific guidance (use base service names for comparison)
-        base_services_added = [service_base_map[s] for s in services_to_add]
-
-        if AnswerKeys.SERVICE_AUTH in base_services_added:
+        if AnswerKeys.SERVICE_AUTH in base_services:
             project_slug = existing_answers.get(AnswerKeys.PROJECT_SLUG, "my-project")
             brand.accent(f"\n{t('add_service.auth_setup')}", bold=True)
             cmd = typer.style(f"{project_slug} auth create-test-users", bold=True)
@@ -646,7 +604,7 @@ def add_service_command(
             url = typer.style(local_url(target_path, "/docs"), bold=True)
             typer.echo(t("add_service.auth_view_routes", url=url))
 
-        if AnswerKeys.SERVICE_AI in base_services_added:
+        if AnswerKeys.SERVICE_AI in base_services:
             project_slug = existing_answers.get(AnswerKeys.PROJECT_SLUG, "my-project")
             brand.accent(f"\n{t('add_service.ai_setup')}", bold=True)
             typer.echo(
@@ -672,5 +630,5 @@ def add_service_command(
         if backup_tag and not succeeded:
             _, message = rollback_to_backup(target_path, backup_tag)
             typer.echo(f"   {t('add_service.rolled_back', detail=message)}", err=True)
-        if backup_tag:
+        if backup_tag and not pending:
             cleanup_backup_tag(target_path, backup_tag)

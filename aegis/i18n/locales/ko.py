@@ -488,6 +488,8 @@ MESSAGES: dict[str, str] = {
         "Commit or stash your changes before running 'aegis add-service': "
         "a failed add is undone by resetting to the last commit."
     ),
+    "add_service.help_opt_finish": "Finish a previous add that stopped on conflicts: write and apply its migrations",
+    "add_service.finish_nothing": "No conflicted add pending - nothing to finish",
     "add_service.rolled_back": "Nothing was added. {detail}",
     "add_service.auth_setup": "Auth 서비스 설정:",
     "add_service.auth_create_users": "   1. 테스트 사용자 생성: {cmd}",
@@ -683,7 +685,7 @@ MESSAGES: dict[str, str] = {
     "update.help_opt_finish": "충돌로 중단된 이전 업데이트 완료: 생성 후 작업을 실행하고 템플릿 버전을 진행합니다",
     "update.finish_resuming": "충돌로 중단된 {ref} 업데이트를 재개합니다...",
     "update.finish_nothing": "보류 중인 충돌 업데이트가 없습니다 - 완료할 항목 없음 (nothing to finish)",
-    "update.finish_blocked": "{count}개 파일에 아직 충돌이 있습니다. 해결 후 실행하세요: aegis update --finish",
+    "update.finish_blocked": "{count}개 파일에 아직 충돌이 있습니다. 해결 후 실행하세요: {cmd}",
     "update.target_unresolved": "{ref}을(를) 커밋으로 확인할 수 없어 업데이트 후 프로젝트의 기준을 기록할 수 없습니다. 태그, 브랜치 또는 전체 SHA를 사용하세요.",
     "update.finish_done": "업데이트 완료!",
     "update.next_finish": "   5. 충돌 해결 후: aegis update --finish",

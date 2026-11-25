@@ -415,6 +415,8 @@ MESSAGES: dict[str, str] = {
         "Commit or stash your changes before running 'aegis add-service': "
         "a failed add is undone by resetting to the last commit."
     ),
+    "add_service.help_opt_finish": "Finish a previous add that stopped on conflicts: write and apply its migrations",
+    "add_service.finish_nothing": "No conflicted add pending - nothing to finish",
     "add_service.rolled_back": "Nothing was added. {detail}",
     "add_service.auth_setup": "认证服务配置：",
     "add_service.auth_create_users": "   1. 创建测试用户：{cmd}",
@@ -582,7 +584,7 @@ MESSAGES: dict[str, str] = {
     "update.help_opt_finish": "完成之前因冲突而中止的更新：运行生成后任务并推进模板版本",
     "update.finish_resuming": "正在恢复因冲突而中止的到 {ref} 的更新...",
     "update.finish_nothing": "没有待完成的冲突更新 - 无需完成 (nothing to finish)",
-    "update.finish_blocked": "{count} 个文件仍包含冲突。请解决后运行：aegis update --finish",
+    "update.finish_blocked": "{count} 个文件仍包含冲突。请解决后运行：{cmd}",
     "update.target_unresolved": "无法将 {ref} 解析为提交，更新将无法记录项目所处的版本。请使用标签、分支或完整的 SHA。",
     "update.finish_done": "更新已完成！",
     "update.next_finish": "   5. 解决冲突后运行：aegis update --finish",

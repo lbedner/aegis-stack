@@ -411,6 +411,7 @@ def add_command(
                 interactive=False,
                 project_path=str(target_path),
                 yes=yes,
+                finish=False,
             )
             return
 

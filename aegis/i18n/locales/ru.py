@@ -491,6 +491,8 @@ MESSAGES: dict[str, str] = {
         "Commit or stash your changes before running 'aegis add-service': "
         "a failed add is undone by resetting to the last commit."
     ),
+    "add_service.help_opt_finish": "Finish a previous add that stopped on conflicts: write and apply its migrations",
+    "add_service.finish_nothing": "No conflicted add pending - nothing to finish",
     "add_service.rolled_back": "Nothing was added. {detail}",
     "add_service.auth_setup": "Настройка Auth:",
     "add_service.auth_create_users": "   1. Создайте тестовых пользователей: {cmd}",
@@ -690,7 +692,7 @@ MESSAGES: dict[str, str] = {
     "update.help_opt_finish": "Завершить предыдущее обновление, остановленное из-за конфликтов: выполнить пост-генерацию и продвинуть версию шаблона",
     "update.finish_resuming": "Возобновление обновления до {ref}, остановленного из-за конфликтов...",
     "update.finish_nothing": "Нет незавершённого обновления с конфликтами - завершать нечего (nothing to finish)",
-    "update.finish_blocked": "{count} файл(ов) всё ещё содержат конфликты. Разрешите их и выполните: aegis update --finish",
+    "update.finish_blocked": "{count} файл(ов) всё ещё содержат конфликты. Разрешите их и выполните: {cmd}",
     "update.target_unresolved": "Не удалось сопоставить {ref} с коммитом, поэтому обновление не сможет записать, на какой версии оставит проект. Укажите тег, ветку или полный SHA.",
     "update.finish_done": "Обновление завершено!",
     "update.next_finish": "   5. После разрешения конфликтов: aegis update --finish",

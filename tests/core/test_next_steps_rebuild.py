@@ -72,7 +72,7 @@ def test_a_conflicted_update_remembers_what_it_started_with(tmp_path: Path) -> N
         installed=frozenset({"fastapi>=0.1"}),
     )
 
-    pending = update._load_pending_update(tmp_path)
+    pending = update.load_pending(tmp_path)
 
     assert pending is not None
-    assert update._installed_before(pending) == frozenset({"fastapi>=0.1"})
+    assert update.installed_before(pending) == frozenset({"fastapi>=0.1"})

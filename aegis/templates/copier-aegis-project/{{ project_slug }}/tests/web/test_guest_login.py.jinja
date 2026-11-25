@@ -12,15 +12,36 @@ from app.components.web_frontend.routes import guest
 from app.core.config import settings
 
 
-def test_the_page_offers_guest_sign_in(client: TestClient) -> None:
+def test_the_page_offers_guest_sign_in(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "GUEST_ON_SIGN_IN_PAGE", True)
     page = client.get("/login").text
     assert 'action="/login/guest"' in page
     assert "cf-turnstile" not in page
 
 
+def test_an_app_whose_guests_start_elsewhere_keeps_the_page_to_members(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A chat panel can start the guest session itself; the page then
+    offers no button."""
+    monkeypatch.setattr(settings, "GUEST_ON_SIGN_IN_PAGE", False)
+    assert 'action="/login/guest"' not in client.get("/login").text
+
+
+def test_an_app_whose_guests_start_elsewhere_refuses_the_form(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hiding the button closes its form too; the API stays the way in."""
+    monkeypatch.setattr(settings, "GUEST_ON_SIGN_IN_PAGE", False)
+    assert client.post("/login/guest", follow_redirects=False).status_code == 404
+
+
 def test_with_its_keys_the_page_carries_the_human_check(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(settings, "GUEST_ON_SIGN_IN_PAGE", True)
     monkeypatch.setattr(settings, "TURNSTILE_SITE_KEY", "site-key")
     monkeypatch.setattr(settings, "TURNSTILE_SECRET_KEY", "secret")
     assert 'data-sitekey="site-key"' in client.get("/login").text
@@ -36,6 +57,7 @@ def test_a_refused_guest_goes_back_saying_why(
     async def refuse(**_: Any) -> None:
         raise HTTPException(status_code=status_code, detail=reason)
 
+    monkeypatch.setattr(settings, "GUEST_ON_SIGN_IN_PAGE", True)
     monkeypatch.setattr(guest, "api_guest_sign_in", refuse)
     response = client.post("/login/guest", follow_redirects=False)
     assert response.headers["location"] == f"/login?error={reason}"

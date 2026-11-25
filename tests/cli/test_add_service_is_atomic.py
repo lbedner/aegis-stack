@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from aegis.commands import add_service
+from aegis.core import migration_generator
 from tests.cli.conftest import ProjectFactory
 from tests.cli.test_utils import run_aegis_command
 
@@ -37,7 +37,7 @@ def _fail_migration_generation(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(*_args: object, **_kwargs: object) -> None:
         raise RuntimeError("migrate_gen failed for auth: unable to open database file")
 
-    monkeypatch.setattr(add_service, "generate_migration", boom)
+    monkeypatch.setattr(migration_generator, "generate_migration", boom)
 
 
 @pytest.fixture

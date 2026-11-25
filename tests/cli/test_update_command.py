@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from aegis.commands.update import _load_pending_update, _record_pending_update
+from aegis.commands.update import _record_pending_update, load_pending
 from aegis.core.copier_manager import is_copier_project
 from aegis.core.template_cleanup import SyncResult
 
@@ -111,7 +111,7 @@ def test_pending_update_in_linked_worktree(tmp_path: Path) -> None:
         installed=frozenset({"fastapi"}),
     )
 
-    assert _load_pending_update(linked) == {
+    assert load_pending(linked) == {
         "target_ref": "v0.13.0",
         "template_root": str(repo),
         "backup_tag": "backup",
@@ -1586,7 +1586,7 @@ class TestUpdateProjectAheadOfTarget:
 class TestUpdateCommandPendingResume:
     """A pending resume must not swallow the flags the user just typed.
 
-    ``_load_pending_update`` runs before any flag is consulted, so
+    ``load_pending`` runs before any flag is consulted, so
     ``--to-version``, ``--template-path`` and ``--dry-run`` were all
     discarded with no warning. The silent wrong target is the common case
     (the flags get corrected precisely because the first run went somewhere
@@ -1971,7 +1971,7 @@ class TestShortShaTarget:
             "template_root": str(project),
             "backup_tag": None,
         }
-        upd._pending_path(project).write_text(json.dumps(pending))
+        upd.pending_path(project, upd._PENDING_FILE).write_text(json.dumps(pending))
 
         with pytest.raises(typer.Exit) as exc:
             upd._finish_update(project, pending)
@@ -1979,7 +1979,7 @@ class TestShortShaTarget:
         assert exc.value.exit_code == 1
         assert not postgen.called
         assert "oldsha" in (project / ".copier-answers.yml").read_text()
-        assert _load_pending_update(project) is not None
+        assert load_pending(project) is not None
 
     @patch("copier.run_update")
     @patch("aegis.commands.update.create_backup_point")

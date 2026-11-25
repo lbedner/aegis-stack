@@ -83,7 +83,7 @@ ROUTER: dict[str, Any] = {
     },
     "/models/load": {"success": True},
     "/models/unload": {"success": True},
-    # A loaded model's own props, asked by name; asking for an unloaded one
-    # would load it (``models_autoload``), so it is never asked.
-    f"/props?{urlencode({'model': MODEL})}": ROUTES["/props"],
+    # A loaded model's own props, asked by name and never loading it
+    # (``autoload=false``: one freed since the listing answers 400).
+    f"/props?{urlencode({'model': MODEL, 'autoload': 'false'})}": ROUTES["/props"],
 }

@@ -24,6 +24,8 @@ Both sit behind one interface (`get_inference_engine()`), so the health check, t
 
 On the host, `make llama` (`my-app inference llama`) serves every GGUF in `LLAMACPP_MODELS_DIR` (default `~/models`) as a router, with the flags chat needs. Ollama's models are linked in first when `OLLAMA_MODELS` (default `~/.ollama/models`) holds any, so one download serves both; `my-app inference link-ollama` links them without serving. It runs in the foreground: Ctrl-C stops it.
 
+It holds one model at a time (`--models-max 1`): picking another frees the last, since two large ones at once can fail with "Compute error". `make llama-unload` (`my-app inference llama-unload`) frees the one it holds; the next chat turn loads its own again.
+
 ```bash
 brew install llama.cpp
 make llama

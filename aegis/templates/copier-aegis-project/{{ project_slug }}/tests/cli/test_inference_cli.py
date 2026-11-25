@@ -137,6 +137,8 @@ def test_llama_links_ollama_then_becomes_the_router(
             "-c",
             "65536",
             "--metrics",
+            "--models-max",
+            "1",
             "--port",
             "8090",
             "-np",
@@ -254,3 +256,48 @@ def test_status_lists_every_engine(monkeypatch: pytest.MonkeyPatch) -> None:
     assert speech_server.NAME in result.output
     assert "ENABLE_DEBUG_ENDPOINTS=true" in result.output
     assert "aegis add inference[llamacpp]" in result.output
+
+
+def _llama_holding(
+    monkeypatch: pytest.MonkeyPatch, names: list[str]
+) -> list[tuple[str, str]]:
+    """A llama.cpp router holding ``names``; what it was asked to move."""
+    from app.components.inference.engine import InferenceServerStatus, RunningModel
+    from app.components.inference.llamacpp import LlamaCppEngine
+
+    moved: list[tuple[str, str]] = []
+
+    async def status(self: LlamaCppEngine) -> InferenceServerStatus:
+        held = [RunningModel(name=n, model=n, size=0) for n in names]
+        return InferenceServerStatus(available=True, running_models=held)
+
+    async def move(self: LlamaCppEngine, action: str, name: str) -> bool:
+        moved.append((action, name))
+        return True
+
+    monkeypatch.setattr(LlamaCppEngine, "get_server_status", status)
+    monkeypatch.setattr(LlamaCppEngine, "move", move)
+    return moved
+
+
+def test_llama_unload_frees_every_model_it_holds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    moved = _llama_holding(monkeypatch, ["qwen3-coder:30b", "qwen3.8:27b"])
+
+    result = invoke(["inference", "llama-unload"])
+
+    assert result.exit_code == 0
+    assert moved == [("unload", "qwen3-coder:30b"), ("unload", "qwen3.8:27b")]
+
+
+def test_llama_unload_with_nothing_loaded_says_so(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    moved = _llama_holding(monkeypatch, [])
+
+    result = invoke(["inference", "llama-unload"])
+
+    assert result.exit_code == 0
+    assert moved == []
+    assert "Nothing loaded" in result.output

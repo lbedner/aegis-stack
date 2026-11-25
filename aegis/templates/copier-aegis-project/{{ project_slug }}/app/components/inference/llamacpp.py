@@ -11,8 +11,8 @@ A router (``--models-dir``; ``/props`` says ``role: router``) serves every
 model in that folder and in llama.cpp's download cache, loading and freeing
 them on request (``/models/load``, ``/models/unload``). Its ``/v1/models``
 gives each one's status and trained context; what one can do is read from
-its own ``/props?model=``, and only for a loaded one: asking of an unloaded
-one loads it.
+its own ``/props?model=``, and only for a loaded one, asked with
+``autoload=false``: without it, asking of an unloaded one loads it.
 """
 
 import asyncio
@@ -88,7 +88,9 @@ def _served(
 
 def router_command(folder: str, port: int, context: int, extra: str = "") -> list[str]:
     """A llama-server router over ``folder``, with the flags chat needs
-    (``make llama`` runs it); ``extra`` is any further flags, as typed."""
+    (``make llama`` runs it); ``extra`` is any further flags, as typed.
+    One model in memory at a time: picking another unloads the last, and
+    two large ones at once fail with "Compute error"."""
     return [
         "llama-server",
         "--models-dir",
@@ -97,6 +99,8 @@ def router_command(folder: str, port: int, context: int, extra: str = "") -> lis
         "-c",
         str(context),
         "--metrics",
+        "--models-max",
+        "1",
         "--port",
         str(port),
         *shlex.split(extra),
@@ -126,12 +130,17 @@ class LlamaCppEngine(BaseInferenceEngine):
             if not _routing(listing):
                 return listing, props, None
             warm = [e["id"] for e in listing["data"] if _warm(e)]
-            # ponytail: one freed between the listing and this ask is loaded
-            # again by it; a status re-check per model if that ever bites.
-            own = await asyncio.gather(
-                *(self._get(client, f"/props?{urlencode({'model': m})}") for m in warm)
-            )
-        return listing, props, dict(zip(warm, own, strict=True))
+            own = await asyncio.gather(*(self._own(client, m) for m in warm))
+        return listing, props, {m: p for m, p in zip(warm, own, strict=True) if p}
+
+    async def _own(self, client: httpx.AsyncClient, model: str) -> dict[str, Any]:
+        """A loaded model's props, never loading it (``autoload=false``):
+        one freed since the listing answers 400, and says nothing ({})."""
+        query = urlencode({"model": model, "autoload": "false"})
+        try:
+            return await self._get(client, f"/props?{query}")
+        except httpx.HTTPStatusError:
+            return {}
 
     async def fetch_models(self) -> list[InferenceModel]:
         return [model for model, _, _ in _served(*await self._read())]

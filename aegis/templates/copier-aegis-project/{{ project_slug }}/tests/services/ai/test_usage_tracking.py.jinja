@@ -48,18 +48,22 @@ class TestExtractUsage:
 
 {%- if ai_framework == "pydantic-ai" %}
 
-    @pytest.mark.filterwarnings("error")
     def test_today_usage_is_read_as_the_property_it_is(
         self, ai_service: AIService
     ) -> None:
         """``RunUsage`` still answers a call, with a deprecation warning."""
         from types import SimpleNamespace
+        import warnings
 
         from pydantic_ai.usage import RunUsage
 
         result = SimpleNamespace(usage=RunUsage(input_tokens=7, output_tokens=3))
 
-        usage = ai_service._extract_usage(result)
+        # Errors scoped to the call: a whole-test filter also failed on an
+        # earlier test's leaked connection, finalized while this one ran.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            usage = ai_service._extract_usage(result)
 
         assert (usage["input_tokens"], usage["output_tokens"]) == (7, 3)
 {%- endif %}

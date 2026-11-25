@@ -7477,16 +7477,25 @@ holds for arq, TaskIQ and Dramatiq alike.</p>
   unless its entry sets <code>timeout</code> in seconds.</li>
 <li><strong>Run Now.</strong> The dashboard button, the API
   (<code>POST /api/v1/scheduler/jobs/{id}/run</code>) and <code>tasks trigger</code> repeat the
-  stored call, so a manual run is an enqueue too and never runs inside the
-  webserver. The API response says where the job runs (<code>ran_in</code>).</li>
+  stored call, so a manual run is an enqueue too and the job's work never
+  runs inside the webserver (a sweep reads its items there, then queues
+  each). The API response says where the job runs (<code>ran_in</code>).</li>
 <li><strong>Run history.</strong> The Scheduler page times the enqueue; the job's own run
   time and outcome are on the Worker page.</li>
+<li><strong>Sweeps.</strong> An entry with <code>each=</code> works over many items (owners,
+  projects, sources): its function returns their ids and <code>each</code> does one.
+  The scheduler runs the sweep itself, since it is cheap, and queues a task
+  per item (<code>&lt;job&gt;_each</code>, claimed so it is queued once), so the worker runs
+  them at the system queue's concurrency and one slow or failing item holds
+  up none of the rest.</li>
 <li><strong>The heartbeat stays in the scheduler</strong>, because it proves the
   scheduler's own loop is alive.</li>
 </ul>
 <p>Without a worker, the scheduler runs each job itself, and Run Now runs it in
-the process that received the request. Adding a worker later moves every
-entry onto it with no change to the list.</p>
+the process that received the request; a sweep does its items one after
+another, one item's failure logged and kept from the rest, and the run
+recorded as failed if any did. Adding a worker later moves every entry onto
+it with no change to the list.</p>
 <h2 id="job-management">Job Management</h2>
 <h3 id="listing-jobs">Listing Jobs</h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Get all scheduled jobs</span>

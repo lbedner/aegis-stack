@@ -501,6 +501,8 @@ MESSAGES: dict[str, str] = {
         "Commit or stash your changes before running 'aegis add-service': "
         "a failed add is undone by resetting to the last commit."
     ),
+    "add_service.help_opt_finish": "Finish a previous add that stopped on conflicts: write and apply its migrations",
+    "add_service.finish_nothing": "No conflicted add pending - nothing to finish",
     "add_service.rolled_back": "Nothing was added. {detail}",
     "add_service.auth_setup": "Auth サービスのセットアップ：",
     "add_service.auth_create_users": "   1. テストユーザーを作成：{cmd}",
@@ -702,7 +704,7 @@ MESSAGES: dict[str, str] = {
     "update.help_opt_finish": "競合で中断した前回の更新を完了する：生成後タスクを実行し、テンプレートバージョンを進めます",
     "update.finish_resuming": "競合で中断した {ref} への更新を再開しています...",
     "update.finish_nothing": "保留中の競合更新はありません - 完了するものがありません (nothing to finish)",
-    "update.finish_blocked": "{count} 個のファイルにまだ競合があります。解決してから実行してください：aegis update --finish",
+    "update.finish_blocked": "{count} 個のファイルにまだ競合があります。解決してから実行してください：{cmd}",
     "update.target_unresolved": "{ref} をコミットに解決できないため、更新後のプロジェクトの基準を記録できません。タグ、ブランチ、または完全な SHA を指定してください。",
     "update.finish_done": "更新が完了しました！",
     "update.next_finish": "   5. 競合を解決した後：aegis update --finish",

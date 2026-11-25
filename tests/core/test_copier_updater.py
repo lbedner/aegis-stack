@@ -14,6 +14,7 @@ from aegis.core.copier_updater import (
     _get_changelog_from_github,
     analyze_conflict_files,
     cleanup_backup_tag,
+    conflict_lines,
     create_backup_point,
     format_conflict_report,
     get_available_versions,
@@ -226,6 +227,16 @@ class TestAnalyzeConflictFiles:
         assert "b.py" in report
         assert "<<<<<<<" in report  # tells the user what to look for
         assert "aegis update --finish" in report
+
+    def test_the_short_list_names_each_file_on_its_own_line(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "a.py").write_text("<<<<<<< ours\n1\n=======\n2\n>>>>>>> theirs\n")
+        (tmp_path / "b.py.rej").write_text("-x\n+y\n")
+
+        lines = conflict_lines(analyze_conflict_files(tmp_path)).splitlines()
+
+        assert sorted(line.strip() for line in lines) == ["- a.py", "- b.py"]
 
     def test_unparsable_pyproject_is_reported(self, tmp_path: Path) -> None:
         """A merge can leave pyproject.toml syntactically broken (duplicate

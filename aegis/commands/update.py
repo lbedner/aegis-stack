@@ -25,12 +25,14 @@ from ..core.copier_manager import is_copier_project, load_copier_answers
 from ..core.copier_updater import (
     analyze_conflict_files,
     cleanup_backup_tag,
+    conflict_lines,
     create_backup_point,
     format_conflict_report,
     get_changelog,
     get_current_template_commit,
     get_template_root,
     is_version_downgrade,
+    pending_path,
     resolve_ref_to_commit,
     resolve_ref_to_commit_remote,
     resolve_version_to_ref,
@@ -150,16 +152,19 @@ def _template_version_for_ref(
 _PENDING_FILE = "aegis-update-pending.json"
 
 
-def _pending_path(project_path: Path) -> Path:
-    """Keep pending state in this checkout's Git directory, including worktrees."""
-    result = subprocess.run(
-        ["git", "-C", str(project_path), "rev-parse", "--git-path", _PENDING_FILE],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    path = Path(result.stdout.strip())
-    return path if path.is_absolute() else project_path / path
+def echo_conflicts(conflicts: list[dict[str, str]]) -> None:
+    """List the files a conflict left, one per line."""
+    typer.echo(conflict_lines(conflicts))
+
+
+def refuse_while_conflicted(project_path: Path, finish_cmd: str) -> None:
+    """Exit while any conflict remains, naming the files and ``finish_cmd``:
+    finishing past a marker skips the hunks the user has not merged."""
+    conflicts = analyze_conflict_files(project_path)
+    if conflicts:
+        brand.error(t("update.finish_blocked", count=len(conflicts), cmd=finish_cmd))
+        echo_conflicts(conflicts)
+        raise typer.Exit(1)
 
 
 def _record_pending_update(
@@ -177,7 +182,7 @@ def _record_pending_update(
     On conflicts the baseline advance and post-gen are skipped on purpose;
     this is what lets a later run pick them up instead of re-merging.
     """
-    _pending_path(project_path).write_text(
+    pending_path(project_path, _PENDING_FILE).write_text(
         json.dumps(
             {
                 "target_ref": target_ref,
@@ -190,14 +195,17 @@ def _record_pending_update(
     )
 
 
-def _installed_before(pending: dict[str, Any]) -> frozenset[str]:
+def installed_before(pending: dict[str, Any]) -> frozenset[str]:
     """The dependencies a pending update started from; none for a record
     written before they were kept (so the rebuild step shows)."""
     return frozenset(pending.get("installed", []))
 
 
-def _load_pending_update(project_path: Path) -> dict[str, Any] | None:
-    path = _pending_path(project_path)
+def load_pending(
+    project_path: Path, name: str = _PENDING_FILE
+) -> dict[str, Any] | None:
+    """A pending record (an update's by default), or None if none is readable."""
+    path = pending_path(project_path, name)
     if not path.exists():
         return None
     try:
@@ -248,12 +256,7 @@ def _finish_update(target_path: Path, pending: dict[str, Any]) -> None:
     unresolved markers would make the next update skip the very hunks the
     user has not merged yet.
     """
-    conflicts = analyze_conflict_files(target_path)
-    if conflicts:
-        brand.error(t("update.finish_blocked", count=len(conflicts)))
-        for conflict in conflicts:
-            typer.echo(f"      - {conflict['original']}")
-        raise typer.Exit(1)
+    refuse_while_conflicted(target_path, "aegis update --finish")
 
     answers = load_copier_answers(target_path) or {}
     # Pinned when the update started; a record from before that re-resolves.
@@ -270,7 +273,7 @@ def _finish_update(target_path: Path, pending: dict[str, Any]) -> None:
         Path(pending["template_root"]),
         target_commit=target_commit,
     )
-    _pending_path(target_path).unlink(missing_ok=True)
+    pending_path(target_path, _PENDING_FILE).unlink(missing_ok=True)
     backup_tag = pending.get("backup_tag")
     if backup_tag and tasks_success:
         cleanup_backup_tag(target_path, backup_tag)
@@ -284,7 +287,7 @@ def _finish_update(target_path: Path, pending: dict[str, Any]) -> None:
     typer.echo("")
     typer.echo(t("update.next_steps"))
     Messages.print_rebuild(
-        project_deps.dependencies(target_path) != _installed_before(pending)
+        project_deps.dependencies(target_path) != installed_before(pending)
     )
     typer.echo(t("update.next_review"))
     typer.echo(t("update.next_test"))
@@ -504,7 +507,7 @@ def update_command(
     # because the user simply ran `aegis update` again) instead of
     # re-merging the whole range from the stale baseline. The tree is
     # dirty by definition here, so this comes before the clean check.
-    pending = _load_pending_update(target_path)
+    pending = load_pending(target_path)
     if finish or pending:
         if not pending:
             brand.error(t("update.finish_nothing"))
@@ -543,8 +546,7 @@ def update_command(
         # point it existed to preserve.
         if dry_run:
             typer.echo(t("update.finish_pending", ref=pending["target_ref"]))
-            for conflict in analyze_conflict_files(target_path):
-                typer.echo(f"      - {conflict['original']}")
+            echo_conflicts(analyze_conflict_files(target_path))
             return
 
         typer.echo(t("update.finish_resuming", ref=pending["target_ref"]))

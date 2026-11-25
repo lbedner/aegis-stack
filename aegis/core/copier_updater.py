@@ -1055,6 +1055,23 @@ def analyze_conflict_files(project_path: Path) -> list[dict[str, str]]:
     return conflicts
 
 
+def conflict_lines(conflicts: list[dict[str, str]]) -> str:
+    """The files a conflict left, one per line."""
+    return "\n".join(f"      - {conflict['original']}" for conflict in conflicts)
+
+
+def pending_path(project_path: Path, name: str) -> Path:
+    """Keep pending state in this checkout's Git directory, including worktrees."""
+    result = subprocess.run(
+        ["git", "-C", str(project_path), "rev-parse", "--git-path", name],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    path = Path(result.stdout.strip())
+    return path if path.is_absolute() else project_path / path
+
+
 def format_conflict_report(conflicts: list[dict[str, str]]) -> str:
     """
     Format a detailed conflict report for display.

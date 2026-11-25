@@ -515,6 +515,8 @@ MESSAGES: dict[str, str] = {
         "Commit or stash your changes before running 'aegis add-service': "
         "a failed add is undone by resetting to the last commit."
     ),
+    "add_service.help_opt_finish": "Finish a previous add that stopped on conflicts: write and apply its migrations",
+    "add_service.finish_nothing": "No conflicted add pending - nothing to finish",
     "add_service.rolled_back": "Nothing was added. {detail}",
     "add_service.auth_setup": "Configuración de Auth:",
     "add_service.auth_create_users": "   1. Crear usuarios de prueba: {cmd}",
@@ -720,7 +722,7 @@ MESSAGES: dict[str, str] = {
     "update.help_opt_finish": "Finalizar una actualización previa detenida por conflictos: ejecuta las tareas post-generación y avanza la versión de plantilla",
     "update.finish_resuming": "Reanudando la actualización a {ref} detenida por conflictos...",
     "update.finish_nothing": "No hay ninguna actualización con conflictos pendiente - nada que finalizar (nothing to finish)",
-    "update.finish_blocked": "{count} archivo(s) aún contienen conflictos. Resuélvelos y ejecuta: aegis update --finish",
+    "update.finish_blocked": "{count} archivo(s) aún contienen conflictos. Resuélvelos y ejecuta: {cmd}",
     "update.target_unresolved": "No se puede resolver {ref} a un commit, así que la actualización no podría registrar en qué versión deja el proyecto. Usa una etiqueta, una rama o un SHA completo.",
     "update.finish_done": "¡Actualización finalizada!",
     "update.next_finish": "   5. Tras resolver los conflictos: aegis update --finish",

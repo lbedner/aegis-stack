@@ -10,6 +10,7 @@ from app.components.backend.api.auth.guest import guest_sign_in as api_guest_sig
 from app.components.backend.security import turnstile
 from app.components.backend.api.auth.sessions import refused_sign_in
 from app.core.audit import AuditEmitter, get_audit
+from app.core.config import settings
 from app.core.formatting import site_path
 from app.services.auth.deps import get_refresh_service, get_user_service
 from app.services.auth.service import RefreshService, UserService
@@ -27,7 +28,10 @@ async def guest_submit(
     audit: AuditEmitter = Depends(get_audit),
 ) -> RedirectResponse:
     """The sign-in page's guest button: the API's guest sign-in, with
-    its cookies on the redirect back to ``next``."""
+    its cookies on the redirect back to ``next``. Closed with the button
+    (``GUEST_ON_SIGN_IN_PAGE``)."""
+    if not settings.GUEST_ON_SIGN_IN_PAGE:
+        raise HTTPException(status_code=404)
     redirect = RedirectResponse(url=site_path(next, "/"), status_code=303)
     try:
         await api_guest_sign_in(

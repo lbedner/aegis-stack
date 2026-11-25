@@ -14,6 +14,9 @@ from app.core.configurable import Configurable
 
 class GuestSettings(BaseSettings):
     GUEST_SESSION_HOURS: Annotated[int, Configurable("service_auth", "Hours a guest's session lasts without use")] = 24
+    # The sign-in page's "Continue as guest". Off when guests start
+    # elsewhere (a chat panel signs its visitor in itself).
+    GUEST_ON_SIGN_IN_PAGE: Annotated[bool, Configurable("service_auth", "Offer guest sign-in on the sign-in page")] = True
     RATE_LIMIT_GUEST_MAX: Annotated[int, Configurable("service_auth", "Guest sessions one address may start per window")] = 5
     RATE_LIMIT_GUEST_WINDOW: Annotated[int, Configurable("service_auth", "Seconds the guest limit counts over")] = 3600
     # Cloudflare Turnstile, the human check in front of guest sign-in. Off

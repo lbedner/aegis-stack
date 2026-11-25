@@ -61,8 +61,8 @@ templates.env.globals["registration_enabled"] = registration_enabled
 
 def guest_sign_in() -> str | None:
     """The Turnstile site key the "Continue as guest" button renders ("" while
-    the check is off), or None on a stack without guest sign-in."""
-    if not hasattr(settings, "GUEST_SESSION_HOURS"):
+    the check is off), or None where the page offers no guest sign-in."""
+    if not getattr(settings, "GUEST_ON_SIGN_IN_PAGE", False):
         return None
     from app.components.backend.security import turnstile  # auth[guest] only
 

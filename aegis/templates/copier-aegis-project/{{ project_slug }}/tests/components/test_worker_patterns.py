@@ -4,6 +4,7 @@ The same on every engine: ``registry.queue_tasks`` finds the tasks and
 each engine's wrapper is unwrapped to the function it runs.
 """
 
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
@@ -12,6 +13,12 @@ from app.components.worker import registry
 from app.components.worker.patterns import TASK, Task
 from app.core.discovery import present
 from app.services.system import patterns
+from tests.components._jobs_over_items import (
+    awaits_in_a_comprehension,
+    fans_out,
+    hands_a_loop_on,
+    loops_itself,
+)
 
 
 def _findings(func: Any) -> list[str]:
@@ -43,6 +50,7 @@ def test_a_services_task_is_registered_only_where_the_service_is() -> None:
         ("run_evals_task", "app.services.ai.domains.evals.jobs"),
         ("generate_evals_task", "app.services.ai.domains.evals.jobs"),
         ("fold_conversation_task", "app.services.ai.domains.chat.summary"),
+        ("score_conversation_task", "app.services.ai.domains.chat.sentiment"),
     ):
         assert (task in registered) == present(service), task
     # A picture shared in chat, read into its paste index with documents'.
@@ -112,3 +120,23 @@ def test_the_canonical_example_follows_every_rule_and_step() -> None:
         return
     assert report.canonical is not None
     assert report.canonical.findings == []
+
+
+def test_a_job_over_many_items_queues_a_task_each() -> None:
+    """Serial work in a job, or in what it calls, waits item by item where
+    the queue would run them at once."""
+    assert "fan-out" in _findings(loops_itself)
+    assert "fan-out" in _findings(hands_a_loop_on)
+    assert "fan-out" in _findings(awaits_in_a_comprehension)
+    assert "fan-out" not in _findings(fans_out)
+
+
+def test_fan_out_points_at_the_loop() -> None:
+    rule = next(r for r in TASK.rules if r.key == "fan-out")
+    task = Task("q", "hands_a_loop_on", hands_a_loop_on)
+
+    (where,) = rule.evidence(task) if rule.evidence else []
+
+    path, line = where.rsplit(":", 1)
+    assert path.endswith("tests/components/_jobs_over_items.py")
+    assert "await _answer(item)" in Path(path).read_text().splitlines()[int(line) - 1]

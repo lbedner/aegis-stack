@@ -30,6 +30,9 @@ class Function:
     # The calls made without ``await``, as written: ``f``, ``x.f``.
     unawaited: frozenset[str] = frozenset()
     returns: str | None = None  # its return annotation, as written
+    # The calls awaited in a loop (a comprehension's too), as written, at
+    # their lines: work done one item after another.
+    looped: frozenset[tuple[str, int]] = frozenset()
 
 
 def _written(lines: tuple[str, ...], node: ast.expr | None) -> str | None:
@@ -83,6 +86,44 @@ def _awaited(value: ast.expr) -> list[ast.Call]:
     return [value] if isinstance(value, ast.Call) else []
 
 
+LOOPS = (
+    ast.For,
+    ast.AsyncFor,
+    ast.While,
+    ast.ListComp,
+    ast.SetComp,
+    ast.DictComp,
+    ast.GeneratorExp,
+)
+
+
+def _each_pass(loop: ast.AST) -> list[ast.AST]:
+    """What a loop runs once an item: its body (a ``while``'s test too), a
+    comprehension's element and conditions; never what it iterates over,
+    which runs once."""
+    if isinstance(loop, ast.For | ast.AsyncFor):
+        return [*loop.body]
+    if isinstance(loop, ast.While):
+        return [loop.test, *loop.body]
+    parts: list[ast.AST] = [
+        getattr(loop, name) for name in ("elt", "key", "value") if hasattr(loop, name)
+    ]
+    return parts + [c for g in getattr(loop, "generators", []) for c in g.ifs]
+
+
+def _looped(node: ast.AST) -> frozenset[tuple[str, int]]:
+    """The calls ``node`` awaits inside a loop, as written, at their lines."""
+    found = set()
+    loops = (n for n in ast.walk(node) if isinstance(n, LOOPS))
+    for loop in loops:
+        for inner in (i for part in _each_pass(loop) for i in ast.walk(part)):
+            if isinstance(inner, ast.Await):
+                for call in _awaited(inner.value):
+                    if name := _spelled(call.func):
+                        found.add((name, call.lineno))
+    return frozenset(found)
+
+
 def _function(
     node: ast.FunctionDef | ast.AsyncFunctionDef, qualname: str, lines: tuple[str, ...]
 ) -> Function:
@@ -115,6 +156,7 @@ def _function(
         len(body) - int(docstring),
         frozenset(unawaited),
         _written(lines, node.returns),
+        _looped(node),
     )
 
 

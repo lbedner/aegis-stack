@@ -304,12 +304,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation LEFT OUTER JOIN sentiment_analysis ON sentiment_analysis.conversation_id = conversation.id WHERE sentiment_analysis.id IS NULL ORDER BY conversation.updated_at LIMIT :param_1",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "unscored_conversations"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM conversation ORDER BY conversation.updated_at DESC",
       "file": "app/services/ai/domains/chat/queries.py",
       "function": "conversations_with_messages"

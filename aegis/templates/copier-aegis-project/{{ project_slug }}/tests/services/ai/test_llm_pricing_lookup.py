@@ -49,6 +49,14 @@ async def catalog(session: AsyncSession) -> LargeLanguageModel:
 
 
 class TestItFindsThePrice:
+
+    def test_a_prices_effective_date_is_naive_utc(self) -> None:
+        price = LLMPrice(
+            org_id=1, llm_id=1, input_cost_per_token=0.0, output_cost_per_token=0.0
+        )
+
+        assert price.effective_date.tzinfo is None
+
     async def test_the_name_the_provider_reports(
         self, session: AsyncSession, catalog: Any
     ) -> None:

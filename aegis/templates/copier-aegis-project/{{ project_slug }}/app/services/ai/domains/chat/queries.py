@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import selectinload
@@ -165,24 +166,58 @@ async def latest_message_timestamp(
     ).one()
 
 
-async def unscored_conversations(
-    session: AsyncSession, limit: int
-) -> Sequence[Conversation]:
+def _unscored() -> tuple[Any, ...]:
+    """Where a conversation still wants a verdict: none yet, and something
+    said in it. One with no messages never gets a verdict, so picked it
+    would be picked again on every run."""
+    # ponytail: empty conversations exist only because a row is made before
+    # its first message (a chat turn that failed, a meeting's live call no one
+    # spoke to). A conversation should not exist without a message; once
+    # meetings' conversations are joined with the others and none is left
+    # orphaned, the messages test can go.
+    scored = select(SentimentAnalysis.id).where(
+        SentimentAnalysis.conversation_id == Conversation.id
+    )
+    said = Conversation.messages.any(ConversationMessage.content != "")  # type: ignore[attr-defined]
+    return (~scored.exists(), said)
+
+
+async def unscored_conversations(session: AsyncSession) -> Sequence[Conversation]:
     """Oldest-first conversations with no sentiment verdict, messages
     loaded."""
     return (
         await session.exec(
             select(Conversation)
-            .outerjoin(
-                SentimentAnalysis,
-                SentimentAnalysis.conversation_id == Conversation.id,  # type: ignore[arg-type]
-            )
-            .where(SentimentAnalysis.id == None)  # noqa: E711 - SQL IS NULL
+            .where(*_unscored())
             .options(selectinload(Conversation.messages))  # type: ignore[arg-type]
             .order_by(Conversation.updated_at)  # type: ignore[arg-type]
-            .limit(limit)
         )
     ).all()
+
+
+async def unscored_conversation_ids(session: AsyncSession) -> Sequence[str]:
+    """The ids of ``unscored_conversations``, oldest first."""
+    return (
+        await session.exec(
+            select(Conversation.id)
+            .where(*_unscored())
+            .order_by(Conversation.updated_at)  # type: ignore[arg-type]
+        )
+    ).all()
+
+
+async def unscored_conversation(
+    session: AsyncSession, conversation_id: str
+) -> Conversation | None:
+    """``conversation_id``, messages loaded, while it still wants a verdict;
+    None once it has one (or is gone, or empty)."""
+    return (
+        await session.exec(
+            select(Conversation)
+            .where(Conversation.id == conversation_id, *_unscored())
+            .options(selectinload(Conversation.messages))  # type: ignore[arg-type]
+        )
+    ).first()
 
 
 async def sentiment_counts(

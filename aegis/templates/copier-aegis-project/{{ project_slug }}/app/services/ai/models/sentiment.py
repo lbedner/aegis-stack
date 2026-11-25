@@ -1,10 +1,12 @@
 """Conversation sentiment analysis model."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import JSON, Column, ForeignKey, String
 from sqlmodel import Field, SQLModel
+
+from app.core.time import utcnow
 
 SENTIMENT_VALUES = ("positive", "neutral", "negative", "frustrated")
 PERFORMANCE_VALUES = ("good", "acceptable", "poor")
@@ -35,4 +37,4 @@ class SentimentAnalysis(SQLModel, table=True):
     issues: list[Any] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     summary: str | None = None
     model_id: str | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=utcnow)

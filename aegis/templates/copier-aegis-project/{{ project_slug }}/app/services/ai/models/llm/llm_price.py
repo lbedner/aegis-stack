@@ -1,9 +1,11 @@
 """LLM Price model for token pricing with versioning."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
+
+from app.core.time import utcnow
 
 if TYPE_CHECKING:
     from .large_language_model import LargeLanguageModel
@@ -52,9 +54,7 @@ class LLMPrice(SQLModel, table=True):
     input_cost_per_second: float | None = Field(default=None, ge=0)
     output_cost_per_second: float | None = Field(default=None, ge=0)
     input_cost_per_character: float | None = Field(default=None, ge=0)
-    effective_date: datetime = Field(
-        default_factory=lambda: datetime.now(UTC), index=True
-    )
+    effective_date: datetime = Field(default_factory=utcnow, index=True)
 
     # Relationships
     org: "LLMOrg" = Relationship(back_populates="llm_prices")

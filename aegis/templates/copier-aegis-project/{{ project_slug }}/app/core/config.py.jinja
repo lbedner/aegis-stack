@@ -417,9 +417,8 @@ class Settings(
     AI_CODE_MODE_MAX_SECONDS: float = 10.0  # run_code's sandbox (code-mode.md)
     AI_CODE_MODE_MAX_MEMORY_BYTES: int = 64 * 1024 * 1024
 {% if ai_backend != "memory" %}
-    # Batch sentiment scoring, OFF by default: it spends model tokens.
-    AI_SENTIMENT_ENABLED: Annotated[bool, Configurable("service_ai", "Score conversations' sentiment in batches (spends model tokens)")] = False
-    AI_SENTIMENT_BATCH_LIMIT: Annotated[int, Configurable("service_ai", "Conversations scored per batch")] = 20
+    # Sentiment scoring, OFF by default: it spends model tokens.
+    AI_SENTIMENT_ENABLED: Annotated[bool, Configurable("service_ai", "Score every conversation's sentiment (spends model tokens)")] = False
 {% endif %}
 
     # Provider API Keys (optional - many providers offer free tiers)

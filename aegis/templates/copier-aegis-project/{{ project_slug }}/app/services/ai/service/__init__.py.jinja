@@ -71,11 +71,12 @@ if TYPE_CHECKING:
     from app.services.ai.domains.chat.queries import conversation_stats
     from app.services.ai.domains.chat.sentiment import (
         SentimentMix,
-        score_unscored_conversations,
+        queue_unscored,
+        score_conversation,
         sentiment_mix,
         sentiment_stats,
     )
-    from app.services.ai.jobs import read_photo_job
+    from app.services.ai.jobs import read_photo_job, score_conversation_job
 {%- endif %}
     from app.services.ai.domains.chat.tools import resolve_tools
 {%- if ai_backend != "memory" %}

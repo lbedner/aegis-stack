@@ -1,10 +1,14 @@
-"""Batch conversation sentiment scoring.
+"""Conversation sentiment scoring.
 
 Scores persisted conversations with the configured LLM and writes one
 ``sentiment_analysis`` row per conversation. Score-once is structural
-(unique ``conversation_id``): the batch only ever selects conversations
-without a verdict, so re-runs never re-score. A conversation that fails
-to score is logged and simply picked up by a later batch.
+(unique ``conversation_id``): only conversations without a verdict are
+picked, so re-runs never re-score. A conversation that fails to score is
+logged and simply picked up by a later run.
+
+The hourly job hands every unscored conversation to the worker, a task
+each (``queue_unscored``), so they score as fast as the system queue runs
+them; no batch, no backlog.
 
 Present but OFF by default: the scheduled job checks
 ``settings.AI_SENTIMENT_ENABLED`` and returns early when disabled,
@@ -19,12 +23,13 @@ from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
-from app.core.db import get_async_session, release_lock
+from app.core.db import release_lock
+from app.core.discovery import present
 from app.core.figures import FIGURES
 from app.core.log import logger
 from app.models.conversation import Conversation
-from app.services.ai.domains.llm.config import AIServiceConfig
 from app.services.ai.domains.chat import queries
+from app.services.ai.domains.llm.config import AIServiceConfig
 from app.services.ai.models.sentiment import (
     PERFORMANCE_VALUES,
     SENTIMENT_VALUES,
@@ -52,6 +57,12 @@ SENTIMENT_AGENT_SLUG = "sentiment"
 # A verdict is a short JSON object, read the same way each time.
 SENTIMENT_TEMPERATURE = 0.0
 SENTIMENT_MAX_TOKENS = 600
+# Scoring runs on the worker, a task a conversation; a stack without one
+# scores them in the job itself.
+QUEUED = present("app.components.worker")
+# A conversation stays claimed for under the job's hour: one still waiting
+# in the queue is not queued twice, one whose task failed is queued again.
+_CLAIM_SECONDS = 50 * 60
 
 
 def _build_transcript(conversation: Conversation) -> str | None:
@@ -99,14 +110,14 @@ def _validate_verdict(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# What a batch scores with: the model's config, and the prompt.
+# What a run scores with: the model's config, and the prompt.
 Scorer = tuple[AIServiceConfig, str]
 
 
 async def _scorer() -> Scorer:
     """The ``sentiment`` agent's model, sampling and prompt, or, while no
     such agent is active, the built-in prompt on the model in force.
-    Resolved once a batch."""
+    Resolved once a sweep, or once a task."""
     from app.services.ai.domains.llm import active_model
 
     return await active_model.agent_in_force(
@@ -151,64 +162,86 @@ async def _score_conversation(
     await session.commit()
 
 
-async def _unscored_batch(
-    session: AsyncSession, limit: int
-) -> list[tuple[str, str | None]]:
-    """Snapshot (conversation_id, transcript) for the unscored batch.
+async def _scored(
+    session: AsyncSession, conversation_id: str, transcript: str | None, scorer: Scorer
+) -> str:
+    """One conversation's verdict written: "scored"; "skipped" with nothing
+    to read; "failed" (logged, rolled back) when the model or its answer
+    would not do, left unscored for a later run."""
+    if transcript is None:
+        return "skipped"
+    try:
+        await _score_conversation(session, conversation_id, transcript, scorer)
+    except Exception as exc:
+        logger.error(
+            "Sentiment scoring failed for conversation",
+            conversation_id=conversation_id,
+            error=str(exc),
+        )
+        await session.rollback()
+        return "failed"
+    return "scored"
 
-    Materialized eagerly, BEFORE any commit in the scoring loop expires
-    the loaded ORM instances (async sessions cannot lazy-load).
+
+async def score_unscored_conversations(*, session: AsyncSession) -> dict[str, int]:
+    """Every unscored conversation scored here, one after another: the
+    sweep where there is no worker to hand them to (``queue_unscored``).
+
+    Read and transcribed BEFORE the first commit expires the loaded ORM
+    instances (async sessions cannot lazy-load), and the transaction
+    ended before any model call.
     """
-    return [
+    batch = [
         (conversation.id, _build_transcript(conversation))
-        for conversation in await queries.unscored_conversations(session, limit)
+        for conversation in await queries.unscored_conversations(session)
     ]
-
-
-async def score_unscored_conversations(
-    *,
-    limit: int | None = None,
-    session: AsyncSession | None = None,
-) -> dict[str, int]:
-    """Score a batch of unscored conversations.
-
-    Per-conversation failures (model error, unparseable reply, invalid
-    verdict) are logged and counted, never fatal to the batch; failed
-    conversations stay unscored and are retried by a later run.
-    """
-    if session is None:
-        async with get_async_session() as owned_session:
-            return await score_unscored_conversations(
-                limit=limit, session=owned_session
-            )
-
-    batch_limit = limit or settings.AI_SENTIMENT_BATCH_LIMIT
-    batch = await _unscored_batch(session, batch_limit)
     await release_lock(session)  # each verdict then writes on its own
     counts = {"scored": 0, "skipped": 0, "failed": 0}
-    scorer: Scorer | None = None
-    for conversation_id, transcript in batch:
-        if transcript is None:
-            logger.debug(
-                "Conversation has no scoreable messages; skipping",
-                conversation_id=conversation_id,
-            )
-            counts["skipped"] += 1
-            continue
-        try:
-            scorer = scorer or await _scorer()
-            await _score_conversation(session, conversation_id, transcript, scorer)
-            counts["scored"] += 1
-        except Exception as exc:
-            counts["failed"] += 1
-            logger.error(
-                "Sentiment scoring failed for conversation",
-                conversation_id=conversation_id,
-                error=str(exc),
-            )
-            await session.rollback()
-    logger.info("Sentiment batch finished", **counts)
+    if batch:
+        scorer = await _scorer()
+        for conversation_id, transcript in batch:
+            counts[await _scored(session, conversation_id, transcript, scorer)] += 1
+    logger.info("Sentiment: conversations scored", **counts)
     return counts
+
+
+async def score_conversation(conversation_id: str, *, session: AsyncSession) -> str:
+    """One queued conversation scored (``score_conversation_task``), as
+    ``_scored`` says; "skipped" too once it has a verdict or is gone. The
+    transaction ends before the model call."""
+    conversation = await queries.unscored_conversation(session, conversation_id)
+    transcript = _build_transcript(conversation) if conversation else None
+    await release_lock(session)
+    if transcript is None:
+        return "skipped"
+    return await _scored(session, conversation_id, transcript, await _scorer())
+
+
+async def queue_unscored(*, session: AsyncSession) -> int:
+    """Every unscored conversation handed to the worker, a task each
+    (``score_conversation_task``): as many score at once as the system
+    queue runs. Each is queued once while its task may still be waiting
+    (``_CLAIM_SECONDS``); one that failed is queued again by a later run.
+    Without a worker they are scored here (``score_unscored_conversations``).
+    How many were queued, or scored."""
+    if not QUEUED:
+        return (await score_unscored_conversations(session=session))["scored"]
+    from app.components.worker.queue_once import enqueue_once
+    from app.core.constants import QueueName
+
+    ids = await queries.unscored_conversation_ids(session)
+    await release_lock(session)
+    queued = 0
+    for conversation_id in ids:
+        queued += await enqueue_once(
+            f"ai:sentiment:{conversation_id}",
+            _CLAIM_SECONDS,
+            "score_conversation_task",
+            QueueName.SYSTEM,
+            conversation_id,
+        )
+    logger.info("Sentiment: conversations queued", queued=queued)
+    return queued
 
 
 RECENT_NEGATIVE_LIMIT = 5

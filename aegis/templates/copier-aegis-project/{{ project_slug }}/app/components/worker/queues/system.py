@@ -11,6 +11,7 @@ from app.components.worker import arq_hooks
 from app.components.worker.tasks.chat_tasks import (
     fold_conversation_task,
     read_photo_task,
+    score_conversation_task,
 )
 from app.components.worker.tasks.document_tasks import extract_document_task
 from app.components.worker.tasks.eval_tasks import (
@@ -54,6 +55,9 @@ class WorkerSettings:
     if present("app.services.ai.domains.chat.summary"):
         # A long conversation's turns out of view, folded into its summary.
         functions.append(fold_conversation_task)
+    if present("app.services.ai.domains.chat.sentiment"):
+        # A conversation's sentiment, a task each.
+        functions.append(score_conversation_task)
     if present("app.services.rag"):
         # A batch waits for the one model this process embeds with.
         functions.append(func(embed_files_task, timeout=30 * 60))

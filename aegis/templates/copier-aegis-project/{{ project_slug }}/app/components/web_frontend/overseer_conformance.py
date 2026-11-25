@@ -1,4 +1,5 @@
-"""What the parts pattern (``service_parts.PARTS``) found, on the map,
+"""What the patterns found (the parts pattern, ``service_parts.PARTS``,
+and every other installed one), on the map,
 always: each part opened up in the Server (``mark``), or each piece of a
 service opened up (``mark_pieces``), marked with what it should fix: how
 many places, in the rule's tone, and on hover what to do and each place,
@@ -9,7 +10,7 @@ from functools import cache
 from typing import Any, NamedTuple
 
 from app.core import source_index
-from app.services.system import pattern_findings, service_parts
+from app.services.system import pattern_findings, patterns, service_parts
 from app.services.system.pattern_findings import Finding
 from app.services.system.service_pieces import Piece
 from app.services.system.staged_paths import registry_of
@@ -23,15 +24,20 @@ class Conformance(NamedTuple):
 
 @cache
 def conformance() -> Conformance:
-    """The parts report (``service_parts.report``) by the map's keys."""
-    report = service_parts.report()
+    """Every pattern's findings (``patterns.own_reports``: the routes' are
+    not handed to the map) by the map's keys; the parts report's (the
+    Patterns page's parts rows) by part, and what each part lacks."""
+    reports = patterns.own_reports()
+    parts = reports[service_parts.PARTS.key]
     found: dict[str, list[Finding]] = {}
     by_part: dict[str, list[Finding]] = {}
-    for finding in pattern_findings.findings(report):
-        found.setdefault(registry_of(finding.subject), []).append(finding)
+    for finding in pattern_findings.findings(parts):
         by_part.setdefault(finding.subject, []).append(finding)
+    for report in reports.values():
+        for finding in pattern_findings.findings(report):
+            found.setdefault(registry_of(finding.subject), []).append(finding)
     lacks: dict[str, list[str]] = {}
-    for instance in report.instances:
+    for instance in parts.instances:
         lacks.setdefault(registry_of(instance.label), []).extend(instance.missed)
     return Conformance(found, lacks, by_part)
 
@@ -41,11 +47,10 @@ def mark(stack: list[dict[str, Any]], found: Conformance) -> None:
     and the parts it lacks."""
     for item in stack:
         key = item["registry"]
-        if key in found.lacks:
-            findings = found.findings.get(key, [])
-            missing = found.lacks[key]
+        if key in found.lacks or key in found.findings:
+            missing = found.lacks.get(key)
             note = f"Lacks: {', '.join(missing)}" if missing else None
-            _mark(item, _whole(findings), note)
+            _mark(item, _whole(found.findings.get(key, [])), note)
 
 
 def mark_pieces(

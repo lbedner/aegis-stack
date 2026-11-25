@@ -168,14 +168,13 @@ When RAG is enabled (`ai[...,rag]`), an agent's `knowledge_base_ids` lists the c
 
 ## Sentiment Analysis
 
-Persistence-backed projects ship a batch job that scores each conversation: user sentiment (positive, neutral, negative, frustrated), a score from -1.0 to 1.0, assistant performance, and detected issues. The job is registered on the scheduler but **off by default**, because every scored conversation costs model tokens:
+Persistence-backed projects ship a job that scores each conversation: user sentiment (positive, neutral, negative, frustrated), a score from -1.0 to 1.0, assistant performance, and detected issues. Every hour it hands each unscored conversation to the worker as its own task (`score_conversation_task`), so they score as many at once as the system queue runs; a stack without a worker scores them in the job. It is registered on the scheduler but **off by default**, because every scored conversation costs model tokens:
 
 ```bash
-AI_SENTIMENT_ENABLED=true    # enable scoring
-AI_SENTIMENT_BATCH_LIMIT=20  # conversations per run
+AI_SENTIMENT_ENABLED=true  # enable scoring
 ```
 
-The job runs as the built-in `sentiment` agent, seeded beside the default one: its model, temperature, max tokens and prompt are edited like any agent's. It starts on the service's active model; scoring is a short, structured task, so a small fast model is usually the better pick, especially when the active model is a large local one whose cold start can outlast `AI_TIMEOUT_SECONDS`. With the agent removed or inactive, the job uses the built-in prompt on the active model. The job reads its batch, ends that database transaction, and only then calls the model, so a slow model never holds the database.
+The job runs as the built-in `sentiment` agent, seeded beside the default one: its model, temperature, max tokens and prompt are edited like any agent's. It starts on the service's active model; scoring is a short, structured task, so a small fast model is usually the better pick, especially when the active model is a large local one whose cold start can outlast `AI_TIMEOUT_SECONDS`. With the agent removed or inactive, the job uses the built-in prompt on the active model. Each task reads its conversation, ends that database transaction, and only then calls the model, so a slow model never holds the database.
 
 Results land in the `sentiment_analysis` table (one verdict per conversation) and surface in the CLI and the dashboard analytics tab:
 

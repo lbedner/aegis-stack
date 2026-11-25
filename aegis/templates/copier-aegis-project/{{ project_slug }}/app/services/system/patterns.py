@@ -28,6 +28,7 @@ from starlette.responses import StreamingResponse
 from starlette.routing import BaseRoute
 
 from app.core import source_index
+from app.core.concurrency import once
 from app.core.log import logger
 from app.core.route_auth import route_requires_auth
 from app.core.source_functions import Function
@@ -481,3 +482,18 @@ def installed_patterns() -> dict[str, Pattern]:
     except ImportError:  # no worker component in this project
         return found
     return found | {"task": TASK}
+
+
+@once
+def own_reports() -> dict[str, Report]:
+    """Every installed pattern's report, by key, but the routes' (it takes
+    the app's routes), built once a process: the code changes only by a
+    reload. The map, the system tools and the Patterns page share them; the
+    parts report is ``service_parts.report``'s."""
+    from app.services.system import service_parts
+
+    return {
+        key: service_parts.report() if key == service_parts.PARTS.key else report(p)
+        for key, p in installed_patterns().items()
+        if key != ROUTE.key
+    }

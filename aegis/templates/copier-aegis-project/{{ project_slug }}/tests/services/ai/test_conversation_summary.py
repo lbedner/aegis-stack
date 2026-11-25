@@ -171,7 +171,7 @@ class TestOffTheRequestPath:
         """The summary does not move until a fold finishes, so every turn
         while one runs finds it due again: queued once per cut, on any
         worker engine."""
-        from app.components.worker import pools
+        from app.components.worker import pools, queue_once
 
         enqueued: list[tuple[object, ...]] = []
 
@@ -180,7 +180,7 @@ class TestOffTheRequestPath:
 
         cache = CacheService()
         monkeypatch.setattr(pools, "enqueue_task", enqueue)
-        monkeypatch.setattr(summary, "get_cache", lambda: cache)
+        monkeypatch.setattr(queue_once, "get_cache", lambda: cache)
         monkeypatch.setattr(summary, "FOLDS", True)
 
         for _turn in range(3):
@@ -195,13 +195,13 @@ class TestOffTheRequestPath:
     async def test_a_failed_enqueue_never_fails_the_turn(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from app.components.worker import pools
+        from app.components.worker import pools, queue_once
 
         async def broken(*_: object, **__: object) -> None:
             raise ConnectionError("redis is down")
 
         monkeypatch.setattr(pools, "enqueue_task", broken)
-        monkeypatch.setattr(summary, "get_cache", CacheService)
+        monkeypatch.setattr(queue_once, "get_cache", CacheService)
         monkeypatch.setattr(summary, "FOLDS", True)
 
         await summary.enqueue_fold("c1", 20)

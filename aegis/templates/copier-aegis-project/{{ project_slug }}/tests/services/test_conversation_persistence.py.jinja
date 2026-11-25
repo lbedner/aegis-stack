@@ -515,6 +515,18 @@ class TestTheSavePath:
     dropped the zone), and ``session.get`` per message was one select per
     message before the inserts."""
 
+    def test_the_rows_defaults_are_naive_too(self) -> None:
+        from app.models.conversation import Conversation as ConversationRow
+        from app.models.conversation import ConversationMessage as MessageRow
+
+        conversation = ConversationRow(id="c", user_id="u")
+        message = MessageRow(conversation_id="c", role="user", content="hi")
+
+        assert conversation.created_at.tzinfo is None
+        assert conversation.updated_at.tzinfo is None
+        assert message.timestamp.tzinfo is None
+
+
     @pytest.mark.asyncio
     async def test_timestamps_are_stored_naive_utc(self, conversation_manager) -> None:
         from sqlalchemy import event

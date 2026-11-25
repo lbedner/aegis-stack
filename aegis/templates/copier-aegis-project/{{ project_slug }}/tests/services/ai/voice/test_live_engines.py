@@ -19,6 +19,7 @@ from app.services.ai.domains.voice.live_engines import ENGINE_SEEDS
 from app.services.ai.domains.voice.profiles import SETUP
 from app.services.ai.models.voice import LiveEngine
 from tests._voice_catalog import seed_voice_catalog
+from tests.services.ai._catalog import listed
 
 
 @pytest.fixture
@@ -183,20 +184,13 @@ class TestChoosing:
     async def test_a_vendor_no_call_can_reach_is_refused(
         self, async_db_session: AsyncSession
     ) -> None:
-        from app.services.ai.models.llm import LargeLanguageModel, LLMOrg
-
-        xai = LLMOrg(slug="xai", name="xai")
-        async_db_session.add(xai)
-        await async_db_session.flush()
-        async_db_session.add(
-            LargeLanguageModel(
-                model_id="grok-voice",
-                title="Grok Voice",
-                mode="realtime",
-                served_by_org_id=xai.id,
-            )
+        await listed(
+            async_db_session,
+            "grok-voice",
+            served_by="xai",
+            title="Grok Voice",
+            mode="realtime",
         )
-        await async_db_session.commit()
 
         assert await live_engines.choose(async_db_session, "grok-voice") is None
 
@@ -242,21 +236,9 @@ async def _local_model(
     session: AsyncSession, model_id: str, mode: str, tools: bool | None = None
 ) -> None:
     """A model llama.cpp serves, in the catalog."""
-    from app.services.ai.models.llm import LargeLanguageModel, LLMOrg
-
-    local = LLMOrg(slug="llamacpp", name="llamacpp")
-    session.add(local)
-    await session.flush()
-    session.add(
-        LargeLanguageModel(
-            model_id=model_id,
-            title=model_id,
-            mode=mode,
-            served_by_org_id=local.id,
-            supports_tools=tools,
-        )
+    await listed(
+        session, model_id, served_by="llamacpp", mode=mode, supports_tools=tools
     )
-    await session.commit()
 
 
 class TestTheWait:

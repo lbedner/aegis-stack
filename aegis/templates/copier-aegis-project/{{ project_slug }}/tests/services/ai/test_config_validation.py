@@ -33,7 +33,8 @@ class TestKeylessProvidersValidate:
 
 def test_an_agent_overlays_its_sampling_and_any_model_it_pins() -> None:
     """One overlay for every runner: sampling always, the model only when
-    the agent pins one (``None`` follows the active model)."""
+    the agent pins one (``None`` follows the active model), on the provider
+    that serves it (``None``: the active one)."""
     from types import SimpleNamespace
 
     config = AIServiceConfig(
@@ -41,7 +42,7 @@ def test_an_agent_overlays_its_sampling_and_any_model_it_pins() -> None:
     )
     assert config.for_agent(None) == config
     follows = config.for_agent(
-        SimpleNamespace(temperature=0.1, max_tokens=300, model_id=None)
+        SimpleNamespace(temperature=0.1, max_tokens=300, model_id=None, provider=None)
     )
     assert (follows.model, follows.temperature, follows.max_tokens) == (
         "active",
@@ -49,6 +50,17 @@ def test_an_agent_overlays_its_sampling_and_any_model_it_pins() -> None:
         300,
     )
     pinned = config.for_agent(
-        SimpleNamespace(temperature=0.1, max_tokens=300, model_id="qwen3:4b")
+        SimpleNamespace(
+            temperature=0.1, max_tokens=300, model_id="qwen3:4b", provider=None
+        )
     )
-    assert pinned.model == "qwen3:4b"
+    assert (pinned.model, pinned.provider) == ("qwen3:4b", AIProvider.OLLAMA)
+    elsewhere = config.for_agent(
+        SimpleNamespace(
+            temperature=0.1,
+            max_tokens=300,
+            model_id="gpt-6-luna",
+            provider=AIProvider.OPENAI,
+        )
+    )
+    assert (elsewhere.model, elsewhere.provider) == ("gpt-6-luna", AIProvider.OPENAI)

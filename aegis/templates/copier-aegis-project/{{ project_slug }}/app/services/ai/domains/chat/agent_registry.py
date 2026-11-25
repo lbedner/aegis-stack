@@ -16,7 +16,10 @@ from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.agent_loader import invalidate_agent_cache
+from app.services.ai.domains.llm import queries as catalog
+from app.services.ai.domains.llm.llm_service import check_model
 from app.services.ai.models.agents import Agent, AgentPromptChange
+from app.services.ai.models.llm import LargeLanguageModel
 
 
 class AgentNotFoundError(ValueError):
@@ -45,7 +48,8 @@ EDITABLE_FIELDS = frozenset(
 
 
 # Editable fields whose columns reject NULL; description/category/model_id
-# stay nullable (model_id None = follow the active default).
+# stay nullable (model_id None = follow the active default). ``model_id``
+# is the catalog's name for the model, kept as its row (``Agent.llm``).
 _NON_NULLABLE_FIELDS = frozenset(
     {"name", "temperature", "max_tokens", "system_prompt", "is_active", "code_mode"}
 )
@@ -90,6 +94,26 @@ def _validate_changes(changes: dict[str, Any]) -> None:
         raise InvalidAgentUpdateError("max_tokens must be positive")
 
 
+async def _picked(
+    session: AsyncSession, model_id: str | None
+) -> LargeLanguageModel | None:
+    """The catalog row ``model_id`` names, checked as ``llm use`` checks
+    the active model (``check_model``: a chat model whose provider can be
+    called); None for the active model. InvalidAgentUpdateError, saying
+    why, for one that cannot answer or that the catalog does not list."""
+    if model_id is None:
+        return None
+    checked = await check_model(session, model_id)
+    model = (
+        await catalog.llm_with_vendor(session, model_id) if checked.success else None
+    )
+    if model is None:
+        raise InvalidAgentUpdateError(
+            checked.message or f"Model '{model_id}' is not in the catalog"
+        )
+    return model
+
+
 async def list_agents(*, session: AsyncSession | None = None) -> list[Agent]:
     """All agents, tools eager-loaded, ordered by slug."""
     if session is None:
@@ -125,7 +149,10 @@ async def update_agent(
                 agent_id=agent.id, system_prompt=prompt, source=source, note=note
             )
         )
-    for field, value in changes.items():
+    fields = dict(changes)
+    if "model_id" in fields:
+        agent.llm = await _picked(session, fields.pop("model_id"))
+    for field, value in fields.items():
         setattr(agent, field, value)
     session.add(agent)
     await session.commit()

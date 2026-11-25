@@ -12,6 +12,7 @@ from app.services.ai.models.agents import (
     ContextModule,
     Tool,
 )
+from app.services.ai.models.llm.large_language_model import LargeLanguageModel
 from tests._cli import invoke
 
 
@@ -34,7 +35,11 @@ class TestAgentsList:
 
     @patch("app.cli.agents._load_agents")
     def test_lists_seeded_agents(self, mock_load) -> None:
-        support = _agent(slug="support", name="Support", model_id="gpt-4o")
+        support = _agent(
+            slug="support",
+            name="Support",
+            llm=LargeLanguageModel(model_id="gpt-4o", title="GPT-4o"),
+        )
         support.tools = [Tool(name="lookup")]
         assistant = _agent()
         assistant.tools = []

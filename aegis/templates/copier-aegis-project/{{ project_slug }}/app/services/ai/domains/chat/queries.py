@@ -25,6 +25,7 @@ from app.services.ai.models.agents import (
     ContextModuleEntry,
 )
 from app.services.ai.models.conversation import ConversationStats
+from app.services.ai.models.llm import LargeLanguageModel
 from app.services.ai.models.sentiment import SentimentAnalysis
 from app.services.shared.queries import within
 
@@ -253,6 +254,10 @@ async def agent_by_slug(session: AsyncSession, slug: str) -> Agent | None:
     ).first()
 
 
+# Who serves an agent's model: the provider it runs on.
+_SERVED = selectinload(Agent.llm).selectinload(LargeLanguageModel.served_by)  # type: ignore[arg-type]
+
+
 async def agent_and_parent(
     session: AsyncSession, slug: str
 ) -> tuple[Agent | None, Agent | None]:
@@ -262,7 +267,10 @@ async def agent_and_parent(
         await session.exec(
             select(Agent)
             .where(or_(Agent.slug == slug, Agent.slug == parent_slug))
-            .options(selectinload(Agent.tools))  # type: ignore[arg-type]
+            .options(
+                selectinload(Agent.tools),  # type: ignore[arg-type]
+                _SERVED,
+            )
         )
     ).all()
     by_slug = {row.slug: row for row in rows}
@@ -290,12 +298,14 @@ async def latest_prompt_change_id(session: AsyncSession) -> int | None:
 
 
 async def active_agents(session: AsyncSession) -> Sequence[Agent]:
-    """The active agents, ordered by slug, without their tools."""
+    """The active agents, ordered by slug, without their tools; who
+    serves each one's model loaded (the engine it runs on)."""
     return (
         await session.exec(
             select(Agent)
             .where(col(Agent.is_active))
             .order_by(Agent.slug)  # type: ignore[arg-type]
+            .options(_SERVED)
         )
     ).all()
 

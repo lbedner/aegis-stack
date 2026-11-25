@@ -61,15 +61,14 @@ def snapshot_module_definition() -> dict[str, Any]:
 def analyst_agent_definition() -> dict[str, Any]:
     """The seed row for the finance analyst agent.
 
-    ``model_id`` is None so the agent follows whatever model the AI service is
-    configured with. Point it at one pulled Ollama tag by setting that column.
+    It pins no model, so it follows whatever model the AI service is
+    configured with; pick one for it in the agent's settings.
     """
     return {
         "slug": ANALYST_AGENT_SLUG,
         "name": "Finance Analyst",
         "description": "Writes the daily finance note from detected findings",
         "category": "finance",
-        "model_id": None,
         "system_prompt": ANALYST_SYSTEM_PROMPT,
         "temperature": ANALYST_TEMPERATURE,
         "max_tokens": ANALYST_MAX_TOKENS,
@@ -91,7 +90,6 @@ def deep_dive_agent_definition() -> dict[str, Any]:
         "name": "Finance Analyst (deep dive)",
         "description": "On-request full review: situation, causes, findings triage, options",
         "category": "finance",
-        "model_id": None,
         "system_prompt": DEEP_DIVE_SYSTEM_PROMPT,
         "temperature": DEEP_DIVE_TEMPERATURE,
         "max_tokens": DEEP_DIVE_MAX_TOKENS,
@@ -162,7 +160,6 @@ def finance_chat_agent_definition() -> dict[str, Any]:
         "name": "Finance Assistant",
         "description": "Conversational finance chat with computed answers",
         "category": "finance",
-        "model_id": None,
         "system_prompt": FINANCE_CHAT_SYSTEM_PROMPT,
         "temperature": FINANCE_CHAT_TEMPERATURE,
         "max_tokens": FINANCE_CHAT_MAX_TOKENS,

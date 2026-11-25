@@ -13,9 +13,12 @@ Agents is each Google account the bot joins as (``meeting_agents``). Registered 
 meetings service (see ``overseer_sections``).
 """
 
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable
 from typing import Any
 
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.db import get_async_session
 from app.core.formatting import format_relative_time
 from app.services.meetings.service import (
     LINE_PARAM,
@@ -41,9 +44,10 @@ from app.services.system.models import ComponentStatus
 from .meeting_agents import agent_options, agents_context, owner_options
 from .meeting_calendar import calendar_context
 from .meeting_status import state_cell
+from .overseer_live import fragments_events
 from .overseer_meeting_search import search_context
 from .overseer_nav import SectionRequest, page_url
-from .rendering import drawer_state, with_query
+from .rendering import drawer_state, fragment, with_query
 from .routes.meetings import row_of, send_form
 
 SECTIONS = (
@@ -71,6 +75,12 @@ SERIES = f"{PAGE}/series"
 SERIES_PARTIALS = f"{PARTIALS}/series"
 SERIES_PARAM = "series"
 LIMIT = 200
+# The list and its figures over SSE while the page is open: a meeting's
+# status moves as the bot joins and leaves.
+EVENTS = f"{PARTIALS}/events"
+FIGURES = "pages/overseer/meetings/_figures.html"
+TABLE = "pages/overseer/meetings/_table.html"
+INTERVAL_SECONDS = 3.0
 
 
 async def section_context(
@@ -86,15 +96,7 @@ async def section_context(
         return await agents_context(req.db, meeting_url) | {"partials": PARTIALS}
     if section == "calendar":
         return await _calendar(req)
-    counts = await meetings_counts(req.db)
-    every = await agents(req.db)
-    names = agent_names((a.id, a.name) for a in every)
-    meetings = await MeetingsService(req.db, None).list_meetings(LIMIT)
-    rows = [
-        row_of(m, meeting_url(m.id))  # type: ignore[arg-type]
-        | {"owner": m.owner_user_id, "agent": names.get(m.account_id)}
-        for m in meetings
-    ]
+    listed, every, meetings = await _listing(req.db)
     wanted = req.query.get(DRAWER_PARAM) or ""
     # A search hit opens its meeting at its line (``overseer_meeting_search``).
     line = req.query.get(LINE_PARAM) or ""
@@ -104,15 +106,43 @@ async def section_context(
     return (
         drawer_state(DRAWER_PARAM, drawer if wanted.isdigit() else None)
         | await search_context(req, PAGE)
-        | {
-            "figures": [
-                {"label": "Meetings", "value": counts.meetings},
-                {"label": "In a call now", "value": counts.in_call},
-            ],
-            "rows": rows,
-        }
+        | listed
+        | {"events": EVENTS}
         | send_form(PARTIALS, agents=agent_options(every), meetings=meetings)
     )
+
+
+async def _listing(db: AsyncSession) -> tuple[dict[str, Any], list[Any], list[Any]]:
+    """The list and its figures (``TABLE``, ``FIGURES``), and the agents
+    and meetings it was made from."""
+    counts = await meetings_counts(db)
+    every = await agents(db)
+    names = agent_names((a.id, a.name) for a in every)
+    meetings = await MeetingsService(db, None).list_meetings(LIMIT)
+    rows = [
+        row_of(m, meeting_url(m.id))  # type: ignore[arg-type]
+        | {"owner": m.owner_user_id, "agent": names.get(m.account_id)}
+        for m in meetings
+    ]
+    figures = [
+        {"label": "Meetings", "value": counts.meetings},
+        {"label": "In a call now", "value": counts.in_call},
+    ]
+    return {"figures": figures, "rows": rows}, every, meetings
+
+
+def meetings_events(max_frames: int | None = None) -> AsyncIterator[str]:
+    """The list and its figures over SSE, sent again only when they change."""
+
+    async def render() -> dict[str, str]:
+        async with get_async_session(read_only=True) as db:
+            listed, _, _ = await _listing(db)
+        return {
+            "meetings-figures": fragment(FIGURES, **listed),
+            "meetings-table": fragment(TABLE, **listed),
+        }
+
+    return fragments_events(render, INTERVAL_SECONDS, max_frames)
 
 
 async def _calendar(req: SectionRequest) -> dict[str, Any]:

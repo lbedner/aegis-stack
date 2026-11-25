@@ -17,6 +17,7 @@ from app.services.ai.domains.chat.agent_registry import (
     update_agent,
 )
 from app.services.ai.models.agents import Agent, AgentTool, Tool
+from tests.services.ai._catalog import listed
 
 
 @pytest.fixture
@@ -134,16 +135,37 @@ class TestUpdateAgent:
             with pytest.raises(InvalidAgentUpdateError):
                 await update_agent("assistant", {field: None}, session=session)
 
-    async def test_null_model_id_means_active_default(
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # pinned, then cleared
+    async def test_a_model_is_picked_by_its_catalog_id_and_stored_as_its_row(
         self, session: AsyncSession
     ) -> None:
-        await _add_agent(session, "assistant", model_id="gpt-x")
+        """Named as the catalog names it (``llm use`` takes the same), kept
+        as the row itself; None follows the active model."""
+        qwen = await listed(session, "qwen3:4b", served_by="ollama")
+        await _add_agent(session, "assistant")
 
-        updated = await update_agent(
-            "assistant", {"model_id": None}, session=session
+        pinned = await update_agent(
+            "assistant", {"model_id": "qwen3:4b"}, session=session
         )
+        assert (pinned.llm_id, pinned.model_id) == (qwen.id, "qwen3:4b")
+        assert serialize_agent(pinned)["model_id"] == "qwen3:4b"
 
-        assert updated.model_id is None
+        cleared = await update_agent("assistant", {"model_id": None}, session=session)
+        assert (cleared.llm_id, cleared.model_id) == (None, None)
+
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # two names refused
+    async def test_a_model_that_cannot_answer_chat_is_refused(
+        self, session: AsyncSession
+    ) -> None:
+        """Checked as ``llm use`` checks the active model (``check_model``):
+        one the catalog does not list, or a voice kind, is never pinned."""
+        await listed(session, "kokoro", served_by="ollama", mode="audio_speech")
+        await _add_agent(session, "assistant")
+
+        with pytest.raises(InvalidAgentUpdateError, match="gpt-typo"):
+            await update_agent("assistant", {"model_id": "gpt-typo"}, session=session)
+        with pytest.raises(InvalidAgentUpdateError, match="not a chat model"):
+            await update_agent("assistant", {"model_id": "kokoro"}, session=session)
 
 
 class TestPromptHistory:

@@ -228,10 +228,29 @@ _CONTEXT_MODULE_CARRY_OVER = (
             batch.drop_column("memory_modules")"""
 )
 
+# An agent named the model it pins (``model_id``, free text); it now points
+# at the catalog's row (``llm_id``), which says who serves it. A name the
+# catalog does not list pins nothing: the agent follows the active model.
+_AGENT_MODEL_CARRY_OVER = """
+    inspector = sa.inspect(bind)
+    if inspector.has_table("agent") and "model_id" in {
+        c["name"] for c in inspector.get_columns("agent")
+    }:
+        op.execute(
+            "UPDATE agent SET llm_id = (SELECT m.id FROM large_language_model m "
+            "WHERE m.model_id = agent.model_id) WHERE model_id IS NOT NULL"
+        )
+        # By name: a project's tests read the drops as written
+        # (test_models_write_what_migrations_require).
+        with op.batch_alter_table("agent") as batch:
+            if "ix_agent_model_id" in {i["name"] for i in inspector.get_indexes("agent")}:
+                batch.drop_index("ix_agent_model_id")
+            batch.drop_column("model_id")"""
+
 AGENTS_MIGRATION = ServiceMigrationSpec(
     service_name="ai_agents",
     description="AI agent registry tables (agents, tools, agent-tool links)",
-    data_after=_CONTEXT_MODULE_CARRY_OVER,
+    data_after=_CONTEXT_MODULE_CARRY_OVER + _AGENT_MODEL_CARRY_OVER,
 )
 
 KNOWLEDGE_MIGRATION = ServiceMigrationSpec(

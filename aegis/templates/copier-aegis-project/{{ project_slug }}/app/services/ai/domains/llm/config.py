@@ -79,11 +79,13 @@ def api_key_env(provider: AIProvider) -> str:
 
 class AgentSampling(Protocol):
     """What an agent sets on the model it runs (``AgentConfig``): its
-    sampling, and a model it pins (``None`` follows the active model)."""
+    sampling, and a model it pins (``None`` follows the active model) on
+    the provider that serves it (``None``: the active one)."""
 
     temperature: float
     max_tokens: int
     model_id: str | None
+    provider: AIProvider | None
 
 
 class AIServiceConfig(BaseModel):
@@ -132,7 +134,8 @@ class AIServiceConfig(BaseModel):
 
     def for_agent(self, agent: AgentSampling | None) -> Self:
         """This config with ``agent``'s sampling overlaid, and its model when
-        it pins one (assumed served by the current provider). The default
+        it pins one, on the provider that serves it where the catalog says
+        (else the current one). The default
         agent carries the settings' own values: the identity until its row
         is edited."""
         if agent is None:
@@ -143,6 +146,8 @@ class AIServiceConfig(BaseModel):
         }
         if agent.model_id:
             update["model"] = agent.model_id
+            if agent.provider:
+                update["provider"] = agent.provider
         return self.model_copy(update=update)
 
     async def get_provider_config(self, settings: Any) -> ProviderConfig:

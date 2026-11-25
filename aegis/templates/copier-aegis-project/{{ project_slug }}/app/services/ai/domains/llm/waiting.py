@@ -88,10 +88,6 @@ def watch_prefill() -> Prefill:
     return seen
 
 
-def current_prefill() -> Prefill | None:
-    return _prefill.get()
-
-
 class _Teed(httpx.AsyncByteStream):
     """A response body passed through as it came, its progress lines kept."""
 

@@ -464,6 +464,17 @@ class TestLlamaCppThinkingBudget:
         assert isinstance(transport, PrefillTee) is tees
 
 
+def test_llamacpp_models_share_one_client() -> None:
+    """A model is built per turn; a client per turn was never closed."""
+    from app.services.ai.domains.llm.model_factory import _local_model
+
+    config = MagicMock()
+    config.provider, config.model = AIProvider.LLAMACPP, "qwen"
+    first, second = (_local_model(config, MagicMock()) for _ in range(2))
+
+    assert first.client._client is second.client._client
+
+
 class TestCliHints:
     """A hint names the command a person types: the project's own CLI."""
 

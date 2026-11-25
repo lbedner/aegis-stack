@@ -7,7 +7,6 @@ from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.core.audit import get_audit
-from app.core.time import utcnow
 from app.services.auth.deps import get_refresh_service, get_user_service
 {% if include_auth_org %}
 from app.services.auth.deps import get_invite_service
@@ -32,7 +31,6 @@ from app.core.security import (
     clear_session_cookie,
     set_refresh_cookie,
     set_session_cookie,
-    verify_password,
 )
 {% if include_auth_org %}
 from app.models.org import AcceptInviteRequest, InviteResponse
@@ -173,36 +171,32 @@ async def login(
     """
     ip_address = get_client_ip(request)
 
-    # Get user by email (username field in OAuth2 form)
-    user = await user_service.get_user_by_email(form_data.username)
+    user, refused = await user_service.authenticate_credentials(
+        form_data.username, form_data.password
+    )
 
-    # Locked accounts still emit an audit event but return the same
-    # 401 "Incorrect email or password" response as the missing-user
-    # path. A distinct 403 leaked email existence: hitting /token with
-    # a random password ten times then comparing the 401 vs 403 split
-    # let an attacker enumerate registered accounts.
-    if user and await user_service.is_account_locked(user):
-        await audit.emit("auth.login_locked", actor_email=form_data.username)
+    # A locked account answers the same 401 "Incorrect email or password"
+    # as a wrong one, with its own audit event: a distinct 403 leaked email
+    # existence (ten random passwords, then the 401/403 split enumerated
+    # registered accounts).
+    if refused in ("locked", "invalid") or user is None:
+        if refused == "locked":
+            await audit.emit("auth.login_locked", actor_email=form_data.username)
+        else:
+            await audit.emit(
+                "auth.login_failed",
+                actor_email=form_data.username,
+                ip_address=ip_address,
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if not user or not verify_password(form_data.password, user.hashed_password):
-        # Record the failed attempt if user exists
-        if user:
-            await user_service.record_failed_login(form_data.username)
-        await audit.emit("auth.login_failed", actor_email=form_data.username, ip_address=ip_address)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    # A disabled account is refused here, after the password check, so only
-    # someone who already knows the password learns that it is disabled.
-    if not user.is_active:
+    # Disabled is named only after the right password, so only someone who
+    # already knows it learns that the account is disabled.
+    if refused == "disabled":
         await audit.emit(
             "auth.login_disabled",
             actor_email=form_data.username,
@@ -212,14 +206,6 @@ async def login(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled"
         )
-
-    # Successful login — reset failed attempts
-    await user_service.reset_login_attempts(user.id)
-
-    # Update last_login timestamp
-    await user_service.update_user(
-        user.id, last_login=utcnow()
-    )
 
     access_token = await sign_in(request, response, user, "password", refresh_service)
 

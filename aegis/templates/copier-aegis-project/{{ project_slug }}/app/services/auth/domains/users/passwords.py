@@ -105,14 +105,15 @@ class PasswordsMixin(UserServiceBase):
     ) -> tuple[User | None, str | None]:
         """Validate email + password and return the user on success.
 
-        Shared between the API ``/token`` endpoint and any web ``/login``
-        form handler so both paths stay in lockstep (lockout, failed-attempt
-        counters, last_login bump). Callers own rate-limiting and audit
+        The API ``/token`` endpoint's check (the page form signs in through
+        it): lockout, failed-attempt counters, the last_login bump. Callers own rate-limiting and audit
         emission — those vary by entry point.
 
-        Returns ``(user, None)`` on success, or ``(None, "locked" | "invalid")``
-        on failure. The error string lets the caller choose 403 vs 401 or a
-        redirect destination without re-implementing the check.
+        Returns ``(user, None)`` on success, ``(None, "locked" | "invalid")``
+        on failure, or ``(user, "disabled")`` for a disabled account with the
+        right password (only then may it be named). The error string lets
+        the caller choose 403 vs 401 or a redirect destination without
+        re-implementing the check.
         """
         user = await self.get_user_by_email(email)
 
@@ -124,8 +125,12 @@ class PasswordsMixin(UserServiceBase):
                 await self.record_failed_login(email)
             return None, "invalid"
 
-        await self.reset_login_attempts(user.id)
-        await self.update_user(user.id, last_login=utcnow())
+        if not user.is_active:
+            return user, "disabled"
+
+        await self.update_user(
+            user.id, last_login=utcnow(), failed_login_attempts=0, locked_until=None
+        )
         return user, None
 
     async def record_failed_login(self, email: str) -> None:
@@ -140,17 +145,6 @@ class PasswordsMixin(UserServiceBase):
                 minutes=settings.ACCOUNT_LOCKOUT_MINUTES
             )
 
-        self.db.add(user)
-        await self.db.commit()
-
-    async def reset_login_attempts(self, user_id: int) -> None:
-        """Reset failed login attempts and unlock account."""
-        user = await self.get_user_by_id(user_id)
-        if not user:
-            return
-
-        user.failed_login_attempts = 0
-        user.locked_until = None
         self.db.add(user)
         await self.db.commit()
 

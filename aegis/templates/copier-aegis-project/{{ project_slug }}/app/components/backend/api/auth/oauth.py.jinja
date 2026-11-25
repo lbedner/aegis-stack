@@ -27,7 +27,7 @@ from datetime import datetime
 from typing import Any
 
 import httpx
-from app.components.backend.security.rate_limit import get_session_metadata
+from app.components.backend.api.auth.sessions import refused_sign_in, sign_in
 from app.core.db import get_async_db
 from app.core.formatting import site_path
 from app.core.time import utcnow
@@ -35,11 +35,7 @@ from app.services.auth.deps import get_refresh_service, get_user_service
 from app.core.log import logger
 from app.core import secrets
 from app.core.secrets import Secret
-from app.core.security import (
-    REFRESH_COOKIE,
-    set_refresh_cookie,
-    set_session_cookie,
-)
+from app.core.security import REFRESH_COOKIE
 from app.models.user import OAuthProvider, User, UserOAuthIdentity
 from app.services.auth.deps import get_current_active_user
 from app.services.auth.service import (
@@ -183,26 +179,24 @@ async def _finalize_oauth_signin(
     no cookies: the provider vouched for who they are, not that they may
     still come in. This tail covers every provider.
     """
+    nxt = _safe_next(request.session.pop("oauth_next", ""))
     if not user.is_active:
-        return RedirectResponse(
-            url="/login?error=disabled", status_code=status.HTTP_303_SEE_OTHER
-        )
+        return refused_sign_in("/login", "disabled", nxt)
     await user_service.update_user(
         user.id, last_login=utcnow()
     )
-    jwt, refresh_token = await refresh_service.start_session(
-        user,
-        source=f"oauth:{provider}",
-        replaces=request.session.pop(OAUTH_REPLACES, None),
-        **get_session_metadata(request),
-    )
-    nxt = _safe_next(request.session.pop("oauth_next", ""))
     response = RedirectResponse(
         url=nxt or "/app",
         status_code=status.HTTP_303_SEE_OTHER,
     )
-    set_session_cookie(response, jwt)
-    set_refresh_cookie(response, refresh_token)
+    await sign_in(
+        request,
+        response,
+        user,
+        f"oauth:{provider}",
+        refresh_service,
+        replaces=request.session.pop(OAUTH_REPLACES, None),
+    )
     return response
 
 

@@ -864,6 +864,25 @@ class TestAuthenticateCredentials:
         assert refreshed is not None
         assert refreshed.failed_login_attempts == 5
 
+    @pytest.mark.asyncio
+    async def test_authenticate_credentials_disabled_account(
+        self, async_db_session: AsyncSession, user_factory
+    ):
+        """Named only after the right password, and not signed in: no
+        ``last_login`` recorded for it."""
+        user = await user_factory(password="rightpassword123")
+        user.is_active = False
+        async_db_session.add(user)
+        await async_db_session.commit()
+
+        result_user, err = await UserService(
+            async_db_session
+        ).authenticate_credentials(user.email, "rightpassword123")
+
+        assert result_user is not None and result_user.id == user.id
+        assert err == "disabled"
+        assert result_user.last_login is None
+
 
 class TestEmailVerificationTokenResendInvalidates:
     """A resent verification email must invalidate any prior unused token

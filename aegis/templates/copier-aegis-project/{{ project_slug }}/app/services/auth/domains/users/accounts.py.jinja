@@ -4,9 +4,6 @@ from collections.abc import Iterable
 import secrets
 from datetime import datetime, timedelta
 
-{% if include_auth_rbac %}
-from sqlalchemy import func
-{% endif %}
 from sqlmodel import delete, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -330,9 +327,8 @@ class UserService(
         if not settings.REGISTRATION_ENABLED:
             raise RegistrationClosedError()
 {%- if include_auth_rbac %}
-        # First user becomes admin (matches password-registration behavior).
-        count_result = await self.db.exec(select(func.count()).select_from(User))
-        is_first_user = count_result.one() == 0
+        # First user becomes admin, as on password sign-up: never the guest.
+        is_first_user = await member_count(self.db) == 0
 {%- endif %}
         user = User(
             email=email,

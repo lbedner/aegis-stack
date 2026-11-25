@@ -8,7 +8,7 @@ from fastapi.responses import RedirectResponse
 
 from app.components.backend.api.auth.guest import guest_sign_in as api_guest_sign_in
 from app.components.backend.security import turnstile
-from app.components.web_frontend.rendering import refused_sign_in
+from app.components.backend.api.auth.sessions import refused_sign_in
 from app.core.audit import AuditEmitter, get_audit
 from app.core.formatting import site_path
 from app.services.auth.deps import get_refresh_service, get_user_service

@@ -37,7 +37,7 @@ from app.components.web_frontend.overseer_access import overseer_gate
 from app.components.web_frontend.rendering import is_htmx, templates
 {%- if include_auth %}
 from app.components.web_frontend.overseer_access import LOGIN
-from app.components.web_frontend.rendering import refused_sign_in
+from app.components.backend.api.auth.sessions import refused_sign_in
 {%- endif %}
 from app.components.web_frontend.routes import overseer as overseer_routes
 from app.components.web_frontend.routes.partials import overseer_code as overseer_code_partials

@@ -113,6 +113,32 @@ class TestOAuthConnectionsRequireAuth:
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
+@pytest.mark.asyncio
+async def test_a_disabled_oauth_sign_in_keeps_where_it_was_headed() -> None:
+    """Refused like the password form: back to sign-in saying why, still
+    headed where it was going, nothing left in the session for next time."""
+    from starlette.requests import Request
+
+    from app.components.backend.api.auth.oauth import _finalize_oauth_signin
+    from app.models.user import User
+
+    request = Request(
+        {
+            "type": "http",
+            "session": {"oauth_next": "/app/goals"},
+            "headers": [],
+            "method": "GET",
+            "path": "/",
+        }
+    )
+    user = User(id=1, email="off@example.com", hashed_password="x", is_active=False)
+    response = await _finalize_oauth_signin(
+        request, user, None, None, provider="github"  # type: ignore[arg-type]
+    )
+    assert response.headers["location"] == "/login?error=disabled&next=%2Fapp%2Fgoals"
+    assert "oauth_next" not in request.session
+
+
 class TestDisabledAccountOAuth:
     """OAuth sign-in refuses a disabled account like the password form does."""
 
@@ -189,5 +215,25 @@ class TestOAuthRetiresTheSessionItReplaces:
         assert await service.validate(held) is None
         assert len(await service.list_sessions(user.id)) == 1
         assert "oauth_replaces" not in request.session
+
+    @pytest.mark.asyncio
+    async def test_a_sign_in_told_which_session_it_replaces_ends_that_one(
+        self, async_db_session, user_factory
+    ) -> None:
+        """``sign_in`` takes the session it replaces where the request carries
+        no cookie for it (the callback's, noted at the start)."""
+        from fastapi import Response
+
+        from app.components.backend.api.auth.sessions import sign_in
+        from app.services.auth.domains.sessions.tokens import RefreshService
+
+        user = await user_factory()
+        service = RefreshService(async_db_session)
+        _, held = await service.start_session(user, source="password")
+        family = await service.family_of(held)
+        await sign_in(
+            self._request(), Response(), user, "oauth:github", service, replaces=family
+        )
+        assert await service.validate(held) is None
 
 {%- endif %}

@@ -1,7 +1,7 @@
 """The refresh-token family: staying signed in, and signing out."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from app.core.audit import get_audit
 from app.services.auth.deps import get_refresh_service, get_user_service
 from app.components.backend.security.rate_limit import (
@@ -9,6 +9,7 @@ from app.components.backend.security.rate_limit import (
     get_session_metadata,
 )
 from app.core.audit import AuditEmitter
+from app.core.formatting import site_path, with_query
 from app.core.security import (
     REFRESH_COOKIE,
     clear_refresh_cookie,
@@ -45,22 +46,34 @@ from app.services.auth.service import is_guest
 router = APIRouter()
 
 
+def refused_sign_in(path: str, reason: str, next: str) -> RedirectResponse:
+    """Back to the sign-in page at ``path`` saying why (``?error=``), still
+    headed for ``next``."""
+    return RedirectResponse(
+        url=with_query(path, error=reason, next=site_path(next, "") or None),
+        status_code=303,
+    )
+
+
 async def sign_in(
     request: Request,
     response: Response,
     user: User,
     source: str,
     refresh_service: RefreshService,
+    *,
+    replaces: str | None = None,
 ) -> str:
     """Start ``user``'s session and set both cookies on ``response``: the
-    HttpOnly session cookie, and the refresh cookie path-scoped to
-    ``/api/v1/auth`` so it rides only on auth endpoints. The access token.
+    HttpOnly session cookie, and the refresh cookie scoped to
+    ``REFRESH_COOKIE_PATH``. Returns the access token.
 
-    The session the browser's refresh cookie belongs to is ended (it is
-    ``replaces``d). The cookie rides only on the auth API, so a page form's
-    sign-in has none."""
+    The session it replaces is ended: ``replaces`` where the caller knows
+    it (OAuth's callback, noted at the start), else the one the request's
+    refresh cookie belongs to."""
     cookie = request.cookies.get(REFRESH_COOKIE)
-    replaces = await refresh_service.family_of(cookie) if cookie else None
+    if replaces is None and cookie:
+        replaces = await refresh_service.family_of(cookie)
     access_token, refresh_token = await refresh_service.start_session(
         user, source=source, replaces=replaces, **get_session_metadata(request)
     )

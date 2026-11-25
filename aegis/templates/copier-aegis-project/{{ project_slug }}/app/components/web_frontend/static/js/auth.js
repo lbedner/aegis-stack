@@ -165,7 +165,6 @@ const SIGN_IN_BANNERS = {
 };
 const SIGN_IN_ERRORS = {
   invalid: 'Incorrect email or password.',
-  locked: 'Account temporarily locked after too many failed attempts. Try again shortly.',
   disabled: 'This account has been disabled. Contact an administrator to restore access.',
   guest_limited: 'Too many guest sessions from here. Try again later.',
   guest_human: 'We could not confirm you are human. Try again.',

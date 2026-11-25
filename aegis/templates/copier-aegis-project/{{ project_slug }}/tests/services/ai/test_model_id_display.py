@@ -11,8 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.domains.llm import queries
 from app.services.ai.domains.llm.catalog import LLMListResult
-from app.services.ai.models.llm.large_language_model import LargeLanguageModel
-from app.services.ai.models.llm.llm_org import LLMOrg
+from tests.services.ai._catalog import listed
 
 
 class TestWhatTheTableShows:
@@ -45,19 +44,8 @@ class TestWhatTheTableShows:
 
 class TestWhatTheLookupAccepts:
     async def _catalog(self, session: AsyncSession, *ids: str) -> None:
-        org = LLMOrg(slug="gemini", name="gemini", color="#000", icon_path="")
-        session.add(org)
-        await session.commit()
-        await session.refresh(org)
         for model_id in ids:
-            session.add(
-                LargeLanguageModel(
-                    model_id=model_id,
-                    title=model_id,
-                    served_by_org_id=org.id,
-                )
-            )
-        await session.commit()
+            await listed(session, model_id, served_by="gemini")
 
     @pytest.mark.asyncio
     async def test_the_stored_id_resolves(self, async_db_session: AsyncSession) -> None:
@@ -80,6 +68,7 @@ class TestWhatTheLookupAccepts:
         assert found.model_id == "gemini/gemini-3"
 
     @pytest.mark.asyncio
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # two vendors' rows
     async def test_an_ambiguous_short_id_resolves_to_nothing(
         self, async_db_session: AsyncSession
     ) -> None:

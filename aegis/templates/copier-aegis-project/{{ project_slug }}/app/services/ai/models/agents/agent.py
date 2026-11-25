@@ -6,6 +6,7 @@ from sqlalchemy import JSON, Column
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.time import utcnow
+from app.services.ai.models.llm import LargeLanguageModel
 
 from .agent_tool import AgentTool
 from .tool import Tool
@@ -17,9 +18,9 @@ class Agent(SQLModel, table=True):
 
     Agents are the AI service's default architecture: every chat request
     resolves an agent (the seeded ``assistant`` by default) and hydrates
-    the runtime from this row. ``model_id`` is a plain catalog reference
-    (NOT a foreign key, matching ``llm_usage``: the catalog is ETL-synced
-    and rows churn); ``None`` means "use the service's active model".
+    the runtime from this row. ``llm`` is the catalog model it runs on, on
+    the provider that serves it; ``None`` means "use the service's active
+    model".
     """
 
     __tablename__ = "agent"
@@ -29,7 +30,9 @@ class Agent(SQLModel, table=True):
     name: str
     description: str | None = None
     category: str | None = None
-    model_id: str | None = Field(default=None, index=True)
+    llm_id: int | None = Field(
+        default=None, foreign_key="large_language_model.id", index=True
+    )
     system_prompt: str
     temperature: float = Field(default=0.7)
     max_tokens: int = Field(default=1000)
@@ -54,3 +57,12 @@ class Agent(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow)
 
     tools: list[Tool] = Relationship(link_model=AgentTool)
+    # Loaded with the row: every reader of an agent shows its model.
+    llm: LargeLanguageModel | None = Relationship(
+        sa_relationship_kwargs={"lazy": "selectin"}
+    )
+
+    @property
+    def model_id(self) -> str | None:
+        """The pinned model's catalog id; None follows the active model."""
+        return self.llm.model_id if self.llm else None

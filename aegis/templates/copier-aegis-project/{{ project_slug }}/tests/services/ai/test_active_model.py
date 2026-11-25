@@ -332,7 +332,9 @@ class TestHeadlessResolution:
             return True
 
         monkeypatch.setattr(active_model, "sync_from_db", _sync)
-        agent = SimpleNamespace(temperature=0.0, max_tokens=400, model_id=pinned)
+        agent = SimpleNamespace(
+            temperature=0.0, max_tokens=400, model_id=pinned, provider=None
+        )
         config = await active_model.config_for_active(settings, agent)
         assert (config.model, config.temperature, config.max_tokens) == (
             expected,

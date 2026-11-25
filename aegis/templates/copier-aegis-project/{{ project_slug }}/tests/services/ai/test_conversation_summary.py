@@ -16,6 +16,7 @@ from app.core.discovery import present
 from app.services.ai.domains.chat import summary
 from app.services.ai.domains.chat.conversation import ConversationManager
 from app.services.ai.domains.chat.self_context import begin_turn_context, current_turn
+from app.services.ai.domains.llm.config import AIServiceConfig
 from app.services.ai.jobs import fold_conversation_job
 from app.services.ai.models import AIProvider, Conversation, MessageRole
 from tests.services.ai._threads import built, thread
@@ -306,7 +307,7 @@ class TestEveryTurnFolds:
         monkeypatch.setattr(turn, "enqueue_fold", lambda *args: args)
         monkeypatch.setattr(turn, "background", folded.append)
         ai = SimpleNamespace(
-            config=SimpleNamespace(model="m"),
+            config=AIServiceConfig(provider=AIProvider.OLLAMA, model="m"),
             # With RAG, what this turn alone brings (``_this_turn``).
             _this_turn=lambda _rag, now: now,
         )

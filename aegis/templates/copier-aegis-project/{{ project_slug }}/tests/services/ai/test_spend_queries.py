@@ -10,8 +10,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.time import utcnow
 from app.services.ai.domains.spend import queries, windows
 from app.services.ai.domains.spend.schemas import ActionSpend
-from app.services.ai.models.llm import LargeLanguageModel, LLMOrg, LLMUsage
+from app.services.ai.models.llm import LLMUsage
 from tests._session import opens
+from tests.services.ai._catalog import listed
 
 START = datetime(2026, 9, 1)
 END = datetime(2026, 10, 1)
@@ -200,13 +201,7 @@ async def test_each_window_says_what_it_cost_by_vendor_by_action_and_by_mode(
     """Who served it (the catalog's vendor; ``unknown`` for a model not in
     it), what it was for (a voice kind by its name) and whether it was
     voice or text, largest first."""
-    org = LLMOrg(slug="openai", name="openai", color="#000", icon_path="")
-    async_db_session.add(org)
-    await async_db_session.commit()
-    await async_db_session.refresh(org)
-    async_db_session.add(
-        LargeLanguageModel(model_id="gpt-x", title="GPT X", served_by_org_id=org.id)
-    )
+    await listed(async_db_session, "gpt-x", title="GPT X")
     call = _call(utcnow(), "realtime", 1.0)
     call.model_id = "voice-y"
     async_db_session.add_all([_call(utcnow(), "chat:assistant", 0.25), call])

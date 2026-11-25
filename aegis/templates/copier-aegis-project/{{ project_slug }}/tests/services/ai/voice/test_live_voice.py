@@ -41,13 +41,14 @@ def _her(
     instructions: str | None = None,
     owner_user_id: int | None = None,
 ) -> AbstractAsyncContextManager[LiveVoice | None]:
-    """Her live voice on ``realtime`` as the engine's call, its audio kept,
-    what she was built with in ``built``."""
+    """Her live voice on ``realtime`` as the engine's call (a list: one per
+    call, in turn), its audio kept, what she was built with in ``built``."""
     monkeypatch.setattr(usage_recording, "get_async_session", opens(session))
+    calls = realtime if isinstance(realtime, list) else None
 
     async def realtime_for(*args: Any, **kwargs: Any) -> Any:
         (built if built is not None else {}).update(kwargs)
-        return realtime, "assistant"
+        return (calls.pop(0) if calls is not None else realtime), "assistant"
 
     async def play(chunk: bytes, rate: int) -> None:
         played.append((chunk, rate))
@@ -208,43 +209,100 @@ async def test_told_to_stop_her_answer_is_cut_off_and_she_stays_on(
         assert voice.open
 
 
-async def test_once_the_call_is_over_she_is_asked_nothing_more(
+async def test_a_call_the_provider_ends_is_opened_again_for_the_next_question(
     async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The provider ends it (its session cap, an error): her voice is told
-    it is over (the bot closes its mic), and asks fail for the old way."""
-    realtime = FakeRealtime([], after_text=True)
+    """The provider ends it (Gemini Live closes a call idle for two minutes,
+    2026-11-24): the bot closes its mic, and the next question opens a new
+    call into the same conversation, told the meeting afresh."""
+    dropped = FakeRealtime([], after_text=True)
+    again = FakeRealtime(ANSWER, after_text=True)
+    built: dict[str, Any] = {}
     ended = asyncio.Event()
 
     async def on_end() -> None:
         ended.set()
 
     async with _her(
-        async_db_session, monkeypatch, realtime, [], on_end=on_end
+        async_db_session, monkeypatch, [dropped, again], [], built, on_end=on_end
     ) as voice:
         assert voice is not None
-        await realtime.live.close()
+        first = built["conversation"]
+        voice.told.add("A: hello")
+        await dropped.live.close()
         await asyncio.wait_for(ended.wait(), 5)
 
-        assert not voice.open
+        assert voice.open  # still hers to ask
+        assert await voice.ask("Who owns billing?") == "Sam owns billing."
+        assert again.live.sent == ["Who owns billing?"]
+        assert built["conversation"] is first
+        assert voice.told == set()  # the new call has heard nothing yet
+
+
+async def test_two_questions_after_a_drop_open_one_call(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two lines put to her at once once the call dropped: one new call,
+    not one each (a second would be left open, talking over the first)."""
+    dropped = FakeRealtime([], after_text=True)
+    again = FakeRealtime(ANSWER, after_text=True)
+    spare = FakeRealtime(ANSWER, after_text=True)
+    ended = asyncio.Event()
+
+    async def on_end() -> None:
+        ended.set()
+
+    calls = [dropped, again, spare]
+
+    async with _her(async_db_session, monkeypatch, calls, [], on_end=on_end) as voice:
+        assert voice is not None
+        await dropped.live.close()
+        await asyncio.wait_for(ended.wait(), 5)
+
+        await asyncio.wait_for(asyncio.gather(voice.up(), voice.up()), 10)
+
+        assert calls == [spare]  # opened once
+
+
+async def test_a_call_that_cannot_open_again_is_over(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Dropped, and refused when opened again: asks fail for the old way."""
+    dropped = FakeRealtime([], after_text=True)
+    ended = asyncio.Event()
+
+    async def on_end() -> None:
+        ended.set()
+
+    async with _her(
+        async_db_session, monkeypatch, [dropped, BrokenRealtime()], [], on_end=on_end
+    ) as voice:
+        assert voice is not None
+        await dropped.live.close()
+        await asyncio.wait_for(ended.wait(), 5)
+
         with pytest.raises(RuntimeError):
             await voice.ask("Who owns billing?")
+        assert not voice.open
 
 
 async def test_an_answer_too_slow_to_come_ends_her_live_call(
     async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Given up on, an answer must not play on or land on the next question:
-    the call ends, and the answer is made the old way."""
+    the call ends (the next question opens a new one), and the answer is
+    made the old way."""
     monkeypatch.setattr(module, "ANSWER_SECONDS", 0.05)
-    realtime = FakeRealtime([], after_text=True)  # never answers
+    slow = FakeRealtime([], after_text=True)  # never answers
+    again = FakeRealtime(ANSWER, after_text=True)
 
-    async with _her(async_db_session, monkeypatch, realtime, []) as voice:
+    async with _her(async_db_session, monkeypatch, [slow, again], []) as voice:
         assert voice is not None
         with pytest.raises(TimeoutError):
             await voice.ask("Who owns billing?")
 
-        assert not voice.open
+        assert slow.live._flag("_closed").is_set()
+        assert await voice.ask("Who owns billing?") == "Sam owns billing."
 
 
 async def test_a_call_that_cannot_come_up_is_given_up_at_once(

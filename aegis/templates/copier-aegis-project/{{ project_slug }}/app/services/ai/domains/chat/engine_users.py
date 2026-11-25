@@ -12,6 +12,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.config import settings
 from app.core.discovery import optional
 from app.core.figures import FIGURES
+from app.services.ai.domains.chat.agent_loader import provider_of
+from app.services.ai.models.agents import Agent
 
 from . import queries
 
@@ -47,15 +49,16 @@ class EngineUsers(BaseModel):
     in_app: list[InAppEngine] = Field(default_factory=list)
 
 
-def engine_of(
-    model_id: str | None, served: Mapping[str, Collection[str]]
-) -> str | None:
-    """The engine an agent's model runs on: the one that serves its pinned
-    model, or, unpinned, the active provider where that is an engine."""
-    if model_id is None:
+def engine_of(agent: Agent, served: Mapping[str, Collection[str]]) -> str | None:
+    """The engine an agent runs on: the provider serving its pinned model
+    (``provider_of``), or, unpinned, the active one, where that is an
+    engine here."""
+    if agent.llm is None:
         provider = settings.AI_PROVIDER
-        return provider if provider in served else None
-    return next((e for e, models in served.items() if model_id in models), None)
+    else:
+        pinned = provider_of(agent)
+        provider = pinned.value if pinned else None
+    return provider if provider in served else None
 
 
 async def engine_users(
@@ -66,7 +69,7 @@ async def engine_users(
     uses = [
         EngineUse(engine=engine, by=agent.name)
         for agent in await queries.active_agents(session)
-        if (engine := engine_of(agent.model_id, served))
+        if (engine := engine_of(agent, served))
     ]
     voice = optional(VOICE)
     if voice is None:

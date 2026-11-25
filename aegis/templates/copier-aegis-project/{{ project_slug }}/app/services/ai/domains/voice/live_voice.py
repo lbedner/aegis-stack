@@ -2,6 +2,10 @@
 question at a time as a text turn, her answer heard as it is made (each
 piece of its audio handed to ``play``) and its words given back once said.
 
+A provider that ends the call (Gemini Live closes one idle for two
+minutes) does not end her: the next question opens a new call into the
+same conversation, told the meeting afresh (``told``).
+
 It is her, built the way a live call builds her (``open_call``: her
 prompt, tools and code mode on the live engine), and driven the way one
 is (``drive``): her tools run in a turn's context, each turn is saved into
@@ -38,21 +42,38 @@ OPEN_SECONDS = 15.0
 class LiveVoice:
     """Her, live: ``ask`` puts a question to her and gives back what she
     said, one question at a time; her voice goes to ``play`` as it comes,
-    and ``on_end`` hears when the call is over, however it ends."""
+    and ``on_end`` hears when a call is over, however it ends. A call
+    over, ``dial`` opens the next one (whether it came up)."""
 
     def __init__(
-        self, play: Play, on_end: Callable[[], Awaitable[None]] | None = None
+        self,
+        play: Play,
+        on_end: Callable[[], Awaitable[None]] | None = None,
+        dial: Callable[[], Awaitable[bool]] | None = None,
     ) -> None:
-        self.play, self.on_end = play, on_end
+        self.play, self.on_end, self.dial = play, on_end, dial
         self.ready = asyncio.Event()  # the call is up
+        self.told: set[str] = set()  # the meeting's lines this call has heard
         self._session: Any = None
         self._reply: asyncio.Future[str] | None = None
         self._one = asyncio.Lock()
+        self._dialing = asyncio.Lock()  # one call opened again, not one each
         self._said: list[str] = []
 
     @property
     def open(self) -> bool:
-        return self._session is not None
+        """Whether she can be asked: her call is up, or can be opened again."""
+        return self._session is not None or self.dial is not None
+
+    async def up(self) -> None:
+        """Her call up, opened again where the last one ended (``told``
+        emptied); RuntimeError where it cannot be, and she is over."""
+        async with self._dialing:
+            if self._session is not None:
+                return
+            if self.dial is None or not await self.dial():
+                self.dial = None
+                raise RuntimeError("Her live call is over")
 
     async def ask(self, text: str) -> str:
         """Her answer to ``text``: heard as she makes it, its words once she
@@ -60,8 +81,7 @@ class LiveVoice:
         past ``ANSWER_SECONDS``, the call then ended so the answer given up
         on neither plays on nor lands on the next question."""
         async with self._one:
-            if self._session is None:
-                raise RuntimeError("Her live call is over")
+            await self.up()
             self._reply = asyncio.get_running_loop().create_future()
             await self._session.send(text)
             try:
@@ -95,6 +115,7 @@ class LiveVoice:
         """Beside the call (``drive``'s ``alongside``): her voice to
         ``play`` as it comes, until the call is over."""
         self._session = session
+        self.told = set()  # a new call has heard none of the meeting
         self.ready.set()
         rate = session.audio_output_sample_rate
         try:
@@ -107,8 +128,11 @@ class LiveVoice:
             if self.on_end is not None:
                 await self.on_end()
 
-    async def close(self) -> None:
-        """The call ended, where it is still up."""
+    async def close(self, *, for_good: bool = False) -> None:
+        """The call ended, where it is still up; ``for_good``, none opened
+        again."""
+        if for_good:
+            self.dial = None
         session, self._session = self._session, None
         if session is not None:
             await session.close()
@@ -148,8 +172,9 @@ async def live_voice(
     # Only the webserver applies the active voice at startup (a worker or a
     # bot reads it here).
     voice = voice or await profiles.active_settings(ledger, settings)
-    try:
-        conversation, realtime, answers = await open_call(
+
+    def build(conversation: Any = None) -> Awaitable[tuple[Any, Any, str]]:
+        return open_call(
             ai,
             engine,
             user_id=user_id,
@@ -157,41 +182,63 @@ async def live_voice(
             surface=surface,
             agent_slug=agent_slug,
             voice=voice,
+            conversation=conversation,
             hang_up=False,
             instructions=instructions,
         )
+
+    try:
+        conversation, realtime, answers = await build()
     except Exception:
         logger.exception("Her live voice could not be made; she answers as before")
         yield None
         return
-    spoken = LiveVoice(play, on_end)
-    call = asyncio.create_task(
-        drive(
-            ai,
-            realtime,
-            ledger=ledger,
-            conversation_id=conversation.id,
-            model=live_engines.realtime_model(engine),
-            agent_slug=answers,
-            user_id=user_id,
-            owner_user_id=owner_user_id,
-            alongside=spoken.carry,
-            on_turn=spoken.turned,
+    calls: list[asyncio.Task[str]] = []
+
+    async def dial(realtime: Any = None) -> bool:
+        """A call up into the conversation (built afresh, but for the
+        first), or over (refused as it opened): whichever comes first."""
+        if realtime is None:
+            try:
+                _, realtime, _ = await build(conversation)
+            except Exception:
+                logger.exception("Her live call could not be opened again")
+                return False
+        spoken.ready.clear()
+        call = asyncio.create_task(
+            drive(
+                ai,
+                realtime,
+                ledger=ledger,
+                conversation_id=conversation.id,
+                model=live_engines.realtime_model(engine),
+                agent_slug=answers,
+                user_id=user_id,
+                owner_user_id=owner_user_id,
+                alongside=spoken.carry,
+                on_turn=spoken.turned,
+            )
         )
-    )
-    # Up, or over (refused as it opened): whichever comes first.
-    up = asyncio.create_task(spoken.ready.wait())
-    await asyncio.wait({call, up}, timeout=OPEN_SECONDS, return_when="FIRST_COMPLETED")
-    if not spoken.ready.is_set():
+        calls.append(call)
+        up = asyncio.create_task(spoken.ready.wait())
+        await asyncio.wait(
+            {call, up}, timeout=OPEN_SECONDS, return_when="FIRST_COMPLETED"
+        )
+        if spoken.ready.is_set():
+            return True
         logger.warning("Her live call did not come up; she answers as before")
         up.cancel()
         call.cancel()
         with suppress(asyncio.CancelledError):  # the cancel just asked for
             await call
+        return False
+
+    spoken = LiveVoice(play, on_end, dial)
+    if not await dial(realtime):
         yield None
         return
     try:
         yield spoken
     finally:
-        await spoken.close()
-        await call
+        await spoken.close(for_good=True)
+        await asyncio.gather(*calls, return_exceptions=True)

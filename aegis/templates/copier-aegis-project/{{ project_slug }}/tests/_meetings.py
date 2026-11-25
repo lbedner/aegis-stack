@@ -269,6 +269,12 @@ class FakeLive:
         self.asked: list[str] = []
         self.spoken = list(spoken)
         self.stopped = False
+        self.told: set[str] = set()
+        self.dropped = False  # its call ended: the next ``up`` opens another
+
+    async def up(self) -> None:
+        if self.dropped:
+            self.dropped, self.told = False, set()
 
     async def ask(self, text: str) -> str:
         self.asked.append(text)

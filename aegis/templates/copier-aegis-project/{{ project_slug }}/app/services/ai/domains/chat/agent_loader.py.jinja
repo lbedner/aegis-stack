@@ -37,6 +37,7 @@ from app.services.ai.domains.chat.module_context import ContextModuleProvider
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
 from app.services.ai.domains.chat.tools import resolve_tools
 from app.services.ai.models.agents import Agent
+from app.services.ai.models.providers import AIProvider
 from app.services.ai.domains.spend.recording import chat_action, record_usage
 {% elif ai_backend != "memory" %}
 from contextvars import ContextVar
@@ -51,6 +52,7 @@ from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.builtin_fetchers import APP_MAP
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
 from app.services.ai.models.agents import Agent
+from app.services.ai.models.providers import AIProvider
 {% else %}
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
@@ -58,6 +60,7 @@ from dataclasses import dataclass, replace
 from app.core.config import settings
 from app.core.log import logger
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
+from app.services.ai.models.providers import AIProvider
 {% endif %}
 DEFAULT_AGENT_SLUG = "assistant"
 
@@ -73,7 +76,9 @@ class AgentConfig:
     """A resolved agent definition, source-agnostic.
 
     ``model_id`` of ``None`` means "use the service's active model", so
-    the default agent tracks the project's configured provider/model.
+    the default agent tracks the project's configured provider/model. A
+    pinned model runs on ``provider``, the one its catalog row says serves
+    it.
     """
 
     slug: str
@@ -88,6 +93,7 @@ class AgentConfig:
     code_mode: bool = False
     # The agent this one extends (``_to_config``), None for most.
     extends: str | None = None
+    provider: AIProvider | None = None
 
     def led_by(self, instructions: str | None) -> "AgentConfig":
         """This agent with ``instructions`` (a caller's manners for the
@@ -191,6 +197,13 @@ def _tool_names(row: Agent) -> tuple[str, ...]:
     return tuple(t.name for t in row.tools if t.is_active)
 
 
+def provider_of(row: Agent) -> AIProvider | None:
+    """The provider serving the model ``row`` pins (its catalog row's org);
+    None for none pinned, or an org that is no provider here."""
+    served = row.llm.served_by if row.llm else None
+    return AIProvider.from_name(served.name) if served else None
+
+
 def _to_config(row: Agent, parent: Agent | None = None) -> AgentConfig:
     """A row as a config; with ``parent`` (the row it ``extends``), the
     row's section goes FIRST - an instruction at the end of a long prompt
@@ -208,6 +221,7 @@ def _to_config(row: Agent, parent: Agent | None = None) -> AgentConfig:
             else row.system_prompt
         ),
         model_id=row.model_id,
+        provider=provider_of(row),
         temperature=row.temperature,
         max_tokens=row.max_tokens,
         tool_names=_tool_names(row) or _tool_names(base),

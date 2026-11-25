@@ -183,7 +183,6 @@ class StreamingMixin(ChatMixin):
             raise AIServiceError("AI service is disabled")
 
         try:
-            current = self.config
             setup = await self._assemble_turn(
                 message,
                 conversation_id=conversation_id,
@@ -206,6 +205,11 @@ class StreamingMixin(ChatMixin):
             conversation = setup.conversation
 {%- if ai_backend != "memory" %}
             agent_config = setup.agent_config  # usage is attributed to the agent
+            # What answers: the agent's pinned model on its provider, else
+            # the active one. The turn is priced at it and reports it.
+            current = self.config.for_agent(agent_config)
+{%- else %}
+            current = self.config
 {%- endif %}
 {% if ai_rag %}
             rag_context = setup.rag_context
@@ -424,9 +428,6 @@ class StreamingMixin(ChatMixin):
 
 {% endif %}
 {%- if ai_backend != "memory" %}
-            # The model that answered: an agent's pin, else the global. It
-            # is what the turn is priced at and what the message reports.
-            answered_by = agent_config.model_id or current.model
             # One price lookup: the ledger row's cost is the message's.
             cost = await self._record_usage(
                 chat_action(agent_config.slug),
@@ -434,7 +435,7 @@ class StreamingMixin(ChatMixin):
                 user_id,
                 duration_ms=response_time_ms,
                 conversation_id=conversation.id,
-                model=answered_by,
+                model=current.model,
             )
 {%- endif %}
             # Extractions recorded mid-run outlive the image AND the
@@ -446,9 +447,8 @@ class StreamingMixin(ChatMixin):
             final_metadata = await reply_metadata(
                 conversation.id,
                 provider=current.provider,
-{% if ai_backend != "memory" %}                model=answered_by,
-{% else %}                model=current.model,
-{% endif %}                response_time_ms=response_time_ms,
+                model=current.model,
+                response_time_ms=response_time_ms,
 {% if ai_rag %}                rag=rag_metadata,
 {% endif %}                tool_trace=tool_trace,
                 finish_reason=finish_reason,

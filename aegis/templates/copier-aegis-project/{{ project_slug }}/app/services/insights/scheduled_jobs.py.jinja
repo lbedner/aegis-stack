@@ -8,12 +8,25 @@ from app.services.insights.jobs import (
     collect_github_stars_job,
     collect_github_traffic_job,
 )
+{%- if insights_per_user %}
+from app.services.insights.jobs import (
+    collect_github_events_for,
+    collect_github_stars_for,
+    collect_github_traffic_for,
+)
+{%- endif %}
 {%- endif %}
 {%- if insights_pypi %}
 from app.services.insights.jobs import collect_pypi_job
+{%- if insights_per_user %}
+from app.services.insights.jobs import collect_pypi_for
+{%- endif %}
 {%- endif %}
 {%- if insights_plausible %}
 from app.services.insights.jobs import collect_plausible_job
+{%- if insights_per_user %}
+from app.services.insights.jobs import collect_plausible_for
+{%- endif %}
 {%- endif %}
 
 JOBS: tuple[ServiceJob, ...] = (
@@ -23,18 +36,27 @@ JOBS: tuple[ServiceJob, ...] = (
         "insight_github_traffic",
         "Insight: GitHub Traffic",
         {"trigger": "cron", "hour": 12, "minute": 0},
+{%- if insights_per_user %}
+        each=collect_github_traffic_for,
+{%- endif %}
     ),
     ServiceJob(
         collect_github_stars_job,
         "insight_github_stars",
         "Insight: GitHub Stars",
         {"trigger": "cron", "hour": 12, "minute": 0},
+{%- if insights_per_user %}
+        each=collect_github_stars_for,
+{%- endif %}
     ),
     ServiceJob(
         collect_github_events_job,
         "insight_github_events",
         "Insight: GitHub Events",
         {"trigger": "cron", "hour": 12, "minute": 0},
+{%- if insights_per_user %}
+        each=collect_github_events_for,
+{%- endif %}
     ),
 {%- endif %}
 {%- if insights_pypi %}
@@ -43,6 +65,9 @@ JOBS: tuple[ServiceJob, ...] = (
         "insight_pypi",
         "Insight: PyPI Downloads",
         {"trigger": "cron", "hour": 18, "minute": 0},
+{%- if insights_per_user %}
+        each=collect_pypi_for,
+{%- endif %}
     ),
 {%- endif %}
 {%- if insights_plausible %}
@@ -51,6 +76,9 @@ JOBS: tuple[ServiceJob, ...] = (
         "insight_plausible",
         "Insight: Plausible Analytics",
         {"trigger": "cron", "minute": 0},
+{%- if insights_per_user %}
+        each=collect_plausible_for,
+{%- endif %}
     ),
 {%- endif %}
 )

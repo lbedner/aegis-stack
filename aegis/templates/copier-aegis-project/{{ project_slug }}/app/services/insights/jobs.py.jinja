@@ -5,11 +5,13 @@ Each enabled source gets a scheduled job that runs its collector
 at the configured interval.
 {% if insights_per_user %}
 
-Multi-tenant when ``auth`` is on: each job iterates over every project
-that has the relevant source configured (e.g. ``project.github_repo``
-set for the GitHub jobs) and runs one ``CollectorService`` per project.
-A project with no source set is silently skipped — collectors are only
-useful when their config is present.
+Multi-tenant when ``auth`` is on: each job is a sweep
+(``ServiceJob.each``) over every project that has the relevant source
+configured (e.g. ``project.github_repo`` set for the GitHub jobs), and
+each project is collected on its own, on the worker a task each, so one
+project's failing API holds up none of the others. A project with no
+source set is never swept - collectors are only useful when their config
+is present.
 {% endif %}
 """
 
@@ -20,6 +22,9 @@ from app.core.db import get_async_session
 from app.services.insights.adapters.collectors.collection import CollectorService
 from .constants import SourceKeys
 {% if insights_per_user -%}
+from typing import Any
+
+from app.core.schedule import read_items
 from app.services.insights.service import ProjectService
 {%- endif %}
 
@@ -30,7 +35,7 @@ async def _run_one(
     session,
     source_key: str,
     {% if insights_per_user -%}
-    project=None,
+    project,
     {%- endif %}
 ) -> None:
     """Run a single source collection and log the outcome.
@@ -40,7 +45,7 @@ async def _run_one(
     """
     {% if insights_per_user -%}
     service = CollectorService(session, project=project)
-    suffix = f" (project={project.slug})" if project is not None else ""
+    suffix = f" (project={project.slug})"
     {% else -%}
     service = CollectorService(session)
     suffix = ""
@@ -61,90 +66,124 @@ async def _run_one(
     else:
         logger.error("%s%s collection failed: %s", source_key, suffix, result.error)
 
+{% if insights_per_user %}
+
+
+async def _project_ids(needs: tuple[Any, ...]) -> list[int]:
+    """The projects with a source's ``needs`` set, by id."""
+    return await read_items(lambda session: ProjectService(session).ids_where(*needs))
+
+
+async def _collect_for(source_key: str, needs: tuple[Any, ...], project_id: int) -> None:
+    """One project's collection of ``source_key``, in a session of its own;
+    none once the project is gone or no longer has ``needs`` set."""
+    async with get_async_session() as session:
+        project = await ProjectService(session).collector_project(project_id, *needs)
+        if project is None:
+            logger.info("%s: project %s gone or unset; skipped", source_key, project_id)
+            return
+        await _run_one(session, source_key, project=project)
+{% endif %}
+
 
 {% if insights_github %}
 
 
+{% if insights_per_user -%}
+async def collect_github_traffic_job() -> list[int]:
+    """Scheduled job: the projects with GitHub configured, each
+    collected on its own (``collect_github_traffic_for``)."""
+    return await _project_ids(ProjectService.GITHUB)
+
+
+async def collect_github_traffic_for(project_id: int) -> None:
+    """One project's GitHub traffic."""
+    await _collect_for(SourceKeys.GITHUB_TRAFFIC, ProjectService.GITHUB, project_id)
+{%- else %}
 async def collect_github_traffic_job() -> None:
     """Scheduled job: collect GitHub traffic data."""
     logger.info("Running scheduled GitHub traffic collection")
     async with get_async_session() as session:
-        {% if insights_per_user -%}
-        projects = await ProjectService(session).list_with_github()
-        if not projects:
-            logger.info("No projects with GitHub configured; skipping")
-            return
-        for project in projects:
-            await _run_one(session, SourceKeys.GITHUB_TRAFFIC, project=project)
-        {% else -%}
         await _run_one(session, SourceKeys.GITHUB_TRAFFIC)
-        {%- endif %}
+{%- endif %}
 
 
+{% if insights_per_user -%}
+async def collect_github_stars_job() -> list[int]:
+    """Scheduled job: the projects with GitHub configured, each
+    collected on its own (``collect_github_stars_for``)."""
+    return await _project_ids(ProjectService.GITHUB)
+
+
+async def collect_github_stars_for(project_id: int) -> None:
+    """One project's GitHub stargazers."""
+    await _collect_for(SourceKeys.GITHUB_STARS, ProjectService.GITHUB, project_id)
+{%- else %}
 async def collect_github_stars_job() -> None:
     """Scheduled job: collect GitHub stargazer data."""
     logger.info("Running scheduled GitHub stars collection")
     async with get_async_session() as session:
-        {% if insights_per_user -%}
-        projects = await ProjectService(session).list_with_github()
-        if not projects:
-            logger.info("No projects with GitHub configured; skipping")
-            return
-        for project in projects:
-            await _run_one(session, SourceKeys.GITHUB_STARS, project=project)
-        {% else -%}
         await _run_one(session, SourceKeys.GITHUB_STARS)
-        {%- endif %}
+{%- endif %}
 
 
+{% if insights_per_user -%}
+async def collect_github_events_job() -> list[int]:
+    """Scheduled job: the projects with GitHub configured, each
+    collected on its own (``collect_github_events_for``)."""
+    return await _project_ids(ProjectService.GITHUB)
+
+
+async def collect_github_events_for(project_id: int) -> None:
+    """One project's GitHub events."""
+    await _collect_for(SourceKeys.GITHUB_EVENTS, ProjectService.GITHUB, project_id)
+{%- else %}
 async def collect_github_events_job() -> None:
     """Scheduled job: collect GitHub events from ClickHouse."""
     logger.info("Running scheduled GitHub events collection")
     async with get_async_session() as session:
-        {% if insights_per_user -%}
-        projects = await ProjectService(session).list_with_github()
-        if not projects:
-            logger.info("No projects with GitHub configured; skipping")
-            return
-        for project in projects:
-            await _run_one(session, SourceKeys.GITHUB_EVENTS, project=project)
-        {% else -%}
         await _run_one(session, SourceKeys.GITHUB_EVENTS)
-        {%- endif %}
+{%- endif %}
 {% endif %}
 {% if insights_pypi %}
 
 
+{% if insights_per_user -%}
+async def collect_pypi_job() -> list[int]:
+    """Scheduled job: the projects with PyPI configured, each
+    collected on its own (``collect_pypi_for``)."""
+    return await _project_ids(ProjectService.PYPI)
+
+
+async def collect_pypi_for(project_id: int) -> None:
+    """One project's PyPI downloads."""
+    await _collect_for(SourceKeys.PYPI, ProjectService.PYPI, project_id)
+{%- else %}
 async def collect_pypi_job() -> None:
     """Scheduled job: collect PyPI download stats."""
     logger.info("Running scheduled PyPI collection")
     async with get_async_session() as session:
-        {% if insights_per_user -%}
-        projects = await ProjectService(session).list_with_pypi()
-        if not projects:
-            logger.info("No projects with PyPI configured; skipping")
-            return
-        for project in projects:
-            await _run_one(session, SourceKeys.PYPI, project=project)
-        {% else -%}
         await _run_one(session, SourceKeys.PYPI)
-        {%- endif %}
+{%- endif %}
 {% endif %}
 {% if insights_plausible %}
 
 
+{% if insights_per_user -%}
+async def collect_plausible_job() -> list[int]:
+    """Scheduled job: the projects with Plausible configured, each
+    collected on its own (``collect_plausible_for``)."""
+    return await _project_ids(ProjectService.PLAUSIBLE)
+
+
+async def collect_plausible_for(project_id: int) -> None:
+    """One project's Plausible analytics."""
+    await _collect_for(SourceKeys.PLAUSIBLE, ProjectService.PLAUSIBLE, project_id)
+{%- else %}
 async def collect_plausible_job() -> None:
     """Scheduled job: collect Plausible analytics."""
     logger.info("Running scheduled Plausible collection")
     async with get_async_session() as session:
-        {% if insights_per_user -%}
-        projects = await ProjectService(session).list_with_plausible()
-        if not projects:
-            logger.info("No projects with Plausible configured; skipping")
-            return
-        for project in projects:
-            await _run_one(session, SourceKeys.PLAUSIBLE, project=project)
-        {% else -%}
         await _run_one(session, SourceKeys.PLAUSIBLE)
-        {%- endif %}
+{%- endif %}
 {% endif %}

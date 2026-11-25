@@ -1085,6 +1085,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/cli/insights.py",
                 "tests/services/test_insights_collectors.py",
                 "tests/services/test_insight_service.py",
+                "tests/services/test_insights_jobs.py",
                 "tests/services/test_query_service.py",
                 "tests/services/test_collector_service.py",
                 "tests/services/test_collector_github_traffic.py",

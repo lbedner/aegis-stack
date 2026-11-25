@@ -7,7 +7,6 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.cache import CacheService
 from app.core.constants import QueueName
 from app.core.discovery import present
 from app.models.conversation import Conversation, ConversationMessage
@@ -129,18 +128,11 @@ class TestOnTheQueue:
 
     @pytest.mark.queryspy(allow_n_plus_one=True)  # two sweeps
     async def test_every_unscored_conversation_is_queued_once(
-        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+        self,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+        queued: list[tuple[object, ...]],
     ) -> None:
-        from app.components.worker import pools, queue_once
-
-        enqueued: list[tuple[object, ...]] = []
-
-        async def enqueue(name: str, queue: str, *args: object, **_: object) -> None:
-            enqueued.append((name, queue, *args))
-
-        cache = CacheService()
-        monkeypatch.setattr(pools, "enqueue_task", enqueue)
-        monkeypatch.setattr(queue_once, "get_cache", lambda: cache)
         monkeypatch.setattr(sentiment_module, "QUEUED", True)
         ids = [f"c{n}" for n in range(25)]  # past any one batch
         session.add_all(
@@ -155,7 +147,7 @@ class TestOnTheQueue:
         assert await queue_unscored(session=session) == 25
         assert await queue_unscored(session=session) == 0  # still queued
 
-        assert sorted(enqueued) == sorted(
+        assert sorted(queued) == sorted(
             ("score_conversation_task", QueueName.SYSTEM, i) for i in ids
         )
 

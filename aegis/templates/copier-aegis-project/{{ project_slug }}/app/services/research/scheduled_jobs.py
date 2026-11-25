@@ -1,7 +1,10 @@
 """Research's scheduled jobs (``app.core.schedule``)."""
 
 from app.core.schedule import LONG_RUNNING, ServiceJob
-from app.services.research.jobs import refresh_research_watches_job
+from app.services.research.jobs import (
+    refresh_research_watches_for,
+    refresh_research_watches_job,
+)
 
 JOBS: tuple[ServiceJob, ...] = (
     # Nightly: what a launch post or a discussion moved settles within a
@@ -12,5 +15,6 @@ JOBS: tuple[ServiceJob, ...] = (
         "Research: Refresh Watches",
         {"trigger": "cron", "hour": 3, "minute": 0},
         timeout=LONG_RUNNING,
+        each=refresh_research_watches_for,
     ),
 )

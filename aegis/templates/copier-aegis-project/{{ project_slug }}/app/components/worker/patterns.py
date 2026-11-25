@@ -211,7 +211,9 @@ TASK = Pattern(
             _fans_out,
             gate=True,
             evidence=_serial,
-            action="queue a task per item (enqueue_once, in "
+            action="make a scheduled job a sweep (ServiceJob(..., each=), in "
+            "app/core/schedule.py: func returns the items, each does one); "
+            "anywhere else queue a task per item (enqueue_once, in "
             "app/components/worker/queue_once.py) instead of awaiting each "
             "in the loop",
         ),

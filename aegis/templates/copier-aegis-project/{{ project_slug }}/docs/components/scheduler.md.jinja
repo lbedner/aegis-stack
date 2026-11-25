@@ -138,6 +138,12 @@ in the scheduler, because it proves the scheduler's own loop is alive.
 - **Run history.** The Scheduler page records the enqueue, which takes
   milliseconds; the job's own run time and outcome are on the Worker page.
 - **Redis down.** A job that cannot be enqueued is recorded as a failed run.
+- **Sweeps.** An entry with `each=` works over many items (owners,
+  projects): its function returns their ids and `each` does one. The
+  scheduler runs the sweep itself, since it is cheap, and queues a task per
+  item (`<job>_each`, claimed so it is queued once), so the worker runs
+  them at the system queue's concurrency and one slow or failing item holds
+  up none of the rest.
 {%- else %}
 
 ### Where jobs run
@@ -145,7 +151,10 @@ in the scheduler, because it proves the scheduler's own loop is alive.
 This project has no worker, so the scheduler runs each job in its own
 process. **Run Now** (the dashboard button or `tasks trigger`) runs the job
 in the process that received it. Adding a worker moves every service job
-onto it with no change to any service's `JOBS`.
+onto it with no change to any service's `JOBS`. A sweep (an entry with
+`each=`) does its items one after another, one item's failure logged and
+kept from the rest and the run recorded as failed; with a worker, each is a
+task of its own.
 {%- endif %}
 
 ### Pre-configured Jobs

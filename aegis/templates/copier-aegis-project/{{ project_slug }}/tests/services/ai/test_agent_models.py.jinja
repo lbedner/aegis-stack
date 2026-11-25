@@ -17,6 +17,9 @@ from app.services.ai.domains.chat.sentiment import (
     SENTIMENT_AGENT_SLUG,
     SENTIMENT_SYSTEM_PROMPT,
 )
+{%- if ai_framework == "pydantic-ai" %}
+from app.services.ai.domains.chat.summary import SUMMARIZER, SUMMARY_PROMPT
+{%- endif %}
 from app.services.ai.domains.chat.tools import resolve_tools
 from app.services.ai.fixtures.agent_fixtures import (
     DEFAULT_AGENT_SLUG,
@@ -63,6 +66,17 @@ class TestAgentSeed:
         ).one()
         assert agent.system_prompt == SENTIMENT_SYSTEM_PROMPT
         assert agent.model_id is None and agent.is_active
+
+{%- if ai_framework == "pydantic-ai" %}
+
+    def test_seeds_the_summarizer(self, session: Session) -> None:
+        """Its own row, so the conversation fold's model is picked in Agents
+        like any job's: the active model until someone pins one."""
+        load_agent_fixtures(session)
+        agent = session.exec(select(Agent).where(Agent.slug == SUMMARIZER)).one()
+        assert agent.system_prompt == SUMMARY_PROMPT
+        assert agent.model_id is None and agent.is_active
+{%- endif %}
 
     def test_seeds_the_pull_request_reviewer(self, session: Session) -> None:
         """Illiana reviewing (``patterns review``): her persona and the

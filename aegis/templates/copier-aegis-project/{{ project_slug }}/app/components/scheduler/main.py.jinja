@@ -20,7 +20,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.core import edges, run_log
 from app.core.boot import apply_saved_overrides, release
-from app.core.constants import ComponentName{% if include_worker %}, QueueName{% endif %}
+from app.core.constants import ComponentName
 {% if scheduler_backend != "memory" %}
 from apscheduler.job import Job
 from apscheduler.jobstores.base import ConflictingIdError
@@ -38,10 +38,7 @@ from app.services.scheduler.execution_log import (
 {% endif %}
 from app.core.config import settings
 from app.core.log import logger
-from app.core.schedule import service_jobs{% if not include_worker %}, run_service_job{% endif %}
-{%- if include_worker %}
-from app.components.worker.pools import enqueue_task
-{%- endif %}
+from app.core.schedule import fire_service_job, service_jobs
 from app.services.system import activity
 from .heartbeat import is_heartbeat_event, register_heartbeat_job
 from .resilient import ResilientScheduler
@@ -111,9 +108,10 @@ _in_flight: dict[str, int] = {}
 {%- endif %}
 
 
-async def scheduled_run(job_id: str{% if include_worker %}, task_name: str{% endif %}) -> Any:
-    """One run of a scheduled job{% if include_worker %}: its task enqueued
-    for the worker, which does the work{% endif %}.
+async def scheduled_run(job_id: str) -> Any:
+    """One run of a scheduled job (``ServiceJob.fire``){% if include_worker %}: its task
+    queued for the worker, which does the work; a sweep run here, its
+    items queued for the worker{% endif %}.
 {%- if scheduler_backend != "memory" %}
 
     Bound as the history row ``record_job_started`` opened for it, so what
@@ -124,17 +122,9 @@ async def scheduled_run(job_id: str{% if include_worker %}, task_name: str{% end
 {%- if scheduler_backend != "memory" %}
     execution_id = _in_flight.get(job_id)
     with run_log.bind_run(str(execution_id) if execution_id is not None else None):
-{%- if include_worker %}
-        return await enqueue_task(task_name, QueueName.SYSTEM)
+        return await fire_service_job(job_id)
 {%- else %}
-        return await run_service_job(job_id)
-{%- endif %}
-{%- else %}
-{%- if include_worker %}
-    return await enqueue_task(task_name, QueueName.SYSTEM)
-{%- else %}
-    return await run_service_job(job_id)
-{%- endif %}
+    return await fire_service_job(job_id)
 {%- endif %}
 
 {%- if scheduler_backend != "memory" %}
@@ -159,9 +149,10 @@ def register_service_jobs(scheduler: AsyncIOScheduler) -> None:
     """Schedule every service job (``service_jobs``) as a ``scheduled_run``.
 {%- if include_worker %}
 
-    The scheduler only produces: each job is scheduled as an enqueue of its
-    task name onto the system queue, and a worker runs it. A manual run
-    repeats the stored call, so it lands on the worker too.
+    Each is stored as its id; ``ServiceJob.fire`` decides at run time
+    where it runs: a job's task queued for a worker, a sweep
+    (``ServiceJob.each``) here, a task per item queued. A manual run
+    repeats the stored call, so it lands where the schedule's would.
 {%- endif %}
 
     A dev stack leaves out the ``server_only`` ones.
@@ -176,7 +167,7 @@ def register_service_jobs(scheduler: AsyncIOScheduler) -> None:
             trigger["next_run_time"] = datetime.now(UTC)
         scheduler.add_job(
             scheduled_run,
-            args=[job.id{% if include_worker %}, job.task_name{% endif %}],
+            args=[job.id],
             id=job.id,
             name=job.name,
             max_instances=1,

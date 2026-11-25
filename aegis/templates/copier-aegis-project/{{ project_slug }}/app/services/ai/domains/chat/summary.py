@@ -18,7 +18,6 @@ from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.cache import get_cache
 from app.core.discovery import present
 from app.core.log import logger
 from app.models.conversation import Conversation as ConversationModel
@@ -136,15 +135,16 @@ async def enqueue_fold(conversation_id: str, upto: int) -> None:
     stack that does not fold) to the worker, once per cut. Never fails the
     turn: a fold missed now is due again on the next."""
     try:
-        if not await get_cache().claim(
-            f"chat:fold:{conversation_id}:{upto}", ttl=_CLAIM_SECONDS
-        ):
-            return
-        from app.components.worker import pools
+        from app.components.worker.queue_once import enqueue_once
         from app.core.constants import QueueName
 
-        await pools.enqueue_task(
-            "fold_conversation_task", QueueName.SYSTEM, conversation_id, upto
+        await enqueue_once(
+            f"chat:fold:{conversation_id}:{upto}",
+            _CLAIM_SECONDS,
+            "fold_conversation_task",
+            QueueName.SYSTEM,
+            conversation_id,
+            upto,
         )
     except Exception as exc:  # noqa: BLE001 - the turn goes on regardless
         logger.warning(f"Could not queue a conversation fold: {exc}")

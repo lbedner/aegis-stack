@@ -37,7 +37,12 @@ if a worker is present, or `add-api-endpoint` for a synchronous route).
 1. Write the failing test first for the job function's behavior, independent
    of the schedule. Confirm it fails for the right reason.
 2. Write the job as an `async def` taking no arguments that does one unit of
-   work.
+   work. A job over many items (conversations, owners, connections) only
+   sweeps: it queues a worker task per item (`pools.enqueue_task`), each
+   claimed so it is queued once (`get_cache().claim`), and the queue runs them
+   at its concurrency. It never awaits each item's work in a loop, and never
+   caps a run with a batch-size setting: `enqueue_fold` and sentiment's
+   `queue_unscored` are the shape.
 3. Add a `ServiceJob` to the service's `JOBS`: the function, a stable id, a display
    name, and the trigger as `add_job` keyword arguments (for example
    `{"trigger": "cron", "hour": 3}`).
@@ -50,10 +55,16 @@ if a worker is present, or `add-api-endpoint` for a synchronous route).
 - `make check`: lint, typecheck, and test. With a worker,
   `tests/components/test_scheduler_jobs.py` fails if a scheduled name is not a
   registered worker task.
+- `patterns check`: flags a job, or a function it calls, that awaits an
+  item's work in a loop (`task.fan-out`).
 
 ## Pitfalls
 
 - A job function that is not in some service's `JOBS` never runs.
+- A loop that awaits each item's model or provider call does them one after
+  another: one slow item holds up every item behind it, and a batch limit
+  added to bound the run leaves the rest for the next one. Queue a task per
+  item instead.
 - A `scheduled_jobs.py` without `JOBS`, or two entries sharing an id or a
   function name, fails at startup rather than scheduling the wrong thing.
 - Do not call `scheduler.add_job(...)` for a service job in `main.py`: with a

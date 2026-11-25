@@ -135,6 +135,20 @@ if present("app.services.ai.domains.chat.summary"):
     fold_conversation_task = broker.task(fold_conversation_task)
 
 
+async def score_conversation_task(conversation_id: str) -> str:
+    """Score one conversation's sentiment: a model call, a task each so the
+    queue runs as many at once as it may. The AI service is imported
+    lazily, as the documents one is."""
+    from app.services.ai.service import score_conversation_job
+
+    return await score_conversation_job(conversation_id)
+
+
+# Registered only where conversations are scored.
+if present("app.services.ai.domains.chat.sentiment"):
+    score_conversation_task = broker.task(score_conversation_task)
+
+
 async def embed_files_task(key: str, n: int, files: list[str]) -> None:
     """Read, chunk and embed a batch of files for the knowledge base; the
     vectors go back through Redis to the one process that writes the index.

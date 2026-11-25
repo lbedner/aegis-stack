@@ -8,12 +8,16 @@ task handing the work to a service, and a JSON result.
 """
 
 from dataclasses import dataclass
+from functools import cache
 import inspect
 import types
 import typing
 from typing import Any
 
-from app.services.system.dry_path import entry_of, reaches_service
+from app.core import source_index
+from app.core.source_functions import Function
+from app.services.system.dry_path import entry_of, hops, reaches_service
+from app.services.system.dry_walk import ENQUEUES, HANDS_OFF, HopKind
 from app.services.system.patterns import (
     THIN_STATEMENTS,
     Pattern,
@@ -23,8 +27,23 @@ from app.services.system.patterns import (
     statement_count,
     thin,
 )
+from app.services.system.service_patterns import SESSION_NAMES
 
 JSON_TYPES = (str, int, float, bool, type(None), dict, list)
+# What a loop over many items may await for each: queueing it (claimed, so
+# once), on any engine, never doing it. The session's own bookkeeping
+# (``db.flush()``) is the query check's to judge, not this rule's.
+FAN_OUT = ENQUEUES | HANDS_OFF | {"claim", "enqueue_once"}
+SESSION_OPS = frozenset(
+    {"commit", "flush", "rollback", "refresh", "exec", "execute", "get", "delete"}
+)
+
+
+def _queues_or_books(spelled: str) -> bool:
+    """A call awaited in a loop that is not an item's work: queueing it, or
+    the session keeping its books."""
+    owner, _, name = spelled.rpartition(".")
+    return name in FAN_OUT or (owner in SESSION_NAMES and name in SESSION_OPS)
 
 
 @dataclass(frozen=True)
@@ -96,6 +115,46 @@ def _uses_service(task: Task) -> bool:
     return reaches_service(entry_of(task.func, task.name))
 
 
+def _function_at(index: source_index.Index, symbol: str) -> tuple[str, Function] | None:
+    """The function ``symbol`` names (``app.x.f``, ``app.x.C.f``) with its
+    module's path, where the index has it."""
+    parts = symbol.split(".")
+    for cut in (1, 2):
+        module = index.get(".".join(parts[:-cut]))
+        qualname = ".".join(parts[-cut:])
+        for function in module.functions if module else ():
+            if function.qualname == qualname:
+                return module.path, function
+    return None
+
+
+@cache
+def _serial(task: Task) -> list[str]:
+    """Each ``path:line`` where the task, or a function it calls, awaits
+    work in a loop: one item after another."""
+    entry = entry_of(task.func, task.name)
+    if entry is None:
+        return []
+    walked = hops(entry)
+    top = {h.id for h in walked if h.kind == HopKind.HANDLER}
+    # ponytail: the task and what it calls, one call deep: where a job's
+    # loop has always lived. A loop further down is a service's own (a
+    # stack with no worker scoring in the job); follow deeper if one hides.
+    reached = {h.symbol for h in walked if h.id in top or h.parent in top}
+    index = source_index.project()
+    found = (_function_at(index, symbol) for symbol in reached)
+    return sorted(
+        f"{path}:{line}"
+        for path, function in filter(None, found)
+        for name, line in function.looped
+        if not _queues_or_books(name)
+    )
+
+
+def _fans_out(task: Task) -> bool:
+    return not _serial(task)
+
+
 def _rank(task: Task) -> tuple[bool, int]:
     """Taking arguments, in the fewest statements."""
     return (bool(inspect.signature(task.func).parameters), -statement_count(task.func))
@@ -140,6 +199,23 @@ TASK = Pattern(
             "same work can run from a route or a job: at most "
             f"{THIN_STATEMENTS} statements around a service call, or one statement.",
             lambda t: thin(t.func, _uses_service(t)),
+        ),
+        Rule(
+            "fan-out",
+            "A task per item",
+            "Work over many items (conversations, owners, connections) is "
+            "queued a task each, claimed so once: the queue runs as many at "
+            "once as its concurrency, one slow or failing item holds up none "
+            "of the rest, and there is no batch to cap. A job that awaits each "
+            "item's work in a loop does them one after another.",
+            _fans_out,
+            # Advisory until main's known debt holds this rule's places: gated
+            # in the change that adds it, every place it finds reads as new.
+            gate=False,
+            evidence=_serial,
+            action="queue a task per item (enqueue_once, in "
+            "app/components/worker/queue_once.py) instead of awaiting each "
+            "in the loop",
         ),
         Rule(
             "json-result",

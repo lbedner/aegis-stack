@@ -26,8 +26,8 @@ from app.services.system import (
     kept_requests,
     live_status,
     pattern_findings,
+    patterns,
     plugin_directory,
-    service_parts,
     ui_errors,
     ui_logs,
 )
@@ -239,12 +239,16 @@ async def _dry_path(route: str) -> RouteWalk:
 
 
 def _findings(node: Node) -> list[pattern_findings.Finding]:
-    """What the parts pattern finds in a part's code, as the map shows it
+    """What every pattern finds in a part's code, as the map shows it
     (read from source once a process, so off the event loop)."""
     if not isinstance(node, PartNode):
         return []
-    report = service_parts.report()
-    return [f for f in pattern_findings.findings(report) if f.subject == node.id]
+    return [
+        f
+        for report in patterns.own_reports().values()
+        for f in pattern_findings.findings(report)
+        if f.subject == node.id
+    ]
 
 
 async def _node(

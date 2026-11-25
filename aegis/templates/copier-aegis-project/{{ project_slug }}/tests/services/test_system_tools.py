@@ -30,7 +30,6 @@ from app.services.system import (
     live_status,
     node_now,
     pattern_findings,
-    service_parts,
     tools,
     ui_errors,
     ui_logs,
@@ -524,8 +523,8 @@ def model(monkeypatch: pytest.MonkeyPatch) -> SystemModel:
         return {}
 
     monkeypatch.setattr("app.core.edges.observed", nothing_seen)
-    # The parts report is built once a process: never from this model.
-    monkeypatch.setattr(service_parts, "report", lambda: None)
+    # The patterns' reports are built once a process: never from this model.
+    monkeypatch.setattr(tools.patterns, "own_reports", dict)
     monkeypatch.setattr(pattern_findings, "findings", lambda report: [])
     # Read as an admin unless a test binds otherwise: sign-in off.
     monkeypatch.setattr(settings, "AUTH_ENABLED", False)
@@ -805,7 +804,8 @@ def _finding(subject: str) -> Finding:
 
 @pytest.fixture
 def found(monkeypatch: pytest.MonkeyPatch) -> None:
-    """What the parts pattern finds: one about payment, one about blog."""
+    """What the patterns find (one report): one about payment, one about blog."""
+    monkeypatch.setattr(tools.patterns, "own_reports", lambda: {"parts": None})
     monkeypatch.setattr(
         pattern_findings,
         "findings",

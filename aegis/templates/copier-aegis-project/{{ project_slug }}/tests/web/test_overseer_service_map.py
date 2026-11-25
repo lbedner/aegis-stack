@@ -4,6 +4,8 @@ facade, domains, data, the parts it reaches), its pieces (``service_pieces``) in
 them with the imports between as lines, a missing part a dashed slot, the
 way back up, and what each piece should fix."""
 
+from types import SimpleNamespace
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
@@ -165,6 +167,37 @@ def test_a_piece_says_what_its_files_should_fix(
     assert "overflow-y-auto" in panel and "max-h-" in panel
     into = select(html, 'path[data-link][data-to="piece:facade"]')
     assert into and all(line.get("data-tone") != "error" for line in into)
+
+
+def test_every_patterns_findings_mark_the_part_they_are_about(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Not only the parts rules: a task's finding marks its service on the
+    map too. The Patterns page's parts rows keep to the parts rules."""
+    parts = SimpleNamespace(pattern=SimpleNamespace(key="parts"), instances=[])
+    task = SimpleNamespace(pattern=SimpleNamespace(key="task"), instances=[])
+    finding = finding_of("task.fan-out", "A task per item", ("app/x.py:3",))
+    monkeypatch.setattr(
+        overseer_conformance.patterns,
+        "own_reports",
+        lambda: {"parts": parts, "task": task},
+    )
+    monkeypatch.setattr(
+        overseer_conformance.pattern_findings,
+        "findings",
+        lambda report: [finding] if report is task else [],
+    )
+    overseer_conformance.conformance.cache_clear()
+    try:
+        found = overseer_conformance.conformance()
+    finally:
+        overseer_conformance.conformance.cache_clear()
+    stack = [{"key": "auth", "registry": "service_auth"}]
+
+    overseer_conformance.mark(stack, found)
+
+    assert stack[0]["todo_count"] == 1
+    assert found.by_part == {}
 
 
 def test_red_past_the_facade_is_what_the_parts_rule_finds() -> None:

@@ -7,14 +7,19 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.cache import CacheService
+from app.core.constants import QueueName
+from app.core.discovery import present
 from app.models.conversation import Conversation, ConversationMessage
-from app.services.ai.jobs import analyze_sentiment_job
-from app.services.ai.models.sentiment import SentimentAnalysis
 import app.services.ai.domains.chat.sentiment as sentiment_module
 from app.services.ai.domains.chat.sentiment import (
+    queue_unscored,
+    score_conversation,
     score_unscored_conversations,
     sentiment_stats,
 )
+from app.services.ai.jobs import analyze_sentiment_job
+from app.services.ai.models.sentiment import SentimentAnalysis
 
 _GOOD_VERDICT: dict[str, Any] = {
     "overall_sentiment": "positive",
@@ -34,14 +39,16 @@ def session(async_db_session: AsyncSession) -> AsyncSession:
 
 
 async def _add_conversation(
-    session: AsyncSession, conv_id: str, *, with_message: bool = True
+    session: AsyncSession,
+    conv_id: str,
+    *,
+    with_message: bool = True,
+    content: str = "hello there",
 ) -> None:
     session.add(Conversation(id=conv_id, user_id="u1", title=conv_id))
     if with_message:
         session.add(
-            ConversationMessage(
-                conversation_id=conv_id, role="user", content="hello there"
-            )
+            ConversationMessage(conversation_id=conv_id, role="user", content=content)
         )
     await session.commit()
 
@@ -66,6 +73,7 @@ def _stub_llm(
 
 
 class TestScoreOnce:
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # two batches
     async def test_scores_unscored_conversations_exactly_once(
         self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -84,16 +92,92 @@ class TestScoreOnce:
         assert len(rows) == 2
         assert {row.overall_sentiment for row in rows} == {"positive"}
 
-    async def test_conversation_without_messages_is_skipped(
+    async def test_conversations_without_messages_are_not_picked(
         self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """An empty one never gets a verdict, so picked it would be picked
+        on every run: one with no messages, or none that say anything."""
         calls = _stub_llm(monkeypatch)
-        await _add_conversation(session, "empty", with_message=False)
+        await _add_conversation(session, "empty-1", with_message=False)
+        await _add_conversation(session, "empty-2", content="")
+        await _add_conversation(session, "said")
 
         counts = await score_unscored_conversations(session=session)
 
-        assert counts == {"scored": 0, "skipped": 1, "failed": 0}
-        assert calls["count"] == 0
+        assert counts == {"scored": 1, "skipped": 0, "failed": 0}
+        assert calls["count"] == 1
+
+
+class TestTheVerdictRow:
+    def test_its_timestamp_is_naive_utc(self) -> None:
+        """As the column stores it: asyncpg refuses an aware value for a
+        ``timestamp without time zone``, which SQLite never shows."""
+        row = SentimentAnalysis(
+            conversation_id="c",
+            overall_sentiment="neutral",
+            overall_score=0.0,
+            assistant_performance="good",
+        )
+
+        assert row.created_at.tzinfo is None
+
+
+@pytest.mark.skipif(not present("app.components.worker"), reason="no worker")
+class TestOnTheQueue:
+    """No batch: a task per conversation, as many scoring at once as the
+    system queue runs."""
+
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # two sweeps
+    async def test_every_unscored_conversation_is_queued_once(
+        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.components.worker import pools, queue_once
+
+        enqueued: list[tuple[object, ...]] = []
+
+        async def enqueue(name: str, queue: str, *args: object, **_: object) -> None:
+            enqueued.append((name, queue, *args))
+
+        cache = CacheService()
+        monkeypatch.setattr(pools, "enqueue_task", enqueue)
+        monkeypatch.setattr(queue_once, "get_cache", lambda: cache)
+        monkeypatch.setattr(sentiment_module, "QUEUED", True)
+        ids = [f"c{n}" for n in range(25)]  # past any one batch
+        session.add_all(
+            [Conversation(id=i, user_id="u1", title=i) for i in [*ids, "empty"]]
+            + [
+                ConversationMessage(conversation_id=i, role="user", content="hi")
+                for i in ids
+            ]
+        )
+        await session.commit()
+
+        assert await queue_unscored(session=session) == 25
+        assert await queue_unscored(session=session) == 0  # still queued
+
+        assert sorted(enqueued) == sorted(
+            ("score_conversation_task", QueueName.SYSTEM, i) for i in ids
+        )
+
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # scored, then found scored
+    async def test_a_queued_conversation_is_scored_once(
+        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        calls = _stub_llm(monkeypatch)
+        await _add_conversation(session, "c1")
+
+        assert await score_conversation("c1", session=session) == "scored"
+        assert await score_conversation("c1", session=session) == "skipped"
+        assert calls["count"] == 1
+
+    async def test_a_failure_is_left_for_a_later_run(
+        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _stub_llm(monkeypatch, fail_for="hello")
+        await _add_conversation(session, "c1")
+
+        assert await score_conversation("c1", session=session) == "failed"
+        assert (await session.exec(select(SentimentAnalysis))).all() == []
 
 
 class TestNoLockWhileTheModelThinks:
@@ -157,7 +241,11 @@ class TestSentimentAgent:
         asked = self._resolving(monkeypatch, agent)
         config, prompt = await sentiment_module._scorer()
         assert asked == [sentiment_module.SENTIMENT_AGENT_SLUG]
-        assert (config.model, config.max_tokens, prompt) == ("qwen3:4b", 400, "Rate it.")
+        assert (config.model, config.max_tokens, prompt) == (
+            "qwen3:4b",
+            400,
+            "Rate it.",
+        )
 
     async def test_without_the_agent_the_built_in_prompt_on_the_active_model(
         self, monkeypatch: pytest.MonkeyPatch
@@ -236,7 +324,12 @@ class TestFailureIsolation:
 
 
 class TestSentimentStats:
-    async def test_empty_state_is_zero_filled(self, session: AsyncSession) -> None:
+    async def test_empty_state_is_zero_filled(
+        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "AI_SENTIMENT_ENABLED", False)
         stats = await sentiment_stats(session=session)
 
         assert stats.total == 0
@@ -324,23 +417,21 @@ class TestSentimentStats:
 
 
 class TestJobGate:
-    async def test_job_is_off_by_default(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """The scheduled job never touches the scorer until enabled."""
-        from app.core.config import settings
+    async def test_job_is_off_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The scheduled job never touches the scorer until enabled: off as
+        shipped, whatever this machine's ``.env`` turns on."""
+        from app.core.config import Settings, settings
 
-        assert settings.AI_SENTIMENT_ENABLED is False
+        assert Settings.model_fields["AI_SENTIMENT_ENABLED"].default is False
+        monkeypatch.setattr(settings, "AI_SENTIMENT_ENABLED", False)
 
         touched = {"ran": False}
 
-        async def fake_batch(**kwargs: Any) -> dict[str, int]:
+        async def fake_sweep(**kwargs: Any) -> int:
             touched["ran"] = True
-            return {"scored": 0, "skipped": 0, "failed": 0}
+            return 0
 
-        monkeypatch.setattr(
-            sentiment_module, "score_unscored_conversations", fake_batch
-        )
+        monkeypatch.setattr(sentiment_module, "queue_unscored", fake_sweep)
 
         await analyze_sentiment_job()
 
@@ -355,13 +446,11 @@ class TestJobGate:
 
         touched = {"ran": False}
 
-        async def fake_batch(**kwargs: Any) -> dict[str, int]:
+        async def fake_sweep(**kwargs: Any) -> int:
             touched["ran"] = True
-            return {"scored": 0, "skipped": 0, "failed": 0}
+            return 0
 
-        monkeypatch.setattr(
-            sentiment_module, "score_unscored_conversations", fake_batch
-        )
+        monkeypatch.setattr(sentiment_module, "queue_unscored", fake_sweep)
 
         await analyze_sentiment_job()
 

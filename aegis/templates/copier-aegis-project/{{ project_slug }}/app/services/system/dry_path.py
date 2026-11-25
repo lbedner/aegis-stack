@@ -120,12 +120,18 @@ def _in_service_or_component(symbol: str) -> bool:
     )
 
 
+@cache
+def hops(entry: Entry, index: Index | None = None) -> tuple[Hop, ...]:
+    """``entry``'s walk through ``index`` (the project's), once an entry:
+    the patterns' steps and rules each read it."""
+    return tuple(trace(entry, index, set()).hops)
+
+
 def _reaches(
     entry: Entry | None, index: Index | None, where: Callable[[str], bool]
 ) -> bool:
     return entry is not None and any(
-        hop.kind != HopKind.HANDLER and where(hop.symbol)
-        for hop in trace(entry, index, set()).hops
+        hop.kind != HopKind.HANDLER and where(hop.symbol) for hop in hops(entry, index)
     )
 
 

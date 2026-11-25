@@ -27,3 +27,11 @@ async def fold_conversation_task(
     from app.services.ai.service import fold_conversation_job
 
     return await fold_conversation_job(conversation_id, upto)
+
+
+async def score_conversation_task(ctx: dict[str, Any], conversation_id: str) -> str:
+    """Score one conversation's sentiment: a model call, one task each so
+    the queue runs as many at once as it may."""
+    from app.services.ai.service import score_conversation_job
+
+    return await score_conversation_job(conversation_id)

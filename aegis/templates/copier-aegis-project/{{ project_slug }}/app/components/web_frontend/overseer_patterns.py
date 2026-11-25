@@ -208,11 +208,11 @@ def _pattern_view(section: str, routes: Sequence[BaseRoute]) -> dict[str, Any]:
     cached = _VIEWS.get((section, id(routes)))
     if cached is not None and cached[0] is routes:
         return cached[1]
-    # The parts report reads the source, not the routes: one for the map too.
+    # Only the routes' report reads the routes; the rest are the map's too.
     report = (
-        service_parts.report()
-        if section == service_parts.PARTS.key
-        else patterns.report(PATTERNS[section], routes)
+        patterns.report(PATTERNS[section], routes)
+        if section == patterns.ROUTE.key
+        else patterns.own_reports()[section]
     )
     view = pattern_view(report)
     _VIEWS[(section, id(routes))] = (routes, view)

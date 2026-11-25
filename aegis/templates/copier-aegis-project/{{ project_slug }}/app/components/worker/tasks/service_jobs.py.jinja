@@ -46,18 +46,20 @@ import app.components.worker.broker  # noqa: F401
 
 
 def as_task(job: ServiceJob) -> Function:
-    """One job as an arq task under the job's own name and timeout."""
+    """The job's task (``ServiceJob.handed_to``) as an arq task under its
+    timeout: the job itself, or, for a sweep, one of its items."""
+    code, call = job.work
 
-    @functools.wraps(job.func)
-    async def run(ctx: dict[str, Any]) -> Any:
-        return await job.run()
+    @functools.wraps(code)
+    async def run(ctx: dict[str, Any], *args: Any) -> Any:
+        return await call(*args)
 
-    return func(run, name=job.task_name, timeout=job.timeout)
+    return func(run, name=job.handed_to, timeout=job.timeout)
 {%- endif %}
 
 
 def service_job_tasks() -> list[Function]:
-    """Every scheduled job, for ``WorkerSettings.functions``."""
+    """Every scheduled job's task, for ``WorkerSettings.functions``."""
 {%- if include_scheduler %}
     return [as_task(job) for job in service_jobs()]
 {%- else %}
@@ -68,32 +70,34 @@ def service_job_tasks() -> list[Function]:
 
 
 def as_task(job: ServiceJob, broker: Any) -> Any:
-    """One job as a TaskIQ task under the job's own name and timeout.
+    """The job's task (``ServiceJob.handed_to``) as a TaskIQ task under its
+    timeout: the job itself, or, for a sweep, one of its items.
 
     TaskIQ renames the function it decorates (``__name__`` gains
     ``__taskiq_original``), so it decorates a wrapper of our own: the job's
     function is shared with the scheduler, which enqueues by its name.
     """
+    code, call = job.work
 
-    @functools.wraps(job.func)  # the job's own code: what it goes into
-    async def run() -> Any:
-        return await job.run()
+    @functools.wraps(code)  # the job's own code: what it goes into
+    async def run(*args: Any) -> Any:
+        return await call(*args)
 
-    run.__name__ = run.__qualname__ = job.task_name
-    run.__doc__ = job.func.__doc__
+    run.__name__ = run.__qualname__ = job.handed_to
+    run.__doc__ = code.__doc__
     labels = {"timeout": job.timeout} if job.timeout else {}
-    return broker.task(task_name=job.task_name, **labels)(run)
+    return broker.task(task_name=job.handed_to, **labels)(run)
 {%- endif %}
 
 
 def service_job_tasks(broker: Any) -> dict[str, Any]:
-    """Every scheduled job, keyed by name, registered on ``broker``.
+    """Every scheduled job's task, keyed by name, registered on ``broker``.
 
     The registry reads a queue's tasks off its module, so the queue binds
     these as module attributes.
     """
 {%- if include_scheduler %}
-    return {job.task_name: as_task(job, broker) for job in service_jobs()}
+    return {job.handed_to: as_task(job, broker) for job in service_jobs()}
 {%- else %}
     return {}
 {%- endif %}
@@ -102,17 +106,20 @@ def service_job_tasks(broker: Any) -> dict[str, Any]:
 
 
 def as_task(job: ServiceJob) -> Any:
-    """One job as a Dramatiq actor under the job's own name and time limit."""
+    """The job's task (``ServiceJob.handed_to``) as a Dramatiq actor on the
+    system queue under its time limit: the job itself, or, for a sweep, one
+    of its items."""
+    code, call = job.work
 
-    @functools.wraps(job.func)  # the job's own code: what it goes into
-    async def run() -> Any:
-        return await job.run()
+    @functools.wraps(code)  # the job's own code: what it goes into
+    async def run(*args: Any) -> Any:
+        return await call(*args)
 
-    run.__name__ = job.task_name
+    run.__name__ = job.handed_to
     limits = {"time_limit": job.timeout * 1000} if job.timeout else {}
     return dramatiq.actor(
         run,
-        actor_name=job.task_name,
+        actor_name=job.handed_to,
         queue_name=QueueName.SYSTEM,
         store_results=True,
         **limits,
@@ -121,13 +128,13 @@ def as_task(job: ServiceJob) -> Any:
 
 
 def service_job_tasks() -> dict[str, Any]:
-    """Every scheduled job, keyed by name, as a registered actor.
+    """Every scheduled job's task, keyed by name, as a registered actor.
 
     The registry reads a queue's actors off its module, so the queue binds
     these as module attributes.
     """
 {%- if include_scheduler %}
-    return {job.task_name: as_task(job) for job in service_jobs()}
+    return {job.handed_to: as_task(job) for job in service_jobs()}
 {%- else %}
     return {}
 {%- endif %}

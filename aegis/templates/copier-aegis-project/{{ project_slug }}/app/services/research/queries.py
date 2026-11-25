@@ -41,3 +41,17 @@ async def research_counts(db: AsyncSession) -> ResearchCounts:
     ).one()
     items = (await db.exec(select(func.count()).select_from(ResearchItem))).one()
     return ResearchCounts(watches=watches, items=items, last_refresh=last)
+
+
+async def watched_sources(db: AsyncSession) -> list[str]:
+    """The sources some owner's watch is on, by name."""
+    found = await db.exec(select(ResearchWatch.source).distinct())
+    return sorted(found.all())
+
+
+async def watches_on(
+    db: AsyncSession, source: str | None = None
+) -> list[ResearchWatch]:
+    """Every owner's watches on ``source`` (on any, when None)."""
+    on = () if source is None else (col(ResearchWatch.source) == source,)
+    return list((await db.exec(select(ResearchWatch).where(*on))).all())

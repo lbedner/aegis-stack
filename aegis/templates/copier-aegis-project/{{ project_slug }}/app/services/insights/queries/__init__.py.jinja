@@ -39,6 +39,7 @@ from app.services.insights.queries.goals import (
 from app.services.insights.queries.projects import (
     project_by_slug,
     projects_for_owner,
+    project_ids_matching,
     projects_matching,
 )
 {%- endif %}
@@ -69,6 +70,7 @@ __all__ = [
     "project_by_slug",
     "projects",
     "projects_for_owner",
+    "project_ids_matching",
     "projects_matching",
 {%- endif %}
 ]

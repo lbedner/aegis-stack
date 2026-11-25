@@ -32,6 +32,18 @@ _ENCRYPTED_COLUMNS: tuple[str, ...] = ("github_token", "plausible_api_key")
 class ProjectService:
     """Per-user CRUD for projects + transparent credential encryption."""
 
+    # What each source needs set on a project before it can be collected:
+    # the sweep's filter and, again, the collection's.
+    GITHUB = (
+        Project.github_owner.isnot(None),  # type: ignore[union-attr]
+        Project.github_repo.isnot(None),  # type: ignore[union-attr]
+    )
+    PYPI = (Project.pypi_package.isnot(None),)  # type: ignore[union-attr]
+    PLAUSIBLE = (
+        Project.plausible_site.isnot(None),  # type: ignore[union-attr]
+        Project.plausible_api_key.isnot(None),  # type: ignore[union-attr]
+    )
+
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
@@ -114,23 +126,27 @@ class ProjectService:
 
     async def list_with_github(self) -> list[Project]:
         """All projects with a GitHub repo configured (across all owners)."""
-        return await self._list_where(
-            Project.github_owner.isnot(None),  # type: ignore[union-attr]
-            Project.github_repo.isnot(None),  # type: ignore[union-attr]
-        )
+        return await self._list_where(*self.GITHUB)
 
     async def list_with_pypi(self) -> list[Project]:
         """All projects with a PyPI package configured."""
-        return await self._list_where(
-            Project.pypi_package.isnot(None),  # type: ignore[union-attr]
-        )
+        return await self._list_where(*self.PYPI)
 
     async def list_with_plausible(self) -> list[Project]:
         """All projects with both Plausible site + API key configured."""
-        return await self._list_where(
-            Project.plausible_site.isnot(None),  # type: ignore[union-attr]
-            Project.plausible_api_key.isnot(None),  # type: ignore[union-attr]
-        )
+        return await self._list_where(*self.PLAUSIBLE)
+
+    async def ids_where(self, *predicates) -> list[int]:
+        """The ids of the projects matching ``predicates`` (a source's
+        needs), across owners: nothing loaded or decrypted."""
+        return await queries.project_ids_matching(self.db, list(predicates))
+
+    async def collector_project(self, project_id: int, *needs) -> Project | None:
+        """One project for its collection (``jobs._collect_for``), across
+        owners and decrypted, as the lists above give them; None once gone
+        or once it no longer has ``needs`` set."""
+        found = await self._list_where(Project.id == project_id, *needs)
+        return found[0] if found else None
 
     async def get_by_slug_for_user(
         self, slug: str, owner_user_id: int

@@ -260,9 +260,10 @@ def test_without_a_scheduler_no_service_job_is_drawn(model: SystemModel) -> None
 
 
 def test_a_scheduled_job_hands_its_task_to_the_queue(model: SystemModel) -> None:
-    """With a worker the scheduler enqueues a job's task, so the path runs
-    job, task, what the task touches; never waited on. Without a scheduler
-    nothing enqueues them, so the worker binds no job tasks."""
+    """With a worker the scheduler enqueues a job's task (a sweep's, one
+    per item), so the path runs job, task, what the task touches; never
+    waited on. Without a scheduler nothing enqueues them, so the worker
+    binds no job tasks."""
     if not {"component:worker", "component:scheduler"} <= _parts(model).keys():
         pytest.skip("no worker and scheduler in this stack")
     from app.core.schedule import service_jobs
@@ -271,7 +272,7 @@ def test_a_scheduled_job_hands_its_task_to_the_queue(model: SystemModel) -> None
         (e.source, e.target): e.mode for e in model.edges if e.source.startswith("job:")
     }
     for job in service_jobs():
-        assert handed[(f"job:{job.id}", f"task:{job.task_name}")] is Mode.ASYNC
+        assert handed[(f"job:{job.id}", f"task:{job.handed_to}")] is Mode.ASYNC
 
 
 def test_each_redis_key_family_is_a_node(model: SystemModel) -> None:

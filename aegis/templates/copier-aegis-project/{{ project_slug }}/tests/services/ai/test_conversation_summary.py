@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from app.core.constants import QueueName
 from app.core.cache import CacheService
 from app.core.discovery import present
 from app.services.ai.domains.chat import summary
@@ -166,30 +167,20 @@ class TestTheFold:
 @pytest.mark.skipif(not present("app.components.worker"), reason="no worker")
 class TestOffTheRequestPath:
     async def test_a_due_fold_is_queued_once(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, queued: list[tuple[object, ...]]
     ) -> None:
         """The summary does not move until a fold finishes, so every turn
         while one runs finds it due again: queued once per cut, on any
         worker engine."""
-        from app.components.worker import pools, queue_once
-
-        enqueued: list[tuple[object, ...]] = []
-
-        async def enqueue(name: str, _queue: str, *args: object, **_: object) -> None:
-            enqueued.append((name, *args))
-
-        cache = CacheService()
-        monkeypatch.setattr(pools, "enqueue_task", enqueue)
-        monkeypatch.setattr(queue_once, "get_cache", lambda: cache)
         monkeypatch.setattr(summary, "FOLDS", True)
 
         for _turn in range(3):
             await summary.enqueue_fold("c1", 20)
         await summary.enqueue_fold("c1", 30)
 
-        assert enqueued == [
-            ("fold_conversation_task", "c1", 20),
-            ("fold_conversation_task", "c1", 30),
+        assert queued == [
+            ("fold_conversation_task", QueueName.SYSTEM, "c1", 20),
+            ("fold_conversation_task", QueueName.SYSTEM, "c1", 30),
         ]
 
     async def test_a_failed_enqueue_never_fails_the_turn(

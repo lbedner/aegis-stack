@@ -1,6 +1,7 @@
 """A source the research tests control: what a search finds and what a
 thread holds are the test's to write."""
 
+import asyncio
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -32,16 +33,25 @@ class FakeSite:
         self.results: dict[str, list[SourceItem]] = {}
         self.threads: dict[str, list[SourceItem]] = {}
         self.searched: list[str] = []
+        self.read: list[str] = []
+        # Searches in flight together, at the most (``in_flight`` now).
+        self.most_at_once = 0
+        self.in_flight = 0
         # Queries whose search fails, the way a timed-out request does.
         self.failing: set[str] = set()
 
     async def search(self, query: FakeQuery) -> list[SourceItem]:
         self.searched.append(query.q)
+        self.in_flight += 1
+        self.most_at_once = max(self.most_at_once, self.in_flight)
+        await asyncio.sleep(0)  # a request: the others start meanwhile
+        self.in_flight -= 1
         if query.q in self.failing:
             raise TimeoutError(f"search for {query.q!r} timed out")
         return self.results.get(query.q, [])
 
     async def thread(self, external_id: str) -> list[SourceItem]:
+        self.read.append(external_id)
         return self.threads.get(external_id, [])
 
 

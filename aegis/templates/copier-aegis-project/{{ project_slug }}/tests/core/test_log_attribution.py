@@ -308,10 +308,11 @@ async def test_scheduler_entry_point_uses_discovered_job_owner(
 
     job = schedule.ServiceJob(shared_job, "sync", "Sync", {}, app_service="ai")
     monkeypatch.setattr(schedule, "service_jobs", lambda: (job,))
-    assert await schedule.run_service_job("sync") == "done"
+    monkeypatch.setattr(schedule, "QUEUED", False)  # run here, not queued
+    assert await schedule.fire_service_job("sync") == "done"
     assert seen == ["ai"]
     with pytest.raises(ValueError, match="Unknown service job"):
-        await schedule.run_service_job("missing")
+        await schedule.fire_service_job("missing")
 
 
 async def test_preserved_job_origin_survives_an_outer_service_frame() -> None:

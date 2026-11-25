@@ -24,6 +24,7 @@ from app.services.research.service import (
     WatchNotFoundError,
 )
 from tests._research import FakeSite, comment, story
+from tests._session import opens
 
 # Most tests refresh a watch twice to see what changes between runs, so the
 # same reads repeat by construction. The nightly pass, the one that must not
@@ -151,6 +152,7 @@ async def test_the_items_aggregate_counts_live_finds_by_source_and_kind(
     assert week.by_kind == {"story": 1}
     assert ever.by_kind == {"story": 1, "comment": 1}
     assert "Private" not in ever.model_dump_json()
+
 
 async def test_the_health_checks_counts_are_a_model(
     async_db_session: AsyncSession, site: FakeSite
@@ -463,3 +465,41 @@ def test_a_sources_aware_time_is_stored_as_naive_utc() -> None:
     )
 
     assert item.published_at == datetime(2026, 9, 1, 0, 0)
+
+
+async def test_a_sources_watches_search_at_once_and_share_a_thread(
+    async_db_session: AsyncSession, site: FakeSite
+) -> None:
+    """One slow search holds up none of its source's other watches, and a
+    thread two of them found is still read once."""
+    svc = ResearchService(async_db_session, owner_user_id=None)
+    for q in ("a", "b"):
+        await svc.add_watch("fake", q, {"q": q}, with_threads=True)
+    site.results = {"a": [story("1", "Both")], "b": [story("1", "Both")]}
+
+    await refresh_every_watch(async_db_session)
+
+    assert site.most_at_once == 2
+    assert site.read == ["1"]
+
+
+async def test_the_nightly_job_refreshes_a_source_at_a_time(
+    async_db_session: AsyncSession, site: FakeSite, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The job sweeps the sources with watches; each is refreshed on its
+    own, so one source's outage or slow night costs only its watches."""
+    from app.core import db
+    from app.services.research import jobs
+    from app.services.research.models import ResearchWatch
+
+    async_db_session.add(ResearchWatch(source="other", name="Elsewhere", query={}))
+    svc = ResearchService(async_db_session, owner_user_id=None)
+    fine = await svc.add_watch("fake", "Fine", {"q": "ok"})
+    site.results["ok"] = [story("1", "Fine")]
+
+    for opener in (db, jobs):  # the sweep's read, and each source's run
+        monkeypatch.setattr(opener, "get_async_session", opens(async_db_session))
+
+    assert await jobs.refresh_research_watches_job() == ["fake", "other"]
+    assert await jobs.refresh_research_watches_for("fake") == 1
+    assert (await svc.get_watch(fine.id)).refreshed_at is not None  # type: ignore[arg-type]

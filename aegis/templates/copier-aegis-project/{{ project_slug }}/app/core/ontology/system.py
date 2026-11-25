@@ -419,16 +419,16 @@ def _queued(
     queues: list[QueueNode], tasks: list[TaskNode], taking: dict[str, str]
 ) -> list[Edge]:
     """Each queue handing its work to its tasks, both in the container
-    taking that queue (``taking``); and a scheduled job, which the
-    scheduler hands to the worker as the task named after its function,
-    to that task."""
+    taking that queue (``taking``); and a scheduled job to the task the
+    scheduler hands the worker for it (``ServiceJob.handed_to``: its own,
+    or a sweep's one per item)."""
     from app.core.schedule import service_jobs
 
     by_name = {task.name: task.id for task in tasks}
     handed = [
-        (node_id(Kind.JOB, job.id), by_name[job.task_name])
+        (node_id(Kind.JOB, job.id), by_name[job.handed_to])
         for job in service_jobs()
-        if job.task_name in by_name
+        if job.handed_to in by_name
     ] + [(node_id(Kind.QUEUE, task.queue), task.id) for task in tasks]
     placed = [(q.id, q.name) for q in queues] + [(t.id, t.queue) for t in tasks]
     run = [

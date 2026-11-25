@@ -1,14 +1,17 @@
 """Scheduler jobs for the finance service.
 
-Inline async jobs (mirrors ``app/services/insights/jobs.py``), NOT a worker
-queue: APScheduler awaits the coroutine directly, so this is backend-agnostic.
-Each job opens its own session and commits (services never commit themselves).
+Each job works per owner, so each is a sweep (``ServiceJob.each``): the job
+returns the owners, and its ``_for`` twin does one owner in a session of
+its own, on the worker a task each. One owner's slow model or failing bank
+holds up none of the others; a stack without a worker does them one after
+another in the sweep. Each opens its own session, which commits as it
+closes (services never commit themselves).
 """
 
 import logging
-from datetime import date
 
 from app.core.db import get_async_session
+from app.core.schedule import read_items
 from app.services.finance.service import (
     FinanceService,
     detect_recurring,
@@ -21,135 +24,117 @@ from app.services.finance.utils import current_date
 
 logger = logging.getLogger(__name__)
 
+Owner = int | None  # None: the no-auth owner
 
-async def finance_recompute_snapshots_job() -> None:
-    """Nightly: materialize per-account balance + per-user net-worth snapshots.
 
-    Recomputes per owner so net worth stays isolated across users (a single
-    ``None`` owner in standalone/no-auth mode). Bounded to the recent window
-    by the service.
-    """
-    try:
-        async with get_async_session() as session:
-            owners = await ledger_queries.account_owner_ids(session)
-            days_written = 0
-            for owner_user_id in owners:
-                await detect_recurring(session, owner_user_id=owner_user_id)
-                await promote_curated_streams(session, owner_user_id=owner_user_id)
-                await generate_insights(session, owner_user_id=owner_user_id)
-                days_written += await recompute_snapshots(
-                    session, owner_user_id=owner_user_id
-                )
-            await session.commit()
-        logger.info(
-            "Finance: recomputed net-worth snapshots for %d owner(s), %d day(s)",
-            len(owners),
-            days_written,
+async def finance_recompute_snapshots_job() -> list[Owner]:
+    """Nightly: every owner with an account, each recomputed on its own
+    (``finance_recompute_snapshots_for``)."""
+    return await read_items(ledger_queries.account_owner_ids)
+
+
+async def finance_recompute_snapshots_for(owner_user_id: Owner) -> int:
+    """One owner's rules pass and per-account balance and net-worth
+    snapshots, bounded to the recent window by the service: days written."""
+    async with get_async_session() as session:
+        await detect_recurring(session, owner_user_id=owner_user_id)
+        await promote_curated_streams(session, owner_user_id=owner_user_id)
+        await generate_insights(session, owner_user_id=owner_user_id)
+        days = await recompute_snapshots(session, owner_user_id=owner_user_id)
+    logger.info("Finance: recomputed %d day(s) for an owner", days)
+    return days
+
+
+async def finance_goal_auto_contribute_job() -> list[Owner]:
+    """Monthly (the 1st): every owner, each one's goals on its own
+    (``finance_goal_auto_contribute_for``)."""
+    return await read_items(ledger_queries.account_owner_ids)
+
+
+async def finance_goal_auto_contribute_for(owner_user_id: Owner) -> int:
+    """Book each toggled-on virtual goal's declared amount as a goal_auto
+    valuation - the plan saves unless actively paused (per-goal opt-in).
+    Idempotent per month, so a scheduler catch-up run later in the month
+    books nothing twice. How many booked."""
+    async with get_async_session() as session:
+        booked = await FinanceService(session).auto_contribute_goals(
+            owner_user_id=owner_user_id, today=current_date()
         )
-    except Exception:
-        logger.exception("Finance snapshot recompute failed")
+    logger.info("Finance: auto-contributed to %d goal(s)", booked)
+    return booked
 
 
-async def finance_goal_auto_contribute_job() -> None:
-    """Monthly (the 1st): book each toggled-on virtual goal's declared
-    amount as a goal_auto valuation - the plan saves unless actively
-    paused (per-goal opt-in). Idempotent per month, so a scheduler
-    catch-up run later in the month books nothing twice."""
-    try:
-        async with get_async_session() as session:
-            service = FinanceService(session)
-            owners = await ledger_queries.account_owner_ids(session)
-            booked = 0
-            for owner_user_id in owners:
-                booked += await service.auto_contribute_goals(
-                    owner_user_id=owner_user_id, today=current_date()
-                )
-            await session.commit()
-        logger.info("Finance: auto-contributed to %d goal(s)", booked)
-    except Exception:
-        logger.exception("Finance goal auto-contribute failed")
+async def finance_envelope_credit_job() -> list[Owner]:
+    """Daily: every owner, each one's envelopes on its own
+    (``finance_envelope_credit_for``)."""
+    return await read_items(ledger_queries.account_owner_ids)
 
 
-
-async def finance_envelope_credit_job() -> None:
-    """Monthly (the 1st): book each auto-credit-on envelope's monthly
-    credit - the allowance arrives whether anyone logs in or not.
-    Idempotent per month, catch-up safe."""
-    try:
-        async with get_async_session() as session:
-            service = FinanceService(session)
-            owners = await ledger_queries.account_owner_ids(session)
-            booked = 0
-            for owner_user_id in owners:
-                booked += await service.auto_credit_envelopes(
-                    owner_user_id=owner_user_id, today=current_date()
-                )
-            await session.commit()
-        logger.info("Finance: auto-credited %d envelope(s)", booked)
-    except Exception:
-        logger.exception("Finance envelope auto-credit failed")
+async def finance_envelope_credit_for(owner_user_id: Owner) -> int:
+    """Book each auto-credit-on envelope's credit - the allowance arrives
+    whether anyone logs in or not. Idempotent per period, catch-up safe.
+    How many booked."""
+    async with get_async_session() as session:
+        booked = await FinanceService(session).auto_credit_envelopes(
+            owner_user_id=owner_user_id, today=current_date()
+        )
+    logger.info("Finance: auto-credited %d envelope(s)", booked)
+    return booked
 
 {%- if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
 
 
-async def finance_analyst_note_job() -> None:
-    """Nightly, after the rules: one plain-language note per owner.
+async def finance_analyst_note_job() -> list[Owner]:
+    """Nightly, after the rules: every owner, each one's note on its own
+    (``finance_analyst_note_for``).
 
     Runs behind the recompute job on purpose - the note is written from the
     findings that pass produced, so it has to see tonight's, not last night's.
-    Each owner is isolated: one owner's model failure must not cost the others
-    their note. ``run_analyst_note`` already absorbs its own errors, so this
-    only has to guard the session.
     """
+    return await read_items(ledger_queries.account_owner_ids)
+
+
+async def finance_analyst_note_for(owner_user_id: Owner) -> bool:
+    """One owner's plain-language note: whether one was written.
+    ``run_analyst_note`` absorbs its own model errors."""
     from app.services.finance.service import run_analyst_note
 
-    try:
-        async with get_async_session() as session:
-            owners = await ledger_queries.account_owner_ids(session)
-            written = 0
-            for owner_user_id in owners:
-                note = await run_analyst_note(session, owner_user_id=owner_user_id)
-                written += 1 if note is not None else 0
-            await session.commit()
-        logger.info(
-            "Finance: analyst notes ready for %d of %d owner(s)",
-            written,
-            len(owners),
-        )
-    except Exception:
-        logger.exception("Finance analyst note run failed")
+    async with get_async_session() as session:
+        note = await run_analyst_note(session, owner_user_id=owner_user_id)
+    return note is not None
+
 {%- endif %}
 {%- if finance_plaid or finance_snaptrade %}
 
 
-async def finance_sync_connections_job() -> None:
-    """Periodic: refresh every provider connection (accounts, balances, new
-    transactions, holdings) per owner. ``sync_owner_connections`` dispatches on
-    each connection's provider and also recomputes net worth, so the register
-    and Overview trend stay current without a reconnect. SnapTrade activities
-    are internally throttled to one pull per account per day (their polling
-    budget), so a more frequent schedule stays within it.
-    """
-    from app.services.finance.adapters.providers import connections
+async def finance_sync_connections_job() -> list[Owner]:
+    """Periodic: every owner with a provider connection, each synced on its
+    own (``finance_sync_connections_for``)."""
     from app.services.finance.adapters.providers import queries as provider_queries
 
-    try:
-        async with get_async_session() as session:
-            owners = await provider_queries.connected_owner_ids(
-                session, ("plaid", "snaptrade")
-            )
-            added = 0
-            for owner_user_id in owners:
-                results = await connections.sync_owner_connections(
-                    session, owner_user_id=owner_user_id
-                )
-                added += sum(r.added for r in results)
-            await session.commit()
-        logger.info(
-            "Finance: synced connections for %d owner(s), %d new txn(s)",
-            len(owners),
-            added,
+    return await read_items(
+        lambda session: provider_queries.connected_owner_ids(
+            session, ("plaid", "snaptrade")
         )
-    except Exception:
-        logger.exception("Finance connection sync failed")
+    )
+
+
+async def finance_sync_connections_for(owner_user_id: Owner) -> int:
+    """Refresh one owner's connections (accounts, balances, new
+    transactions, holdings): new transactions. ``sync_owner_connections``
+    dispatches on each connection's provider and recomputes the owner's net
+    worth once after them all, so the register and Overview trend stay
+    current without a reconnect. SnapTrade activities are internally
+    throttled to one pull per account per day (their polling budget), so a
+    more frequent schedule stays within it.
+    """
+    from app.services.finance.adapters.providers import connections
+
+    async with get_async_session() as session:
+        results = await connections.sync_owner_connections(
+            session, owner_user_id=owner_user_id
+        )
+    added = sum(r.added for r in results)
+    logger.info("Finance: synced an owner's connections, %d new txn(s)", added)
+    return added
 {%- endif %}

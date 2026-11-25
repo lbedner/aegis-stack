@@ -53,5 +53,5 @@ or for work that must finish before the response is sent (keep that inline).
   so the request returns promptly.
 - Work over many items is a task per item, not one task that loops over them:
   the queue runs as many at once as its concurrency, and one slow or failing
-  item holds up none of the rest. `patterns check` flags a task, or a function
-  it calls, that awaits an item's work in a loop (`task.fan-out`).
+  item holds up none of the rest. `patterns check --strict` blocks a task, or
+  a function it calls, that awaits an item's work in a loop (`task.fan-out`).

@@ -209,9 +209,7 @@ TASK = Pattern(
             "of the rest, and there is no batch to cap. A job that awaits each "
             "item's work in a loop does them one after another.",
             _fans_out,
-            # Advisory until main's known debt holds this rule's places: gated
-            # in the change that adds it, every place it finds reads as new.
-            gate=False,
+            gate=True,
             evidence=_serial,
             action="queue a task per item (enqueue_once, in "
             "app/components/worker/queue_once.py) instead of awaiting each "

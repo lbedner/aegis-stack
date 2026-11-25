@@ -381,7 +381,7 @@ async def _in_call(
     await call.watch_captions(moved)
     answering: Answers | None = None
 
-    def heard(step: str) -> None:
+    def heard(step: str, *_call: Any) -> None:
         """A step of her turns here (live, or answered in the app): on
         the card under the question it answers, read at the next look,
         and, for one put to her, that she looks it up."""

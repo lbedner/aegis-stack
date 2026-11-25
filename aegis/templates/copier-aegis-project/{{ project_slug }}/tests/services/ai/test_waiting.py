@@ -99,6 +99,108 @@ class TestTheReason:
         assert await waiting.waiting_reason() is None
 
 
+def _progress(total: int, cache: int, processed: int, time_ms: int) -> bytes:
+    """One chunk of llama-server's stream with ``return_progress`` on, as it
+    sends it: a role-only delta carrying how far the prompt's read is."""
+    chunk = {
+        "choices": [{"index": 0, "delta": {"role": "assistant", "content": None}}],
+        "object": "chat.completion.chunk",
+        "prompt_progress": {
+            "total": total,
+            "cache": cache,
+            "processed": processed,
+            "time_ms": time_ms,
+        },
+    }
+    return f"data: {json.dumps(chunk)}\n\n".encode()
+
+
+async def _through_tee(*pieces: bytes) -> tuple[bytes, waiting.Prefill]:
+    """``pieces`` served as the server's reads, through the tee; a line cut
+    across two reads must still count."""
+    import httpx
+
+    class Pieces(httpx.AsyncByteStream):
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            for piece in pieces:
+                yield piece
+
+    class Server(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, stream=Pieces())
+
+    seen = waiting.watch_prefill()
+    async with httpx.AsyncClient(transport=waiting.PrefillTee(Server())) as client:
+        async with client.stream("POST", "http://llama/v1/chat") as response:
+            body = b"".join([part async for part in response.aiter_raw()])
+    return body, seen
+
+
+class TestPrefill:
+    """llama-server reads a long prompt for minutes before its first token
+    (prefill), and says how far it is in the stream itself when asked
+    (``return_progress``). The words are pushed as it reads: no poll."""
+
+    async def test_the_stream_passes_untouched_and_its_progress_is_kept(
+        self,
+    ) -> None:
+        first = _progress(37_000, 14_000, 16_000, 10_000)
+        second = _progress(37_000, 14_000, 20_480, 32_000)
+        half = len(second) // 2
+        body, seen = await _through_tee(first, second[:half], second[half:])
+
+        assert body == first + second
+        assert (seen.total, seen.cache, seen.processed, seen.time_ms) == (
+            37_000,
+            14_000,
+            20_480,
+            32_000,
+        )
+
+    async def test_a_stream_without_progress_leaves_nothing(self) -> None:
+        _, seen = await _through_tee(b'data: {"choices": []}\n\n', b"data: [DONE]\n\n")
+        assert seen.label() is None
+
+    def test_reading_says_prefill_how_far_and_how_fast(self) -> None:
+        seen = waiting.Prefill(
+            total=37_000, cache=14_000, processed=20_480, time_ms=32_000
+        )
+        # Speed counts only what was read: the cached part came for free.
+        assert seen.label() == "prefill 55% · 20,480 / 37,000 · 202/s · 14,000 cached"
+
+    def test_nothing_cached_and_just_started_says_less(self) -> None:
+        assert waiting.Prefill(total=6_782).label() == "prefill 0% · 0 / 6,782"
+
+    def test_once_read_it_has_nothing_to_say(self) -> None:
+        """The prompt is in; what follows is the model's own (thinking)."""
+        seen = waiting.Prefill(total=6_782, processed=6_782, time_ms=32_000)
+        assert seen.label() is None
+
+
+async def test_a_prompt_being_read_shows_its_progress_while_quiet(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """What the server pushes mid-read reaches the next waiting frame, over
+    the turn's reason."""
+
+    async def explain() -> str:
+        return "thinking"
+
+    async def reads_then_text() -> AsyncIterator[StreamingMessage]:
+        seen = waiting.current_prefill()
+        assert seen is not None
+        seen.total, seen.processed = 1_000, 500
+        await asyncio.sleep(0.2)
+        yield _message()
+
+    _quick(monkeypatch)
+    monkeypatch.setattr(sse, "waiting_reason", explain)
+    frames = _frames([f async for f in sse._events(reads_then_text())])
+
+    waits = [data for name, data in frames if name == "waiting"]
+    assert waits and waits[-1]["reason"] == "prefill 50% · 500 / 1,000"
+
+
 def _frames(body: list[str]) -> list[tuple[str, dict[str, object]]]:
     pairs = []
     for frame in body:
@@ -149,6 +251,28 @@ async def test_a_running_tool_is_not_the_model_thinking(
     waits = [data for name, data in frames if name == "waiting"]
     assert waits and all(wait["reason"] is None for wait in waits)
     assert asked == []
+
+
+async def test_quiet_after_the_model_starts_thinking_says_why(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Thinking is a trail row, not a tool: the quiet after it is the
+    model's, so its engine is asked why."""
+
+    async def explain() -> str:
+        return "thinking"
+
+    async def thinking_then_text() -> AsyncIterator[StreamingMessage]:
+        yield _message(event="tool", tool="", label="Thinking")
+        await asyncio.sleep(0.2)
+        yield _message()
+
+    _quick(monkeypatch)
+    monkeypatch.setattr(sse, "waiting_reason", explain)
+    frames = _frames([f async for f in sse._events(thinking_then_text())])
+
+    waits = [data for name, data in frames if name == "waiting"]
+    assert waits and all(wait["reason"] == "thinking" for wait in waits)
 
 
 async def test_a_quiet_stream_sends_how_long_and_why(

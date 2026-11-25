@@ -151,7 +151,7 @@ if TYPE_CHECKING:
     from app.services.ai.domains.chat.summary import fold_conversation, write_summary
     from app.services.ai.domains.llm.writer import write, writer
 {%- endif %}
-    from app.services.ai.domains.llm.waiting import waiting_reason
+    from app.services.ai.domains.llm.waiting import waiting_reason, watch_prefill
 {%- if ai_backend != "memory" %}
     from app.services.ai.domains.spend import queries as spend_queries
     from app.services.ai.domains.spend import report as spend_report

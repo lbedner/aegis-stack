@@ -422,24 +422,46 @@ class TestLlamaCppThinkingBudget:
         _budget(monkeypatch, 256)
         config = AIServiceConfig(provider=AIProvider.LLAMACPP, model="qwen")
 
-        assert _model_settings(config)["extra_body"] == {"thinking_budget_tokens": 256}
+        assert _model_settings(config)["extra_body"] == {
+            "return_progress": True,
+            "thinking_budget_tokens": 256,
+        }
 
-    @pytest.mark.parametrize(
-        ("provider", "budget"),
-        [
-            (AIProvider.LLAMACPP, -1),
-            (AIProvider.OLLAMA, 256),
-            (AIProvider.OPENAI, 256),
-        ],
-    )
-    def test_no_budget_set_or_another_server_sends_none(
-        self, monkeypatch: pytest.MonkeyPatch, provider: AIProvider, budget: int
+    def test_llamacpp_without_a_budget_still_reports_its_reading(
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _budget(monkeypatch, budget)
+        """Prefill progress (``return_progress``) rides every llama-server
+        request: the chat says how far a long prompt's read is."""
+        _budget(monkeypatch, -1)
+        config = AIServiceConfig(provider=AIProvider.LLAMACPP, model="qwen")
+
+        assert _model_settings(config)["extra_body"] == {"return_progress": True}
+
+    @pytest.mark.parametrize("provider", [AIProvider.OLLAMA, AIProvider.OPENAI])
+    def test_another_server_is_sent_neither(
+        self, monkeypatch: pytest.MonkeyPatch, provider: AIProvider
+    ) -> None:
+        _budget(monkeypatch, 256)
 
         assert "extra_body" not in _model_settings(
             AIServiceConfig(provider=provider, model="m")
         )
+
+    @pytest.mark.parametrize(
+        ("provider", "tees"), [(AIProvider.LLAMACPP, True), (AIProvider.OLLAMA, False)]
+    )
+    def test_only_llamacpp_reads_through_the_prefill_tee(
+        self, provider: AIProvider, tees: bool
+    ) -> None:
+        from app.services.ai.domains.llm.model_factory import _local_model
+        from app.services.ai.domains.llm.waiting import PrefillTee
+
+        config = MagicMock()
+        config.provider, config.model = provider, "qwen"
+        model = _local_model(config, MagicMock())
+
+        transport = model.client._client._transport
+        assert isinstance(transport, PrefillTee) is tees
 
 
 class TestCliHints:

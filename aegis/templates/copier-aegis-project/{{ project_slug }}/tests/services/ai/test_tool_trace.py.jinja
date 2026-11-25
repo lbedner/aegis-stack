@@ -236,7 +236,7 @@ def test_each_tool_call_is_a_step_for_whoever_is_watching() -> None:
 
     register_tool("look_up", str, effect="read", doing="Looking it up")
     try:
-        with watching(steps.append):
+        with watching(lambda doing, *_: steps.append(doing)):
             record_tool_call([], call)
             # A registered tool is heard where it runs (``resolve_tools``).
             record_tool_call([], registered)

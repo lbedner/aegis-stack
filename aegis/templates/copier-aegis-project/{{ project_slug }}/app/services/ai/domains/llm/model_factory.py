@@ -5,6 +5,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 import importlib
 from typing import Any
 
+import httpx
 from openai import AsyncOpenAI
 from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.messages import ModelMessage, ModelResponse
@@ -23,6 +24,7 @@ from app.services.ai.domains.llm.base import (
     require_api_key,
 )
 from app.services.ai.domains.llm.config import AIServiceConfig
+from app.services.ai.domains.llm.waiting import PrefillTee
 from app.services.ai.models import PROVIDERS, AIProvider
 from app.services.ai.models.provider_names import LOCAL_PROVIDERS, local_base_url
 
@@ -175,11 +177,15 @@ def _model_settings(config: Any) -> ModelSettings:
     }
     if _supports_custom_temperature(config.model):
         kwargs["temperature"] = config.temperature
-    # llama-server's cap on a reply's thinking, which it writes no faster
-    # than the answer; no other server reads the field.
-    budget = getattr(app_settings, "LLAMACPP_THINKING_TOKENS", -1)
-    if budget >= 0 and getattr(config, "provider", None) == AIProvider.LLAMACPP:
-        kwargs["extra_body"] = {"thinking_budget_tokens": budget}
+    # llama-server alone reads these: how far it is through reading the
+    # prompt, put into the stream (``waiting.PrefillTee``), and the cap on
+    # a reply's thinking, which it writes no faster than the answer.
+    if getattr(config, "provider", None) == AIProvider.LLAMACPP:
+        extra: dict[str, Any] = {"return_progress": True}
+        budget = getattr(app_settings, "LLAMACPP_THINKING_TOKENS", -1)
+        if budget >= 0:
+            extra["thinking_budget_tokens"] = budget
+        kwargs["extra_body"] = extra
     # Effort is an Anthropic-only knob (thinking depth / token spend). Lazy
     # import mirrors ``_get_model_class``: the anthropic extra may not be
     # installed when another provider is configured.
@@ -205,6 +211,12 @@ def _local_model(config: AIServiceConfig, settings: Any) -> Any:
         # A retry would queue behind the abandoned request, still reading
         # the same prompt, and start reading it again after.
         max_retries=0,
+        # llama-server says how far its prompt reading is, in the stream.
+        http_client=(
+            httpx.AsyncClient(transport=PrefillTee())
+            if config.provider == AIProvider.LLAMACPP
+            else None
+        ),
     )
     # Ollama's OpenAI-compat endpoint silently DROPS the modern
     # ``max_completion_tokens`` field (only ``max_tokens`` maps to

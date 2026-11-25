@@ -107,19 +107,43 @@ async def test_a_refused_argument_is_the_models_to_correct() -> None:
 @pytest.mark.usefixtures("clean_registry")
 async def test_each_call_is_a_step_for_whoever_is_watching() -> None:
     """Heard where the call runs, not where the model asked for it: a read
-    run inside a code-mode script is a step too, as its tool says it."""
+    run inside a code-mode script is a step too, as its tool says it, then
+    the call itself, for a trail that shows it."""
     from app.core.steps import watching
 
     register_tool("strict", strict, effect="read", doing="Checking the part")
     register_tool("strict_sync", strict_sync, effect="read")
     tool, sync_tool = resolve_tools(["strict", "strict_sync"])
-    steps: list[str] = []
+    steps: list[tuple[Any, ...]] = []
 
-    with watching(steps.append):
+    with watching(lambda *step: steps.append(step)):
         await tool(component="x")
         sync_tool(component="x")
 
-    assert steps == ["Checking the part", "Strict sync"]
+    assert steps == [
+        ("Checking the part", "strict", {"component": "x"}),
+        ("Strict sync", "strict_sync", {"component": "x"}),
+    ]
+
+
+@pytest.mark.usefixtures("clean_registry")
+async def test_a_step_is_the_call_as_written_not_its_defaults() -> None:
+    """The trail showed ``transactions(payee=None, ..., limit=10)`` live
+    for a script's ``transactions(limit=10)``: a default filled in is not
+    an argument given."""
+    from app.core.steps import watching
+
+    async def listed(limit: int = 50, payee: str | None = None) -> str:
+        return ""
+
+    register_tool("listed", listed, effect="read")
+    (tool,) = resolve_tools(["listed"])
+    told: list[Any] = []
+
+    with watching(lambda _doing, _name, args: told.append(args)):
+        await tool(limit=10, payee=None)
+
+    assert told == [{"limit": 10}]
 
 
 class Spend(BaseModel):

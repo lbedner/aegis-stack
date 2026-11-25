@@ -24,6 +24,9 @@ from pydantic_ai.messages import (
 from pydantic_ai.run import AgentRunResultEvent
 {%- endif %}
 
+{%- if ai_framework == "pydantic-ai" %}
+from app.core.concurrency import interleave
+{%- endif %}
 from app.core.log import logger
 {%- if ai_framework == "pydantic-ai" %}
 from app.services.ai.domains.chat.attachments import (
@@ -40,6 +43,7 @@ from app.services.ai.domains.chat.attachments import ChatAttachment, LiftedTurn
 from app.services.ai.domains.chat.readings import Reading, merge_staged_readings
 {%- endif %}
 {%- if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+from app.services.ai.domains.chat.agent_loader import sandboxed_tools
 from app.services.ai.domains.chat.cards import attach_cards, card_stage
 from app.services.ai.domains.chat.user_memory import memory_user
 {%- endif %}
@@ -62,9 +66,10 @@ from app.services.ai.service.base import (
 from app.services.ai.service.chat import ChatMixin, reply_metadata
 {%- if ai_framework == "pydantic-ai" %}
 from app.services.ai.service.trace import (
-    nested_tool_calls,
     record_tool_call,
     record_tool_result,
+    script_reads,
+    step_notice,
     tool_notice,
 )
 {%- else %}
@@ -259,15 +264,28 @@ class StreamingMixin(ChatMixin):
                 ),
                 reading_stage() as staged_readings,
                 card_stage() as drawn_cards,
+                script_reads(sandboxed_tools(agent_config)) as reads,
             ):
 {% else %}
-            with reading_stage() as staged_readings:
+            with (
+                reading_stage() as staged_readings,
+                script_reads(frozenset()) as reads,
+            ):
 {% endif %}
                 async with agent.run_stream_events(
                     build_user_content(conversation_context, attachments)
                 ) as events:
-                    async for event in events:
+                    async for event in interleave(events, reads):
                         text_chunk = ""
+                        notice = step_notice(
+                            event,
+                            message_id=message_id,
+                            conversation_id=conversation.id,
+                            stream_delta=stream_delta,
+                        )
+                        if notice is not None:
+                            yield notice
+                            continue
                         if isinstance(event, PartStartEvent) and isinstance(
                             event.part, TextPart
                         ):
@@ -277,11 +295,8 @@ class StreamingMixin(ChatMixin):
                         ):
                             text_chunk = event.delta.content_delta
                         elif isinstance(event, FunctionToolCallEvent):
-                            # Text streamed before a tool call is running
-                            # commentary ("let me check..."), not the answer.
-                            # Reset accumulation so the saved message and final
-                            # chunk carry only what follows the last tool call,
-                            # and notify the UI which tool is running.
+                            # Text before a tool call is commentary ("let me
+                            # check..."): the answer is what follows the last.
                             streaming_conv.accumulated_content = ""
                             record_tool_call(tool_trace, event)
                             yield tool_notice(
@@ -293,23 +308,13 @@ class StreamingMixin(ChatMixin):
                             )
                             continue
                         elif isinstance(event, FunctionToolResultEvent):
-                            # A completing run_code call carries its sandbox-
-                            # dispatched calls as metadata; surface each one so
-                            # the UI trail shows what the script actually did.
+                            # A completing run_code call keeps its sandbox-
+                            # dispatched calls (the trail showed each live).
                             {% if ai_backend != "memory" %}finished = {% endif %}record_tool_result(tool_trace, event)
 {%- if ai_backend != "memory" %}
                             # Cards a script drew ride that script's entry.
                             attach_cards(finished, drawn_cards)
 {%- endif %}
-                            for name, args in nested_tool_calls(event):
-                                yield tool_notice(
-                                    name,
-                                    args=args,
-                                    message_id=message_id,
-                                    conversation_id=conversation.id,
-                                    stream_delta=stream_delta,
-                                    inside=True,
-                                )
                             continue
                         elif isinstance(event, AgentRunResultEvent):
                             finish_reason = getattr(

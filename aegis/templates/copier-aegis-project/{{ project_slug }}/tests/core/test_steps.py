@@ -32,8 +32,21 @@ def test_a_step_is_heard_only_where_someone_is_watching() -> None:
     steps: list[str] = []
 
     heard("bill_candidates")
-    with watching(steps.append):
+    with watching(lambda doing, *_: steps.append(doing)):
         heard("bill_candidates")
     heard("bill_candidates")
 
     assert steps == ["Bill candidates"]
+
+
+def test_a_listener_inside_anothers_is_told_beside_it() -> None:
+    """A chat turn's trail listens inside the meeting bot that runs it:
+    both hear each step, the call as well as its phrase."""
+    outer: list[tuple[object, ...]] = []
+    inner: list[tuple[object, ...]] = []
+
+    with watching(lambda *step: outer.append(step)):
+        with watching(lambda *step: inner.append(step)):
+            heard("bill_candidates", {"months": 3})
+
+    assert outer == inner == [("Bill candidates", "bill_candidates", {"months": 3})]

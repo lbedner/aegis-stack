@@ -5,6 +5,7 @@ from app.core.security import SESSION_COOKIE
 from app.models.user import User
 from app.services.auth.service import get_current_user_from_token
 {%- if include_auth_guest %}
+from app.services.auth.service import is_guest
 from app.services.auth.service import visitor
 from app.services.auth.service import session_id_of
 {%- endif %}
@@ -70,10 +71,26 @@ async def get_current_active_user(
     return await get_current_user_from_token(token, user_service)
 
 
+{%- if include_auth_guest %}
+async def get_session_user(
+    token: str | None = Depends(get_session_token),
+    user_service: UserService = Depends(get_user_service),
+) -> User | None:
+    """Whoever the session is, a guest included; None signed out. The one
+    read of the session that ``get_optional_user`` and ``get_visitor``
+    share, so a route asking for both looks it up once."""
+    return await _optional_user(token, user_service, guests=True)
+
+
+async def get_optional_user(
+    user: User | None = Depends(get_session_user),
+) -> User | None:
+{%- else %}
 async def get_optional_user(
     token: str | None = Depends(get_session_token),
     user_service: UserService = Depends(get_user_service),
 ) -> User | None:
+{%- endif %}
     """Resolve the session to a User if present, else return ``None``.
 
     For routes that render differently for anon vs authed visitors
@@ -84,7 +101,11 @@ async def get_optional_user(
     session still resolves, to the synthetic dev user.{% if include_auth_guest %} A guest is
     ``None`` here: it is a visitor (``get_visitor``), never a user.{% endif %}
     """
+{%- if include_auth_guest %}
+    return None if user is None or is_guest(user) else user
+{%- else %}
     return await _optional_user(token, user_service)
+{%- endif %}
 
 
 async def _optional_user(
@@ -103,10 +124,9 @@ async def _optional_user(
 
 async def get_visitor(
     token: str | None = Depends(get_session_token),
-    user_service: UserService = Depends(get_user_service),
+    user: User | None = Depends(get_session_user),
 ) -> str | None:
     """``visitor()`` for this request; None signed out."""
-    user = await _optional_user(token, user_service, guests=True)
     return visitor(user, session_id_of(token)) if user else None
 {%- endif %}
 

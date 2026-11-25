@@ -160,6 +160,9 @@ def test_other_pages_carry_the_drawer_and_it_fetches_the_surface(
     html = client.get(PAGE).text
     assert not select(html, "#chat")
     assert one(html, "#chat-fab") is not None
+    # Signed out, the app's own drawer sends its user to sign in: only a
+    # drawer with an entry of its own takes them back there.
+    assert not select(html, "#chat-drawer-body[data-signed-out]")
     drawer = client.get(f"{CHAT}/drawer").text
     assert len(select(drawer, "#chat")) == 1
 

@@ -39,11 +39,14 @@ SWEEP_AT = 10_000
 
 
 
-def too_many(window_seconds: int) -> HTTPException:
-    """The 429 every limit answers with, saying when to try again."""
+def too_many(
+    window_seconds: int, detail: str = "Too many requests. Please try again later."
+) -> HTTPException:
+    """The 429 every limit answers with, saying when to try again; a limit
+    whose callers word it themselves gives its reason as ``detail``."""
     return HTTPException(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        detail="Too many requests. Please try again later.",
+        detail=detail,
         headers={"Retry-After": str(window_seconds)},
     )
 

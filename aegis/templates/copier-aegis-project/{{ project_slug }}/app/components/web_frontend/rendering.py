@@ -66,7 +66,7 @@ def guest_sign_in() -> str | None:
         return None
     from app.components.backend.security import turnstile  # auth[guest] only
 
-    return settings.TURNSTILE_SITE_KEY if turnstile.enabled() else ""
+    return turnstile.site_key()
 
 
 templates.env.globals["guest_sign_in"] = guest_sign_in

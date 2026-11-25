@@ -8,6 +8,8 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 import pytest
 
+from app.components.backend.api.auth import guest as api_guest
+from app.components.backend.security import turnstile
 from app.components.web_frontend.routes import guest
 from app.core.config import settings
 
@@ -38,6 +40,16 @@ def test_an_app_whose_guests_start_elsewhere_refuses_the_form(
     assert client.post("/login/guest", follow_redirects=False).status_code == 404
 
 
+def test_the_human_checks_key_is_blank_while_it_is_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "TURNSTILE_SITE_KEY", "site-key")
+    monkeypatch.setattr(settings, "TURNSTILE_SECRET_KEY", "")
+    assert turnstile.site_key() == ""
+    monkeypatch.setattr(settings, "TURNSTILE_SECRET_KEY", "secret")
+    assert turnstile.site_key() == "site-key"
+
+
 def test_with_its_keys_the_page_carries_the_human_check(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -58,7 +70,7 @@ def test_a_refused_guest_goes_back_saying_why(
         raise HTTPException(status_code=status_code, detail=reason)
 
     monkeypatch.setattr(settings, "GUEST_ON_SIGN_IN_PAGE", True)
-    monkeypatch.setattr(guest, "api_guest_sign_in", refuse)
+    monkeypatch.setattr(api_guest, "guest_sign_in", refuse)
     response = client.post("/login/guest", follow_redirects=False)
     assert response.headers["location"] == f"/login?error={reason}"
 {%- endif %}

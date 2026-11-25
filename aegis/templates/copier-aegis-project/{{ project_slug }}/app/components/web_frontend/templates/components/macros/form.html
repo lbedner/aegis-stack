@@ -26,6 +26,10 @@
 }[kind] }}
 {%- endmacro %}
 
+{# Cloudflare Turnstile in front of guest sign-in (``turnstile.site_key``):
+   its widget, which fetches Cloudflare's script itself (``humanCheck``). #}
+{% macro human_check(key) %}<div class="cf-turnstile" data-sitekey="{{ key }}" data-theme="dark" x-data="humanCheck"></div>{% endmacro %}
+
 {# Buttons are DaisyUI's: outline so the data stays louder than the
    controls; ``tone`` is default (quiet: muted text and border, which
    DaisyUI has no outline variant for), primary (teal), danger or warn;

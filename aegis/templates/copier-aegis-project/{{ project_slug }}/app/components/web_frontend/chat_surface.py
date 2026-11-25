@@ -99,6 +99,10 @@ class ChatSurface:
     # of them beside the thread. A mount whose agent only reads leaves it
     # out.
     approvals: bool = True
+    # Whether its users may speak a turn and hear one read aloud: paid per
+    # use, so a mount whose users spend from a budget that does not count
+    # them leaves the microphone, read-aloud and their routes out.
+    speech: bool = True
     # Whether its users may call, on what the install calls with. None
     # follows ``operator_controls``; True lets in a caller with no controls
     # (a signed-out visitor), and ``bind`` may decide it per request.
@@ -129,6 +133,12 @@ class ChatSurface:
     def page_at(self, path: str | None) -> Page | None:
         """What the page at ``path`` declares, as the chat names it."""
         return self.pages.get(path or "")
+
+
+def speaks(chat: ChatSurface) -> bool:
+    """Whether the mount takes a spoken turn and reads a reply aloud:
+    voice and the mount's say (``speech``)."""
+    return HAS_VOICE and chat.speech
 
 
 def offers_calls(chat: ChatSurface) -> bool:
@@ -356,7 +366,7 @@ def settled(
         "turns_url": f"{chat.path}/turns",
         "continue_vals": {"message": CONTINUE, "conversation_id": conversation_id},
         "model_icon": (icons or {}).get(str(meta.get("provider") or "")),
-        "speech": f"{url}/speech" if HAS_VOICE else None,
+        "speech": f"{url}/speech" if speaks(chat) else None,
         "eval_url": f"{chat.eval_cases}?{urlencode({'turn': message.id})}"
         if chat.eval_cases and message.role.value == "assistant"
         else None,
@@ -436,7 +446,7 @@ def _call_context(chat: ChatSurface) -> dict[str, Any]:
     """What a call needs on any page it is held on (``partials/chat/_call.html``)."""
     return {
         "chat_path": chat.path,
-        "voice": _voice(chat) if HAS_VOICE else None,
+        "voice": _voice(chat) if speaks(chat) else None,
         "calls": offers_calls(chat),
         # A call's engine and running cost are the operator's figures.
         "operator": chat.operator_controls,

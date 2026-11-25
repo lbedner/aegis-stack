@@ -3,6 +3,7 @@ visitor. Two visitors are two sessions on one user, each ends alone, and
 neither sees or ends the other's."""
 
 from datetime import datetime
+from typing import Any
 
 from fastapi import status
 from fastapi.testclient import TestClient
@@ -95,6 +96,8 @@ async def test_an_address_may_start_only_so_many(
     async_client_with_db.cookies.clear()
     again = async_client_with_db.post(GUEST_SIGN_IN)
     assert again.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+    # The reason, as every page that starts a guest words it.
+    assert again.json()["detail"] == "guest_limited"
 
 
 async def test_with_turnstile_on_a_failed_check_starts_nothing(
@@ -148,13 +151,32 @@ async def test_a_guest_is_signed_out_to_every_optional_user_route(
 ) -> None:
     """A page or a route that also serves anonymous callers sees no user in
     a guest (nothing keyed by the shared id), only its visitor."""
-    from app.services.auth.deps import get_optional_user, get_visitor
+    from app.services.auth.deps import (
+        get_optional_user,
+        get_session_user,
+        get_visitor,
+    )
 
     sid = _as_new_visitor(async_client_with_db)
     token = async_client_with_db.cookies.get(SESSION_COOKIE)
     users = UserService(async_db_session)
-    assert await get_optional_user(token, users) is None
-    assert await get_visitor(token, users) == guest_visitor(sid)
+    seen = await get_session_user(token, users)
+    assert await get_optional_user(seen) is None
+    assert await get_visitor(token, seen) == guest_visitor(sid)
+
+
+def test_a_request_reads_its_session_once_for_its_user_and_its_visitor() -> None:
+    """A visitor's chat turn asks for both (its mount, its owner's id):
+    they share one dependency, which FastAPI resolves once a request."""
+    from fastapi.dependencies.utils import get_dependant
+
+    from app.services.auth import deps
+
+    def reads(call: Any) -> set[Any]:
+        return {d.call for d in get_dependant(path="/", call=call).dependencies}
+
+    shared = reads(deps.get_optional_user) & reads(deps.get_visitor)
+    assert deps.get_session_user in shared
 
 
 async def test_nobody_signs_up_as_the_guest(

@@ -21,6 +21,11 @@ def enabled() -> bool:
     return bool(settings.TURNSTILE_SITE_KEY and settings.TURNSTILE_SECRET_KEY)
 
 
+def site_key() -> str:
+    """The key a page renders the widget with; blank while the check is off."""
+    return settings.TURNSTILE_SITE_KEY if enabled() else ""
+
+
 async def passed(token: str | None, ip: str | None) -> bool:
     """Whether ``token`` is one Cloudflare gave a human just now; True
     while the check is off."""

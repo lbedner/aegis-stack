@@ -187,14 +187,14 @@ async def test_a_prompt_being_read_shows_its_progress_while_quiet(
         return "thinking"
 
     async def reads_then_text() -> AsyncIterator[StreamingMessage]:
-        seen = waiting.current_prefill()
-        assert seen is not None
         seen.total, seen.processed = 1_000, 500
         await asyncio.sleep(0.2)
         yield _message()
 
+    seen = waiting.Prefill()
     _quick(monkeypatch)
     monkeypatch.setattr(sse, "waiting_reason", explain)
+    monkeypatch.setattr(sse, "watch_prefill", lambda: seen)
     frames = _frames([f async for f in sse._events(reads_then_text())])
 
     waits = [data for name, data in frames if name == "waiting"]

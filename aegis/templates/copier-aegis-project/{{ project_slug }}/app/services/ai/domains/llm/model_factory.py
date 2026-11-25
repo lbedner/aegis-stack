@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
+import functools
 import importlib
 from typing import Any
 
@@ -197,6 +198,14 @@ def _model_settings(config: Any) -> ModelSettings:
     return ModelSettings(**kwargs)
 
 
+@functools.cache
+def _prefill_client() -> httpx.AsyncClient:
+    """llama.cpp's one client, through ``PrefillTee``: built per turn, a
+    client was never closed (openai's own closes itself; a plain one does
+    not). ``PrefillTee`` reads the watching turn per request."""
+    return httpx.AsyncClient(transport=PrefillTee())
+
+
 def _local_model(config: AIServiceConfig, settings: Any) -> Any:
     """The model for a local server (Ollama, llama.cpp's llama-server),
     over its OpenAI-compatible API. Both stream reasoning in a field
@@ -213,9 +222,7 @@ def _local_model(config: AIServiceConfig, settings: Any) -> Any:
         max_retries=0,
         # llama-server says how far its prompt reading is, in the stream.
         http_client=(
-            httpx.AsyncClient(transport=PrefillTee())
-            if config.provider == AIProvider.LLAMACPP
-            else None
+            _prefill_client() if config.provider == AIProvider.LLAMACPP else None
         ),
     )
     # Ollama's OpenAI-compat endpoint silently DROPS the modern

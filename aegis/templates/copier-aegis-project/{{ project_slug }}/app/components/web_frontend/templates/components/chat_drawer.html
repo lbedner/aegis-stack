@@ -3,9 +3,14 @@
    page swaps. On the AI page's Chat section the page IS the surface, so
    the panel empties and the button steps aside (``chatDrawer`` in
    static/js/chat.js). No @click.stop on the panel: it would swallow the
-   delegated clicks chat.js listens for on the document. #}
+   delegated clicks chat.js listens for on the document. ``chat_entry`` is
+   what it opens on (default: the mount's drawer), where a mount shows
+   something first (a notice before a visitor starts), and where it goes
+   back to once its visitor's session is gone (``data-signed-out``,
+   ``reopenedSignedOut`` in static/js/auth.js); a ``chat:open``
+   event on the window opens it from anywhere on the page. #}
 {% from "components/macros/chat.html" import chat_toolbar %}
-<div x-data="chatDrawer('{{ chat_path }}')" @htmx:after-settle.window="settled()">
+<div x-data="chatDrawer('{{ chat_entry | default(chat_path ~ "/drawer") }}')" @htmx:after-settle.window="settled()" @chat:open.window="show()" @chat:signed-out.window="reopen()">
   <button type="button" id="chat-fab" x-show="!onChat && !open" x-cloak @click="show()"
           class="fixed bottom-5 right-5 z-40 rounded-xl transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-aegis-teal"
           aria-label="Open chat" title="Chat">
@@ -28,7 +33,7 @@
           </div>
         </div>
         {# The surface's bubble insets are page-scale; a narrow panel trims them. #}
-        <div id="chat-drawer-body" x-ref="body" class="flex-1 min-h-0 min-w-0 px-5 py-3 [&_.pl-24]:pl-4 [&_.pr-24]:pr-4"></div>
+        <div id="chat-drawer-body" x-ref="body"{% if chat_entry is defined %} data-signed-out{% endif %} class="flex-1 min-h-0 min-w-0 px-5 py-3 [&_.pl-24]:pl-4 [&_.pr-24]:pr-4"></div>
       </div>
     </div>
   </template>

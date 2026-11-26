@@ -372,6 +372,7 @@ class TestWebFrontendScaffolding:
                 "form_footer",
                 "form_section",
                 "honeypot",
+                "human_check",
                 "money_input",
                 "no_autofill",
                 "number_input",

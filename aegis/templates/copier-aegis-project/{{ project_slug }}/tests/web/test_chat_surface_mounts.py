@@ -259,6 +259,31 @@ def test_a_mount_may_take_calls_without_the_operator_controls(
         assert "data-call-engine" not in drawer and "data-call-cost" not in drawer
 
 
+def test_a_mount_speaks_where_voice_is_installed_unless_it_says_not() -> None:
+    assert chat_surface.speaks(MOUNT) is chat_surface.HAS_VOICE
+    assert chat_surface.speaks(replace(MOUNT, speech=False)) is False
+
+
+def test_a_mount_may_leave_speech_out(turns: list[dict[str, Any]]) -> None:
+    """Hearing a turn and saying one are paid per use: a mount whose users
+    spend from a budget that does not count them leaves both out
+    (``speech``), the microphone, read-aloud and their routes."""
+    quiet = replace(MOUNT, speech=False)
+
+    async def bind_quiet(request: Request) -> ChatSurface:
+        return replace(quiet, user=request.headers["x-user"], subject="3")
+
+    app = FastAPI()
+    app.include_router(chat_router(replace(quiet, bind=bind_quiet), allow))
+    client = TestClient(app, headers={"x-user": "7", "x-project": "3"})
+
+    drawer = client.get("/chat/drawer").text
+    assert "Yes." in drawer
+    assert 'id="chat-mic"' not in drawer and "/speech" not in drawer
+    assert client.get("/chat/speech/say", params={"text": "hi"}).status_code == 404
+    assert client.post("/chat/speech/transcripts").status_code in (404, 405)
+
+
 @pytest.mark.skipif(not chat_surface.PERSISTED, reason="no queue without a database")
 def test_a_mount_whose_agent_only_reads_has_no_approvals(
     turns: list[dict[str, Any]], client: TestClient

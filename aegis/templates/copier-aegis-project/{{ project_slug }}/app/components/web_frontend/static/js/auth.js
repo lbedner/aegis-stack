@@ -107,19 +107,30 @@ async function fetchAuth(path, opts = {}) {
   return resp;
 }
 
+// A drawer that opens on its own entry (chat_drawer.html's
+// data-signed-out) takes a visitor whose session went back there, never to
+// /login: that visitor may be on a host the app's sign-in is not.
+function reopenedSignedOut(el) {
+  if (!el?.closest?.('[data-signed-out]')) return false;
+  window.dispatchEvent(new CustomEvent('chat:signed-out'));
+  return true;
+}
+window.reopenedSignedOut = reopenedSignedOut;
+
 // If htmx gets a 401 from a protected endpoint, kick to /login. If it gets a
 // 403 with `email_not_verified`, kick to /verify-pending so the user can
 // resend the verification email.
 document.addEventListener('htmx:responseError', (evt) => {
   const xhr = evt.detail.xhr;
   if (xhr.status === 401) {
+    const from = evt.detail.elt;
     // Same refresh-first flow as fetchAuth. On success reload the page rather
     // than replaying the htmx request - the swap target may be mid-transition,
     // and a full reload re-renders the current URL with the fresh session.
     _tryRefresh().then((ok) => {
       if (ok) {
         window.location.reload();
-      } else {
+      } else if (!reopenedSignedOut(from)) {
         window.location = _loginUrlWithNext();
       }
     });

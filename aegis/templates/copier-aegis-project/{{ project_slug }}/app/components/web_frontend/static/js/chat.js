@@ -346,6 +346,7 @@ function pageAction({ action, target, value }) {
     let marker = text;
     try {
       const answer = await fetch(`${config().path}/pastes`, { method: 'POST', body });
+      if (answer.status === 401 && window.reopenedSignedOut?.(box)) return;
       if (answer.ok) marker = (await answer.json()).marker;
     } catch (_) { /* offline: the text goes in as text */ }
     box.value = box.value.slice(0, at) + marker + box.value.slice(to);
@@ -413,6 +414,7 @@ function pageAction({ action, target, value }) {
           page: chatPage(), // what it declares is the mount's to say
         }),
       });
+      if (resp.status === 401 && window.reopenedSignedOut?.(bubble)) return;
       if (!resp.ok || !resp.body) throw new Error(`bad response ${resp.status}`);
       for await (const { event, data } of frames(resp.body)) {
         if (event === 'waiting') {
@@ -506,7 +508,7 @@ function pageAction({ action, target, value }) {
   // The AI page's Chat section IS the surface, so while it shows the drawer
   // empties and its button steps aside: one surface per document.
   document.addEventListener('alpine:init', () => {
-    Alpine.data('chatDrawer', (path) => ({
+    Alpine.data('chatDrawer', (entry) => ({
       open: false,
       onChat: false,
       init() { this.settled(); },
@@ -516,7 +518,13 @@ function pageAction({ action, target, value }) {
       },
       show() {
         this.open = true;
-        if (!this.$refs.body.children.length) htmx.ajax('GET', `${path}/drawer`, { target: '#chat-drawer-body', swap: 'innerHTML' });
+        if (!this.$refs.body.children.length) htmx.ajax('GET', entry, { target: this.$refs.body, swap: 'innerHTML' });
+      },
+      // Its visitor's session went (reopenedSignedOut, auth.js): back to
+      // the entry, a notice they read before starting again.
+      reopen() {
+        this.$refs.body.innerHTML = '';
+        this.show();
       },
     }));
   });

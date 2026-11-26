@@ -6,6 +6,7 @@ address may start (``RATE_LIMIT_GUEST_*``, counted across processes), then
 Cloudflare Turnstile (``turnstile.py``, off without keys).
 """
 
+from collections.abc import Awaitable, Callable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, status
@@ -39,7 +40,7 @@ async def guest_sign_in(
     403 when the human check fails."""
     ip = get_client_ip(request)
     if not await STARTS.take(ip or "unknown"):
-        raise too_many(STARTS.window_seconds)
+        raise too_many(STARTS.window_seconds, detail="guest_limited")
     if not await turnstile.passed(human, ip):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="guest_human")
     user = await guest_user(users)
@@ -48,3 +49,35 @@ async def guest_sign_in(
     access_token = await sign_in(request, response, user, GUEST, refresh_service)
     await audit.emit("auth.guest_sign_in", actor_id=user.id, ip_address=ip)
     return TokenResponse(access_token=access_token)
+
+
+# A page's way to start a guest (``guest_starter``): the sign-in above with
+# its cookies on the page's own response; the reason it was refused (the
+# sign-in's detail: guest_limited, guest_human, guest_closed), else None.
+GuestStart = Callable[[Response, str | None], Awaitable[str | None]]
+
+
+async def guest_starter(
+    request: Request,
+    users: UserService = Depends(get_user_service),
+    refresh_service: RefreshService = Depends(get_refresh_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> GuestStart:
+    """What a page that starts guests depends on, so each words only its
+    own refusals and no page repeats the sign-in's dependencies."""
+
+    async def start(response: Response, human: str | None) -> str | None:
+        try:
+            await guest_sign_in(
+                request=request,
+                response=response,
+                human=human,
+                users=users,
+                refresh_service=refresh_service,
+                audit=audit,
+            )
+        except HTTPException as exc:
+            return str(exc.detail)
+        return None
+
+    return start

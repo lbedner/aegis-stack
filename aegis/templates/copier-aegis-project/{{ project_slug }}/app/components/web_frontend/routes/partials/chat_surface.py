@@ -282,9 +282,9 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
                 chip_oob=True,
             )
 
-    # --- Speech: only where voice is installed --------------------------------
+    # --- Speech: only where voice is installed and the mount speaks ----------
 
-    if chat.HAS_VOICE:
+    if chat.speaks(mount):
 
         @router.post("/speech/transcripts")
         async def transcribe(audio: UploadFile) -> Response:

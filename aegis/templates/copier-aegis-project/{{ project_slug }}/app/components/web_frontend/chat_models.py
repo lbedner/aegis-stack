@@ -20,6 +20,7 @@ none).
 from typing import TYPE_CHECKING, Any
 
 from app.core.model_picker import (
+    NO_MATCH,
     display_title,
     filter_models,
     format_context_window,
@@ -92,8 +93,9 @@ async def model_choices(
 
 async def call_models() -> list[dict[str, Any]]:
     """What a live call can run on (``live_engines.reachable``), each with
-    its ``kind``: a realtime model, or a local chat model, which a call
-    runs as a cascade. One read of every kind: the rule picks."""
+    its ``kind``: a realtime model, or a chat model that calls tools (local
+    or cloud), which a call runs as a cascade. One read of every kind: the
+    rule picks."""
     from app.services.ai.service import live_engines
 
     return [
@@ -316,6 +318,7 @@ async def picker(query: str, current: str, path: str) -> dict[str, Any]:
         "query": query,
         "current": current,
         "sections": sections,
-        "empty": not any(section["rows"] for section in sections),
+        # What the list says when the search leaves none.
+        "empty": None if any(section["rows"] for section in sections) else NO_MATCH,
         "path": path,
     }

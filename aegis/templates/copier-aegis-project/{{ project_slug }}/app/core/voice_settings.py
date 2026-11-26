@@ -28,8 +28,6 @@ class VoiceSettings(SpeechServerSettings):
     STT_PROVIDER: str = "openai_whisper"  # Default to OpenAI Whisper API
     STT_MODEL: str | None = None  # Model name/size (provider-specific, None = default)
     STT_LANGUAGE: str | None = None  # ISO 639-1 language code (None = auto-detect)
-    # For local providers (whisper_local, faster_whisper)
-    STT_DEVICE: str | None = None  # Device: 'cpu', 'cuda', 'mps' (None = auto-detect)
 
     # Text-to-Speech (TTS) Configuration
     # Provider: a TTSProvider value (app/services/ai/domains/voice/models.py)

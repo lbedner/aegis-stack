@@ -559,6 +559,32 @@ services:
       - dev
       - prod
 {%- endif %}
+{%- if include_inference and inference_hearing == "speaches" %}
+
+  speaches:
+    image: ghcr.io/speaches-ai/speaches:0.9.0-rc.3-cpu
+    hostname: speaches
+    environment:
+      STT_MODEL_TTL: "-1"
+      PRELOAD_MODELS: '["istupakov/parakeet-tdt-0.6b-v3-onnx"]'
+      ENABLE_UI: "false"
+    volumes:
+      - speaches-models:/home/ubuntu/.cache/huggingface/hub
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 5G
+    profiles:
+      - dev
+      - prod
+{%- endif %}
 
 {%- if include_ingress %}
   # TRAEFIK REVERSE PROXY
@@ -661,6 +687,9 @@ volumes:
 {%- if inference_engine == "llamacpp" %}
   llamacpp-models:
 {%- endif %}
+{%- endif %}
+{%- if include_inference and inference_hearing == "speaches" %}
+  speaches-models:
 {%- endif %}
 {%- if include_ingress and ingress_tls %}
   traefik-letsencrypt:

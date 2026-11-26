@@ -1,14 +1,24 @@
 """``inference``: the speech server as it answers, a line said into an MP3,
-and its model unloaded or reloaded; the client the inference API and its
-Overseer page call, faked here."""
+and its model unloaded or reloaded; the hearing server as it answers, and
+a model of its loaded or unloaded; the clients the inference API and their
+Overseer pages call, faked here."""
 
 from pathlib import Path
 
 import pytest
 
-from app.core import speech_server
+from app.core import hearing_server, speech_server
 from tests._cli import invoke
-from tests._fake_ollama import RUNNING, SPEECH_READY, serve, speaking
+from tests._fake_ollama import (
+    HEARING_READY,
+    PARAKEET,
+    RUNNING,
+    SPEECH_READY,
+    hearing,
+    serve,
+    speaking,
+)
+from tests._speech_server import WHISPER
 
 
 @pytest.fixture(autouse=True)
@@ -61,6 +71,36 @@ def test_without_a_server_it_says_how_to_set_one() -> None:
 
     assert result.exit_code == 1
     assert "SPEECH_BASE_URL" in result.output
+
+
+def test_hearing_says_what_it_holds_and_what_is_in_memory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hearing(
+        monkeypatch,
+        HEARING_READY.model_copy(update={"models": [PARAKEET, WHISPER]}),
+    )
+
+    result = invoke(["inference", "hearing"])
+
+    assert result.exit_code == 0
+    assert f"{PARAKEET} (in memory)" in result.output
+    assert f"{WHISPER}\n" in result.output
+
+
+@pytest.mark.parametrize("action", hearing_server.ACTIONS)
+def test_hearing_model_moves_it(monkeypatch: pytest.MonkeyPatch, action: str) -> None:
+    done = hearing(monkeypatch)
+
+    assert invoke(["inference", "hearing-model", action, PARAKEET]).exit_code == 0
+    assert done == [("move", action, PARAKEET)]
+
+
+def test_without_a_hearing_server_it_says_how_to_set_one() -> None:
+    result = invoke(["inference", "hearing"])
+
+    assert result.exit_code == 1
+    assert "HEARING_BASE_URL" in result.output
 
 
 def test_link_ollama_links_its_models_into_the_router_folder(

@@ -175,6 +175,15 @@ inference_speech:
     - "kokoro_fastapi"
   when: "{{ include_inference }}"
 
+inference_hearing:
+  type: str
+  help: "A hearing server (speech to text) the inference component runs"
+  default: "none"
+  choices:
+    - "none"
+    - "speaches"
+  when: "{{ include_inference }}"
+
 include_secrets:
   type: bool
   help: "Include the encrypted credential store (keys editable, live)?"

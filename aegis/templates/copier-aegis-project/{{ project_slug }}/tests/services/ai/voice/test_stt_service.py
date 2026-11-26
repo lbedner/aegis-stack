@@ -15,7 +15,6 @@ class TestSTTServiceInitialization:
         settings.STT_PROVIDER = "groq_whisper"
         settings.STT_MODEL = "whisper-large-v3"
         settings.STT_LANGUAGE = "en"
-        settings.STT_DEVICE = None
 
         service = STTService(settings)
 
@@ -28,7 +27,6 @@ class TestSTTServiceInitialization:
         settings.STT_PROVIDER = "openai_whisper"
         settings.STT_MODEL = None
         settings.STT_LANGUAGE = None
-        settings.STT_DEVICE = None
 
         service = STTService(settings, provider=STTProvider.GROQ_WHISPER)
 
@@ -40,7 +38,6 @@ class TestSTTServiceInitialization:
         settings.STT_PROVIDER = "openai_whisper"
         settings.STT_MODEL = "settings-model"
         settings.STT_LANGUAGE = None
-        settings.STT_DEVICE = None
 
         service = STTService(settings, model="explicit-model")
 
@@ -72,9 +69,9 @@ class TestSTTServiceProperties:
 
     def test_provider_type_property(self) -> None:
         """Test provider_type property returns correct enum."""
-        service = STTService(provider=STTProvider.FASTER_WHISPER)
+        service = STTService(provider=STTProvider.GROQ_WHISPER)
 
-        assert service.provider_type == STTProvider.FASTER_WHISPER
+        assert service.provider_type == STTProvider.GROQ_WHISPER
 
     def test_model_property_with_explicit_model(self) -> None:
         """Test model property returns explicit model when set."""
@@ -101,7 +98,6 @@ class TestSTTServiceStatus:
         assert "provider" in status
         assert "model" in status
         assert "language" in status
-        assert "device" in status
         assert "initialized" in status
         assert "available" in status
         assert "errors" in status
@@ -127,7 +123,6 @@ class TestSTTServiceStatus:
         settings.STT_PROVIDER = "openai_whisper"
         settings.STT_MODEL = None
         settings.STT_LANGUAGE = None
-        settings.STT_DEVICE = None
 
         service = STTService(settings)
         status = await service.get_status()
@@ -137,13 +132,10 @@ class TestSTTServiceStatus:
 
     async def test_get_status_errors_present_when_invalid(self) -> None:
         """Test errors contains messages when validation fails."""
-        settings = MagicMock(
-            spec=["STT_PROVIDER", "STT_MODEL", "STT_LANGUAGE", "STT_DEVICE"]
-        )
+        settings = MagicMock(spec=["STT_PROVIDER", "STT_MODEL", "STT_LANGUAGE"])
         settings.STT_PROVIDER = "openai_whisper"
         settings.STT_MODEL = None
         settings.STT_LANGUAGE = None
-        settings.STT_DEVICE = None
 
         service = STTService(settings)
         status = await service.get_status()
@@ -163,7 +155,6 @@ class TestSTTServiceValidation:
         settings.STT_PROVIDER = "openai_whisper"
         settings.STT_MODEL = None
         settings.STT_LANGUAGE = None
-        settings.STT_DEVICE = None
 
         service = STTService(settings)
         errors = await service.validate()
@@ -185,7 +176,6 @@ class TestSTTServiceValidation:
         settings.STT_PROVIDER = "openai_whisper"
         settings.STT_MODEL = None
         settings.STT_LANGUAGE = None
-        settings.STT_DEVICE = None
 
         service = STTService(settings)
 
@@ -193,13 +183,10 @@ class TestSTTServiceValidation:
 
     async def test_is_available_false_when_invalid(self) -> None:
         """Test is_available returns False when invalid."""
-        settings = MagicMock(
-            spec=["STT_PROVIDER", "STT_MODEL", "STT_LANGUAGE", "STT_DEVICE"]
-        )
+        settings = MagicMock(spec=["STT_PROVIDER", "STT_MODEL", "STT_LANGUAGE"])
         settings.STT_PROVIDER = "openai_whisper"
         settings.STT_MODEL = None
         settings.STT_LANGUAGE = None
-        settings.STT_DEVICE = None
 
         service = STTService(settings)
 
@@ -239,7 +226,6 @@ class TestSTTServiceApiKey:
         settings.STT_PROVIDER = "openai_whisper"
         settings.STT_MODEL = None
         settings.STT_LANGUAGE = None
-        settings.STT_DEVICE = None
 
         service = STTService(settings, api_key="explicit-key")
 
@@ -253,7 +239,6 @@ class TestSTTServiceApiKey:
         settings.STT_PROVIDER = "openai_whisper"
         settings.STT_MODEL = None
         settings.STT_LANGUAGE = None
-        settings.STT_DEVICE = None
 
         service = STTService(settings)
 

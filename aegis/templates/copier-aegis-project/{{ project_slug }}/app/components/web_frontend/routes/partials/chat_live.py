@@ -22,7 +22,7 @@ means leaving the call.
 """
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
 import contextlib
 import functools
 import json
@@ -46,6 +46,7 @@ from app.components.backend.api.ai.service import ai_service
 from app.components.web_frontend import chat_surface as chat
 from app.components.web_frontend.chat_surface import ChatSurface
 from app.core.chat_transcript import trace_label
+from app.core.concurrency import background
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
@@ -53,6 +54,7 @@ from app.core.pages import page_stage
 from app.services.ai.service import (
     ChatAttachment,
     LiveEngine,
+    call_stages,
     live_engines,
     realtime_calls,
     to_spoken,
@@ -108,6 +110,12 @@ async def _send(ws: WebSocket, message: dict[str, Any]) -> None:
         return
 
 
+def _working(step: str | None) -> dict[str, Any]:
+    """A step of her turn for the page (its status line and trail), or
+    None: her turn is done."""
+    return {"type": "done"} if step is None else {"type": "working", "label": step}
+
+
 async def _tell(ws: WebSocket, event: Any) -> None:
     """What the page shows of an event, if anything."""
     said: dict[str, Any] | None = None
@@ -125,9 +133,9 @@ async def _tell(ws: WebSocket, event: Any) -> None:
         else:
             step: list[dict[str, Any]] = []
             record_tool_call(step, event)
-            said = {"type": "working", "label": trace_label(step[0])}
+            said = _working(trace_label(step[0]))
     elif isinstance(event, RealtimeTurnCompleteEvent):
-        said = {"type": "done"}
+        said = _working(None)
     elif (
         isinstance(event, PartStartEvent)
         and isinstance(event.part, SpeechPart)
@@ -150,6 +158,19 @@ async def _tell(ws: WebSocket, event: Any) -> None:
         said = {"type": side, "text": event.part.transcript or ""}
     if said:
         await _send(ws, said)
+
+
+@contextlib.contextmanager
+def _staging(ws: WebSocket) -> Iterator[None]:
+    """Each stage of a local call (``call_stages``: hearing, the model
+    reading the call) to the page as a step, its status line and trail;
+    None ends a turn's steps with no answer to come."""
+
+    def told(stage: str | None) -> None:
+        background(_send(ws, _working(stage)))
+
+    with call_stages.watching(told):
+        yield
 
 
 def _said(text: str) -> dict[str, Any]:
@@ -422,32 +443,33 @@ def live_router(
                 # The call's ledger row is kept on its own session, each
                 # write committed as it lands (``drive``).
                 async with get_async_session() as ledger:
-                    how = await realtime_calls.drive(
-                        ai_service,
-                        realtime,
-                        ledger=ledger,
-                        alongside=lambda session: _carry(
-                            ws,
-                            session,
-                            conversation,
-                            info if operator else None,
-                            stopped,
-                            functools.partial(clock, longest=longest)
-                            if longest
-                            else None,
-                            see,
-                        ),
-                        on_event=lambda event: _tell(ws, event),
-                        on_saved=saved,
-                        on_drawn=lambda card_ids: show_cards(ws, card_ids),
-                        conversation_id=conversation.id,
-                        model=live_engines.realtime_model(engine),
-                        agent_slug=answers,
-                        user_id=bound.user,
-                        owner_user_id=owner_user_id,
-                        subject=bound.subject,
-                        admin=admin,
-                    )
+                    with _staging(ws):
+                        how = await realtime_calls.drive(
+                            ai_service,
+                            realtime,
+                            ledger=ledger,
+                            alongside=lambda session: _carry(
+                                ws,
+                                session,
+                                conversation,
+                                info if operator else None,
+                                stopped,
+                                functools.partial(clock, longest=longest)
+                                if longest
+                                else None,
+                                see,
+                            ),
+                            on_event=lambda event: _tell(ws, event),
+                            on_saved=saved,
+                            on_drawn=lambda card_ids: show_cards(ws, card_ids),
+                            conversation_id=conversation.id,
+                            model=live_engines.realtime_model(engine),
+                            agent_slug=answers,
+                            user_id=bound.user,
+                            owner_user_id=owner_user_id,
+                            subject=bound.subject,
+                            admin=admin,
+                        )
                 how = server_end or how
                 try:
                     await ws.close()

@@ -8,7 +8,6 @@ from app.services.ai.domains.voice.models import DEFAULT_TTS_MODEL, TTSProvider
 from app.services.ai.domains.voice.tts import TTSService
 from app.services.ai.domains.voice.tts.service import unsaid
 from tests._voice_errors import AnsweredError
-from tests._voice_packages import packages_installed
 from tests._voice_settings import voice_settings
 
 
@@ -359,18 +358,6 @@ class TestUnsaid:
 
         assert "log" in said
         assert "secret" not in said
-
-    def test_says_a_missing_package_with_the_line_that_installs_it(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from app.services.ai.domains.voice.tts.providers import get_tts_provider
-
-        packages_installed(monkeypatch, False)
-        with pytest.raises(RuntimeError) as refused:
-            get_tts_provider(TTSProvider.KOKORO)
-
-        assert unsaid(refused.value) == str(refused.value)
-        assert "uv add" in unsaid(refused.value)
 
     def test_a_chain_that_loops_back_on_itself_still_ends(self) -> None:
         looped = RuntimeError("key=sk-secret")

@@ -52,6 +52,10 @@ class TurnLog:
         # Live) is not timed.
         self._quiet_at: float | None = None
         self.first_word_ms: int | None = None
+        # From then to the reply's end, every step between: how long the
+        # turn took (``response_time_ms``, as a typed turn keeps it).
+        self._asked_at: float | None = None
+        self.response_time_ms: int | None = None
         # The cards the call's steps draw (its card stage), moved onto the
         # step that drew them; the call's, not a turn's.
         self.drawn: list[dict[str, Any]] = []
@@ -73,9 +77,9 @@ class TurnLog:
         ):
             return False
         if isinstance(event, RealtimeInputSpeechStartEvent):
-            self._quiet_at = None
+            self._quiet_at = self._asked_at = None
         elif isinstance(event, RealtimeInputSpeechEndEvent):
-            self._quiet_at = self._clock()
+            self._quiet_at = self._asked_at = self._clock()
         elif (
             isinstance(event, PartDeltaEvent)
             and isinstance(event.delta, SpeechPartDelta)
@@ -96,7 +100,12 @@ class TurnLog:
             finished = record_tool_result(self.trace, event)
             self.shown = [marker["id"] for marker in self.drawn]
             attach_cards(finished, self.drawn)
-        return isinstance(event, RealtimeTurnCompleteEvent)
+        elif isinstance(event, RealtimeTurnCompleteEvent):
+            if self._asked_at is not None:
+                self.response_time_ms = round((self._clock() - self._asked_at) * 1000)
+                self._asked_at = None
+            return True
+        return False
 
     def take(self) -> tuple[str, str, list[dict[str, Any]]] | None:
         """The finished turn, once; None when nothing was said."""

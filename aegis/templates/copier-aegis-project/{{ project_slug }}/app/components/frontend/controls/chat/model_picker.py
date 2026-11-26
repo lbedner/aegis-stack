@@ -25,6 +25,7 @@ from app.components.frontend.controls.text import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.model_picker import (
+    NO_MATCH,
     display_title,
     filter_models,
     format_context_window,
@@ -243,7 +244,7 @@ class ModelPickerDialog(StyledAlertDialog):
                 )
             ]
         if not rows:
-            rows = [SecondaryText("No models match.")]
+            rows = [SecondaryText(NO_MATCH)]
         return ft.ListView(
             rows, spacing=Theme.Spacing.XS, padding=ft.padding.only(top=2, bottom=8)
         )

@@ -17,6 +17,7 @@ from ..constants import (
     AuthLevels,
     ComponentNames,
     InferenceEngines,
+    InferenceHearing,
     InferencePlacement,
     InferenceSpeech,
     OllamaMode,
@@ -215,6 +216,7 @@ class TemplateGenerator:
         self.inference_engine = InferenceEngines.DEFAULT
         self.inference_placement = InferencePlacement.DEFAULT
         self.inference_speech = InferenceSpeech.DEFAULT
+        self.inference_hearing = InferenceHearing.DEFAULT
         found = next(
             (
                 c
@@ -233,6 +235,7 @@ class TemplateGenerator:
         self.inference_engine = inference_engine(found, self._ai_providers())
         self.inference_placement = parsed["placement"]
         self.inference_speech = parsed["speech"]
+        self.inference_hearing = parsed["hearing"]
         if "[" not in found:
             from ..cli.interactive import get_ollama_mode_selection
 
@@ -411,15 +414,17 @@ class TemplateGenerator:
         return list(dict.fromkeys(services))  # Preserve order, remove duplicates
 
     def _inference_containers(self) -> list[str]:
-        """The inference containers: none on the host; on docker the
-        engine's (its service is named as the engine is), and the speech
-        server's where there is one."""
-        if self.inference_placement != InferencePlacement.DOCKER:
-            return []
-        engine = [self.inference_engine]
-        if self.inference_speech == InferenceSpeech.NONE:
-            return engine
-        return engine + COMPONENTS[ComponentNames.INFERENCE].docker_services[-1:]
+        """The inference containers: on docker the engine's (its service is
+        named as the engine is) and the speech server's where there is one;
+        the hearing server's wherever there is one."""
+        found: list[str] = []
+        if self.inference_placement == InferencePlacement.DOCKER:
+            found.append(self.inference_engine)
+            if service := InferenceSpeech.SERVICES.get(self.inference_speech):
+                found.append(service)
+        if service := InferenceHearing.SERVICES.get(self.inference_hearing):
+            found.append(service)
+        return found
 
     def _get_pyproject_deps(self) -> list[str]:
         """

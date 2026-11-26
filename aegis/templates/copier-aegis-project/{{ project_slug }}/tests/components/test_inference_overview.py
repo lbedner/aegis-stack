@@ -3,7 +3,6 @@
 and the memory it reports, who runs on it, and how to add one it lacks. The
 Overseer page, the ``inference status`` command and its API all show it."""
 
-from collections.abc import Sequence
 from dataclasses import replace
 from typing import Any
 
@@ -13,13 +12,15 @@ from app.components.inference import overview, sampler
 from app.components.inference.engine import InferenceServerStatus
 from app.components.inference.llamacpp import LlamaCppEngine
 from app.components.inference.ollama import OllamaEngine
-from app.core import speech_server
+from app.core import hearing_server, speech_server
 from app.core.config import settings
 from tests._fake_ollama import (
+    PARAKEET,
     RUNNING,
     SERVING,
     SPEECH_READY,
     FakeClient,
+    hearing,
     serve,
     speaking,
 )
@@ -28,9 +29,8 @@ from tests._fake_ollama import (
 class Used:
     """The AI service's answer (``chat/engine_users``), as its shape."""
 
-    def __init__(self, uses: list[tuple[str, str]], in_app: Sequence[Any] = ()) -> None:
+    def __init__(self, uses: list[tuple[str, str]]) -> None:
         self.uses = [type("Use", (), {"engine": e, "by": b})() for e, b in uses]
-        self.in_app = list(in_app)
 
 
 def _answers(monkeypatch: pytest.MonkeyPatch, used: Used | None) -> list[Any]:
@@ -49,6 +49,7 @@ def _serving(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(FakeClient, "status", SERVING)
     serve(monkeypatch)
     monkeypatch.setattr(settings, "SPEECH_BASE_URL", None)
+    monkeypatch.setattr(settings, "HEARING_BASE_URL", None)
     _answers(monkeypatch, None)
 
 
@@ -141,6 +142,36 @@ async def test_a_speech_server_keeping_its_memory_shut_names_the_flag(
     assert f"{speech_server.DEBUG}=true" in (row.memory_note or "")
 
 
+async def test_the_hearing_server_is_a_row_with_what_it_holds_in_memory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hearing(monkeypatch)
+
+    row = _row(await overview.read_overview(None), hearing_server.SLUG)
+
+    assert (row.name, row.job) == (hearing_server.NAME, overview.HEARING)
+    assert [m.name for m in row.loaded] == [PARAKEET]
+    # speaches does not report its memory: said, never 0.
+    assert row.memory_bytes is None
+    assert row.memory_note == overview.UNREPORTED
+
+
+async def test_with_no_hearing_server_set_none_is_asked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def read() -> None:
+        raise AssertionError("read with no HEARING_BASE_URL")
+
+    monkeypatch.setattr(sampler, "HEARING", replace(sampler.HEARING, read=read))
+
+    found = await overview.read_overview(None)
+
+    assert hearing_server.SLUG not in [r.id for r in found.engines]
+    to_add = {a.name: a for a in found.to_add}
+    assert to_add[hearing_server.NAME].command == "aegis add inference[speaches]"
+    assert "HEARING_BASE_URL" in to_add[hearing_server.NAME].how
+
+
 async def test_an_engine_it_lacks_says_how_to_add_it_never_a_button() -> None:
     found = await overview.read_overview(None)
 
@@ -157,13 +188,21 @@ async def test_each_engine_says_who_runs_on_it(monkeypatch: pytest.MonkeyPatch) 
     speaking(monkeypatch)
     asked = _answers(
         monkeypatch,
-        Used([("ollama", "Assistant"), (speech_server.SLUG, "Voice, speaking")]),
+        Used(
+            [
+                ("ollama", "Assistant"),
+                (speech_server.SLUG, "Voice, speaking"),
+                (hearing_server.SLUG, "Voice, listening"),
+            ]
+        ),
     )
+    hearing(monkeypatch)
 
     found = await overview.read_overview(object())
 
     assert _row(found, "ollama").used_by == ["Assistant"]
     assert _row(found, speech_server.SLUG).used_by == ["Voice, speaking"]
+    assert _row(found, hearing_server.SLUG).used_by == ["Voice, listening"]
     assert asked == [{"ollama": ["qwen2.5:7b", "llama3.1:8b"]}]
 
 
@@ -175,34 +214,3 @@ async def test_without_a_database_no_one_is_asked(
     found = await overview.read_overview(None)
 
     assert asked == [] and _row(found, "ollama").used_by == []
-
-
-async def test_in_app_engines_are_one_row_with_this_process_s_memory(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    parakeet = type("InApp", (), {"name": "Parakeet", "loaded": True})()
-    _answers(
-        monkeypatch, Used([(speech_server.IN_APP, "Voice, listening")], [parakeet])
-    )
-    monkeypatch.setattr(overview, "_process_memory", lambda: 900 * 2**20)
-
-    row = _row(await overview.read_overview(object()), speech_server.IN_APP)
-
-    assert row.name == "In the app"
-    assert [m.name for m in row.loaded] == ["Parakeet"]
-    assert row.memory_bytes == 900 * 2**20
-    assert row.used_by == ["Voice, listening"]
-
-
-async def test_another_process_does_not_claim_the_webservers_memory(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    kokoro = type("InApp", (), {"name": "Kokoro", "loaded": False})()
-    _answers(monkeypatch, Used([], [kokoro]))
-
-    row = _row(
-        await overview.read_overview(object(), serving=False), speech_server.IN_APP
-    )
-
-    assert row.memory_bytes is None and row.loaded == []
-    assert row.memory_note

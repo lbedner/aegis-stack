@@ -182,6 +182,7 @@ class ScriptedUI:
         postgres_provider: str = "container",
         inference_placement: str = "host",
         inference_speech: str = "none",
+        inference_hearing: str = "none",
         auth_level: str = "basic",
         ai_config: tuple[str, str, list[str], bool, bool] = (
             "memory",
@@ -198,6 +199,7 @@ class ScriptedUI:
         self._postgres_provider = postgres_provider
         self._inference_placement = inference_placement
         self._inference_speech = inference_speech
+        self._inference_hearing = inference_hearing
         self._auth_level = auth_level
         self._ai_config = ai_config
         self.transcript: list[str] = []
@@ -228,6 +230,10 @@ class ScriptedUI:
     def choose_inference_speech(self) -> str:
         self.transcript.append("[inference speech]")
         return self._inference_speech
+
+    def choose_inference_hearing(self) -> str:
+        self.transcript.append("[inference hearing]")
+        return self._inference_hearing
 
     def choose_scheduler_backend(self) -> str:
         self.transcript.append("[scheduler backend]")
@@ -427,6 +433,22 @@ class TestInferenceStep:
             )
             assert run_project_selection(ui).components == [expected]
             assert "[inference speech]" in ui.transcript
+
+    def test_a_hearing_server_joins_the_bracket(self) -> None:
+        """Asked after the speech server; none, the default, adds nothing."""
+        from aegis.cli.interactive import run_project_selection
+
+        ui = ScriptedUI(
+            confirms=self._accept_only_inference(),
+            inference_speech="kokoro_fastapi",
+            inference_hearing="speaches",
+        )
+        assert run_project_selection(ui).components == [
+            "inference[kokoro_fastapi,speaches]"
+        ]
+        assert ui.transcript.index("[inference hearing]") > ui.transcript.index(
+            "[inference speech]"
+        )
 
     def test_the_ollama_provider_reuses_the_placement(self) -> None:
         """Chosen at the inference step, the AI's Ollama question is not asked

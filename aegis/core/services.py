@@ -719,7 +719,6 @@ SERVICES: dict[str, ServiceSpec] = {
                     "tests/web/test_voice_dialog_reads_never_wait.py",
                     "tests/web/test_chat_live.py",
                     "tests/_voice_catalog.py",
-                    "tests/_voice_packages.py",
                     "tests/_voice_errors.py",
                     "tests/_voice_settings.py",
                     "tests/_realtime.py",

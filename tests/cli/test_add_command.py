@@ -191,6 +191,28 @@ class TestAddCommand:
         speech = (project_path / "app/core/speech_settings.py").read_text()
         assert '"http://host.docker.internal:8880/v1"' in speech
 
+    def test_add_gives_an_installed_inference_a_hearing_server(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """``aegis add inference[speaches]`` on a project that already has
+        inference adds the hearing server: the answer, its container, and
+        the address the app hears through."""
+        project_path = project_factory("base")
+        first = run_aegis_command(
+            "add", "inference", "--project-path", str(project_path), "--yes"
+        )
+        assert first.success, f"Command failed: {first.stderr}"
+
+        result = run_aegis_command(
+            "add", "inference[speaches]", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success, f"Command failed: {result.stderr}"
+        assert load_copier_answers(project_path).get("inference_hearing") == "speaches"
+        assert "speaches:" in (project_path / "docker-compose.yml").read_text()
+        speech = (project_path / "app/core/speech_settings.py").read_text()
+        assert '"http://speaches:8000/v1"' in speech
+
     def test_the_ollama_provider_brings_inference_with_its_answers(
         self, project_factory: ProjectFactory
     ) -> None:

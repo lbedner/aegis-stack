@@ -32,7 +32,7 @@
           <td class="{{ cell }} font-mono text-aegis-muted">{{ row.plays_on or "" }}</td>
           <td class="{{ cell }} font-mono text-right text-aegis-muted">{{ row.price or "" }}</td>
           <td class="{{ row_cell('whitespace-nowrap text-right') }}">
-            {%- if row.blocked %}<span data-blocked class="text-xs text-warning" title="Set the key in Secrets, or run the install line, to use this">{{ row.blocked }}</span>{% endif -%}
+            {%- if row.blocked %}<span data-blocked class="text-xs text-warning" title="Set the key in Secrets, or the server's address, to use this">{{ row.blocked }}</span>{% endif -%}
             {%- if row.speak %}{{ speak_button(row.speak, "align-middle") }}{% endif -%}
             {%- if row.use %}<button type="button" data-write data-voice-use hx-post="{{ use_url }}" hx-vals='{{ row.use|tojson }}' class="ml-2 text-xs text-aegis-muted hover:text-aegis-teal">Use</button>
             {%- elif row.used and row.kind != "use" %}<span class="ml-2 text-xs text-aegis-teal">in use</span>{% endif -%}

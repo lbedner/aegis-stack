@@ -8,11 +8,12 @@ hear it on (one that speaks it) and the change a Use would make.
 profiles (no database) shows what its settings use, and nothing to change.
 """
 
+import asyncio
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.core import secrets
+from app.core import secrets, speech_server
 from app.core.config import settings
 from app.core.discovery import optional
 from app.core.model_picker import model_price
@@ -28,7 +29,7 @@ from .catalog import (
     get_voice,
     speaking_model,
 )
-from .models import install_line, unserved
+from .models import server_url, unserved
 
 if TYPE_CHECKING:
     # Only a stack with a database has it; a voice-only one does not.
@@ -108,14 +109,23 @@ def provider_key(provider: Any) -> str | None:
 
 
 def blocked(provider: Any, found: dict[str, str | None]) -> str | None:
-    """What a speech or hearing provider cannot run without: the packages
-    it lacks (the line installing them), a speech server's address, else
-    its key (``missing_from``); None when it can run."""
-    return (
-        install_line(provider.id)
-        or unserved(provider.id, settings.SPEECH_BASE_URL)
-        or missing_from(provider_key(provider), found)
+    """What a speech or hearing provider cannot run without: its server's
+    address, else its key (``missing_from``); None when it can run."""
+    return unserved(provider.id, server_url(provider.id, settings)) or missing_from(
+        provider_key(provider), found
     )
+
+
+async def can_run_now(providers: list[Any]) -> set[str]:
+    """The ids of ``providers`` a call can use now: nothing they lack
+    (``blocked``), and a server of yours answering (each asked once,
+    together): Kokoro-FastAPI picked while it was down ended the call on
+    its first line (2026-11-21)."""
+    found = await read_keys(*(provider_key(p) for p in providers))
+    ready = [p.id for p in providers if not blocked(p, found)]
+    urls = {p: url for p in ready if (url := server_url(p, settings))}
+    up = await asyncio.gather(*(speech_server.answers(url) for url in urls.values()))
+    return set(ready) - {p for p, said in zip(urls, up, strict=True) if not said}
 
 
 def _vendor_key(slug: str) -> str | None:
@@ -222,11 +232,7 @@ def _in_use(
     if engine is None:
         return
     from .call_setup import speaks_as
-    from .cascade import connection as cascade
 
-    # A cascade speaks in the voice's own speech; a realtime model in its
-    # vendor's voice of hers.
-    model = live.realtime_model(engine)
     rows.add(
         "use",
         engine.llm.served_by.slug,
@@ -235,8 +241,10 @@ def _in_use(
         provider_name=engine.llm.served_by.name,
         detail=detail(
             (used.TTS_VOICE or "its own voice")
-            if cascade.serves(model)
-            else speaks_as(model, active),
+            # A chain speaks in the voice's own speech; a realtime model in
+            # its vendor's voice of hers.
+            if live.chained(engine)
+            else speaks_as(live.realtime_model(engine), active),
             f"reply {used.VOICE_REPLY}",
             f"check in {used.VOICE_LIVE_IDLE_SECONDS}s",
         ),

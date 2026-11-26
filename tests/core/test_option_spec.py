@@ -501,16 +501,27 @@ class TestVariantDelta:
         )
         assert variant_delta("inference[ollama]", inference, ollama, **asked) == {}
 
-    def test_an_installed_inference_takes_a_speech_server_later(self) -> None:
-        """No speech server holds nothing, so adding one later is an upgrade,
-        and asking for none once one runs is already satisfied."""
+    @pytest.mark.parametrize(
+        ("key", "server"),
+        [("inference_speech", "kokoro_fastapi"), ("inference_hearing", "speaches")],
+    )
+    def test_an_installed_inference_takes_a_server_later(
+        self, key: str, server: str
+    ) -> None:
+        """No speech or hearing server holds nothing, so adding one later is
+        an upgrade, and asking for it again once it runs is satisfied."""
         from aegis.core.components import COMPONENTS
 
         inference = COMPONENTS["inference"]
-        none = {"inference_speech": "none"}
+        none, chosen = {key: "none"}, {key: server}
+        assert variant_delta(f"inference[{server}]", inference, none) == chosen
+        assert variant_delta(f"inference[{server}]", inference, chosen) == {}
+
+    def test_asking_for_no_speech_server_once_one_runs_is_satisfied(self) -> None:
+        from aegis.core.components import COMPONENTS
+
         kokoro = {"inference_speech": "kokoro_fastapi"}
-        assert variant_delta("inference[kokoro_fastapi]", inference, none) == kokoro
-        assert variant_delta("inference[none]", inference, kokoro) == {}
+        assert variant_delta("inference[none]", COMPONENTS["inference"], kokoro) == {}
 
     def test_a_dependency_never_switches_it(self) -> None:
         """A plugin needing ``inference[ollama]`` on a llama.cpp project is a

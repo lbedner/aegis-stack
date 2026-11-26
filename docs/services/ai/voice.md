@@ -21,7 +21,7 @@ Voice capabilities add Text-to-Speech (TTS) and Speech-to-Text (STT) to the AI s
 
 - **Text-to-Speech** - Convert text to audio with multiple voices and speed control
 - **Speech-to-Text** - Transcribe audio with timestamps and segment detection
-- **Multiple providers** - Cloud (OpenAI, Gemini, Groq), local in the app (Kokoro, Parakeet, Whisper, faster-whisper), and a speech server you run (Kokoro-FastAPI)
+- **Multiple providers** - Cloud (OpenAI, Gemini, Groq), and servers you run (Kokoro-FastAPI speaking, speaches or any OpenAI-compatible transcription server hearing)
 - **Voice catalog** - Browse providers, models, and voices via API
 - **Voice previews** - Generate audio samples to compare voices
 - **Usage tracking** - TTS and STT operations tracked alongside LLM usage
@@ -34,7 +34,6 @@ Voice capabilities add Text-to-Speech (TTS) and Speech-to-Text (STT) to the AI s
 |----------|------|--------|--------|-----------|---------|
 | **OpenAI** | Cloud | gpt-realtime-2.1-mini (gpt-4o-mini-tts, tts-1, tts-1-hd shut down Jan 6, 2027) | 13 (marin, cedar, alloy, ...); 10 on gpt-realtime-2.1-mini | The /v1/audio/speech models only | `OPENAI_API_KEY` |
 | **Gemini** | Cloud | gemini-3.8-flash-tts, gemini-3.8-flash-lite-tts | 30 prebuilt (Kore, Puck, Charon, ...) and its voice library | No | `GOOGLE_API_KEY` |
-| **Kokoro** | Local | kokoro-v1.0 (Kokoro-82M, int8) | 28 English (af_heart, bm_george, ...) | No | None (`uv add kokoro-onnx`) |
 | **Kokoro-FastAPI** (a speech server) | Local | kokoro | 28 English, then whatever the server lists | Yes | None (`SPEECH_BASE_URL`) |
 
 Each speech model records what its delivery instructions steer, as its
@@ -112,11 +111,9 @@ GOOGLE_API_KEY=...
 |----------|------|-------|-------|---------|----------|
 | **OpenAI Whisper** | Cloud | whisper-1 | Good | High | `OPENAI_API_KEY` |
 | **Groq Whisper** | Cloud | whisper-large-v3-turbo | Very fast | High | `GROQ_API_KEY` |
-| **Local Whisper** | Local | whisper-tiny to large-v3 | Varies | Varies | `transformers`, `torch` |
-| **faster-whisper** | Local | tiny to large-v3 | 4x faster | High | `faster-whisper` |
-| **Parakeet** | Local | nemo-parakeet-tdt-0.6b-v3 (int8) | Fast on CPU | High, 25 languages | `onnx-asr[cpu,hub]`, `av` |
+| **Hearing server** (speaches, or a server you run) | Local | istupakov/parakeet-tdt-0.6b-v3-onnx | Fast on CPU | High, 25 languages | None (`HEARING_BASE_URL`) |
 
-The local providers' packages are not installed with `ai[voice]` (torch alone is gigabytes). Until they are added, the provider is offered with its install line in place of a Use, in the Overseer's voice models and its voice designer alike, and the voice settings and the provider itself refuse it with that line (`faster_whisper is not installed: uv add faster-whisper`), so a saved profile that still names it fails at once, saying what to add.
+No model runs in the app's own process: a local one runs as a server of its own ([A Speech Server](#a-speech-server), [A Hearing Server](#a-hearing-server)), so the webserver holds none, competes with no model for its CPU, and ships no model packages.
 
 ### OpenAI Whisper
 
@@ -135,59 +132,6 @@ Ultra-fast cloud transcription:
 STT_PROVIDER=groq_whisper
 STT_MODEL=whisper-large-v3-turbo
 ```
-
-### Local Whisper
-
-Runs on your machine via HuggingFace transformers. Auto-detects GPU (CUDA, MPS) or falls back to CPU:
-
-```bash
-STT_PROVIDER=whisper_local
-STT_MODEL=openai/whisper-base   # tiny, base, small, medium, large-v3
-```
-
-Requires: `uv add transformers torch`
-
-### faster-whisper
-
-SYSTRAN's optimized implementation - 4x faster than standard Whisper with similar accuracy:
-
-```bash
-STT_PROVIDER=faster_whisper
-STT_MODEL=base   # tiny, base, small, medium, large-v3
-```
-
-Requires: `uv add faster-whisper`
-
-Supports compute types: `default`, `float16`, `int8`
-
----
-
-## Voice in the App
-
-Speaking and hearing can both run inside the app, on the CPU, with no key
-and no server: [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) speaks
-(through `kokoro-onnx`) and NVIDIA's [Parakeet v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)
-hears (through `onnx-asr`, in 25 European languages). Their packages are
-opt-in, like local Whisper's:
-
-```bash
-uv add kokoro-onnx                  # speaking (Python 3.13 or older)
-uv add "onnx-asr[cpu,hub]" av       # hearing; av decodes the browser's webm
-
-# .env
-TTS_PROVIDER=kokoro
-TTS_VOICE=af_heart
-STT_PROVIDER=parakeet
-```
-
-Each fetches its model on first use, so the first line said or heard
-waits for the download: Kokoro's two files (about 120MB, int8) from the
-kokoro-onnx release into `~/.cache/kokoro-onnx`, and Parakeet (about
-670MB, int8) from Hugging Face into its cache. Kokoro speaks a WAV at
-24kHz, takes a speed from 0.5 to 2.0, and no delivery instructions. It
-names no tone, so the voice designer finds its voices by gender and
-accent; each is named by its id (`af_alloy`), since half share a name with
-an OpenAI or Gemini voice. Usage is recorded at no cost.
 
 ---
 
@@ -219,7 +163,7 @@ address is set, the provider is locked with
 `SPEECH_BASE_URL missing`, in the Overseer, the voice designer and
 `ai tts-status` alike, which also lists its voices.
 Its 28 English voices are listed from the start under ids of their own
-(`local_server:af_heart`, since the in-app Kokoro has the same names). The
+(`local_server:af_heart`). The
 first listing asks the server for the rest in the background (its other
 languages, the mixes it saved), and they appear as they come in; a server
 not running yet is asked again on the next listing. Speech is asked for as
@@ -231,6 +175,46 @@ inference engine's chat models; the OpenAI names it answers to are left to
 OpenAI.
 
 ---
+
+## A Hearing Server
+
+Hearing gets what speaking has: a server of its own, so the model does not
+live in the app's process. The inference component ships one,
+[speaches](https://github.com/speaches-ai/speaches), with Parakeet on the CPU:
+
+```bash
+aegis add inference[speaches]
+```
+
+That is a `speaches` service in the compose stack (wherever the engine runs),
+which keeps Parakeet loaded once a call loads it, and `HEARING_BASE_URL`
+defaulting to `http://speaches:8000/v1`. `make serve` publishes it on the
+host at `HEARING_HOST_PORT` (8010 first). Pick it with:
+
+```bash
+# .env
+STT_PROVIDER=hearing_server
+```
+
+Any other server with OpenAI's transcription endpoint
+(`POST /v1/audio/transcriptions`), NVIDIA NIM on a GPU say, works the same
+way: point `HEARING_BASE_URL` at it and set `STT_MODEL` to what it names its
+model.
+
+speaches loads Parakeet at full precision, about 3 GB in memory (the
+service's limit is 5G). The first transcription ever downloads the model,
+2.4 GB, about a minute; it is kept in the `speaches-models` volume, so a
+restart's first call takes about a second.
+
+It is asked as OpenAI is, without the app's OpenAI key. Until the address
+is set, the provider is refused with `HEARING_BASE_URL missing`. The call
+setup's Hears lists it only while the server answers: one picked while it
+is down would fail the call's first turn.
+
+Each stage of a live call is then a server at an address of its own:
+hearing here, thinking at the inference engine, speaking at
+`SPEECH_BASE_URL`, so each can run on another machine, or as several
+replicas behind the stack's ingress.
 
 ## API Endpoints
 
@@ -401,12 +385,12 @@ curl http://localhost:8000/voice/catalog/summary | jq
     "provider_count": 3,
     "model_count": 9,
     "voice_count": 71,
-    "providers": ["openai", "gemini", "kokoro"]
+    "providers": ["openai", "gemini", "local_server"]
   },
   "stt": {
-    "provider_count": 5,
-    "model_count": 12,
-    "providers": ["openai_whisper", "groq_whisper", "faster_whisper", "whisper_local", "parakeet"]
+    "provider_count": 3,
+    "model_count": 7,
+    "providers": ["openai_whisper", "groq_whisper", "hearing_server"]
   },
   "current_config": {
     "tts_provider": "openai",
@@ -579,6 +563,8 @@ The Flet Overseer's voice tab has the same two views, over the API.
 | `TTS_SPEED` | `1.0` | Speed multiplier (0.25-4.0) |
 | `SPEECH_BASE_URL` | unset | A speech server's address (`http://host.docker.internal:8880/v1`) |
 | `SPEECH_SERVER` | `kokoro_fastapi` | Which speech server it is |
+| `HEARING_BASE_URL` | `http://speaches:8000/v1` with `inference[speaches]`, else unset | A hearing server's address |
+| `HEARING_HOST_PORT` | set by `make serve` | The host port speaches is published on |
 | `STT_PROVIDER` | `openai_whisper` | STT provider |
 | `STT_MODEL` | `whisper-1` | STT model |
 | `STT_LANGUAGE` | auto-detect | Language for transcription |

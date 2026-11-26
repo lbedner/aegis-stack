@@ -38,12 +38,11 @@ SPEECH_PAGE = discovery.optional(
 
 
 def _shipped_marks() -> dict[str, str]:
-    """The mark of each provider that runs in the app, or a server of its
-    own, which no catalog org holds, as the static route serves it."""
+    """The mark of each provider a server of yours runs, which no catalog
+    org holds, as the static route serves it."""
     from app.services.ai.service import TTSProvider
 
-    kokoro = static_url("marks/kokoro.png")
-    return {TTSProvider.KOKORO.value: kokoro, TTSProvider.LOCAL_SERVER.value: kokoro}
+    return {TTSProvider.LOCAL_SERVER.value: static_url("marks/kokoro.png")}
 
 
 def _speak(voice: str, model: str) -> str:
@@ -155,7 +154,7 @@ async def _editor(db: "AsyncSession", query: Mapping[str, str]) -> dict[str, Any
         "step": step,
         "chosen_listen": _speak(view.voice, view.model),
         # Each provider's logo, served by the AI page's icon route; one
-        # that runs in the app has no catalog org, so its mark ships here.
+        # a server of yours runs has no catalog org, so its mark ships here.
         "marks": _shipped_marks()
         | {p: icon_url(logo.org) for p, logo in view.logos.items()},
         # The accent checklist follows the other filters: a new id when its

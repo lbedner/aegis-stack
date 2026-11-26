@@ -2,11 +2,8 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from app.services.ai.domains.voice.models import STTProvider
 from app.services.ai.domains.voice.stt import STTConfig, get_stt_config
-from tests._voice_packages import packages_installed
 
 
 class TestSTTConfigDefaults:
@@ -27,11 +24,6 @@ class TestSTTConfigDefaults:
         config = STTConfig()
         assert config.language is None
 
-    def test_default_device_is_none(self) -> None:
-        """Test default device is None (auto-detect for local providers)."""
-        config = STTConfig()
-        assert config.device is None
-
 
 class TestSTTConfigFromSettings:
     """Test STTConfig.from_settings() method."""
@@ -42,14 +34,12 @@ class TestSTTConfigFromSettings:
         settings.STT_PROVIDER = "groq_whisper"
         settings.STT_MODEL = "whisper-large-v3"
         settings.STT_LANGUAGE = "en"
-        settings.STT_DEVICE = "cuda"
 
         config = STTConfig.from_settings(settings)
 
         assert config.provider == STTProvider.GROQ_WHISPER
         assert config.model == "whisper-large-v3"
         assert config.language == "en"
-        assert config.device == "cuda"
 
     def test_from_settings_with_missing_values(self) -> None:
         """Test creating config from settings with missing values uses defaults."""
@@ -60,7 +50,6 @@ class TestSTTConfigFromSettings:
         assert config.provider == STTProvider.OPENAI_WHISPER
         assert config.model is None
         assert config.language is None
-        assert config.device is None
 
     def test_from_settings_invalid_provider_falls_back(self) -> None:
         """Test invalid provider string falls back to OpenAI Whisper."""
@@ -68,7 +57,6 @@ class TestSTTConfigFromSettings:
         settings.STT_PROVIDER = "invalid_provider"
         settings.STT_MODEL = None
         settings.STT_LANGUAGE = None
-        settings.STT_DEVICE = None
 
         config = STTConfig.from_settings(settings)
 
@@ -79,8 +67,6 @@ class TestSTTConfigFromSettings:
         providers = [
             ("openai_whisper", STTProvider.OPENAI_WHISPER),
             ("groq_whisper", STTProvider.GROQ_WHISPER),
-            ("whisper_local", STTProvider.WHISPER_LOCAL),
-            ("faster_whisper", STTProvider.FASTER_WHISPER),
         ]
 
         for provider_str, expected_enum in providers:
@@ -88,7 +74,6 @@ class TestSTTConfigFromSettings:
             settings.STT_PROVIDER = provider_str
             settings.STT_MODEL = None
             settings.STT_LANGUAGE = None
-            settings.STT_DEVICE = None
 
             config = STTConfig.from_settings(settings)
             assert config.provider == expected_enum, f"Failed for {provider_str}"
@@ -115,18 +100,6 @@ class TestSTTConfigGetModel:
 
         assert config.get_model() == "whisper-large-v3-turbo"
 
-    def test_get_model_returns_provider_default_local(self) -> None:
-        """Test get_model returns local Whisper default when model not set."""
-        config = STTConfig(provider=STTProvider.WHISPER_LOCAL)
-
-        assert config.get_model() == "openai/whisper-base"
-
-    def test_get_model_returns_provider_default_faster(self) -> None:
-        """Test get_model returns faster-whisper default when model not set."""
-        config = STTConfig(provider=STTProvider.FASTER_WHISPER)
-
-        assert config.get_model() == "base"
-
 
 class TestSTTConfigGetApiKey:
     """Test STTConfig.get_api_key() method."""
@@ -148,22 +121,6 @@ class TestSTTConfigGetApiKey:
         config = STTConfig(provider=STTProvider.GROQ_WHISPER)
 
         assert await config.get_api_key(settings) == "gsk-test-groq-key"
-
-    async def test_get_api_key_local_returns_none(self) -> None:
-        """Test get_api_key returns None for local providers."""
-        settings = MagicMock()
-
-        config = STTConfig(provider=STTProvider.WHISPER_LOCAL)
-
-        assert await config.get_api_key(settings) is None
-
-    async def test_get_api_key_faster_whisper_returns_none(self) -> None:
-        """Test get_api_key returns None for faster-whisper."""
-        settings = MagicMock()
-
-        config = STTConfig(provider=STTProvider.FASTER_WHISPER)
-
-        assert await config.get_api_key(settings) is None
 
     async def test_get_api_key_missing_returns_none(self) -> None:
         """Test get_api_key returns None when key not set."""
@@ -216,30 +173,6 @@ class TestSTTConfigValidation:
 
         assert len(errors) == 1
         assert "GROQ_API_KEY" in errors[0]
-
-    async def test_validate_local_no_key_required(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Test validation passes for local providers without API key."""
-        packages_installed(monkeypatch, True)
-        settings = MagicMock(spec=[])
-
-        config = STTConfig(provider=STTProvider.WHISPER_LOCAL)
-        errors = await config.validation_errors(settings)
-
-        assert len(errors) == 0
-
-    async def test_validate_faster_whisper_no_key_required(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Test validation passes for faster-whisper without API key."""
-        packages_installed(monkeypatch, True)
-        settings = MagicMock(spec=[])
-
-        config = STTConfig(provider=STTProvider.FASTER_WHISPER)
-        errors = await config.validation_errors(settings)
-
-        assert len(errors) == 0
 
     async def test_validate_invalid_language_code_fails(self) -> None:
         """Test validation fails for invalid language code format."""
@@ -302,7 +235,6 @@ class TestGetSTTConfigFunction:
         settings.STT_PROVIDER = "openai_whisper"
         settings.STT_MODEL = None
         settings.STT_LANGUAGE = None
-        settings.STT_DEVICE = None
 
         config = get_stt_config(settings)
 

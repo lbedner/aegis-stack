@@ -11,7 +11,6 @@ from app.services.ai.domains.voice import design, profiles
 from app.services.ai.domains.voice.delivery import compose, styled
 from app.services.ai.models.voice import VoiceProfile
 from tests._voice_catalog import keep_voice_settings, only_profile
-from tests._voice_packages import packages_installed
 
 
 @pytest.fixture
@@ -104,7 +103,6 @@ async def test_a_provider_without_its_key_is_one_line_not_its_voices(
 ) -> None:
     monkeypatch.setattr(settings, "GOOGLE_API_KEY", None)
     monkeypatch.setattr(settings, "OPENAI_API_KEY", "set")
-    packages_installed(monkeypatch, True)  # Kokoro's in
 
     view = await design.design_view(async_db_session, hers.id, None, {"filtered": "1"})
 

@@ -2,7 +2,7 @@
 the memory they report, who runs on each, how to add one), the nav grouped
 by job, and a page per engine with its own tabs: the text engine's Overview,
 Models (load and unload) and Activity, the speech server's Overview and
-Voices. Everything reads the samplers' last readings, so a load shows on the
+Voices, the hearing server's Overview (``test_overseer_inference_hearing``). Everything reads the samplers' last readings, so a load shows on the
 next render rather than the next health poll."""
 
 import asyncio
@@ -21,7 +21,7 @@ from app.components.inference.engine import (
 from app.components.inference.llamacpp import LlamaCppEngine
 from app.components.web_frontend import overseer_inference_speech as speech_page
 from app.components.web_frontend import overseer_inference_text as text_page
-from app.core import speech_server
+from app.core import hearing_server, speech_server
 from app.services.system.models import ComponentStatus, ComponentStatusType
 from tests._fake_ollama import (
     SERVING,
@@ -75,11 +75,16 @@ def _figures(html: str) -> dict[str, str]:
 def test_the_nav_groups_the_engines_by_job(signed_in: TestClient) -> None:
     """A page per engine, under its job; the containers behind them after."""
     html = _get(signed_in)
-    assert [text(h) for h in select(html, "#overseer-subnav h3")] == ["Text", "Speech"]
+    assert [text(h) for h in select(html, "#overseer-subnav h3")] == [
+        "Text",
+        "Speech",
+        "Hearing",
+    ]
     assert [text(a) for a in select(html, "#overseer-subnav nav a")] == [
         "Overview",
         "Ollama",
         speech_server.NAME,
+        hearing_server.NAME,
         "Container",
         "Logs",
     ]
@@ -152,7 +157,6 @@ def test_each_engine_says_who_runs_on_it(
 ) -> None:
     class Used:
         uses = [type("Use", (), {"engine": "ollama", "by": "Assistant"})()]
-        in_app: list[object] = []
 
     async def users(session: object, server: object) -> Used:
         return Used()

@@ -19,6 +19,7 @@ from ..constants import (
     AnswerKeys,
     AuthLevels,
     ComponentNames,
+    InferenceHearing,
     InferencePlacement,
     InferenceSpeech,
     Messages,
@@ -327,6 +328,7 @@ class SelectionUI(Protocol):
     def choose_inference_placement(self) -> str: ...
 
     def choose_inference_speech(self) -> str: ...
+    def choose_inference_hearing(self) -> str: ...
 
     def configure_auth(self, service_name: str) -> str: ...
 
@@ -395,6 +397,10 @@ class TyperSelectionUI:
     def choose_inference_speech(self) -> str:
         wanted = typer.confirm(f"  {t('interactive.inference_speech')}", default=False)
         return InferenceSpeech.KOKORO_FASTAPI if wanted else InferenceSpeech.NONE
+
+    def choose_inference_hearing(self) -> str:
+        wanted = typer.confirm(f"  {t('interactive.inference_hearing')}", default=False)
+        return InferenceHearing.SPEACHES if wanted else InferenceHearing.NONE
 
     def configure_auth(self, service_name: str) -> str:
         return interactive_auth_service_config(service_name)
@@ -527,8 +533,8 @@ def _step_generic_component(
 def _step_inference(
     spec: ComponentSpec, state: ProjectSelection, ui: SelectionUI
 ) -> None:
-    """Inference prompt, then where Ollama runs and its speech server;
-    defaults stay out of the bracket."""
+    """Inference prompt, then where Ollama runs, its speech server and its
+    hearing server; defaults stay out of the bracket."""
     desc = _translated_desc(spec.name, spec.description)
     if not ui.confirm(
         f"  {t('interactive.add_prompt', name=spec.display_title, description=desc)}",
@@ -540,6 +546,7 @@ def _step_inference(
         for value, default in (
             (ui.choose_inference_placement(), InferencePlacement.DEFAULT),
             (ui.choose_inference_speech(), InferenceSpeech.DEFAULT),
+            (ui.choose_inference_hearing(), InferenceHearing.DEFAULT),
         )
         if value != default
     ]

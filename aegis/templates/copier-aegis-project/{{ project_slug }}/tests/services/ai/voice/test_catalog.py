@@ -1,7 +1,5 @@
 """Tests for voice catalog functions."""
 
-import pytest
-
 from app.services.ai.domains.voice import (
     OpenAIVoice,
     STTProvider,
@@ -13,7 +11,6 @@ from app.services.ai.domains.voice import (
     get_tts_providers,
     get_tts_voices,
     get_voice,
-    models,
     speaking_model,
 )
 from app.services.ai.domains.voice.models import (
@@ -22,7 +19,6 @@ from app.services.ai.domains.voice.models import (
     ProviderInfo,
     VoiceInfo,
 )
-from tests._voice_packages import packages_installed
 from tests._voice_settings import voice_settings
 
 
@@ -236,12 +232,6 @@ class TestGetSttProviders:
         provider_ids = [p.id for p in providers]
         assert STTProvider.GROQ_WHISPER.value in provider_ids
 
-    def test_get_stt_providers_contains_faster_whisper(self) -> None:
-        """Test that Faster Whisper is included."""
-        providers = get_stt_providers()
-        provider_ids = [p.id for p in providers]
-        assert STTProvider.FASTER_WHISPER.value in provider_ids
-
     def test_get_stt_providers_returns_provider_info_objects(self) -> None:
         """Test that returned items are ProviderInfo objects."""
         providers = get_stt_providers()
@@ -294,13 +284,6 @@ class TestGetSttModels:
         assert len(models) > 0
         for model in models:
             assert model.provider_id == STTProvider.GROQ_WHISPER.value
-
-    def test_get_stt_models_filtered_by_faster_whisper(self) -> None:
-        """Test getting STT models filtered by Faster Whisper."""
-        models = get_stt_models(provider_id=STTProvider.FASTER_WHISPER.value)
-        assert len(models) > 0
-        for model in models:
-            assert model.provider_id == STTProvider.FASTER_WHISPER.value
 
     def test_get_stt_models_invalid_provider_returns_empty(self) -> None:
         """Test that invalid provider returns empty list."""
@@ -437,8 +420,7 @@ class TestEveryVoiceIsDescribed:
     def test_every_voice_has_a_gender_and_a_tone(self) -> None:
         for voice in get_tts_voices():
             assert voice.gender in ("female", "male", "neutral"), voice.id
-            kokoro = (TTSProvider.KOKORO, TTSProvider.LOCAL_SERVER)
-            assert voice.tone or voice.provider_id in kokoro, voice.id
+            assert voice.tone or voice.provider_id == TTSProvider.LOCAL_SERVER, voice.id
 
 
 class TestWhatEachModelSteers:
@@ -512,28 +494,3 @@ class TestAccentsByLanguage:
         assert get_voice("marin").accent == "General American"
         assert get_voice("Kore").accent == "General American"
         assert get_voice("fable").accent == "British"
-
-
-class TestLocalPackages:
-    """A local provider runs only with its packages installed, which no
-    stack does for it: each names the ones it lacks."""
-
-    def test_a_local_provider_names_the_packages_it_lacks(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        packages_installed(monkeypatch, False)
-
-        assert models.uninstalled(STTProvider.FASTER_WHISPER) == ["faster-whisper"]
-        assert models.uninstalled(STTProvider.WHISPER_LOCAL) == [
-            "transformers",
-            "torch",
-        ]
-
-    def test_installed_or_hosted_it_lacks_nothing(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        packages_installed(monkeypatch, False)
-        assert models.uninstalled(STTProvider.OPENAI_WHISPER) == []
-
-        packages_installed(monkeypatch, True)
-        assert models.uninstalled(STTProvider.FASTER_WHISPER) == []

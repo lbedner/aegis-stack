@@ -52,7 +52,9 @@
       {{ checklist("ai-voice-tone", "family", "Tone", f.options.family) }}
       {{ checklist(accent_id, "accent_of", "Accent", f.options.accent) }}
     </div>
-    {% for l in v.locked %}<p data-voice-locked class="text-xs text-aegis-muted">{{ l.voices }} {{ l.provider_name }} voices are locked: <span class="text-warning">{{ l.needs }}</span>.</p>{% endfor %}
+    {# Engines asked for (a Pick on one, or the Provider filter) show only their own locks. #}
+    {% set asked = request.query_params.getlist("provider") %}
+    {% for l in v.locked if not asked or l.provider in asked %}<p data-voice-locked class="text-xs text-aegis-muted">{{ l.voices }} {{ l.provider_name }} voices are locked: <span class="text-warning">{{ l.needs }}</span>.</p>{% endfor %}
     <div class="divide-y divide-aegis-border/40 border-y border-aegis-border/40">
       {% for c in f.cards %}
       <label data-voice-card="{{ c.id }}" class="flex items-center gap-3 px-2 py-1.5 cursor-pointer hover:bg-aegis-border/20">

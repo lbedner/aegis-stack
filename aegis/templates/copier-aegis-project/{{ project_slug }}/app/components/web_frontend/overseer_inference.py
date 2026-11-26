@@ -2,8 +2,9 @@
 (``app.components.inference.overview``: a row each, the memory they report
 in one bar, who runs on each, how to add one the app lacks), the nav
 grouped by job, and a page per engine with its own tabs: the text engine's
-(``overseer_inference_text``) and the speech server's
-(``overseer_inference_speech``). Container and Logs follow, as on every page
+(``overseer_inference_text``), the speech server's
+(``overseer_inference_speech``) and the hearing server's
+(``overseer_inference_hearing``). Container and Logs follow, as on every page
 with containers behind it.
 
 A new engine is an ``overview.Engine`` with its row, and a page here.
@@ -16,6 +17,7 @@ from app.components.inference import overview
 from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus
 
+from . import overseer_inference_hearing as hearing
 from . import overseer_inference_speech as speech
 from . import overseer_inference_text as text
 from .overseer_nav import SectionRequest, page_url, tab_links
@@ -38,6 +40,7 @@ class EnginePage(NamedTuple):
 ENGINES = (
     EnginePage(overview.text_engine(), "text", text.TABS, text.context),
     EnginePage(overview.SPEECH_ENGINE, "speech", speech.TABS, speech.context),
+    EnginePage(overview.HEARING_ENGINE, "hearing", hearing.TABS, hearing.context),
 )
 _BY_ID = {e.engine.id: e for e in ENGINES}
 

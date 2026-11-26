@@ -2,14 +2,12 @@
 process reaches it, and what it answers. The server is a stub; the real
 client's requests are answered in the test."""
 
-from typing import Any
-
 import httpx
 import pytest
 
 from app.core import speech_server
-from app.core.config import Settings
 from tests._fake_dns import answering
+from tests._speech_server import Shell, serving
 
 URL = "http://localhost:8880/v1"
 MODELS = {"object": "list", "data": [{"id": "tts-1"}, {"id": "kokoro"}]}
@@ -29,38 +27,13 @@ KOKORO_FASTAPI = {
 }
 
 
-def _serving(
-    monkeypatch: pytest.MonkeyPatch, answers: dict[str, Any]
-) -> list[httpx.Request]:
-    """A server answering each path from ``answers`` (a body, or a status
-    code alone), 404 past them. Returns the requests that reached it."""
-    sent: list[httpx.Request] = []
-    real = httpx.AsyncClient
-
-    def answer(request: httpx.Request) -> httpx.Response:
-        sent.append(request)
-        found = answers.get(request.url.path, 404)
-        if isinstance(found, int):
-            return httpx.Response(found)
-        if isinstance(found, bytes):
-            return httpx.Response(200, content=found)
-        return httpx.Response(200, json=found)
-
-    monkeypatch.setattr(
-        httpx,
-        "AsyncClient",
-        lambda **kw: real(transport=httpx.MockTransport(answer), **kw),
-    )
-    return sent
-
-
 LISTING = {"/v1/models": MODELS, "/v1/audio/voices": VOICES}
 
 
 async def test_a_reading_has_its_models_and_voices(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _serving(monkeypatch, LISTING)
+    serving(monkeypatch, LISTING)
 
     reading = await speech_server.read(URL)
 
@@ -77,7 +50,7 @@ async def test_a_reading_has_its_models_and_voices(
 async def test_kokoro_fastapi_reports_its_model_and_process(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _serving(monkeypatch, LISTING | KOKORO_FASTAPI)
+    serving(monkeypatch, LISTING | KOKORO_FASTAPI)
 
     reading = await speech_server.read(URL)
 
@@ -91,7 +64,7 @@ async def test_a_flag_left_off_names_itself(monkeypatch: pytest.MonkeyPatch) -> 
     """Kokoro-FastAPI refuses (403) what its flags keep closed: the reading
     names the flag that opens it."""
     closed = {"/dev/model": 403, "/debug/threads": 403}
-    _serving(monkeypatch, LISTING | KOKORO_FASTAPI | closed)
+    serving(monkeypatch, LISTING | KOKORO_FASTAPI | closed)
 
     reading = await speech_server.read(URL)
 
@@ -105,7 +78,7 @@ async def test_a_line_is_said_and_its_time_charted(
 ) -> None:
     from app.core import series
 
-    sent = _serving(monkeypatch, {"/v1/audio/speech": b"ID3 audio"})
+    sent = serving(monkeypatch, {"/v1/audio/speech": b"ID3 audio"})
     charted: list[dict[str, float]] = []
 
     async def record(values: dict[str, float]) -> None:
@@ -125,7 +98,7 @@ async def test_a_line_is_said_and_its_time_charted(
 async def test_the_model_is_moved_at_the_server_root(
     monkeypatch: pytest.MonkeyPatch, action: str
 ) -> None:
-    sent = _serving(monkeypatch, {f"/dev/{action}": {"status": action}})
+    sent = serving(monkeypatch, {f"/dev/{action}": {"status": action}})
 
     await speech_server.move(URL, action)
 
@@ -137,7 +110,7 @@ async def test_a_refusal_names_a_flag_only_where_one_is_why(
 ) -> None:
     """Only its dev routes are behind ALLOW_DEV_UNLOAD: a 403 to a line is
     the server's own refusal, and names no flag."""
-    _serving(monkeypatch, {"/dev/unload": 403, "/v1/audio/speech": 403})
+    serving(monkeypatch, {"/dev/unload": 403, "/v1/audio/speech": 403})
 
     with pytest.raises(speech_server.SpeechServerError) as moved:
         await speech_server.move(URL, "unload")
@@ -191,35 +164,36 @@ async def test_a_server_that_cannot_be_read_is_unavailable(
     assert reading.error
 
 
-class _Shell:
-    """Settings as a shell on the host has them, with only the speech
-    settings given: this ships to every stack, and only inference and
-    ai[voice] carry them."""
-
-    is_docker = False
-    localhost_url = staticmethod(Settings.localhost_url)
-
-    def __init__(self, **given: Any) -> None:
-        self.__dict__.update(given)
-
-
 def test_a_shell_on_the_host_reaches_a_docker_name_on_localhost() -> None:
     for name in ("host.docker.internal", "kokoro-fastapi"):
         assert (
-            speech_server.reach(_Shell(SPEECH_BASE_URL=f"http://{name}:8880/v1")) == URL
+            speech_server.reach(Shell(SPEECH_BASE_URL=f"http://{name}:8880/v1")) == URL
         )
-    assert speech_server.reach(_Shell()) is None
+    assert speech_server.reach(Shell()) is None
 
 
 def test_a_shell_takes_the_port_make_serve_published_it_on() -> None:
-    published = _Shell(
+    published = Shell(
         SPEECH_BASE_URL="http://kokoro-fastapi:8880/v1", SPEECH_HOST_PORT=8890
     )
 
     assert speech_server.reach(published) == "http://localhost:8890/v1"
 
 
+def test_each_server_is_reached_by_its_own_setting() -> None:
+    """A hearing server (HEARING_BASE_URL) as the speaking one is, on the
+    port published for it, never on the speaking server's."""
+    shell = Shell(
+        SPEECH_BASE_URL="http://host.docker.internal:8880/v1",
+        HEARING_BASE_URL="http://speaches:8000/v1",
+        HEARING_HOST_PORT=18010,
+    )
+
+    assert speech_server.reach(shell, "HEARING_BASE_URL") == "http://localhost:18010/v1"
+    assert speech_server.reach(Shell(SPEECH_BASE_URL=URL), "HEARING_BASE_URL") is None
+
+
 def test_the_app_in_docker_reaches_it_by_its_own_name() -> None:
     named = "http://kokoro-fastapi:8880/v1"
 
-    assert speech_server.reach(_Shell(is_docker=True, SPEECH_BASE_URL=named)) == named
+    assert speech_server.reach(Shell(is_docker=True, SPEECH_BASE_URL=named)) == named

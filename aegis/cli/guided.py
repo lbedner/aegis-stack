@@ -52,6 +52,7 @@ from ..blueprints import Blueprint
 from ..blueprints.spec import ACCEPT_PREFIX, QKeys, pick_index, pick_multi
 from ..constants import (
     AIProviders,
+    InferenceHearing,
     InferencePlacement,
     InferenceSpeech,
     PostgresProviders,
@@ -516,6 +517,31 @@ class GuidedSelectionUI(BlueprintScreens):
                 choices,
                 crumb="amend",
                 qkey=QKeys.INFERENCE_SPEECH,
+            )
+        ].value
+
+    def choose_inference_hearing(self) -> str:
+        choices = [
+            _Choice(
+                InferenceHearing.NONE,
+                "None",
+                _g("choice.inference_hearing.none", "No hearing server. The default."),
+            ),
+            _Choice(
+                InferenceHearing.SPEACHES,
+                "speaches",
+                _g(
+                    "choice.inference_hearing.speaches",
+                    "Speech to text for ai[voice] (Parakeet), in its own container.",
+                ),
+            ),
+        ]
+        return choices[
+            self._select(
+                _g("prompt.inference_hearing", "Run a hearing server beside it?"),
+                choices,
+                crumb="amend",
+                qkey=QKeys.INFERENCE_HEARING,
             )
         ].value
 

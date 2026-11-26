@@ -22,8 +22,7 @@ VOICE = "app.services.ai.domains.voice.engine_use"
 
 class EngineUse(BaseModel):
     """One thing that runs on an engine: ``engine`` is the engine's id (its
-    ``inference[...]`` name, the speech server's slug, or
-    ``speech_server.IN_APP``)."""
+    ``inference[...]`` name, or the speech or hearing server's slug)."""
 
     model_config = FIGURES
 
@@ -31,22 +30,12 @@ class EngineUse(BaseModel):
     by: str
 
 
-class InAppEngine(BaseModel):
-    """A model the app's own process runs, and whether it is in memory."""
-
-    model_config = FIGURES
-
-    name: str
-    loaded: bool
-
-
 class EngineUsers(BaseModel):
-    """Everything that runs on an engine, and the in-app engines in use."""
+    """Everything that runs on an engine."""
 
     model_config = FIGURES
 
     uses: list[EngineUse] = Field(default_factory=list)
-    in_app: list[InAppEngine] = Field(default_factory=list)
 
 
 def engine_of(agent: Agent, served: Mapping[str, Collection[str]]) -> str | None:
@@ -74,5 +63,4 @@ async def engine_users(
     voice = optional(VOICE)
     if voice is None:
         return EngineUsers(uses=uses)
-    spoken, in_app = await voice.voice_uses(session)
-    return EngineUsers(uses=uses + spoken, in_app=in_app)
+    return EngineUsers(uses=uses + await voice.voice_uses(session))

@@ -8,7 +8,6 @@ doesn't require database storage.
 
 from typing import Any
 
-from . import local
 from .models import (
     DEFAULT_TTS_MODELS,
     INSTRUCTED_TTS_MODELS,
@@ -22,6 +21,7 @@ from .models import (
     TTSProvider,
     VoiceInfo,
 )
+from .stt import server as hearing_server
 from .stt.config import STTConfig
 from .tts import realtime, server
 from .tts.config import TTSConfig
@@ -227,9 +227,9 @@ _TTS_VOICES += [
     )
     for name, (gender, tone) in _GEMINI_VOICES.items()
 ]
-_TTS_PROVIDERS += [local.TTS_PROVIDER, server.PROVIDER]
-_TTS_MODELS += local.TTS_MODELS + server.MODELS
-_TTS_VOICES += local.VOICES + server.VOICES
+_TTS_PROVIDERS += [server.PROVIDER]
+_TTS_MODELS += server.MODELS
+_TTS_VOICES += server.VOICES
 
 # Each voice and speech model by id, for the lookups a page makes per row.
 _VOICES_BY_ID = {v.id: v for v in _TTS_VOICES}
@@ -257,24 +257,6 @@ _STT_PROVIDERS: list[ProviderInfo] = [
         api_key_env_var=STT_KEYS[STTProvider.GROQ_WHISPER],
         is_local=False,
         description="Ultra-fast Whisper inference via Groq",
-    ),
-    ProviderInfo(
-        id=STTProvider.FASTER_WHISPER.value,
-        name="Faster Whisper",
-        type="stt",
-        requires_api_key=False,
-        api_key_env_var=None,
-        is_local=True,
-        description="Optimized local Whisper using CTranslate2",
-    ),
-    ProviderInfo(
-        id=STTProvider.WHISPER_LOCAL.value,
-        name="Whisper (Local)",
-        type="stt",
-        requires_api_key=False,
-        api_key_env_var=None,
-        is_local=True,
-        description="Local Whisper via HuggingFace Transformers",
     ),
 ]
 
@@ -314,51 +296,9 @@ _STT_MODELS: list[ModelInfo] = [
         description="High accuracy Whisper Large v3 on Groq",
         supports_streaming=False,
     ),
-    # Faster Whisper (local)
-    ModelInfo(
-        id="large-v3",
-        name="Large v3",
-        provider_id=STTProvider.FASTER_WHISPER.value,
-        quality="hd",
-        description="Large v3 model for high accuracy",
-        supports_streaming=False,
-    ),
-    ModelInfo(
-        id="medium",
-        name="Medium",
-        provider_id=STTProvider.FASTER_WHISPER.value,
-        quality="standard",
-        description="Medium model for balanced speed/accuracy",
-        supports_streaming=False,
-    ),
-    ModelInfo(
-        id="small",
-        name="Small",
-        provider_id=STTProvider.FASTER_WHISPER.value,
-        quality="standard",
-        description="Small model for faster inference",
-        supports_streaming=False,
-    ),
-    # Whisper Local (HuggingFace)
-    ModelInfo(
-        id="openai/whisper-large-v3",
-        name="Whisper Large v3",
-        provider_id=STTProvider.WHISPER_LOCAL.value,
-        quality="hd",
-        description="HuggingFace Whisper Large v3",
-        supports_streaming=False,
-    ),
-    ModelInfo(
-        id="openai/whisper-medium",
-        name="Whisper Medium",
-        provider_id=STTProvider.WHISPER_LOCAL.value,
-        quality="standard",
-        description="HuggingFace Whisper Medium",
-        supports_streaming=False,
-    ),
-    *local.STT_MODELS,
 ]
-_STT_PROVIDERS.append(local.STT_PROVIDER)
+_STT_PROVIDERS += [hearing_server.PROVIDER]
+_STT_MODELS += hearing_server.MODELS
 _STT_BY_ID = {m.id: m for m in _STT_MODELS}
 
 

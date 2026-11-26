@@ -216,6 +216,29 @@ class TestResolvePorts:
         assert ports["SEAWEEDFS_HOST_PORT"] == 41441
         assert "SEAWEEDFS_HOST_PORT" not in ports_file.read_text()
 
+    def test_the_hearing_server_gets_a_host_port_the_app_reads(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``make serve`` runs the hearing server (``inference[speaches]``);
+        a shell on the host reaches it on the port compose published."""
+        monkeypatch.setenv("WEBSERVER_PORT_BASE", "41450")
+        monkeypatch.setenv("HEARING_PORT_BASE", "41451")
+        ports_file = tmp_path / ".env.ports"
+
+        ports = resolve_ports(
+            ingress=False,
+            postgres=False,
+            redis=False,
+            ollama=False,
+            browser=False,
+            storage=False,
+            hearing=True,
+            ports_file=ports_file,
+        )
+
+        assert ports["HEARING_HOST_PORT"] == 41451
+        assert "HEARING_HOST_PORT=41451" in ports_file.read_text()
+
     def test_only_resolves_requested_resources(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

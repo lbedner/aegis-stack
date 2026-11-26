@@ -17,7 +17,8 @@ from ..models import (
     DEFAULT_STT_PROVIDER,
     STT_KEYS,
     STTProvider,
-    not_installed,
+    server_url,
+    unserved,
 )
 
 
@@ -32,7 +33,8 @@ class STTConfig(BaseModel):
     provider: STTProvider = DEFAULT_STT_PROVIDER
     model: str | None = None  # None = use provider default
     language: str | None = None  # None = auto-detect
-    device: str | None = None  # For local providers: cpu, cuda, mps
+    # A hearing server's address (``hearing_server``).
+    server_url: str | None = None
 
     @classmethod
     def from_settings(cls, settings: Any) -> Self:
@@ -48,7 +50,7 @@ class STTConfig(BaseModel):
             provider=provider,
             model=getattr(settings, "STT_MODEL", None),
             language=getattr(settings, "STT_LANGUAGE", None),
-            device=getattr(settings, "STT_DEVICE", None),
+            server_url=server_url(provider, settings),
         )
 
     def get_model(self) -> str:
@@ -83,7 +85,7 @@ class STTConfig(BaseModel):
                     f"Missing API key for {self.provider.value}. "
                     f"Set {key_name} environment variable."
                 )
-        if refused := not_installed(self.provider):
+        if refused := unserved(self.provider, self.server_url):
             errors.append(refused)
 
         # Validate language code format if provided

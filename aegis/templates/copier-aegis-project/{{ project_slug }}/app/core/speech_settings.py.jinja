@@ -79,3 +79,13 @@ class SpeechServerSettings(InferenceEngineSettings):
     SPEECH_HOST_PORT: int | None = None
     # A Kokoro-FastAPI checkout on the host, for ``make kokoro``.
     SPEECH_SERVER_DIR: str = "~/Kokoro-FastAPI"
+    # A hearing server you run: any OpenAI-compatible transcription server
+    # (``/v1/audio/transcriptions``: speaches, ``inference[speaches]``), heard
+    # as the call setup's Hears lists it while it answers. None for none.
+{%- if include_inference and inference_hearing == "speaches" %}
+    HEARING_BASE_URL: str | None = "http://speaches:8000/v1"
+{%- else %}
+    HEARING_BASE_URL: str | None = None
+{%- endif %}
+    # The host port ``make serve`` published it on (``.env.ports``).
+    HEARING_HOST_PORT: int | None = None

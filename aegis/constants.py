@@ -214,6 +214,22 @@ class InferenceSpeech:
 
     ALL = [NONE, KOKORO_FASTAPI]
     DEFAULT = NONE
+    # Each server's compose service.
+    SERVICES = {KOKORO_FASTAPI: "kokoro-fastapi"}
+
+
+class InferenceHearing:
+    """The hearing server the inference component runs: an OpenAI-compatible
+    transcription server ai[voice] hears through (HEARING_BASE_URL). It runs
+    in Docker wherever the engine does."""
+
+    NONE = "none"
+    SPEACHES = "speaches"
+
+    ALL = [NONE, SPEACHES]
+    DEFAULT = NONE
+    # Each server's compose service.
+    SERVICES = {SPEACHES: "speaches"}
 
 
 class SecretsBackends:
@@ -338,6 +354,7 @@ class AnswerKeys:
     INFERENCE_ENGINE = "inference_engine"
     INFERENCE_PLACEMENT = "inference_placement"
     INFERENCE_SPEECH = "inference_speech"
+    INFERENCE_HEARING = "inference_hearing"
     SECRETS = "include_secrets"
     SECRETS_BACKEND = "secrets_backend"
     DEPLOY = "include_deploy"

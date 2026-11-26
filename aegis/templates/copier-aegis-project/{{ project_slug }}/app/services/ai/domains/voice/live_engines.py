@@ -144,12 +144,34 @@ def split_model(model: str) -> tuple[str, str]:
 def reachable(vendor: str, mode: str, model_id: str, tools: bool | None = None) -> bool:
     """Whether a call can run on this catalog model: a realtime model of a
     vendor the call path serves, by the vendor's own id (the catalog's
-    routed copies, "gemini/...", are not reachable), or a local chat model
-    that can call the agent's tools (unknown let through: an engine that
-    does not say), which a call runs as a cascade (``cascade``)."""
+    routed copies, "gemini/...", are not reachable), or any chat model,
+    local or cloud, that can call the agent's tools, which a call runs as
+    a chain (``chained``). Unknown is let through on a local engine, which
+    may not say; the cloud catalog says."""
     if mode == "realtime":
         return vendor in CALL_VENDORS and "/" not in model_id
-    return mode == "chat" and vendor in LOCAL_PROVIDERS and tools is not False
+    said = tools if tools is not None else vendor in LOCAL_PROVIDERS
+    return mode == "chat" and said
+
+
+def reply_cap(engine: LiveEngine) -> int | None:
+    """One reply's token cap. A realtime model's is its engine's: a
+    backstop sized for its speech's audio tokens. A chain's reply is text
+    and its model's thinking, so its cap is what the catalog says the
+    model can write (its serving org's deployment); none where the
+    catalog does not say. A realtime seed's 1200 left GPT-6 Luna no room
+    to think, and it said nothing (2026-11-22)."""
+    if not chained(engine):
+        return engine.max_output_tokens
+    deployment = engine.llm.serving_deployment
+    return deployment.output_max_tokens if deployment else None
+
+
+def chained(engine: LiveEngine) -> bool:
+    """Whether a call on ``engine`` runs as the app's own chain (hear,
+    think, speak: ``cascade``): its model is a chat model, with no
+    realtime API of its own."""
+    return engine.llm.mode != "realtime"
 
 
 def voiced_by(model: str) -> TTSProvider | None:
@@ -218,7 +240,10 @@ async def choose(session: AsyncSession, model_id: str) -> LiveEngine | None:
             key=model_id,
             llm_id=llm_id,
             instructions=LIVE_CALL_INSTRUCTIONS,
-            max_output_tokens=None if is_gpt_live(model_id) else REPLY_CAP,
+            # A chain's reply cap is its model's (``reply_cap``).
+            max_output_tokens=REPLY_CAP
+            if mode == "realtime" and not is_gpt_live(model_id)
+            else None,
             sort_order=len(ENGINE_SEEDS),
         )
     engine.is_enabled = True

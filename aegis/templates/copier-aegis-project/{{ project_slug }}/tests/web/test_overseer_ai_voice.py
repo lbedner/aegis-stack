@@ -27,7 +27,6 @@ from app.core.config import settings  # noqa: E402
 from app.services.ai.domains.voice import profiles  # noqa: E402
 from app.services.ai.models.voice import VoiceProfile  # noqa: E402
 from tests._voice_catalog import keep_voice_settings, only_profile  # noqa: E402
-from tests._voice_packages import packages_installed  # noqa: E402
 from tests.web.dom import one, row_text, select, text, triggers  # noqa: E402
 from tests.web.overseer import AI, on_session, sign_in, status_with  # noqa: E402
 
@@ -250,7 +249,6 @@ async def test_the_voice_step_opens_on_the_profiles_voice(
     is one line saying what it needs."""
     monkeypatch.setattr(settings, "GOOGLE_API_KEY", None)
     monkeypatch.setattr(settings, "OPENAI_API_KEY", "set")
-    packages_installed(monkeypatch, True)  # Kokoro's in
     html = _editor(client, hers)
 
     assert (
@@ -260,6 +258,20 @@ async def test_the_voice_step_opens_on_the_profiles_voice(
     assert one(html, "[aria-current=step]").get("value") == "voice"
     assert "GOOGLE_API_KEY" in row_text(html, "[data-voice-locked]", "Gemini")
     assert not html.count('data-voice-card="Kore"')
+
+
+async def test_opened_on_one_engine_it_lists_that_engines_voices_alone(
+    client: TestClient, hers: VoiceProfile, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The call dialog's Pick on an engine: its voices, and no other
+    engine's lock (Gemini's missing key says nothing about OpenAI)."""
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY", None)
+    monkeypatch.setattr(settings, "OPENAI_API_KEY", "set")
+    html = _editor(client, hers, filtered="1", provider="openai")
+
+    cards = select(html, "[data-voice-card]")
+    assert cards and all("OpenAI" in text(c) for c in cards)
+    assert not select(html, "[data-voice-locked]")
 
 
 async def test_the_delivery_step_says_who_was_picked(
@@ -401,7 +413,6 @@ async def test_a_line_is_said_in_a_voice_picked_by_provider(
     can be heard here, under their providers, starting on the one in use."""
     monkeypatch.setattr(settings, "GOOGLE_API_KEY", None)
     monkeypatch.setattr(settings, "OPENAI_API_KEY", "set")
-    packages_installed(monkeypatch, False)
     html = _voice(client)
     picker = one(html, "#ai-voice-try [data-dropdown]")
 
@@ -427,20 +438,6 @@ async def test_a_provider_without_its_key_says_so_instead_of_playing(
 
     assert not kore.cssselect("[data-speak], [data-voice-use]")
     assert "GOOGLE_API_KEY missing" in text(kore)
-
-
-async def test_a_local_provider_not_installed_says_how_to_install_it(
-    client: TestClient, hers: VoiceProfile, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """No stack installs faster-whisper: its models say the line that
-    installs it, and offer no Use that would leave the stack unhearing."""
-    packages_installed(monkeypatch, False)
-    faster = [r for r in _rows(_voice(client), "stt") if "Faster Whisper" in text(r)]
-
-    assert faster
-    for row in faster:
-        assert not row.cssselect("[data-voice-use]")
-        assert "uv add faster-whisper" in text(row)
 
 
 async def test_the_voice_step_offers_the_models_that_speak_it(
@@ -717,14 +714,15 @@ async def test_each_voice_shows_its_providers_mark(
     assert chosen.get("src").endswith("/icons/openai")
 
 
-async def test_a_voice_that_runs_in_the_app_wears_the_mark_it_ships_with(
+async def test_a_voice_a_server_of_yours_speaks_wears_the_mark_it_ships_with(
     client: TestClient, hers: VoiceProfile, heard: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Kokoro has no catalog org to hold a mark: its own ships with the app."""
-    packages_installed(monkeypatch, True)
-    html = _editor(client, hers, filtered="1", provider="kokoro")
+    """Kokoro-FastAPI has no catalog org to hold a mark: its own ships with
+    the app."""
+    monkeypatch.setattr(settings, "SPEECH_BASE_URL", "http://server:8880/v1")
+    html = _editor(client, hers, filtered="1", provider="local_server")
 
-    heart = one(html, '[data-voice-card="af_heart"] img')
+    heart = one(html, '[data-voice-card="local_server:af_heart"] img')
     assert heart.get("src").startswith("/static/marks/kokoro.png")
 
 

@@ -7851,7 +7851,7 @@ models are open only to past users.</p>
 <tr>
 <td><strong>Hearing server</strong> (speaches, or a server you run)</td>
 <td>Local</td>
-<td>istupakov/parakeet-tdt-0.6b-v3-onnx</td>
+<td>The models it holds (istupakov/parakeet-tdt-0.6b-v3-onnx first)</td>
 <td>Fast on CPU</td>
 <td>High, 25 languages</td>
 <td>None (<code>HEARING_BASE_URL</code>)</td>
@@ -7921,7 +7921,8 @@ host at <code>HEARING_HOST_PORT</code> (8010 first). Pick it with:</p>
 <p>Any other server with OpenAI's transcription endpoint
 (<code>POST /v1/audio/transcriptions</code>), NVIDIA NIM on a GPU say, works the same
 way: point <code>HEARING_BASE_URL</code> at it and set <code>STT_MODEL</code> to what it names its
-model.</p>
+model. The voice settings and the call's Hears list every hearing model the
+server holds, asked for once it is set, and again if it was not answering.</p>
 <p>speaches loads Parakeet at full precision, about 3 GB in memory (the
 service's limit is 5G). The first transcription ever downloads the model,
 2.4 GB, about a minute; it is kept in the <code>speaches-models</code> volume, so a

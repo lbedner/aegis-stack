@@ -7,7 +7,7 @@
    the pronunciation list.
    Previews play through voice.js's Listen handler ([data-speak]). #}
 {% from "components/macros/icons.html" import icon %}
-{% from "components/macros/chat.html" import call_part, model_row, voice_chip, speak_button %}
+{% from "components/macros/chat.html" import call_part, model_row, model_search, voice_chip, speak_button %}
 {% from "components/macros/form.html" import action, field, text_input, number_input, select, primary_button %}
 {% from "components/macros/feedback.html" import error_banner, empty_state %}
 {% from "components/macros/layout.html" import chip, dialog_title %}
@@ -22,7 +22,7 @@
     <span class="text-aegis-text">{{ engine.name }}{% if engine.local %} <span class="text-aegis-muted">local</span>{% endif %}</span>
     {% if engine.voice %}<span class="flex items-center gap-2 text-aegis-text">{{ engine.voice }}{{ speak_button(preview ~ "?engine=" ~ engine.provider) }}</span>
     {% else %}<span class="flex items-center gap-2"><span class="text-aegis-amber">Not set</span>
-      <a data-engine-pick href="/overseer/services/ai/voice?profile={{ voice.id }}" class="text-xs text-aegis-teal hover:underline">Pick</a></span>{% endif %}
+      <a data-engine-pick href="/overseer/services/ai/voice?profile={{ voice.id }}&filtered=1&provider={{ engine.provider }}" class="text-xs text-aegis-teal hover:underline">Pick</a></span>{% endif %}
   </li>
   {% endfor %}
 </ul>
@@ -34,12 +34,14 @@
 {% elif view == "list" %}
 {% if chip_oob %}{{ voice_chip(active, path, calling, oob=True) }}{% endif %}
 {# Two panels: the call (its setup, and who it speaks as) and the voice in
-   use (her style, her voice on each engine, the shared pronunciation).
-   Every voice, and making one, is behind Manage. #}
-<div id="voice-profiles" class="space-y-4">
+   use (her style, her voice on each engine, the shared pronunciation),
+   side by side in the widest dialog (``data-wider``), the call's three
+   stage cards taking three fifths. Every voice, and making one, is behind
+   Manage. #}
+<div id="voice-profiles" class="space-y-4" data-wider>
   {{ dialog_title("Calls and voice" if setup is not none else "Voice", "A pick takes effect on the next call, or the next thing said.") }}
-  <div class="grid gap-4 sm:grid-cols-2 items-start">
-  <section class="space-y-4 rounded-lg border border-aegis-border p-4">
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 items-start">
+  <section class="space-y-4 rounded-lg border border-aegis-border p-4 lg:col-span-3">
     {% if setup is not none %}
     <div class="space-y-2" data-calls data-call-mode="{{ setup.mode }}">
       <h3 class="micro-label text-aegis-muted">Setup</h3>
@@ -54,6 +56,7 @@
         <span class="{{ 'text-aegis-teal' if setup.summary.local else 'text-aegis-amber' }}">{{ setup.summary.where }}</span> · {{ setup.summary.cost }} · {{ setup.summary.wait }}</p>
       {% endif %}
       {% if setup.listing %}
+      {{ model_search(path, "call-list", setup.query, setup.search) }}
       <div id="call-list" data-call-list>
       {% if setup.rows %}
       <ul class="max-h-56 overflow-y-auto">
@@ -99,7 +102,7 @@
     </p>
   </section>
   {% if active %}
-  <section class="space-y-3 rounded-lg border border-aegis-border p-4" data-voice-card>
+  <section class="space-y-3 rounded-lg border border-aegis-border p-4 lg:col-span-2" data-voice-card>
     <div>
       <p class="flex items-center justify-between gap-2"><span class="text-base text-aegis-text" data-name>{{ active.name }}</span><span class="text-xs text-aegis-teal">In use</span></p>
       <p data-style class="text-xs text-aegis-muted line-clamp-2" title="{{ active.tts_instructions or '' }}">{% if active.tts_instructions %}Style: {{ active.tts_instructions }} · {% endif %}Speed {{ active.tts_speed }}×</p>

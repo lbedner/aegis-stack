@@ -88,12 +88,11 @@ ollama pull llama3.1
 
 - **`app/components/inference/`**: `engine.py`, the one interface; `ollama.py` and `llamacpp.py`, async clients for each server's models, running models, and (Ollama) load and unload; `activity.py`, an in-memory record of models moving in and out of memory.
 - **Settings:** `INFERENCE_ENGINE`; `OLLAMA_BASE_URL` or `LLAMACPP_BASE_URL` (defaulted from the placement), `OLLAMA_BASE_URL_LOCAL` for CLI commands run on the host, `OLLAMA_HOST_PORT` / `LLAMACPP_HOST_PORT` for the port `make serve` publishes, `OLLAMA_API_KEY` for a server behind auth.
-- **A health check** on the system status, named `inference`, with each engine under it by name (`ollama` or `llamacpp`, and `kokoro_fastapi` where a speech server is set): reachable, installed and running models, VRAM in use.
+- **A health check** on the system status, named `inference`, with each engine under it by name (`ollama` or `llamacpp`, `kokoro_fastapi` where a speech server is set, and `speaches` where a hearing server is): reachable, installed and running models, VRAM in use.
 - **Overseer > Inference** (with the htmx frontend):
     - **Overview:** a row per engine, with its job, whether it answers, what it holds, its memory and who runs on it (the agents whose model it serves, the voice that speaks or listens through it). One bar shows the memory the engines report together.
     - **Engines it lacks** are listed with the command or `.env` address that adds them, never an install button.
-    - **A page per engine**, grouped by job in the menu: the text engine's Overview, Models (load and unload) and Activity, and the speech server's Overview and Voices. Container and Logs follow where the engines run in docker.
-    - **An "In the app" row** appears where `ai[voice]` loads a model into the webserver (in-app Kokoro, Parakeet, faster-whisper), with the webserver's own memory.
+    - **A page per engine**, grouped by job in the menu: the text engine's Overview, Models (load and unload) and Activity, the speech server's Overview and Voices, and the hearing server's Overview. Container and Logs follow where the engines run in docker.
 - **The same on the CLI and API:** `my-app inference status` and `GET /api/v1/inference` list every engine as the overview does.
 - **A dashboard card and modal**: installed models with load and unload, and an activity tab of recent loads and evictions.
 - **The LLM catalog** lists the installed models when the AI service is present (`my-app llm sync --source local`).
@@ -105,7 +104,6 @@ Each engine reports memory its own way, and a row that reports none says why rat
 | Ollama | Each loaded model's |
 | llama.cpp | None (`/metrics` counts tokens and requests) |
 | Kokoro-FastAPI | Its whole process, with `ENABLE_DEBUG_ENDPOINTS` on |
-| In the app | The webserver's whole process, read on the webserver only |
 
 The bar adds up what the engines report. It is not the machine's total: the webserver runs in Docker and sees the VM's memory, not the host's.
 
@@ -148,9 +146,26 @@ make kokoro
 | `ALLOW_DEV_UNLOAD` | Its model's state (loaded, device, requests, idle), and Unload and Reload |
 | `ENABLE_DEBUG_ENDPOINTS` | Its process: memory and threads |
 
+## A hearing server
+
+A hearing server transcribes for `ai[voice]`. speaches is the one so far: Parakeet TDT 0.6B v3 on the CPU, 25 languages.
+
+```bash
+aegis add inference[speaches]   # a speaches service in the compose stack
+```
+
+It runs in docker whatever the placement, since it has no host GPU to use. Its models are kept in the `speaches-models` volume (the first call downloads Parakeet, 2.4 GB), it never unloads one, and `HEARING_BASE_URL` defaults to `http://speaches:8000/v1`. With an address set:
+
+- **Overseer > Inference > speaches** shows the server, read once a second while it is open: how many hearing models it holds and how many are in memory, where the app reaches it, each model with Load or Unload, and charts of what is in memory and how long each transcription took.
+- **The CLI and API** do the same: `my-app inference hearing`, `my-app inference hearing-model load|unload <model>`; `GET /api/v1/inference/hearing`, `POST /api/v1/inference/hearing/{load,unload}/<model>`.
+- **The health check** carries it as `speaches` under `inference`: unhealthy where it does not answer, a warning where it holds no models, and information while none is in memory (the next call loads one).
+- **`ai[voice]`** offers it as the Hearing server provider ([Voice](../services/ai/voice.md#a-hearing-server)), and the overview names the voice that listens through it.
+
+Any OpenAI-compatible transcription server works at `HEARING_BASE_URL`; one without speaches' own routes lists its models, and what is in memory goes unsaid.
+
 ## Changing placement
 
-The placement is an answer in `.copier-answers.yml` (`inference_placement`), and the speech server another (`inference_speech`). A speech server is added in place (above); to change the placement, remove and re-add the component:
+The placement is an answer in `.copier-answers.yml` (`inference_placement`), the speech server another (`inference_speech`), and the hearing server a third (`inference_hearing`). Speech and hearing servers are added in place (above); to change the placement, remove and re-add the component:
 
 ```bash
 aegis remove inference

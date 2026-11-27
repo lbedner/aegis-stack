@@ -21,9 +21,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.components.web_frontend import chat_calls
 from app.components.web_frontend.overseer_ai_chat import OVERSEER
 from app.components.web_frontend.routes.partials import chat_voices
+from app.core import speech_server
 from app.core.config import settings
-from app.services.ai.domains.voice import profiles
+from app.services.ai.domains.voice import call_setup, profiles
 from app.services.ai.models.voice import CallSetup, VoiceProfile
+from tests._speech_server import PARAKEET
 from tests._voice_catalog import keep_voice_settings, no_voices
 from tests.web.dom import none, one, oob, select, text, triggers
 from tests.web.overseer import AI, on_session, sign_in, status_with
@@ -33,6 +35,8 @@ VOICES = f"{OVERSEER.path}/voices"
 LIVE = "gemini-3.8-live"
 # A local chat model, which a call runs on as a cascade.
 LOCAL = "qwen3.8:27b"
+# A cloud chat model that calls tools, which a call runs on as a cascade too.
+CLOUD = "claude-sonnet-5"
 
 
 @pytest.fixture
@@ -103,6 +107,12 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
                 "supports_tools": False,
             },
             {"model_id": "gpt-5.5", "title": "GPT-5.5", "vendor": "openai"},
+            {
+                "model_id": CLOUD,
+                "title": "Claude Sonnet 5",
+                "vendor": "anthropic",
+                "supports_tools": True,
+            },
         ]
         every = [{**m, "mode": "realtime"} for m in realtime] + [
             {**m, "mode": "chat"} for m in chat
@@ -284,10 +294,10 @@ class TestCalls:
     def test_a_chain_shows_what_hears_thinks_and_speaks(
         self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
     ) -> None:
-        """A local model runs between the active voice's STT and TTS: each
-        part named, the model's list below, the summary adding them up. A
-        cloud chat model, a model that cannot call tools and one that does
-        not chat are not offered."""
+        """A chat model that calls tools, local or cloud, runs between the
+        active voice's STT and TTS: each part named, the models' list below,
+        the summary adding them up. A model that does not say it calls
+        tools and one that does not chat are not offered."""
         calls.append(LOCAL)
         html = hx.get(
             chat_calls.address(VOICES, chat_calls.CHAIN, chat_calls.THINKS)
@@ -306,13 +316,45 @@ class TestCalls:
         opened = one(html, "[data-call-part][aria-current=true]")
         assert opened.get("data-call-part") == chat_calls.THINKS
         rows = [r.get("data-call-model") for r in select(html, "[data-call-model]")]
-        assert rows == [LOCAL]
-        assert chat_calls.TOOLS["label"] in text(
+        assert rows == [LOCAL, CLOUD]
+        assert chat_calls.LOCAL["label"] in text(
             one(html, f'[data-call-model="{LOCAL}"]')
+        )
+        assert chat_calls.CLOUD["label"] in text(
+            one(html, f'[data-call-model="{CLOUD}"]')
         )
         assert "in the cloud" in text(one(html, "[data-call-summary]"))
         speaking = text(one(html, "[data-speaks-as] [data-speaking]"))
         assert speaking == "On OpenAI: Marin · her style · 1.2×"
+
+    @pytest.mark.parametrize(
+        ("query", "listed"), [("claude", [CLOUD]), ("nothing like it", [])]
+    )
+    def test_a_list_is_searched_in_its_own_box(
+        self,
+        hx: TestClient,
+        voices: dict[str, VoiceProfile],
+        calls: list[str],
+        query: str,
+        listed: list[str],
+    ) -> None:
+        """Thinks lists every vendor's tool callers: the box narrows it,
+        keeping the mode and part it searches, and swaps only the list."""
+        calls.append(LOCAL)
+        where = {"mode": chat_calls.CHAIN, "slot": chat_calls.THINKS}
+        html = hx.get(VOICES, params={**where, "q": query}).text
+
+        box = one(html, "[data-calls] form[hx-select]")
+        kept = {
+            i.get("name"): i.get("value") for i in select(box, "input[type=hidden]")
+        }
+        assert kept == where
+        assert box.get("hx-select") == "#call-list"
+        assert one(box, "input[name=q]").get("value") == query
+        rows = select(html, "#call-list [data-call-model]")
+        assert [r.get("data-call-model") for r in rows] == listed
+        if not listed:
+            assert text(one(html, "#call-list")) == chat_calls.NO_MATCH
 
     def test_switching_to_a_chain_with_nothing_local_picked_asks_for_one(
         self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
@@ -325,15 +367,119 @@ class TestCalls:
         assert not select(html, "[data-call-summary]")
         assert not select(html, "[data-call-model][aria-current=true]")
 
-    def test_speaks_opens_every_voice(
-        self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
+    def test_speaks_lists_the_speaking_models(
+        self,
+        hx: TestClient,
+        voices: dict[str, VoiceProfile],
+        calls: list[str],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Speaks is the voice: its card opens every voice."""
-        calls.append(LOCAL)
-        html = hx.get(VOICES).text
+        """Kokoro was running and nowhere to pick: Speaks listed the saved
+        voices alone (2026-11-21)."""
 
-        speaks = one(html, f'[data-call-part="{chat_calls.SPEAKS}"]')
-        assert speaks.get("hx-get") == f"{VOICES}/manage"
+        async def answering(url: str) -> bool:
+            return True
+
+        monkeypatch.setattr(settings, "SPEECH_BASE_URL", "http://server:5092/v1")
+        monkeypatch.setattr(speech_server, "answers", answering)
+        calls.append(LOCAL)
+        url = chat_calls.address(VOICES, chat_calls.CHAIN, chat_calls.SPEAKS)
+        html = hx.get(url).text
+
+        kokoro = one(html, '[data-speak-model="kokoro"]')
+        assert chat_calls.LOCAL["label"] in text(kokoro)
+        current = one(html, "[data-speak-model][aria-current=true]")
+        assert current.get("data-speak-model") == "gpt-4o-mini-tts-2025-03-20"
+        assert not select(html, "[data-call-model]")
+
+    @pytest.mark.parametrize("answers", [True, False])
+    @pytest.mark.parametrize(
+        ("part", "setting", "mark", "served"),
+        [
+            # Kokoro-FastAPI was picked while it was not running, and the
+            # call ended on its first line (2026-11-21).
+            (chat_calls.SPEAKS, "SPEECH_BASE_URL", "data-speak-model", "kokoro"),
+            (
+                chat_calls.HEARS,
+                "HEARING_BASE_URL",
+                "data-hear-model",
+                PARAKEET,
+            ),
+        ],
+    )
+    def test_a_server_of_yours_is_offered_only_while_it_answers(
+        self,
+        hx: TestClient,
+        voices: dict[str, VoiceProfile],
+        calls: list[str],
+        monkeypatch: pytest.MonkeyPatch,
+        answers: bool,
+        part: str,
+        setting: str,
+        mark: str,
+        served: str,
+    ) -> None:
+        asked: list[str] = []
+
+        async def answering(url: str) -> bool:
+            asked.append(url)
+            return answers
+
+        monkeypatch.setattr(settings, setting, "http://server:5092/v1")
+        monkeypatch.setattr(speech_server, "answers", answering)
+        calls.append(LOCAL)
+        html = hx.get(chat_calls.address(VOICES, chat_calls.CHAIN, part)).text
+
+        rows = [r.get(mark) for r in select(html, f"[{mark}]")]
+        assert (served in rows) is answers
+        assert asked  # asked only for the list on show
+
+    def test_a_speaking_model_says_what_runs_it(
+        self,
+        hx: TestClient,
+        voices: dict[str, VoiceProfile],
+        calls: list[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Kokoro-FastAPI's model is "Kokoro", as the in-app one is: a row
+        named only that read as the in-app one (2026-11-25)."""
+
+        async def answering(url: str) -> bool:
+            return True
+
+        monkeypatch.setattr(settings, "SPEECH_BASE_URL", "http://server:5092/v1")
+        monkeypatch.setattr(speech_server, "answers", answering)
+        calls.append(LOCAL)
+        url = chat_calls.address(VOICES, chat_calls.CHAIN, chat_calls.SPEAKS)
+
+        (row,) = select(hx.get(url).text, '[data-speak-model="kokoro"]')
+        assert "Kokoro-FastAPI" in row.text_content()
+
+    # Each step reads the call setup once (as each request does); the
+    # test takes 2 on purpose, so 3 would be one read too many.
+    @pytest.mark.queryspy(threshold=3)
+    async def test_speaks_picks_the_setups_speaking_model_not_the_voice(
+        self,
+        hx: TestClient,
+        voices: dict[str, VoiceProfile],
+        calls: list[str],
+        async_db_session: AsyncSession,
+    ) -> None:
+        """By its own provider; the voice stays hers. Marin has no Kokoro
+        voice, so Kokoro speaks its own and the part says she has none
+        there."""
+        calls.append(LOCAL)
+        response = hx.post(f"{VOICES}/speaks", data={"model_id": "kokoro"})
+
+        setup = await _setup(async_db_session)
+        assert (setup.tts_model, setup.tts_provider) == ("kokoro", "local_server")
+        await async_db_session.refresh(voices["marin"])
+        assert voices["marin"].voices == {"openai": "marin"}
+        assert (settings.TTS_MODEL, settings.TTS_VOICE) == ("kokoro", None)
+        speaks = one(response.text, f'[data-call-part="{chat_calls.SPEAKS}"]')
+        assert text(one(speaks, "[data-name]")).startswith("Kokoro")
+        assert chat_calls.LOCAL["label"] in text(speaks)
+        assert call_setup.unvoiced(voices["marin"], "local_server") in text(speaks)
 
     def test_hears_lists_the_hearing_models_the_voices_marked(
         self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
@@ -345,7 +491,27 @@ class TestCalls:
         heard = one(listed, "[data-hear-model][aria-current=true]")
         assert heard.get("data-hear-model") == "gpt-transcribe"
 
-    @pytest.mark.queryspy(allow_n_plus_one=True)  # reads back what it saved
+    @pytest.mark.parametrize("key", ["sk-test", None])
+    def test_hears_offers_a_cloud_model_only_with_its_key(
+        self,
+        hx: TestClient,
+        voices: dict[str, VoiceProfile],
+        calls: list[str],
+        monkeypatch: pytest.MonkeyPatch,
+        key: str | None,
+    ) -> None:
+        """What can run is the voice overview's rule (``blocked``): with no
+        key, a call on OpenAI's hearing fails on its first turn."""
+        monkeypatch.setattr(settings, "OPENAI_API_KEY", key)
+        calls.append(LOCAL)
+        url = chat_calls.address(VOICES, chat_calls.CHAIN, chat_calls.HEARS)
+
+        rows = [
+            r.get("data-hear-model")
+            for r in select(hx.get(url).text, "[data-hear-model]")
+        ]
+        assert ("gpt-transcribe" in rows) is bool(key)
+
     async def test_hears_picks_the_voices_hearing_model(
         self,
         hx: TestClient,
@@ -356,13 +522,13 @@ class TestCalls:
         """The call setup hears with it, by its own provider, at once: a
         call and the replies said in chat both."""
         calls.append(LOCAL)
-        response = hx.post(f"{VOICES}/hears", data={"model_id": "large-v3"})
+        response = hx.post(f"{VOICES}/hears", data={"model_id": PARAKEET})
 
         setup = await _setup(async_db_session)
-        assert (setup.stt_model, setup.stt_provider) == ("large-v3", "faster_whisper")
-        assert settings.STT_MODEL == "large-v3"
+        assert (setup.stt_model, setup.stt_provider) == (PARAKEET, "hearing_server")
+        assert settings.STT_MODEL == PARAKEET
         hears = one(response.text, f'[data-call-part="{chat_calls.HEARS}"]')
-        assert text(one(hears, "[data-name]")) == "Large v3"
+        assert text(one(hears, "[data-name]")) == "Parakeet TDT 0.6B v3 (speaches)"
         assert chat_calls.LOCAL["label"] in text(hears)
 
     async def test_a_pick_sets_what_calls_run_on_and_leaves_the_voice(
@@ -428,8 +594,10 @@ class TestCalls:
         assert "Marin has no Gemini voice yet" in text(one(html, "[data-speaks-as]"))
         gemini = one(html, '[data-voice-card] [data-engine="gemini"]')
         assert "Not set" in text(gemini)
+        # It opens her editor on Gemini's voices.
         assert one(gemini, "a[data-engine-pick]").get("href") == (
             f"/overseer/services/ai/voice?profile={voices['marin'].id}"
+            "&filtered=1&provider=gemini"
         )
 
     def test_a_refused_pick_says_why(
@@ -441,6 +609,13 @@ class TestCalls:
 
 
 class TestTheDialog:
+    def test_its_two_panels_ask_for_the_widest_dialog(
+        self, hx: TestClient, voices: dict[str, VoiceProfile]
+    ) -> None:
+        """The call (three stage cards side by side) beside the voice in
+        use: any narrower and the stage cards cut their picks off."""
+        assert one(hx.get(VOICES).text, "#voice-profiles").get("data-wider") is not None
+
     # Two requests (the dialog, then what it opens), each reading once:
     # the test takes 2 on purpose, so 3 would be one read too many.
     @pytest.mark.queryspy(threshold=3)
@@ -672,13 +847,10 @@ class TestCallSettings:
     ) -> None:
         """Any hearing model can be picked, and it is heard by its own
         provider: an OpenAI model kept beside Parakeet would be asked of
-        Parakeet."""
-        hx.post(
-            f"{VOICES}/setup",
-            data=_setup_form(stt_model="nemo-parakeet-tdt-0.6b-v3"),
-        )
+        the hearing server."""
+        hx.post(f"{VOICES}/setup", data=_setup_form(stt_model=PARAKEET))
 
-        assert (await _setup(async_db_session)).stt_provider == "parakeet"
+        assert (await _setup(async_db_session)).stt_provider == "hearing_server"
 
     @pytest.mark.parametrize(
         "change",

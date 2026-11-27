@@ -367,6 +367,7 @@ class TestListModels:
             results = await list_models(pattern="test")
         assert results == []
 
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # two listings
     async def test_voice_models_are_listed_only_when_asked_for(
         self,
         mock_async_session,
@@ -459,6 +460,7 @@ class TestListModels:
         assert len(results) == 1
         assert results[0].model_id == "gpt-4o"
 
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # two listings
     async def test_limit_parameter(
         self,
         mock_async_session,
@@ -551,6 +553,33 @@ class TestListModels:
 
         assert len(results) == 1  # Only gpt-4o
         assert results[0].model_id == "gpt-4o"
+
+    async def test_a_cloud_model_calls_tools_where_its_deployment_says(
+        self,
+        mock_async_session,
+        llm_session: Session,
+        openai_vendor: LLMOrg,
+        sample_models: list[LargeLanguageModel],
+    ) -> None:
+        """A cloud model's tool use is its serving org's deployment's (the
+        cloud catalog's sync); a local engine says it on the model itself.
+        Read as unknown, no cloud model could think on a call (2026-11-25)."""
+        from app.services.ai.models.llm import LLMDeployment
+
+        tools = next(m for m in sample_models if m.served_by_org_id == openai_vendor.id)
+        llm_session.add(
+            LLMDeployment(
+                llm_id=tools.id, org_id=openai_vendor.id, function_calling=True
+            )
+        )
+        llm_session.commit()
+        with patch(
+            "app.services.ai.domains.llm.catalog.get_async_session",
+            mock_async_session,
+        ):
+            results = await list_models(pattern=tools.model_id)
+
+        assert results[0].supports_tools is True
 
     async def test_includes_pricing(
         self,

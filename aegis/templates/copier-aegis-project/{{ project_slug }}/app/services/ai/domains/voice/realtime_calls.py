@@ -32,7 +32,7 @@ from app.services.ai.domains.voice.call_turns import (
     END_CALL as END_CALL,  # what the call path reads it as
 )
 from app.services.ai.domains.voice.call_turns import TurnLog, end_call, save_turn
-from app.services.ai.domains.voice.cascade import connection as cascade
+from app.services.ai.domains.voice.cascade import call as cascade
 from app.services.ai.domains.voice.live_engines import call_voice, is_gpt_live
 from app.services.ai.domains.voice.spoken import pronunciation_instructions
 from app.services.ai.models import AIProvider, MessageRole
@@ -70,11 +70,15 @@ def _model_settings(
     voice: Any,
     max_output_tokens: int | None,
     instructions: str | None = None,
+    chained: bool = False,
 ) -> dict[str, Any]:
-    """The session's settings for its provider. Each speaks the voice's
-    own for its vendor (``voice``: settings sounding as the active voice),
-    else its own; OpenAI's realtime models at the voice's speed. OpenAI
-    transcribes the caller only when asked, Gemini by default."""
+    """The session's settings for its provider (a chain's: its reply cap).
+    Each speaks the voice's own for its vendor (``voice``: settings
+    sounding as the active voice), else its own; OpenAI's realtime models
+    at the voice's speed. OpenAI transcribes the caller only when asked,
+    Gemini by default."""
+    if chained:  # it hears and speaks in the voice's own models
+        return {"max_tokens": max_output_tokens} if max_output_tokens else {}
     settings: dict[str, Any] = {}
     speaks = call_voice(model, voice.TTS_VOICES)
     if model.startswith("openai:"):
@@ -197,8 +201,10 @@ async def realtime_for(
     instructions: str | None = None,
     max_output_tokens: int | None = None,
     hang_up: bool = True,
+    chained: bool = False,
 ) -> tuple[Any, str]:
-    """The agent on ``model`` (a Pydantic AI realtime model string), built
+    """The agent on ``model`` (a Pydantic AI realtime model string, or a
+    chat model's a ``chained`` call thinks with), built
     for the caller (``user_id``, ``owner_user_id``, ``admin``) about the
     call's ``subject`` by the function a typed turn builds her with
     (``_build_turn``), and the slug of the agent she is (``held_agent``:
@@ -214,7 +220,7 @@ async def realtime_for(
     from app.services.ai.service.chat import held_agent
 
     hands_off = live_engines.LIVE_HANDS_OFF if is_gpt_live(model) else None
-    style = None if cascade.serves(model) else voice.TTS_INSTRUCTIONS
+    style = None if chained else voice.TTS_INSTRUCTIONS
     manners = (instructions, style, pronunciation_instructions(), hands_off)
     instructions = "\n\n".join(filter(None, manners))
     # A call answers as its agent without taking the thread: typed turns
@@ -243,11 +249,11 @@ async def realtime_for(
         past = _seeded(setup, seeded)
         instructions = _and_history(instructions, setup.history_summary)
     realtime = agent.realtime(
-        await cascade.for_call(ai, model, user_id=user_id)
-        if cascade.serves(model)
-        else model,
+        await cascade.for_call(ai, model, user_id=user_id) if chained else model,
         instructions=await call_instructions(agent, history),
-        model_settings=_model_settings(model, voice, max_output_tokens, instructions),
+        model_settings=_model_settings(
+            model, voice, max_output_tokens, instructions, chained=chained
+        ),
         toolsets=[CALL_TOOLS] if hang_up else [],
         # GPT-Live's voice: its thread as past turns (``_seeded``). Every
         # other engine reads it in its prompt.
@@ -298,8 +304,9 @@ async def open_call(
         subject=subject,
         admin=admin,
         instructions=engine.instructions if instructions is None else instructions,
-        max_output_tokens=engine.max_output_tokens,
+        max_output_tokens=live_engines.reply_cap(engine),
         hang_up=hang_up,
+        chained=live_engines.chained(engine),
     )
     return conversation, realtime, slug
 
@@ -380,9 +387,10 @@ async def drive(
             ),
         }
         shares: dict[str, Any] = {k: now[k] - so_far[k] for k in now}
-        if log.first_word_ms is not None:
-            shares["first_word_ms"] = log.first_word_ms
-            log.first_word_ms = None
+        for timed in ("first_word_ms", "response_time_ms"):
+            if (ms := getattr(log, timed)) is not None:
+                shares[timed] = ms
+                setattr(log, timed, None)
         await save_turn(
             ai,
             conversation_id,

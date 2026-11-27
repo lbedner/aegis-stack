@@ -68,5 +68,29 @@ class LargeLanguageModel(SQLModel, table=True):
     llm_prices: list["LLMPrice"] = Relationship(back_populates="llm")
     deployments: list["LLMDeployment"] = Relationship(back_populates="llm")
 
+    @property
+    def serving_deployment(self) -> "LLMDeployment | None":
+        """Its deployment by the org that serves it (what the cloud catalog
+        says of it there); None where there is none. Read with
+        ``deployments`` loaded."""
+        return next(
+            (d for d in self.deployments if d.org_id == self.served_by_org_id),
+            None,
+        )
+
+    @property
+    def calls_tools(self) -> bool | None:
+        """Whether it can call tools (``tools_with`` its serving
+        deployment)."""
+        return self.tools_with(self.serving_deployment)
+
+    def tools_with(self, deployment: "LLMDeployment | None") -> bool | None:
+        """Whether it can call tools: a local engine says so on the model
+        (``supports_tools``), a cloud catalog on its serving ``deployment``;
+        None where neither does."""
+        if self.supports_tools is not None:
+            return self.supports_tools
+        return deployment.function_calling if deployment else None
+
     def __repr__(self) -> str:
         return f"<LargeLanguageModel title={self.title} model_id={self.model_id}>"

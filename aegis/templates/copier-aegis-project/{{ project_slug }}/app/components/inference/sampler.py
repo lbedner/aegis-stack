@@ -5,7 +5,8 @@ and the Flet Ollama modal (``current_status``). It is also the one reader
 that notices models loading and leaving (``get_inference_activity``): Ollama
 has no event API, so each reading's running set is diffed with the last.
 
-The speech server is read the same way (``SPEECH``) for its own page.
+The speech server is read the same way (``SPEECH``) for its own page, and
+the hearing server (``HEARING``) for its.
 """
 
 import httpx
@@ -13,7 +14,7 @@ import httpx
 from app.components.inference import get_inference_engine
 from app.components.inference.activity import get_inference_activity
 from app.components.inference.engine import InferenceServerStatus
-from app.core import series, speech_server
+from app.core import hearing_server, series, speech_server
 from app.core.log import logger
 from app.core.series import Sample, Sampler
 from app.services.system.models import ComponentStatus
@@ -125,6 +126,48 @@ SPEECH_CHARTS = (
         "seconds",
         empty="No line said in {window}: a whole file, or a stream until its "
         "first audio.",
+        style="events",
+    ),
+)
+
+
+LOADED = "loaded"
+
+
+async def read_hearing() -> Sample:
+    """The hearing server now (``app.core.hearing_server``): how many models
+    it holds in memory for the chart, where it says, and the reading whole
+    for its page; nothing where none is set."""
+    from app.core.config import settings
+
+    url = hearing_server.reach(settings)
+    if url is None:
+        return Sample({}, None)
+    reading = await hearing_server.read(url)
+    values = (
+        {}
+        if reading.loaded is None
+        else {f"{hearing_server.NAME}:{LOADED}": float(len(reading.loaded))}
+    )
+    return Sample(values, reading)
+
+
+HEARING = Sampler(hearing_server.SAMPLER, read_hearing)
+HEARING_CHARTS = (
+    Chart(
+        "loaded",
+        "Models in memory",
+        f"{hearing_server.SAMPLER}:",
+        LOADED,
+        empty="Nothing reported in {window}: speaches says what it holds in memory.",
+    ),
+    Chart(
+        "latency",
+        "Latency",
+        f"{hearing_server.CALLS}:",
+        series.LATENCY,
+        "seconds",
+        empty="Nothing heard in {window}: each transcription, whole.",
         style="events",
     ),
 )

@@ -39,17 +39,16 @@ from .models import (
     VoiceInfo,
     VoicePreviewRequest,
     VoiceSettingsResponse,
+    server_url,
 )
 
 # STT submodule imports
 from .stt import (
     BaseSTTProvider,
-    FasterWhisperProvider,
     GroqWhisperProvider,
     OpenAIWhisperProvider,
     STTConfig,
     STTService,
-    WhisperLocalProvider,
     get_stt_config,
     get_stt_provider,
 )
@@ -73,6 +72,7 @@ __all__ = [
     # Core Models
     "STTProvider",
     "TTSProvider",
+    "server_url",
     "OpenAIVoice",
     "AudioFormat",
     "AudioInput",
@@ -90,8 +90,6 @@ __all__ = [
     # STT Providers
     "BaseSTTProvider",
     "OpenAIWhisperProvider",
-    "WhisperLocalProvider",
-    "FasterWhisperProvider",
     "GroqWhisperProvider",
     "get_stt_provider",
     # TTS Providers

@@ -180,6 +180,9 @@ if TYPE_CHECKING:
         pronunciations,
         realtime_calls,
     )
+    from app.services.ai.domains.voice.cascade.connection import (
+        stages as call_stages,
+    )
     from app.services.ai.domains.voice.live_voice import live_voice
 {%- endif %}
 {%- if ai_voice %}
@@ -190,6 +193,7 @@ if TYPE_CHECKING:
         ProviderInfo,
         SpeechRequest,
         SpeechResult,
+        STTProvider,
         TTSProvider,
         TTSService,
         VoiceInfo,
@@ -202,11 +206,13 @@ if TYPE_CHECKING:
         get_tts_providers,
         get_tts_voices,
         get_voice,
+        server_url,
         speaking_model,
     )
     from app.services.ai.domains.voice.tts.service import unsaid
     from app.services.ai.domains.voice.overview import (
         VoiceOverview,
+        can_run_now,
         switch_voice,
         use_voice,
         voice_overview,

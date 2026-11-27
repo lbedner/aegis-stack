@@ -168,10 +168,13 @@ class TestPickingAModel:
         setup = await profiles.call_setup(async_db_session)
         assert setup is not None
         spoken, _ = await profiles.give_voice(
-            async_db_session, setup, seeded, "af_heart"
+            async_db_session, setup, seeded, "local_server:af_heart"
         )
 
-        assert spoken.voices == {"openai": "marin", "kokoro": "af_heart"}
+        assert spoken.voices == {
+            "openai": "marin",
+            "local_server": "local_server:af_heart",
+        }
 
 
 class TestApplying:

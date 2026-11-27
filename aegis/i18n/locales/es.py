@@ -78,7 +78,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "Base de datos con SQLModel ORM (SQLite o PostgreSQL)",
     "component.ingress": "Traefik reverse proxy y balanceador de carga",
     "component.observability": "Logfire observabilidad, trazas y métricas",
-    "component.inference": "Local AI models via Ollama or llama.cpp, speech via Kokoro",
+    "component.inference": "Local AI models via Ollama or llama.cpp, speech via Kokoro, hearing via speaches",
     "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.deploy": "Destino de despliegue (Docker Compose), leído por el Overseer",
     "component.mcp": "MCP server: an outside assistant reads the app's tools",
@@ -212,6 +212,7 @@ MESSAGES: dict[str, str] = {
         "Nota: El primer inicio puede tardar en descargar modelos"
     ),
     "interactive.inference_speech": "Run a speech server (Kokoro-FastAPI) beside it, for ai[voice]?",
+    "interactive.inference_hearing": "Run a hearing server (speaches) beside it, for ai[voice]?",
     "interactive.ai_rag_label": "RAG (Retrieval-Augmented Generation):",
     "interactive.ai_rag_prompt": (
         "¿Habilitar RAG para indexación de documentos y búsqueda semántica?"
@@ -1193,6 +1194,7 @@ MESSAGES: dict[str, str] = {
     "guided.sidebar.services": "SERVICIOS",
     "guided.prompt.inference_placement": "Where does the local model server run?",
     "guided.prompt.inference_speech": "Run a speech server beside it?",
+    "guided.prompt.inference_hearing": "Run a hearing server beside it?",
     "guided.prompt.worker_backend": "Elige un backend de worker",
     "guided.prompt.scheduler_backend": "Persistencia del programador: ¿conservar el historial de tareas entre reinicios?",
     "guided.prompt.database_engine": "Motor de base de datos para {context}",
@@ -1284,6 +1286,8 @@ MESSAGES: dict[str, str] = {
     "guided.choice.inference.host": "Use the one already running on this machine. The default.",
     "guided.choice.inference_speech.none": "No speech server. The default.",
     "guided.choice.inference_speech.kokoro_fastapi": "Text to speech for ai[voice], where the model server runs.",
+    "guided.choice.inference_hearing.none": "No hearing server. The default.",
+    "guided.choice.inference_hearing.speaches": "Speech to text for ai[voice] (Parakeet), in its own container.",
     "guided.choice.worker.arq": "Worker asíncrono sencillo y bien probado con configuración mínima. Ideal para tareas con uso intensivo de E/S. El predeterminado.",
     "guided.choice.worker.dramatiq": "Modelo de actores multiproceso. Ideal para tareas con uso intensivo de CPU que se benefician de varios procesos del sistema.",
     "guided.choice.worker.taskiq": "Asíncrono nativo, con brokers por cola y transporte Redis Streams con confirmaciones.",

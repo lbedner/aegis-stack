@@ -8,30 +8,43 @@ a moment before its first word, so the first syllable is not cut.
 
 Both run on ``onnxruntime`` on the CPU (Silero is 2 MB, Smart Turn 8 MB,
 about 10 ms a judgement), fetched on first use into the cache
-(``local.fetched``). Smart Turn reads Whisper's features, made in numpy
+(``fetched``). Smart Turn reads Whisper's features, made in numpy
 (``features``): no torch, no ``transformers``.
 """
 
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import cache
+import logging
+import os
 from pathlib import Path
+import tempfile
+import threading
 from typing import Any, Literal
 
-from .. import local
+import httpx
+
 from ..tts import realtime
 from . import features
 
+logger = logging.getLogger(__name__)
 RATE = features.RATE
 # Silero's window at 16 kHz, and the context it carries between windows.
 WINDOW = 512
 CONTEXT = 64
 WINDOW_MS = WINDOW * 1000 // RATE
 SPEECH = 0.5  # Silero's probability a window is speech
-PAUSE_MS = 200  # quiet this long is a pause, which Smart Turn judges
+# Quiet this long is a pause, which Smart Turn judges: at 200 ms it heard
+# "Um" and "Can you show me uh" as finished turns (2026-11-22).
+PAUSE_MS = 500
 DONE = 0.5  # Smart Turn's probability the turn is over
 GIVE_UP_MS = 2000  # quiet this long ends the turn, finished or not
 PREROLL_MS = 300  # kept from before the first word
+# Speech this long in a row starts a turn: a window or a few (a tap, a
+# click, a breath) made a half-second turn the hearing model heard as
+# "Yeah." (2026-11-21). A short "yes" lasts longer.
+MIN_SPEECH_MS = 200
 
 CACHE = Path.home() / ".cache" / "turn-detection"
 SILERO = (
@@ -44,15 +57,51 @@ SMART_TURN = (
 )
 
 
-@local.loaded_once
+def fetched(url: str, cache_dir: Path) -> Path:
+    """The model file at ``url`` in ``cache_dir``, downloaded into it first
+    when absent (whole into a file of its own, then moved, so a cut-off
+    download, or another process fetching it too, never leaves half a
+    file)."""
+    path = cache_dir / url.rpartition("/")[2]
+    if path.exists():
+        return path
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    fd, partial = tempfile.mkstemp(dir=cache_dir, suffix=".partial")
+    logger.info(f"Fetching {url} into {cache_dir}")
+    try:
+        with (
+            os.fdopen(fd, "wb") as out,
+            httpx.stream("GET", url, follow_redirects=True, timeout=60) as response,
+        ):
+            response.raise_for_status()
+            for chunk in response.iter_bytes(1 << 20):
+                out.write(chunk)
+        os.replace(partial, path)
+    except BaseException:
+        Path(partial).unlink(missing_ok=True)
+        raise
+    return path
+
+
+_LOADING = threading.Lock()
+
+
 def _model(url: str) -> Any:
-    """One ONNX session per model for the process, on one CPU thread each."""
+    """One ONNX session per model for the whole process, however many calls
+    ask at once."""
+    with _LOADING:
+        return _session(url)
+
+
+@cache
+def _session(url: str) -> Any:
+    """An ONNX session on one CPU thread."""
     import onnxruntime
 
     options = onnxruntime.SessionOptions()
     options.inter_op_num_threads = 1
     options.intra_op_num_threads = 1
-    path = str(local.fetched(url, CACHE))
+    path = str(fetched(url, CACHE))
     return onnxruntime.InferenceSession(
         path, sess_options=options, providers=["CPUExecutionProvider"]
     )
@@ -109,7 +158,12 @@ class Listener:
         self._vad = vad or Silero()
         self._done = done or smart_turn
         self._rest = b""
-        self._before: deque[Any] = deque(maxlen=-(-PREROLL_MS // WINDOW_MS))
+        # Before a turn: the preroll, and the speech that has not yet
+        # lasted long enough to start one (``_onset`` windows of it).
+        self._before: deque[Any] = deque(
+            maxlen=-(-(PREROLL_MS + MIN_SPEECH_MS) // WINDOW_MS)
+        )
+        self._onset = 0
         self._turn: list[Any] = []
         self._quiet = 0
         self._judged = False
@@ -130,8 +184,10 @@ class Listener:
         speaking = self._vad(window) >= SPEECH
         if not self._turn:
             self._before.append(window)
-            if not speaking:
+            self._onset = self._onset + 1 if speaking else 0
+            if self._onset * WINDOW_MS < MIN_SPEECH_MS:
                 return []
+            self._onset = 0
             self._turn, self._quiet, self._judged = list(self._before), 0, False
             self._before.clear()
             return [Heard("start")]

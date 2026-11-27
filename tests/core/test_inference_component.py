@@ -24,7 +24,7 @@ from tests.core._compose import load
 def test_inference_is_an_infrastructure_component() -> None:
     spec = COMPONENTS[ComponentNames.INFERENCE]
     assert spec.type is ComponentType.INFRASTRUCTURE
-    assert spec.docker_services == ["ollama", "llamacpp", "kokoro-fastapi"]
+    assert spec.docker_services == ["ollama", "llamacpp", "kokoro-fastapi", "speaches"]
     assert spec.marker_path == "app/components/inference/ollama.py"
     assert "app/components/inference" in spec.files.primary
 
@@ -35,12 +35,14 @@ def test_the_engine_placement_and_speech_server_parse_from_brackets() -> None:
         "engine": "ollama",
         "placement": "host",
         "speech": "none",
+        "hearing": "none",
     }
     assert parse_options("inference[docker]", spec)["placement"] == "docker"
-    assert parse_options("inference[ollama,docker,kokoro_fastapi]", spec) == {
+    assert parse_options("inference[ollama,docker,kokoro_fastapi,speaches]", spec) == {
         "engine": "ollama",
         "placement": "docker",
         "speech": "kokoro_fastapi",
+        "hearing": "speaches",
     }
 
 
@@ -56,6 +58,44 @@ def test_a_speech_server_in_docker_is_a_container_of_its_own() -> None:
     assert "kokoro-fastapi" in found["docker_services"]
     for elsewhere in ("inference[kokoro_fastapi]", "inference[docker]"):
         assert "kokoro-fastapi" not in context(elsewhere)["docker_services"]
+
+
+def test_a_hearing_server_is_a_container_wherever_the_engine_runs() -> None:
+    """speaches runs in Docker either way (it has no host GPU to use, as
+    Kokoro-FastAPI has on a Mac), so the placement does not move it."""
+
+    def context(component: str) -> dict[str, Any]:
+        return TemplateGenerator("demo", [component]).get_template_context()
+
+    for component in ("inference[speaches]", "inference[docker,speaches]"):
+        found = context(component)
+        assert found[AnswerKeys.INFERENCE_HEARING] == "speaches"
+        assert "speaches" in found["docker_services"]
+    assert "speaches" not in context("inference[docker]")["docker_services"]
+
+
+def test_the_hearing_server_says_where_the_app_reaches_it() -> None:
+    def address(**answers: object) -> str:
+        found = _render("app/core/speech_settings.py.jinja", **answers)
+        return next(line for line in found.splitlines() if "HEARING_BASE_URL:" in line)
+
+    on = address(include_inference=True, inference_hearing="speaches")
+    assert on.endswith('"http://speaches:8000/v1"')
+    assert address(include_inference=True, inference_hearing="none").endswith("= None")
+
+
+def test_the_hearing_container_keeps_parakeet_loaded() -> None:
+    """Never unloaded once a call loads it, and its files kept in a volume,
+    so only the first call ever downloads them."""
+
+    def compose(**answers: object) -> str:
+        return _render("docker-compose.yml.jinja", include_inference=True, **answers)
+
+    assert "speaches:" not in compose(ollama_mode="host", inference_hearing="none")
+    found = load(compose(ollama_mode="host", inference_hearing="speaches"))
+    speaches = found["services"]["speaches"]
+    assert speaches["environment"]["STT_MODEL_TTL"] == "-1"
+    assert "speaches-models" in found["volumes"]
 
 
 def test_the_speech_server_says_where_the_app_reaches_it() -> None:
@@ -139,6 +179,7 @@ def test_adding_the_component_answers_every_axis_and_ollama_mode() -> None:
         AnswerKeys.INFERENCE_ENGINE: "ollama",
         AnswerKeys.INFERENCE_PLACEMENT: "host",
         AnswerKeys.INFERENCE_SPEECH: "none",
+        AnswerKeys.INFERENCE_HEARING: "none",
         AnswerKeys.OLLAMA_MODE: "host",
     }
     assert (
@@ -152,6 +193,7 @@ def test_removing_the_component_resets_ollama_mode() -> None:
     reset = COMPONENTS[ComponentNames.INFERENCE].reset_answers_on_remove
     assert reset[AnswerKeys.OLLAMA_MODE] == "none"
     assert reset[AnswerKeys.INFERENCE_SPEECH] == "none"
+    assert reset[AnswerKeys.INFERENCE_HEARING] == "none"
 
 
 def test_the_template_context_carries_the_component() -> None:

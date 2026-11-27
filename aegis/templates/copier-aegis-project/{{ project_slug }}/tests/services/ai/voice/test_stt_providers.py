@@ -1,17 +1,12 @@
 """Tests for STT providers."""
 
-import pytest
-
 from app.services.ai.domains.voice.models import STTProvider
 from app.services.ai.domains.voice.stt import (
     BaseSTTProvider,
-    FasterWhisperProvider,
     GroqWhisperProvider,
     OpenAIWhisperProvider,
-    WhisperLocalProvider,
     get_stt_provider,
 )
-from tests._voice_packages import packages_installed
 
 
 class TestGetSTTProvider:
@@ -23,22 +18,6 @@ class TestGetSTTProvider:
 
         assert isinstance(provider, OpenAIWhisperProvider)
         assert provider.provider_type == STTProvider.OPENAI_WHISPER
-
-    def test_get_whisper_local_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Test factory returns WhisperLocalProvider."""
-        packages_installed(monkeypatch, True)
-        provider = get_stt_provider(STTProvider.WHISPER_LOCAL)
-
-        assert isinstance(provider, WhisperLocalProvider)
-        assert provider.provider_type == STTProvider.WHISPER_LOCAL
-
-    def test_get_faster_whisper_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Test factory returns FasterWhisperProvider."""
-        packages_installed(monkeypatch, True)
-        provider = get_stt_provider(STTProvider.FASTER_WHISPER)
-
-        assert isinstance(provider, FasterWhisperProvider)
-        assert provider.provider_type == STTProvider.FASTER_WHISPER
 
     def test_get_groq_whisper_provider(self) -> None:
         """Test factory returns GroqWhisperProvider."""
@@ -66,16 +45,6 @@ class TestGetSTTProvider:
 
         assert isinstance(provider, OpenAIWhisperProvider)
         assert provider.model == "whisper-large"
-
-    def test_get_provider_with_kwargs(self) -> None:
-        """Test factory passes kwargs to provider."""
-        provider = get_stt_provider(
-            STTProvider.OPENAI_WHISPER,
-            base_url="https://custom.api.com",
-        )
-
-        assert isinstance(provider, OpenAIWhisperProvider)
-        assert provider.base_url == "https://custom.api.com"
 
 
 class TestOpenAIWhisperProvider:
@@ -125,92 +94,6 @@ class TestOpenAIWhisperProvider:
         assert isinstance(provider, BaseSTTProvider)
 
 
-class TestWhisperLocalProvider:
-    """Test WhisperLocalProvider class."""
-
-    def test_default_model(self) -> None:
-        """Test default model is openai/whisper-base."""
-        provider = WhisperLocalProvider()
-
-        assert provider.model_name == "openai/whisper-base"
-
-    def test_custom_model(self) -> None:
-        """Test custom model can be set."""
-        provider = WhisperLocalProvider(model_name="openai/whisper-large-v3")
-
-        assert provider.model_name == "openai/whisper-large-v3"
-
-    def test_device_stored(self) -> None:
-        """Test device is stored."""
-        provider = WhisperLocalProvider(device="cuda")
-
-        assert provider.device == "cuda"
-
-    def test_device_default_none(self) -> None:
-        """Test device defaults to None (auto-detect)."""
-        provider = WhisperLocalProvider()
-
-        assert provider.device is None
-
-    def test_pipeline_lazy_loaded(self) -> None:
-        """Test pipeline is not created until needed."""
-        provider = WhisperLocalProvider()
-
-        assert provider._pipeline is None
-
-    def test_provider_type_is_local(self) -> None:
-        """Test provider_type is WHISPER_LOCAL."""
-        provider = WhisperLocalProvider()
-
-        assert provider.provider_type == STTProvider.WHISPER_LOCAL
-
-
-class TestFasterWhisperProvider:
-    """Test FasterWhisperProvider class."""
-
-    def test_default_model_size(self) -> None:
-        """Test default model size is base."""
-        provider = FasterWhisperProvider()
-
-        assert provider.model_size == "base"
-
-    def test_custom_model_size(self) -> None:
-        """Test custom model size can be set."""
-        provider = FasterWhisperProvider(model_size="large-v3")
-
-        assert provider.model_size == "large-v3"
-
-    def test_device_default(self) -> None:
-        """Test device defaults to auto."""
-        provider = FasterWhisperProvider()
-
-        assert provider.device == "auto"
-
-    def test_compute_type_default(self) -> None:
-        """Test compute_type defaults to default."""
-        provider = FasterWhisperProvider()
-
-        assert provider.compute_type == "default"
-
-    def test_custom_compute_type(self) -> None:
-        """Test custom compute_type can be set."""
-        provider = FasterWhisperProvider(compute_type="float16")
-
-        assert provider.compute_type == "float16"
-
-    def test_model_lazy_loaded(self) -> None:
-        """Test model is not created until needed."""
-        provider = FasterWhisperProvider()
-
-        assert provider._model is None
-
-    def test_provider_type_is_faster(self) -> None:
-        """Test provider_type is FASTER_WHISPER."""
-        provider = FasterWhisperProvider()
-
-        assert provider.provider_type == STTProvider.FASTER_WHISPER
-
-
 class TestGroqWhisperProvider:
     """Test GroqWhisperProvider class."""
 
@@ -252,8 +135,6 @@ class TestBaseSTTProviderInterface:
         """Test all provider classes have transcribe method."""
         providers = [
             OpenAIWhisperProvider,
-            WhisperLocalProvider,
-            FasterWhisperProvider,
             GroqWhisperProvider,
         ]
 
@@ -267,8 +148,6 @@ class TestBaseSTTProviderInterface:
         """Test all provider classes have provider_type class attribute."""
         providers = [
             (OpenAIWhisperProvider, STTProvider.OPENAI_WHISPER),
-            (WhisperLocalProvider, STTProvider.WHISPER_LOCAL),
-            (FasterWhisperProvider, STTProvider.FASTER_WHISPER),
             (GroqWhisperProvider, STTProvider.GROQ_WHISPER),
         ]
 

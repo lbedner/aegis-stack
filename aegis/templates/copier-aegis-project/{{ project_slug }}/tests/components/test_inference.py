@@ -12,12 +12,14 @@ from app.components.inference.activity import (
 )
 from app.components.inference.engine import InferenceServerStatus
 from app.components.inference.ollama import OllamaEngine
-from app.core import series, speech_server
+from app.core import hearing_server, series, speech_server
 from app.core.config import settings
 from app.core.speech_server import SpeechServerReading
 from app.services.system.health_inference import check_inference_health
 from app.services.system.models import ComponentStatusType
 from tests._fake_ollama import (
+    HEARING_READY,
+    HEARING_URL,
     ROUTES,
     RUNNING,
     SERVING,
@@ -26,6 +28,7 @@ from tests._fake_ollama import (
     SPEECH_URL,
     FakeClient,
     down,
+    hearing,
     serve,
     serving,
 )
@@ -377,3 +380,52 @@ def test_the_inference_page_charts_come_with_the_component() -> None:
         await sampler.current_status()
         await sampler.current_status(fresh=True)
         assert len(fake_server) == 2
+
+
+class TestHearingServer:
+    """The hearing server's status in the inference health check."""
+
+    @pytest.fixture(autouse=True)
+    def ollama(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        serve(monkeypatch)
+        monkeypatch.setattr(settings, "SPEECH_BASE_URL", None)
+
+    async def test_what_it_holds_is_in_the_inference_check(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        hearing(monkeypatch)
+
+        status = await check_inference_health()
+
+        heard = status.sub_components[hearing_server.SLUG]
+        assert heard.status == ComponentStatusType.HEALTHY
+        assert heard.metadata["base_url"] == HEARING_URL
+        assert heard.metadata["loaded"] == HEARING_READY.loaded
+
+    @pytest.mark.parametrize(
+        ("reading", "expected"),
+        [
+            (
+                dict(available=False, models=[], loaded=None),
+                ComponentStatusType.UNHEALTHY,
+            ),
+            (dict(models=[], loaded=[]), ComponentStatusType.WARNING),
+            (dict(loaded=[]), ComponentStatusType.INFO),
+        ],
+    )
+    async def test_one_down_empty_or_idle_says_so(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        reading: dict[str, Any],
+        expected: ComponentStatusType,
+    ) -> None:
+        hearing(monkeypatch, HEARING_READY.model_copy(update=reading))
+
+        heard = (await check_inference_health()).sub_components[hearing_server.SLUG]
+
+        assert heard.status == expected
+
+    async def test_without_an_address_there_is_none(self) -> None:
+        status = await check_inference_health()
+
+        assert hearing_server.SLUG not in status.sub_components

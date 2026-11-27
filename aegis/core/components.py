@@ -15,6 +15,7 @@ from ..constants import (
     ComponentNames,
     DeployTargets,
     InferenceEngines,
+    InferenceHearing,
     InferencePlacement,
     InferenceSpeech,
     OllamaMode,
@@ -589,7 +590,10 @@ COMPONENTS: dict[str, ComponentSpec] = {
         page="inference",
         order=110,
         type=ComponentType.INFRASTRUCTURE,
-        description="Local AI models via Ollama or llama.cpp, speech via Kokoro",
+        description=(
+            "Local AI models via Ollama or llama.cpp, speech via Kokoro, "
+            "hearing via speaches"
+        ),
         long_description=(
             "Runs language models locally: an Ollama server, or llama.cpp's "
             "llama-server serving one model, on the machine, where a Mac's "
@@ -598,11 +602,17 @@ COMPONENTS: dict[str, ComponentSpec] = {
             "what it serves, and the dashboards show its models and "
             "activity. A "
             "speech server can run beside it (Kokoro-FastAPI), which "
-            "ai[voice] speaks through."
+            "ai[voice] speaks through, and a hearing server (speaches, "
+            "Parakeet on the CPU), which it hears through."
         ),
-        # The containers only exist for ``placement=docker``, the speech
-        # server's only with one; the template generator drops the rest.
-        docker_services=["ollama", "llamacpp", "kokoro-fastapi"],
+        # The engine's and the speech server's containers only exist for
+        # ``placement=docker``; the hearing server's wherever it is chosen.
+        # The template generator drops the rest.
+        docker_services=[
+            *InferenceEngines.ALL,
+            *InferenceSpeech.SERVICES.values(),
+            *InferenceHearing.SERVICES.values(),
+        ],
         options=[
             OptionSpec(
                 name="engine",
@@ -631,6 +641,16 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 # takes one later (``aegis add inference[kokoro_fastapi]``).
                 upgrades_from=InferenceSpeech.NONE,
             ),
+            OptionSpec(
+                name="hearing",
+                mode=OptionMode.SINGLE,
+                choices=list(InferenceHearing.ALL),
+                default=InferenceHearing.DEFAULT,
+                answer_key=AnswerKeys.INFERENCE_HEARING,
+                about="guided.choice.inference_hearing",
+                # As the speech server: ``aegis add inference[speaches]``.
+                upgrades_from=InferenceHearing.NONE,
+            ),
         ],
         # ``ollama_mode`` mirrors the placement; without the component there
         # is no Ollama, and a later re-add starts from the default.
@@ -638,6 +658,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             AnswerKeys.OLLAMA_MODE: OllamaMode.NONE,
             AnswerKeys.INFERENCE_PLACEMENT: InferencePlacement.DEFAULT,
             AnswerKeys.INFERENCE_SPEECH: InferenceSpeech.DEFAULT,
+            AnswerKeys.INFERENCE_HEARING: InferenceHearing.DEFAULT,
         },
         docs_path="components/inference",
         marker_path="app/components/inference/ollama.py",
@@ -648,6 +669,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/cli/inference.py",
                 "app/services/system/health_inference.py",
                 "app/services/system/health_speech.py",
+                "app/services/system/health_hearing.py",
                 "app/components/frontend/dashboard/cards/inference_card.py",
                 "app/components/frontend/dashboard/modals/inference_modal",
                 "tests/components/test_inference.py",
@@ -667,9 +689,11 @@ COMPONENTS: dict[str, ComponentSpec] = {
                     "app/components/web_frontend/overseer_inference.py",
                     "app/components/web_frontend/overseer_inference_text.py",
                     "app/components/web_frontend/overseer_inference_speech.py",
+                    "app/components/web_frontend/overseer_inference_hearing.py",
                     "app/components/web_frontend/routes/partials/overseer_inference.py",
                     "app/components/web_frontend/templates/pages/overseer/inference",
                     "tests/web/test_overseer_inference.py",
+                    "tests/web/test_overseer_inference_hearing.py",
                 ],
             },
         ),

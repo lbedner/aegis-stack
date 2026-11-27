@@ -8,10 +8,11 @@ audio input handling, and voice chat responses.
 from __future__ import annotations
 
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.discovery import present
+from app.core import speech_server
 from app.core.voice_settings import TTS_SPEED_MAX, TTS_SPEED_MIN, setting_default
 
 
@@ -19,10 +20,8 @@ class STTProvider(str, Enum):
     """Supported Speech-to-Text providers."""
 
     OPENAI_WHISPER = "openai_whisper"  # OpenAI Whisper API
-    WHISPER_LOCAL = "whisper_local"  # Local Whisper via HuggingFace transformers
-    FASTER_WHISPER = "faster_whisper"  # SYSTRAN faster-whisper (optimized local)
     GROQ_WHISPER = "groq_whisper"  # Groq API (ultra-fast)
-    PARAKEET = "parakeet"  # NVIDIA Parakeet in the app (onnx-asr)
+    HEARING_SERVER = "hearing_server"  # a transcription server you run
 
 
 class TTSProvider(str, Enum):
@@ -30,7 +29,6 @@ class TTSProvider(str, Enum):
 
     OPENAI = "openai"  # OpenAI TTS API
     GEMINI = "gemini"  # Gemini's speech models, the voices Gemini Live speaks
-    KOKORO = "kokoro"  # Kokoro in the app (kokoro-onnx)
     LOCAL_SERVER = "local_server"  # a speech server you run (tts/server.py)
 
 
@@ -67,14 +65,12 @@ DEFAULT_TTS_VOICE = OpenAIVoice.ALLOY.value
 DEFAULT_TTS_MODELS: dict[TTSProvider, str] = {
     TTSProvider.OPENAI: DEFAULT_TTS_MODEL,
     TTSProvider.GEMINI: "gemini-3.8-flash-tts",
-    TTSProvider.KOKORO: "kokoro-v1.0",
     # Kokoro-FastAPI's (the one server SPEECH_SERVER names so far).
     TTSProvider.LOCAL_SERVER: "kokoro",
 }
 DEFAULT_TTS_VOICES: dict[TTSProvider, str] = {
     TTSProvider.OPENAI: DEFAULT_TTS_VOICE,
     TTSProvider.GEMINI: "Kore",
-    TTSProvider.KOKORO: "af_heart",  # Kokoro's own pick
     # tts/server.py's id for Kokoro's af_heart: its ids name their provider.
     TTSProvider.LOCAL_SERVER: f"{TTSProvider.LOCAL_SERVER.value}:af_heart",
 }
@@ -83,9 +79,7 @@ DEFAULT_STT_MODEL = "whisper-1"
 DEFAULT_STT_MODELS: dict[STTProvider, str] = {
     STTProvider.OPENAI_WHISPER: DEFAULT_STT_MODEL,
     STTProvider.GROQ_WHISPER: "whisper-large-v3-turbo",
-    STTProvider.WHISPER_LOCAL: "openai/whisper-base",
-    STTProvider.FASTER_WHISPER: "base",
-    STTProvider.PARAKEET: "nemo-parakeet-tdt-0.6b-v3",  # as onnx-asr names it
+    STTProvider.HEARING_SERVER: "istupakov/parakeet-tdt-0.6b-v3-onnx",  # as speaches names it
 }
 # The setting holding each cloud provider's key; a provider not here runs
 # locally and needs none.
@@ -102,48 +96,32 @@ STT_KEYS: dict[STTProvider, str] = {
     STTProvider.OPENAI_WHISPER: "OPENAI_API_KEY",
     STTProvider.GROQ_WHISPER: "GROQ_API_KEY",
 }
-# What each in-process provider imports, and the name ``uv add`` installs
-# it by. No stack installs these (torch alone is gigabytes): a provider
-# here runs once its packages are added.
-LOCAL_PACKAGES: dict[str, dict[str, str]] = {
-    STTProvider.WHISPER_LOCAL: {"transformers": "transformers", "torch": "torch"},
-    STTProvider.FASTER_WHISPER: {"faster_whisper": "faster-whisper"},
-    # PyAV decodes the browser's webm, which onnx-asr cannot read.
-    STTProvider.PARAKEET: {"onnx_asr": '"onnx-asr[cpu,hub]"', "av": "av"},
-    TTSProvider.KOKORO: {"kokoro_onnx": "kokoro-onnx"},
+
+
+# Each provider a server of yours runs, and the setting holding its address:
+# the one home of which server a provider is reached at.
+SERVED: dict[str, str] = {
+    TTSProvider.LOCAL_SERVER: "SPEECH_BASE_URL",
+    STTProvider.HEARING_SERVER: "HEARING_BASE_URL",
 }
 
 
-def uninstalled(provider: str) -> list[str]:
-    """The packages (as ``uv add`` names them) an in-process ``provider``
-    lacks; nothing for one installed or hosted."""
-    needs = LOCAL_PACKAGES.get(provider, {})
-    return [package for module, package in needs.items() if not present(module)]
-
-
-def install_line(provider: str) -> str | None:
-    """The command that installs what ``provider`` lacks; None when nothing."""
-    needed = uninstalled(provider)
-    return f"uv add {' '.join(needed)}" if needed else None
-
-
-def not_installed(provider: str) -> str | None:
-    """Why ``provider`` cannot run here, with the line that fixes it: what
-    the settings report and the provider factories raise."""
-    install = install_line(provider)
-    name = getattr(provider, "value", provider)
-    return f"{name} is not installed: {install}" if install else None
+def server_url(provider: str, settings: Any) -> str | None:
+    """Where this process reaches ``provider``'s server (``SERVED``); None
+    for a provider no server of yours runs."""
+    setting = SERVED.get(provider)
+    return speech_server.reach(settings, setting) if setting else None
 
 
 def unserved(provider: str, url: str | None) -> str | None:
     """Why a provider reached over the network cannot run: its server's
-    address (SPEECH_BASE_URL, ``url``) is not set."""
-    served = provider == TTSProvider.LOCAL_SERVER
-    return "SPEECH_BASE_URL missing" if served and not url else None
+    address (``SERVED``, ``url``) is not set."""
+    setting = SERVED.get(provider)
+    return f"{setting} missing" if setting and not url else None
 
 
 class CannotRunError(RuntimeError):
-    """A provider factory's refusal (``not_installed``, ``unserved``): words
+    """A provider factory's refusal (``unserved``): words
     of the app's own, so safe to show where a provider's text is not."""
 
 
@@ -182,7 +160,6 @@ MEDIA_TYPES: dict[AudioFormat, str] = {
 TTS_FORMATS: dict[TTSProvider, AudioFormat] = {
     TTSProvider.OPENAI: AudioFormat.MP3,
     TTSProvider.GEMINI: AudioFormat.WAV,
-    TTSProvider.KOKORO: AudioFormat.WAV,
     # Asked of every speech server: each one known speaks it, so none needs
     # a transcode.
     TTSProvider.LOCAL_SERVER: AudioFormat.WAV,

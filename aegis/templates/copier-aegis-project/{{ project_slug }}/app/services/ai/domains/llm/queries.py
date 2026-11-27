@@ -21,6 +21,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.ai.models.llm import (
     LargeLanguageModel,
     LLMActiveSelection,
+    LLMDeployment,
     LLMModality,
     LLMOrg,
     LLMPrice,
@@ -250,6 +251,24 @@ async def latest_prices_by_llm_ids(
     for price in rows:
         latest.setdefault(price.llm_id, price)
     return latest
+
+
+async def serving_deployments(
+    session: AsyncSession, llm_ids: Iterable[int]
+) -> dict[int, LLMDeployment]:
+    """Each model's deployment by the org that serves it, one query."""
+    wanted = list(llm_ids)
+    if not wanted:
+        return {}
+    rows = await session.exec(
+        select(LLMDeployment)
+        .join(LargeLanguageModel, LLMDeployment.llm_id == LargeLanguageModel.id)
+        .where(
+            col(LLMDeployment.llm_id).in_(wanted),
+            LLMDeployment.org_id == LargeLanguageModel.served_by_org_id,
+        )
+    )
+    return {d.llm_id: d for d in rows.all()}
 
 
 async def vendor_model_counts(session: AsyncSession) -> Sequence[tuple[str, int]]:

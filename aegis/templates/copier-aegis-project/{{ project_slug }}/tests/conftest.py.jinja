@@ -278,12 +278,14 @@ def _no_background_sampling(monkeypatch: pytest.MonkeyPatch) -> None:
 {% if (include_ai and ai_voice) or ollama_mode != "none" -%}
 @pytest.fixture(autouse=True)
 def _no_speech_server(monkeypatch: pytest.MonkeyPatch) -> None:
-    """No speech server (SPEECH_BASE_URL, which inference[kokoro_fastapi]
-    or ``.env`` sets): one reached from a test would be the dev stack's. A
-    test that needs one sets its own address."""
+    """No speech or hearing server (SPEECH_BASE_URL, HEARING_BASE_URL, which
+    inference[kokoro_fastapi] and inference[speaches] or ``.env`` set): one
+    reached from a test would be the dev stack's. A test that needs one sets
+    its own address."""
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "SPEECH_BASE_URL", None)
+    monkeypatch.setattr(settings, "HEARING_BASE_URL", None)
 
 
 {% endif -%}

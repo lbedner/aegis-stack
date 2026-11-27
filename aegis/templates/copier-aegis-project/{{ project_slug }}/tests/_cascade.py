@@ -37,6 +37,11 @@ def ear() -> turns.Listener:
     return turns.Listener(vad=speech, done=lambda audio: 0.9)
 
 
+def said() -> bytes:
+    """Speech just long enough to be heard as a turn's start."""
+    return windows(*[LOUD] * windows_for(turns.MIN_SPEECH_MS))
+
+
 def turn() -> bytes:
     """A spoken turn: speech, then a pause that ends it."""
-    return windows(*[LOUD] * 4) + pause()
+    return said() + windows(LOUD) + pause()

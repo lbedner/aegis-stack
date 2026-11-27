@@ -71,7 +71,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "SQLModel ORM 付きデータベース（SQLite / PostgreSQL）",
     "component.ingress": "Traefik リバースプロキシ＆ロードバランサー",
     "component.observability": "Logfire による監視・トレース・メトリクス",
-    "component.inference": "Local AI models via Ollama or llama.cpp, speech via Kokoro",
+    "component.inference": "Local AI models via Ollama or llama.cpp, speech via Kokoro, hearing via speaches",
     "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.deploy": "デプロイ先 (Docker Compose)、Overseer が参照",
     "component.mcp": "MCP server: an outside assistant reads the app's tools",
@@ -202,6 +202,7 @@ MESSAGES: dict[str, str] = {
         "注意：初回起動時はモデルのダウンロードに時間がかかります"
     ),
     "interactive.inference_speech": "Run a speech server (Kokoro-FastAPI) beside it, for ai[voice]?",
+    "interactive.inference_hearing": "Run a hearing server (speaches) beside it, for ai[voice]?",
     "interactive.ai_rag_label": "RAG（検索拡張生成）：",
     "interactive.ai_rag_prompt": (
         "ドキュメントインデックスとセマンティック検索の RAG を有効にしますか？"
@@ -1174,6 +1175,7 @@ MESSAGES: dict[str, str] = {
     "guided.sidebar.services": "サービス",
     "guided.prompt.inference_placement": "Where does the local model server run?",
     "guided.prompt.inference_speech": "Run a speech server beside it?",
+    "guided.prompt.inference_hearing": "Run a hearing server beside it?",
     "guided.prompt.worker_backend": "ワーカーバックエンドを選択",
     "guided.prompt.scheduler_backend": "スケジューラの永続化：再起動後もジョブ履歴を保持しますか？",
     "guided.prompt.database_engine": "{context} のデータベースエンジン",
@@ -1265,6 +1267,8 @@ MESSAGES: dict[str, str] = {
     "guided.choice.inference.host": "Use the one already running on this machine. The default.",
     "guided.choice.inference_speech.none": "No speech server. The default.",
     "guided.choice.inference_speech.kokoro_fastapi": "Text to speech for ai[voice], where the model server runs.",
+    "guided.choice.inference_hearing.none": "No hearing server. The default.",
+    "guided.choice.inference_hearing.speaches": "Speech to text for ai[voice] (Parakeet), in its own container.",
     "guided.choice.worker.arq": "シンプルでよくテストされた非同期ワーカー。設定は最小限。I/O バウンドのタスクに最適。デフォルト。",
     "guided.choice.worker.dramatiq": "マルチプロセスのアクターモデル。複数の OS プロセスが活きる CPU バウンドのタスクに最適。",
     "guided.choice.worker.taskiq": "非同期ネイティブ。キューごとのブローカーと、確認応答付きの Redis Streams トランスポートを使用します。",

@@ -99,8 +99,9 @@ class ModelChoice(Frozen):
 
 class LockedProvider(Frozen):
     """A provider whose voices cannot be heard, and what it needs
-    (``overview.blocked``): its key, or its packages installed."""
+    (``overview.blocked``): its key, or its server's address."""
 
+    provider: str
     provider_name: str
     voices: int
     needs: str
@@ -213,7 +214,10 @@ async def _voices(chosen: str) -> tuple[list[VoiceChoice], list[LockedProvider]]
         if needs := blocked(provider, found):
             locked.append(
                 LockedProvider(
-                    provider_name=provider.name, voices=len(theirs), needs=needs
+                    provider=provider.id,
+                    provider_name=provider.name,
+                    voices=len(theirs),
+                    needs=needs,
                 )
             )
             theirs = [v for v in theirs if v.id == chosen]

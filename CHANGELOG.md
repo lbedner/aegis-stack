@@ -9,6 +9,18 @@
 
 ### Added
 
+- **A hearing server.** `aegis add inference[speaches]` runs
+  [speaches](https://github.com/speaches-ai/speaches) in the compose stack
+  with Parakeet loaded, and the app hears through it
+  (`STT_PROVIDER=hearing_server`) the way Kokoro-FastAPI speaks at
+  `SPEECH_BASE_URL`, so the hearing model need not live in the app's
+  process. Any OpenAI-compatible transcription server works at
+  `HEARING_BASE_URL`. The call setup's Hears lists it only while it answers.
+  It has the speech server's surfaces: Overseer > Inference > speaches (its
+  models, Load and Unload, what is in memory and each transcription's time
+  charted), `inference hearing` and `inference hearing-model`,
+  `/api/v1/inference/hearing`, a row on the inference overview, and a
+  `speaches` health check under `inference`.
 - **An audit log that keeps its rows.** Every `AuditEmitter.emit` is now a row
   in `audit_event` as well as its log line, wherever the stack has the
   database component: on PostgreSQL in its own `audit` schema, through its own

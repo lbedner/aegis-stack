@@ -134,6 +134,21 @@ class TestATurn:
         untimed.observe(audio)
         assert untimed.first_word_ms is None
 
+    def test_it_times_the_caller_stopping_to_the_turn_done(self) -> None:
+        """How long the turn took, for its footer: from the end of the
+        caller's speech to the reply's end, every step between."""
+        now = iter([3.0, 95.5])
+        log = TurnLog(clock=lambda: next(now))
+
+        for event in (
+            RealtimeInputSpeechStartEvent(item_id="a"),
+            RealtimeInputSpeechEndEvent(item_id="a"),  # 3.0
+            RealtimeTurnCompleteEvent(),  # 95.5
+        ):
+            log.observe(event)
+
+        assert log.response_time_ms == 92_500
+
     def test_a_part_ended_twice_is_said_once(self) -> None:
         """#292: one reply was saved with its text twice, back to back - the
         same spoken part reported finished twice."""
@@ -284,16 +299,35 @@ class TestACallKnowsWhoSheIs:
     ) -> None:
         """It has no realtime API: the agent's session runs on the app's own
         chain around it, and a realtime model is still called by name."""
-        from app.services.ai.domains.voice.cascade.connection import (
+        from app.services.ai.domains.voice.cascade.call import (
             CascadeRealtimeModel,
         )
 
-        _, local = await _built(monkeypatch, model="ollama:qwen3.8:27b")
+        _, local = await _built(monkeypatch, model="ollama:qwen3.8:27b", chained=True)
         _, cloud = await _built(monkeypatch)
 
         assert isinstance(local["model"], CascadeRealtimeModel)
         assert local["model"].model_name == "qwen3.8:27b"
         assert cloud["model"] == "google:gemini-3.8-live"
+
+    @pytest.mark.asyncio
+    async def test_a_cloud_chat_model_is_chained_with_its_whole_turn(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A cloud model thinking on the chain reads her whole turn (it is
+        not minutes of local prefill), and is not warmed: a warm-up is a
+        local cache's, and a cloud one bills the prompt for it."""
+        from app.core.config import settings
+        from app.services.ai.domains.voice.cascade.call import (
+            CascadeRealtimeModel,
+        )
+
+        monkeypatch.setattr(settings, "OPENAI_API_KEY", "sk-test")
+        built, chained = await _built(monkeypatch, model="openai:gpt-5.5", chained=True)
+
+        assert isinstance(chained["model"], CascadeRealtimeModel)
+        assert chained["model"].model_name == "gpt-5.5"
+        assert chained["model"].warm is False
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("model", ["openai:gpt-live-1", "google:gemini-3.8-live"])
@@ -600,38 +634,6 @@ class TestACutCall:
         assert [step["tool"] for step in reply.metadata["tool_trace"]] == ["run_code"]
 
     @pytest.mark.asyncio
-    async def test_a_local_models_turn_is_saved_under_its_whole_id(
-        self, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """A local model's id has a colon of its own ("qwen3.8:27b"): only
-        the first one ends the provider's prefix."""
-        from app.services.ai.domains.voice.realtime_calls import drive
-        from tests._realtime import FakeRealtime
-
-        await _priced(async_db_session, monkeypatch)
-        conversation = await _conversation()
-
-        async def hang_up(session: object) -> None:
-            await session.close()  # type: ignore[attr-defined]
-
-        await drive(
-            ai_service,
-            FakeRealtime(_turn()[:2]),
-            ledger=async_db_session,
-            conversation_id=conversation.id,
-            model="llamacpp:qwen3.8:27b",
-            agent_slug="voice",
-            user_id=USER,
-            alongside=hang_up,
-        )
-
-        reply = (await ai_service.get_conversation(conversation.id)).messages[-1]
-        assert (reply.metadata["provider"], reply.metadata["model"]) == (
-            "llamacpp",
-            "qwen3.8:27b",
-        )
-
-    @pytest.mark.asyncio
     async def test_work_the_session_lost_is_logged(
         self, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -671,6 +673,38 @@ class TestACutCall:
         [(_, fields)] = told
         assert fields["error"] == lost.message
         assert fields["code"] == "response_incomplete"
+
+    @pytest.mark.asyncio
+    async def test_a_local_models_turn_is_saved_under_its_whole_id(
+        self, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A local model's id has a colon of its own ("qwen3.8:27b"): only
+        the first one ends the provider's prefix."""
+        from app.services.ai.domains.voice.realtime_calls import drive
+        from tests._realtime import FakeRealtime
+
+        await _priced(async_db_session, monkeypatch)
+        conversation = await _conversation()
+
+        async def hang_up(session: object) -> None:
+            await session.close()  # type: ignore[attr-defined]
+
+        await drive(
+            ai_service,
+            FakeRealtime(_turn()[:2]),
+            ledger=async_db_session,
+            conversation_id=conversation.id,
+            model="llamacpp:qwen3.8:27b",
+            agent_slug="voice",
+            user_id=USER,
+            alongside=hang_up,
+        )
+
+        reply = (await ai_service.get_conversation(conversation.id)).messages[-1]
+        assert (reply.metadata["provider"], reply.metadata["model"]) == (
+            "llamacpp",
+            "qwen3.8:27b",
+        )
 
     @pytest.mark.asyncio
     async def test_a_call_soon_after_picks_up_the_question(self) -> None:
@@ -1057,6 +1091,7 @@ class TestDrivingACall:
 
         reply = (await ai_service.get_conversation(conversation.id)).messages[-1]
         assert reply.metadata["first_word_ms"] >= 0
+        assert reply.metadata["response_time_ms"] >= reply.metadata["first_word_ms"]
 
     @pytest.mark.asyncio
     async def test_a_turn_it_hands_off_names_its_row(

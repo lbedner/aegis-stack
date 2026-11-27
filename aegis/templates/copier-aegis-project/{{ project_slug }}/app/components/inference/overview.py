@@ -5,10 +5,10 @@ Inference's overview, the ``inference status`` command and
 A row per engine: its job, whether it answers, what it holds, the memory it
 reports and who runs on it. Each engine reports memory its own way (Ollama
 each loaded model's, Kokoro-FastAPI its process's with its debug routes
-on, llama.cpp's server none), so a row that reports nothing says why, never
-0. The engines' memory is not summed into the machine's: the webserver runs
-in Docker and sees the VM, not the host the engines run on, so the total is
-what the engines report together (``reported_bytes``).
+on, llama.cpp's server and speaches none), so a row that reports nothing
+says why, never 0. The engines' memory is not summed into the machine's:
+the webserver runs in Docker and sees the VM, not the host the engines run
+on, so the total is what the engines report together (``reported_bytes``).
 
 Who runs on each is the AI service's to say (agents own their model, the
 voice profile its speech), read through its facade where the stack has it.
@@ -18,20 +18,16 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any, NamedTuple
 
-import psutil
 from pydantic import BaseModel, Field
 
 from app.components.inference import ENGINES, inference_engine_class, sampler
 from app.components.inference.engine import InferenceServerStatus
-from app.core import discovery, series, speech_server
+from app.core import discovery, hearing_server, series, speech_server
 from app.core.config import settings
 from app.core.figures import FIGURES, absent
 from app.core.formatting import format_bytes
 
-TEXT, SPEECH = "Text", "Speech"
-IN_APP_NAME = "In the app"
-IN_APP_MEMORY = "The webserver's whole process, the app with its in-app models."
-ELSEWHERE = "Only the webserver knows what its own process holds."
+TEXT, SPEECH, HEARING = "Text", "Speech", "Hearing"
 DOWN = "It is not answering."
 UNREPORTED = "It does not report its memory."
 NOTHING_REPORTED = "No engine reports its memory."
@@ -43,7 +39,7 @@ DB = "app.core.db"
 
 class Engine(NamedTuple):
     """What an engine is: its id (its ``inference[...]`` name, or the speech
-    server's slug), the name it goes by, and its job."""
+    or hearing server's slug), the name it goes by, and its job."""
 
     id: str
     name: str
@@ -57,6 +53,7 @@ def text_engine() -> Engine:
 
 
 SPEECH_ENGINE = Engine(speech_server.SLUG, speech_server.NAME, SPEECH)
+HEARING_ENGINE = Engine(hearing_server.SLUG, hearing_server.NAME, HEARING)
 
 
 class LoadedModel(BaseModel):
@@ -69,7 +66,7 @@ class LoadedModel(BaseModel):
 
 
 class EngineRow(BaseModel):
-    """One engine: ``id`` is an ``Engine``'s, or ``speech_server.IN_APP``;
+    """One engine: ``id`` is an ``Engine``'s;
     ``memory_note`` says why there is no memory figure, or what one covers."""
 
     model_config = FIGURES
@@ -176,29 +173,20 @@ def speech_row(reading: speech_server.SpeechServerReading) -> EngineRow:
     )
 
 
-def _in_app_row(in_app: list[Any], serving: bool) -> EngineRow:
-    """The models loaded into the webserver's own process, with its memory
-    (only the webserver itself knows either)."""
+def hearing_row(reading: hearing_server.HearingServerReading) -> EngineRow:
+    """The hearing server, as its sampler last read it."""
     return EngineRow(
-        id=speech_server.IN_APP,
-        name=IN_APP_NAME,
-        job=SPEECH,
-        available=True,
-        loaded=[LoadedModel(name=e.name) for e in in_app if e.loaded]
-        if serving
-        else [],
-        memory_bytes=_process_memory() if serving else None,
-        memory_note=IN_APP_MEMORY if serving else ELSEWHERE,
+        **HEARING_ENGINE._asdict(),
+        available=reading.available,
+        url=reading.base_url,
+        loaded=[LoadedModel(name=m) for m in reading.loaded or []],
+        memory_note=_note(reading.available, UNREPORTED),
     )
 
 
-def _process_memory() -> int:
-    return psutil.Process().memory_info().rss
-
-
-def _to_add(has_speech: bool) -> list[EngineToAdd]:
-    """The speech server where none is set, and each other text engine (an
-    app runs one, so adding another switches to it)."""
+def _to_add(has_speech: bool, has_hearing: bool) -> list[EngineToAdd]:
+    """The speech and hearing servers where none is set, and each other
+    text engine (an app runs one, so adding another switches to it)."""
     current = inference_engine_class()
     found = [
         EngineToAdd(
@@ -210,15 +198,17 @@ def _to_add(has_speech: bool) -> list[EngineToAdd]:
         for engine in ENGINES.values()
         if engine is not current
     ]
-    if not has_speech:
-        found.append(
-            EngineToAdd(
-                name=speech_server.NAME,
-                job=SPEECH,
-                how=f"{speech_server.HOW_TO_ADD}.",
-                command=speech_server.ADD,
-            )
+    servers = (
+        (speech_server, SPEECH, has_speech),
+        (hearing_server, HEARING, has_hearing),
+    )
+    found += [
+        EngineToAdd(
+            name=server.NAME, job=job, how=f"{server.HOW_TO_ADD}.", command=server.ADD
         )
+        for server, job, has in servers
+        if not has
+    ]
     return found
 
 
@@ -237,15 +227,23 @@ async def _users(session: Any, server: InferenceServerStatus) -> Any:
     return await read(session, served)
 
 
-async def _readings(serving: bool) -> tuple[tuple[InferenceServerStatus, str], Any]:
-    """The text engine and the speech server, together: in the webserver,
-    the samplers' last readings (one read a tick for every viewer); anywhere
-    else, read now, needing no Redis. No speech server set, none is read."""
+async def _readings(serving: bool) -> list[Any]:
+    """The text engine, the speech server and the hearing server, together:
+    in the webserver, the samplers' last readings (one read a tick for every
+    viewer); anywhere else, read now, needing no Redis. A server not set is
+    not read (None)."""
     read = series.reading if serving else _now
-    if speech_server.reach(settings) is None:
-        return await read(sampler.SAMPLER), None
-    text, speech = await asyncio.gather(read(sampler.SAMPLER), read(sampler.SPEECH))
-    return text, speech
+
+    async def unset() -> None:
+        return None
+
+    servers = (
+        (sampler.SPEECH, speech_server.reach(settings)),
+        (sampler.HEARING, hearing_server.reach(settings)),
+    )
+    return await asyncio.gather(
+        read(sampler.SAMPLER), *(read(s) if url else unset() for s, url in servers)
+    )
 
 
 async def _now(each: series.Sampler) -> Any:
@@ -253,16 +251,16 @@ async def _now(each: series.Sampler) -> Any:
 
 
 async def read_overview(session: Any, *, serving: bool = True) -> InferenceOverview:
-    """Every engine now, who runs on each where ``session`` is a database's,
-    and the in-app engines' memory where this process is the webserver
-    (``serving``; a CLI command is not)."""
-    (server, url), speech = await _readings(serving)
+    """Every engine now, and who runs on each where ``session`` is a
+    database's; read from the sampled series where this process is the
+    webserver (``serving``; a CLI command is not)."""
+    (server, url), speech, heard = await _readings(serving)
     rows = [text_row(server, url)]
     if speech is not None:
         rows.append(speech_row(speech))
+    if heard is not None:
+        rows.append(hearing_row(heard))
     used = await _users(session, server)
-    if used is not None and used.in_app:
-        rows.append(_in_app_row(used.in_app, serving))
     by: dict[str, list[str]] = {}
     for use in used.uses if used is not None else []:
         by.setdefault(use.engine, []).append(use.by)
@@ -270,7 +268,7 @@ async def read_overview(session: Any, *, serving: bool = True) -> InferenceOverv
     return InferenceOverview(
         engines=engines,
         reported_bytes=sum(r.memory_bytes or 0 for r in engines),
-        to_add=_to_add(speech is not None),
+        to_add=_to_add(speech is not None, heard is not None),
     )
 
 

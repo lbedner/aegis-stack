@@ -17,6 +17,7 @@ from ..models import (
     SpeechResult,
     SpeechTokens,
     TTSProvider,
+    server_url,
     speech_format,
 )
 from ..spoken import pronounced
@@ -111,10 +112,12 @@ class TTSService:
         # Build config from settings or explicit values
         if provider or model or voice:
             # Explicit configuration overrides settings
+            chosen = provider or TTSProvider.OPENAI
             self._config = TTSConfig(
-                provider=provider or TTSProvider.OPENAI,
+                provider=chosen,
                 model=model,
                 voice=voice,
+                server_url=server_url(chosen, settings) if settings else None,
             )
         elif settings:
             # Load from settings

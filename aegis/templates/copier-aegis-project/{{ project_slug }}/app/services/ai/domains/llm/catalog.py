@@ -15,7 +15,7 @@ from app.core.figures import FIGURES
 from app.core.time import utcnow
 from app.core.tools import register_tool
 from app.services.ai.domains.llm import queries
-from app.services.ai.models.llm import LargeLanguageModel, LLMPrice
+from app.services.ai.models.llm import LargeLanguageModel, LLMDeployment, LLMPrice
 
 
 async def context_window_for(model_id: str) -> int | None:
@@ -120,10 +120,13 @@ async def list_models(
         )
         if vendors:
             models = _capped_per_vendor(models, limit)
-        prices = await queries.latest_prices_by_llm_ids(
-            session, [m.id for m in models if m.id is not None]
-        )
-    return [_list_result(model, prices.get(model.id or -1)) for model in models]
+        ids = [m.id for m in models if m.id is not None]
+        prices = await queries.latest_prices_by_llm_ids(session, ids)
+        deployed = await queries.serving_deployments(session, ids)
+    return [
+        _list_result(model, prices.get(model.id or -1), deployed.get(model.id or -1))
+        for model in models
+    ]
 
 
 def _capped_per_vendor(
@@ -142,7 +145,11 @@ def _capped_per_vendor(
     return capped
 
 
-def _list_result(model: LargeLanguageModel, price: LLMPrice | None) -> LLMListResult:
+def _list_result(
+    model: LargeLanguageModel,
+    price: LLMPrice | None,
+    deployment: LLMDeployment | None,
+) -> LLMListResult:
     return LLMListResult(
         model_id=model.model_id,
         title=model.title,
@@ -159,7 +166,7 @@ def _list_result(model: LargeLanguageModel, price: LLMPrice | None) -> LLMListRe
         if model.released_on
         else None,
         mode=model.mode,
-        supports_tools=model.supports_tools,
+        supports_tools=model.tools_with(deployment),
     )
 
 

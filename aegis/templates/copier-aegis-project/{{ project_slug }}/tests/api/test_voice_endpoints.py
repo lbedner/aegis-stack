@@ -263,17 +263,6 @@ class TestSttCatalogProviders:
         provider_ids = [p["id"] for p in data]
         assert STTProvider.GROQ_WHISPER.value in provider_ids
 
-    def test_list_stt_providers_contains_faster_whisper(
-        self, client: TestClient
-    ) -> None:
-        """Test that Faster Whisper is included."""
-        response = client.get("/api/v1/voice/catalog/stt/providers")
-
-        assert response.status_code == 200
-        data = response.json()
-        provider_ids = [p["id"] for p in data]
-        assert STTProvider.FASTER_WHISPER.value in provider_ids
-
 
 class TestSttCatalogModels:
     """Tests for STT model catalog endpoints."""
@@ -331,18 +320,6 @@ class TestSttCatalogModels:
         assert len(data) > 0
         for model in data:
             assert model["provider_id"] == STTProvider.GROQ_WHISPER.value
-
-    def test_list_stt_models_faster_whisper_provider(self, client: TestClient) -> None:
-        """Test retrieving models for Faster Whisper provider."""
-        response = client.get(
-            f"/api/v1/voice/catalog/stt/{STTProvider.FASTER_WHISPER.value}/models"
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data) > 0
-        for model in data:
-            assert model["provider_id"] == STTProvider.FASTER_WHISPER.value
 
     def test_list_stt_models_invalid_provider(self, client: TestClient) -> None:
         """Test error handling for invalid provider."""

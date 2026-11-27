@@ -26,7 +26,6 @@ from ..models import (
     SpeechRequest,
     SpeechResult,
     TTSProvider,
-    not_installed,
     unserved,
 )
 from . import length, realtime
@@ -332,10 +331,9 @@ def get_tts_provider(
 
     Raises:
         ValueError: If provider type is not supported.
-        CannotRunError: An in-process provider's packages are not installed,
-            or a speech server's address is not set.
+        CannotRunError: A speech server's address is not set.
     """
-    if refused := not_installed(provider) or unserved(provider, server_url):
+    if refused := unserved(provider, server_url):
         raise CannotRunError(refused)
     if provider == TTSProvider.OPENAI:
         return OpenAITTSProvider(
@@ -350,10 +348,6 @@ def get_tts_provider(
             model=model or DEFAULT_TTS_MODELS[provider],
             voice=voice or DEFAULT_TTS_VOICES[provider],
         )
-    elif provider == TTSProvider.KOKORO:
-        from .kokoro import KokoroProvider  # it imports this module
-
-        return KokoroProvider(voice=voice or DEFAULT_TTS_VOICES[provider])
     elif provider == TTSProvider.LOCAL_SERVER and server_url:
         from .server import ServerTTSProvider  # it imports this module
 

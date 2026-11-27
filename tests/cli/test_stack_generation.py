@@ -343,18 +343,22 @@ STACK_COMBINATIONS = [
     ),
     StackCombination(
         name="inference_speech",
-        # A speech server beside Ollama, both in docker: its container, its
-        # health under the inference check, and its Overseer page.
-        components=["htmx", "inference[docker,kokoro_fastapi]"],
+        # A speech and a hearing server beside Ollama, all in docker: their
+        # containers, the speech server's health under the inference check,
+        # and its Overseer page.
+        components=["htmx", "inference[docker,kokoro_fastapi,speaches]"],
         services=[],
-        description="Inference in docker with a speech server",
+        description="Inference in docker with speech and hearing servers",
         expected_files=[
             "app/core/speech_server.py",
             "app/services/system/health_speech.py",
             "app/components/web_frontend/templates/pages/overseer/inference/_speech_overview.html",
             "tests/core/test_speech_server.py",
+            "app/services/system/health_hearing.py",
+            "app/components/web_frontend/overseer_inference_hearing.py",
+            "app/components/web_frontend/templates/pages/overseer/inference/_hearing_overview.html",
         ],
-        expected_docker_services=["webserver", "ollama", "kokoro-fastapi"],
+        expected_docker_services=["webserver", "ollama", "kokoro-fastapi", "speaches"],
         expected_pyproject_deps=["fastapi", "flet"],
     ),
     StackCombination(

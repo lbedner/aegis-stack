@@ -47,6 +47,7 @@ class QKeys:
     POSTGRES_PROVIDER = "postgres_provider"
     INFERENCE_PLACEMENT = "inference_placement"
     INFERENCE_SPEECH = "inference_speech"
+    INFERENCE_HEARING = "inference_hearing"
     AUTH_LEVEL = "auth_level"
     AI_FRAMEWORK = "ai_framework"
     AI_STORAGE = "ai_storage"
@@ -61,6 +62,7 @@ class QKeys:
         POSTGRES_PROVIDER,
         INFERENCE_PLACEMENT,
         INFERENCE_SPEECH,
+        INFERENCE_HEARING,
         AUTH_LEVEL,
         AI_FRAMEWORK,
         AI_STORAGE,

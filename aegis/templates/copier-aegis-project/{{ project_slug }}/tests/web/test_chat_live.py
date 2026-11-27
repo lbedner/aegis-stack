@@ -8,6 +8,7 @@ same socket under its own path.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from importlib.util import find_spec
@@ -829,3 +830,23 @@ async def test_her_words_reach_the_page_as_she_says_them() -> None:
         {"type": "saying", "text": "First the"},
         {"type": "saying", "text": "First the Server"},
     ]
+
+
+async def test_each_stage_of_a_local_call_reaches_the_page_as_a_step() -> None:
+    """The status line and trail name what a local call is doing (hearing,
+    the model reading the call), and a turn heard as nothing ends them:
+    it sat on "working" for minutes with no word of why (2026-11-21)."""
+    from app.components.web_frontend.routes.partials import chat_live
+    from app.services.ai.service import call_stages
+
+    told: list[dict[str, object]] = []
+
+    class Page:
+        async def send_json(self, message: dict[str, object]) -> None:
+            told.append(message)
+
+    with chat_live._staging(Page()):  # type: ignore[arg-type]
+        call_stages.tell("Hearing you")
+        call_stages.tell(None)
+        await asyncio.sleep(0)
+    assert told == [{"type": "working", "label": "Hearing you"}, {"type": "done"}]

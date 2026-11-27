@@ -25,9 +25,13 @@ from app.core.formatting import format_bytes, format_span
 NAME = "Kokoro-FastAPI"
 # Its id (SPEECH_SERVER, and the catalog's org for what it serves).
 SLUG = "kokoro_fastapi"
-# What it is called on the Docker network: the host, or its own compose
-# service (``inference[docker,kokoro_fastapi]``).
-DOCKER_HOSTS = {"host.docker.internal", "kokoro-fastapi"}
+# What a server of yours (speaking, hearing) is called on the Docker
+# network: the host, or its own compose service
+# (``inference[docker,kokoro_fastapi]``, ``inference[speaches]``).
+DOCKER_HOSTS = {"host.docker.internal", "kokoro-fastapi", "speaches"}
+# Sent as a server of yours' key: without one the OpenAI client sends
+# OPENAI_API_KEY, the app's own, to a server that is not OpenAI.
+NO_KEY = "speech-server"
 # A local server answers at once; Ollama's client waits as long.
 WAIT_SECONDS = 2.0
 # A line takes as long as it is to say, and a model reload as long as a load.
@@ -60,9 +64,6 @@ OPENS = {DEV: "its model's state, unload and reload", DEBUG: "its memory and thr
 ADD = f"aegis add inference[{SLUG}]"
 HOW_TO_ADD = f"Run {NAME} and set SPEECH_BASE_URL in .env, or add it to the stack"
 UNSET = f"No speech server is set. {HOW_TO_ADD}: {ADD}."
-# The engine id of a speech model loaded into the app's own process (the
-# inference overview's "In the app" row; the voice says which it uses).
-IN_APP = "in_app"
 # Kokoro's voice names say their accent and gender (``af_heart``).
 ACCENTS = {
     "a": "General American",
@@ -106,27 +107,29 @@ class SpeechServerReading(BaseModel):
 
 
 class SpeechServerError(Exception):
-    """A call the server refused or never answered, said for its caller;
-    ``flag`` is the one left off where that is why (Kokoro-FastAPI's 403)."""
+    """A call a server of yours (speech or hearing) refused or never
+    answered, said for its caller; ``flag`` is the one left off where that
+    is why (Kokoro-FastAPI's 403)."""
 
     def __init__(self, message: str, flag: str | None = None) -> None:
         super().__init__(message)
         self.flag = flag
 
 
-def reach(settings: Any) -> str | None:
-    """SPEECH_BASE_URL as this process reaches it: a shell on the host swaps
-    a Docker name for localhost, on the port ``make serve`` published it on
-    (SPEECH_HOST_PORT). Only inference and ai[voice] carry the two
-    settings; elsewhere there is no server."""
-    url = getattr(settings, "SPEECH_BASE_URL", None)
+def reach(settings: Any, setting: str = "SPEECH_BASE_URL") -> str | None:
+    """A server's address (``setting``: SPEECH_BASE_URL, HEARING_BASE_URL)
+    as this process reaches it: a shell on the host swaps a Docker name for
+    localhost, on the port ``make serve`` published it on (its
+    ``*_HOST_PORT``). Only inference and ai[voice] carry the settings;
+    elsewhere there is no server."""
+    url = getattr(settings, setting, None)
     if not url or settings.is_docker:
         return url
-    port = getattr(settings, "SPEECH_HOST_PORT", None)
+    port = getattr(settings, setting.replace("_BASE_URL", "_HOST_PORT"), None)
     return settings.localhost_url(url, DOCKER_HOSTS, port)
 
 
-def _root(url: str) -> str:
+def root(url: str) -> str:
     """The server itself, where its own routes are: ``url`` less ``/v1``."""
     return url.rstrip("/").removesuffix("/v1")
 
@@ -168,9 +171,10 @@ def left_off(closed: list[str]) -> str:
     return f"Start {NAME} with {flags} to see the rest."
 
 
-def unanswered(url: str) -> str:
-    """What to do where nothing answered at ``url``."""
-    return f"No speech server answered at {url}. Start it, or check SPEECH_BASE_URL."
+def unanswered(url: str, kind: str = "speech", setting: str = "SPEECH_BASE_URL") -> str:
+    """What to do where nothing answered at ``url`` (a ``kind`` server of
+    yours, set by ``setting``)."""
+    return f"No {kind} server answered at {url}. Start it, or check {setting}."
 
 
 def _shown(pairs: list[tuple[str, Any]]) -> list[tuple[str, str]]:
@@ -238,6 +242,18 @@ def _reported(found: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def answers(url: str) -> bool:
+    """Whether a server is up at ``url``: any answer counts, an error page
+    too; only one that cannot be reached, or does not answer in time, is
+    down. Asked of a speaking or a hearing server alike."""
+    try:
+        async with httpx.AsyncClient(timeout=WAIT_SECONDS) as client:
+            await client.get(url)
+    except httpx.HTTPError:
+        return False
+    return True
+
+
 async def read(url: str) -> SpeechServerReading:
     """The server at ``url`` as it answers now; unavailable, and why, where
     it cannot be read."""
@@ -246,7 +262,7 @@ async def read(url: str) -> SpeechServerReading:
             models, listing, *reports = await asyncio.gather(
                 _get(client, url, "models"),
                 _get(client, url, "audio/voices"),
-                *(_report(client, _root(url), path) for path in REPORTS),
+                *(_report(client, root(url), path) for path in REPORTS),
             )
         found = dict(zip(REPORTS, reports, strict=True))
         return SpeechServerReading(
@@ -269,18 +285,26 @@ async def charted(kind: str, seconds: float) -> None:
     await series.record({LATENCY[kind]: seconds})
 
 
-async def _post(url: str, body: Any = None, flag: str | None = None) -> bytes:
-    """What the server answers a POST to ``url`` with; ``SpeechServerError``
-    where it does not, naming ``flag`` where that keeps the route shut (403)."""
+async def call(
+    url: str,
+    body: Any = None,
+    flag: str | None = None,
+    *,
+    method: str = "POST",
+    kind: str = "speech",
+) -> bytes:
+    """What a ``kind`` server of yours answers ``method`` on ``url`` with;
+    ``SpeechServerError`` where it does not, naming ``flag`` where that
+    keeps the route shut (403)."""
     try:
         async with httpx.AsyncClient(timeout=SAY_SECONDS) as client:
-            answer = await client.post(url, json=body)
+            answer = await client.request(method, url, json=body)
     except httpx.HTTPError as exc:
-        raise SpeechServerError(f"The speech server did not answer: {exc!r}") from exc
+        raise SpeechServerError(f"The {kind} server did not answer: {exc!r}") from exc
     if flag and answer.status_code == httpx.codes.FORBIDDEN:
         raise SpeechServerError(left_off([flag]), flag)
     if not answer.is_success:
-        raise SpeechServerError(f"The speech server refused ({answer.status_code}).")
+        raise SpeechServerError(f"The {kind} server refused ({answer.status_code}).")
     return answer.content
 
 
@@ -289,7 +313,7 @@ async def say(url: str, text: str, voice: str) -> bytes:
     ``SpeechServerError`` where it cannot."""
     body = {"model": MODEL, "input": text, "voice": voice, "response_format": "mp3"}
     started = time.perf_counter()
-    audio = await _post(f"{url.rstrip('/')}/audio/speech", body)
+    audio = await call(f"{url.rstrip('/')}/audio/speech", body)
     await charted("file", time.perf_counter() - started)
     return audio
 
@@ -299,7 +323,7 @@ async def move(url: str, action: str) -> None:
     action than ``ACTIONS``, ``SpeechServerError`` where the server refuses."""
     if action not in ACTIONS:
         raise ValueError(f"No action {action}: unload or reload.")
-    await _post(f"{_root(url)}/dev/{action}", flag=DEV)
+    await call(f"{root(url)}/dev/{action}", flag=DEV)
 
 
 def traits(name: str) -> tuple[str, str] | None:

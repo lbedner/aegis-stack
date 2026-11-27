@@ -2,7 +2,8 @@
 """
 The inference health check for {{ project_name }}: one check for the
 component, each engine it tracks a sub-component named for its server (the
-text engine by its ``inference[...]`` name, the speech server by its slug).
+text engine by its ``inference[...]`` name, the speech and hearing servers
+by their slugs).
 """
 {% if ollama_mode != "none" %}
 from __future__ import annotations
@@ -14,6 +15,7 @@ from app.core.config import settings
 from app.core.constants import ComponentName
 from app.core.log import logger
 
+from .health_hearing import check_hearing_health
 from .health_speech import check_speech_health
 from .models import ComponentStatus, ComponentStatusType
 
@@ -23,10 +25,12 @@ if TYPE_CHECKING:
 
 async def check_inference_health() -> ComponentStatus:
     """Every engine the component tracks, read together so one failing
-    leaves the others' readings: the app's text engine, and the speech
-    server where one is set."""
-    engine, speech = await asyncio.gather(_engine_health(), check_speech_health())
-    return inference_status(engine, *([] if speech is None else [speech]))
+    leaves the others' readings: the app's text engine, and the speech and
+    hearing servers where each is set."""
+    engine, *servers = await asyncio.gather(
+        _engine_health(), check_speech_health(), check_hearing_health()
+    )
+    return inference_status(engine, *(s for s in servers if s is not None))
 
 
 def inference_status(

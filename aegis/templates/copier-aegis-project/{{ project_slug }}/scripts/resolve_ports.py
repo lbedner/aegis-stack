@@ -25,6 +25,7 @@ _PERSISTED_KEYS = {
     "OLLAMA_HOST_PORT",
     "LLAMACPP_HOST_PORT",
     "SPEECH_HOST_PORT",
+    "HEARING_HOST_PORT",
     "BROWSER_HOST_PORT",
     "INGRESS_DASHBOARD_PORT",
 }
@@ -143,6 +144,7 @@ def resolve_ports(
     browser: bool,
     storage: bool,
     speech: bool = False,
+    hearing: bool = False,
     llamacpp: bool = False,
     ports_file: Path | None = None,
 ) -> dict[str, int]:
@@ -201,6 +203,10 @@ def resolve_ports(
     if speech:
         ports["SPEECH_HOST_PORT"] = pick(
             "SPEECH_HOST_PORT", "SPEECH_PORT_BASE", "8880", "speech server"
+        )
+    if hearing:
+        ports["HEARING_HOST_PORT"] = pick(
+            "HEARING_HOST_PORT", "HEARING_PORT_BASE", "8010", "hearing server"
         )
     if browser:
         ports["BROWSER_HOST_PORT"] = pick(

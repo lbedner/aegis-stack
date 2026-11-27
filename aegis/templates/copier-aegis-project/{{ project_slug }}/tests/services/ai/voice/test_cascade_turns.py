@@ -3,6 +3,8 @@ window, and at each pause Smart Turn judges whether the caller is done.
 Both models are stood in for here; the features Smart Turn reads are
 checked against ``transformers``' own (values captured from it)."""
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -11,8 +13,8 @@ from app.services.ai.domains.voice.cascade.turns import Listener
 from tests._cascade import (
     LOUD,
     QUIET,
-    WINDOW_BYTES,
     pause,
+    said,
     speech,
     windows,
     windows_for,
@@ -30,11 +32,11 @@ def test_a_finished_turn_is_heard_whole_from_just_before_it_began() -> None:
 
     ear = Listener(vad=speech, done=done)
     before = windows(QUIET, QUIET)
-    heard = ear.hear(before + windows(LOUD, LOUD) + pause())
+    heard = ear.hear(before + said() + pause())
 
     assert [h.kind for h in heard] == ["start", "end"]
     assert len(judged) == 1
-    assert len(heard[1].audio) == len(before) + 2 * WINDOW_BYTES + len(pause())
+    assert len(heard[1].audio) == len(before) + len(said()) + len(pause())
 
 
 def test_a_pause_mid_thought_waits_for_more() -> None:
@@ -44,7 +46,7 @@ def test_a_pause_mid_thought_waits_for_more() -> None:
     ear = Listener(vad=speech, done=lambda audio: next(verdicts))
     quiet = pause()
 
-    first = ear.hear(windows(LOUD) + quiet)
+    first = ear.hear(said() + quiet)
     second = ear.hear(windows(LOUD) + quiet)
 
     assert [h.kind for h in first] == ["start"]
@@ -55,7 +57,7 @@ def test_a_pause_mid_thought_waits_for_more() -> None:
 def test_a_long_enough_silence_ends_the_turn_whatever_smart_turn_says() -> None:
     ear = Listener(vad=speech, done=lambda audio: 0.0)
 
-    heard = ear.hear(windows(LOUD) + windows(*[QUIET] * windows_for(turns.GIVE_UP_MS)))
+    heard = ear.hear(said() + windows(*[QUIET] * windows_for(turns.GIVE_UP_MS)))
 
     assert [h.kind for h in heard] == ["start", "end"]
 
@@ -63,13 +65,24 @@ def test_a_long_enough_silence_ends_the_turn_whatever_smart_turn_says() -> None:
 def test_audio_in_pieces_of_any_size_is_heard_the_same() -> None:
     """The page sends frames that are not Silero's window: the rest waits
     for the next piece."""
-    audio = windows(QUIET, LOUD, LOUD) + pause()
+    audio = windows(QUIET) + said() + pause()
     ear = Listener(vad=speech, done=lambda audio: 0.9)
 
     heard = [h for i in range(0, len(audio), 333) for h in ear.hear(audio[i : i + 333])]
 
     assert [h.kind for h in heard] == ["start", "end"]
     assert ear.hear(b"") == []
+
+
+def test_a_click_is_no_turn() -> None:
+    """A window or a few heard as speech (a tap, a click, a breath) was a
+    half-second turn, and the hearing model made "Yeah." of it
+    (2026-11-21): a turn starts only once speech has lasted MIN_SPEECH_MS."""
+    ear = Listener(vad=speech, done=lambda audio: pytest.fail("judged a click"))
+    short = windows_for(turns.MIN_SPEECH_MS) - 1
+
+    assert ear.hear(windows(*[LOUD] * short) + pause() * 3) == []
+    assert [h.kind for h in ear.hear(said())] == ["start"]
 
 
 def test_silence_alone_is_no_turn() -> None:
@@ -92,3 +105,9 @@ def test_the_features_are_whispers() -> None:
     }.items():
         assert spec[mel, frame] == pytest.approx(value, abs=1e-4)
     assert spec.mean() == pytest.approx(-0.30882, abs=1e-4)
+
+
+def test_a_model_file_already_fetched_is_not_fetched_again(tmp_path: Path) -> None:
+    (tmp_path / "silero_vad.onnx").write_bytes(b"kept")
+
+    assert turns.fetched(turns.SILERO, tmp_path).read_bytes() == b"kept"

@@ -1,0 +1,7 @@
+{# A server of yours' Overview (overseer_live.ServerPage): its live part
+   (``server_body``, re-sent over SSE every tick while open) and its charts. #}
+{% from "pages/overseer/_macros.html" import live_charts %}
+<div id="{{ server_event }}" class="space-y-4" hx-ext="sse" sse-connect="{{ server_charts.events }}">
+  <div sse-swap="{{ server_event }}" hx-target="this">{% include server_body %}</div>
+  {{ live_charts(server_charts, "#" ~ server_event, request.url.path) }}
+</div>

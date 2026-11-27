@@ -12,12 +12,10 @@ from app.components.inference import sampler
 from app.core import discovery, series, speech_server
 from app.core.constants import ComponentName
 from app.core.speech_server import SpeechServerReading
-from app.services.system import ui_runtime
 
 from .overseer_inference_text import PARTIALS, where
-from .overseer_live import Drawn, chart_panel, live_events
+from .overseer_live import ServerPage
 from .overseer_nav import SectionRequest, page_url
-from .rendering import fragment
 
 TABS = {"overview": "Overview", "voices": "Voices"}
 # Its live part and charts over SSE, a voice played and its model moved by
@@ -71,6 +69,17 @@ def speech_view(speech: SpeechServerReading) -> dict[str, Any]:
     }
 
 
+SPEECH_OVERVIEW = ServerPage(
+    sampler.SPEECH,
+    sampler.SPEECH_CHARTS,
+    SPEECH_EVENT,
+    SPEECH_BODY,
+    SPEECH_EVENTS,
+    SPEECH_WINDOWS,
+    speech_view,
+)
+
+
 async def context(tab: str, req: SectionRequest) -> dict[str, Any]:
     """The speech server as its sampler last read it (once a tick while the
     page is open): its Overview with its charts, or its voices by accent
@@ -86,31 +95,8 @@ async def context(tab: str, req: SectionRequest) -> dict[str, Any]:
             "say": SAY,
             "voice_page": VOICE_PAGE,
         }
-    window = series.window_of(req.query.get("window"), SPEECH_WINDOWS)
-    charts = await ui_runtime.draw(sampler.SPEECH_CHARTS, window)
-    return speech_view(speech) | {
-        "speech": speech,
-        "speech_event": SPEECH_EVENT,
-        "speech_charts": chart_panel(
-            SPEECH_EVENT, charts, window, SPEECH_EVENTS, SPEECH_WINDOWS
-        ),
-    }
+    overview = await SPEECH_OVERVIEW.overview(speech, req.query.get("window"))
+    return overview | {"speech": speech}
 
 
-def speech_events(  # noqa: ANN201 - async iterator
-    window: int = series.DEFAULT_WINDOW, max_frames: int | None = None
-):
-    """The Overview's live part and each chart over SSE
-    (``overseer_live.live_events``)."""
-
-    async def read(draw: bool) -> tuple[dict[str, str], Drawn]:
-        speech = await series.reading(sampler.SPEECH)
-        sent = (
-            {}
-            if speech is None
-            else {SPEECH_EVENT: fragment(SPEECH_BODY, **speech_view(speech))}
-        )
-        drawn = await ui_runtime.draw(sampler.SPEECH_CHARTS, window) if draw else None
-        return sent, drawn
-
-    return live_events(SPEECH_EVENT, read, window, max_frames)
+speech_events = SPEECH_OVERVIEW.stream

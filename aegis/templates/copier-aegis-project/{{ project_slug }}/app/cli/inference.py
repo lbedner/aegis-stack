@@ -6,6 +6,9 @@ Inference and the inference API:
 - ``inference speech`` - what it reports, and its voices by accent and gender.
 - ``inference speak "a line" -v af_heart`` - the line said, into an MP3.
 - ``inference speech-model unload|reload`` - its model out of memory, or back.
+- ``inference hearing`` - the hearing server's models, and those in memory.
+- ``inference hearing-model load|unload MODEL`` - a hearing model into
+  memory, or out.
 - ``inference link-ollama`` - Ollama's GGUF models into llama-server's
   ``--models-dir`` (``app.components.inference.ollama_library``).
 - ``inference llama`` - that folder served by a llama-server router, here
@@ -21,6 +24,7 @@ import os
 from pathlib import Path
 import platform
 import shutil
+from types import ModuleType
 from typing import Annotated
 from urllib.parse import urlsplit
 
@@ -30,12 +34,12 @@ from app.cli import theme
 from app.components.inference import overview
 from app.components.inference.llamacpp import LlamaCppEngine, router_command
 from app.components.inference.ollama_library import link_ollama as link
-from app.core import speech_server
+from app.core import hearing_server, speech_server
 from app.core.config import settings
 
 app = typer.Typer(
     name="inference",
-    help="The local inference engines: their status, the speech server, and llama.cpp's models.",
+    help="The local inference engines: their status, the speech and hearing servers, and llama.cpp's models.",
     no_args_is_help=True,
 )
 
@@ -56,11 +60,12 @@ async def status() -> None:
         typer.echo(f"Add {engine.name} ({engine.job}): {engine.how} {engine.command}")
 
 
-def _url() -> str:
-    """Where the speech server is; exits saying how to set one where none is."""
-    if url := speech_server.reach(settings):
+def _url(server: ModuleType = speech_server) -> str:
+    """Where the speech server (or ``hearing_server``) is; exits saying how
+    to set one where none is."""
+    if url := server.reach(settings):
         return url
-    theme.fail(speech_server.UNSET)
+    theme.fail(server.UNSET)
 
 
 @app.command()
@@ -108,6 +113,32 @@ async def speech_model(
     except (ValueError, speech_server.SpeechServerError) as exc:
         theme.fail(str(exc))
     theme.good(f"{speech_server.NAME}: {action}ed")
+
+
+@app.command()
+async def hearing() -> None:
+    """The hearing server's models, and those in memory where it says."""
+    reading = await hearing_server.read(_url(hearing_server))
+    if not reading.available:
+        theme.fail(f"{hearing_server.unanswered(reading.base_url)} ({reading.error})")
+    theme.good(f"{hearing_server.NAME} at {reading.base_url}")
+    for label, value in hearing_server.figures(reading):
+        typer.echo(f"  {label}: {value}")
+    for model in reading.models:
+        typer.echo(f"  {model}{' (in memory)' if reading.in_memory(model) else ''}")
+
+
+@app.command("hearing-model")
+async def hearing_model(
+    action: Annotated[str, typer.Argument(help="load or unload")],
+    model: Annotated[str, typer.Argument(help="One of the server's models.")],
+) -> None:
+    """Load one of the hearing server's models into memory, or unload it."""
+    try:
+        await hearing_server.move(_url(hearing_server), action, model)
+    except (ValueError, speech_server.SpeechServerError) as exc:
+        theme.fail(str(exc))
+    theme.good(f"{hearing_server.NAME}: {model} {action}ed")
 
 
 def _folders() -> tuple[Path, Path]:

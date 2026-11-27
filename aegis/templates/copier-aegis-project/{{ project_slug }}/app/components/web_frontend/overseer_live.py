@@ -8,6 +8,7 @@ nobody is looking. A frame goes out only when the fragment changed.
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 import contextlib
+from dataclasses import dataclass
 import time
 from typing import Any
 
@@ -17,6 +18,9 @@ from markupsafe import Markup
 from app.core import series
 from app.core.concurrency import until_closing
 from app.core.log import logger
+from app.core.series import Sampler
+from app.services.system import ui_runtime
+from app.services.system.ui_runtime import Chart
 
 from .rendering import fragment, templates, with_query
 
@@ -264,3 +268,48 @@ def live_events(
         return sent if drawn is None else sent | chart_frames(prefix, drawn, held)
 
     return fragments_events(frame, series.TICK_SECONDS, max_frames)
+
+
+@dataclass(frozen=True)
+class ServerPage:
+    """A server-of-yours page's live Overview (the speech and hearing
+    servers'): its sampler's last reading through ``view`` into ``body``,
+    and its charts, at first load and over SSE. ``event`` names both the
+    stream's event and the page's ``#id`` (``_server_overview.html``)."""
+
+    sampler: Sampler
+    charts: tuple[Chart, ...]
+    event: str
+    body: str
+    events: str
+    windows: tuple[tuple[int, str], ...]
+    view: Callable[[Any], dict[str, Any]]
+
+    async def overview(self, reading: Any, window: str | None) -> dict[str, Any]:
+        """The Overview's context for ``reading``, its charts over ``window``."""
+        seconds = series.window_of(window, self.windows)
+        charts = await ui_runtime.draw(self.charts, seconds)
+        return self.view(reading) | {
+            "server_event": self.event,
+            "server_body": self.body,
+            "server_charts": chart_panel(
+                self.event, charts, seconds, self.events, self.windows
+            ),
+        }
+
+    def stream(
+        self, window: int = series.DEFAULT_WINDOW, max_frames: int | None = None
+    ) -> AsyncIterator[str]:
+        """The Overview's live part and each chart over SSE (``live_events``)."""
+
+        async def read(draw: bool) -> tuple[dict[str, str], Drawn]:
+            reading = await series.reading(self.sampler)
+            sent = (
+                {}
+                if reading is None
+                else {self.event: fragment(self.body, **self.view(reading))}
+            )
+            drawn = await ui_runtime.draw(self.charts, window) if draw else None
+            return sent, drawn
+
+        return live_events(self.event, read, window, max_frames)

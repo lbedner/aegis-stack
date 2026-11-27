@@ -21,7 +21,9 @@ from app.components.inference.engine import (
     RunningModel,
 )
 from app.components.inference.ollama import OllamaEngine
+from app.core.hearing_server import HearingServerReading
 from app.core.speech_server import SpeechServerReading
+from tests._speech_server import PARAKEET
 
 NOW = datetime(2026, 9, 30, 12, 0, tzinfo=UTC)
 DETAILS = ModelDetails(
@@ -66,6 +68,10 @@ SPEECH_READY = SpeechServerReading(
     voices=["af_heart", "bm_george"],
 )
 SPEECH_DOWN = SpeechServerReading(base_url=SPEECH_URL, available=False, error="refused")
+HEARING_URL = "http://speaches:8000/v1"
+HEARING_READY = HearingServerReading(
+    base_url=HEARING_URL, available=True, models=[PARAKEET], loaded=[PARAKEET]
+)
 
 
 def speaking(
@@ -94,6 +100,31 @@ def speaking(
     monkeypatch.setattr(settings, "SPEECH_BASE_URL", reading.base_url)
     for name, fake in (("read", read), ("say", say), ("move", move)):
         monkeypatch.setattr(speech_server, name, fake)
+    return done
+
+
+def hearing(
+    monkeypatch: pytest.MonkeyPatch, reading: HearingServerReading = HEARING_READY
+) -> list[tuple[str, ...]]:
+    """The hearing server set and faked (``app.core.hearing_server``): it
+    reads as ``reading`` and takes every action it knows. Returns each
+    action taken."""
+    from app.core import hearing_server
+    from app.core.config import settings
+
+    done: list[tuple[str, ...]] = []
+
+    async def read(url: str) -> HearingServerReading:
+        return reading
+
+    async def move(url: str, action: str, model: str) -> None:
+        if action not in hearing_server.ACTIONS:
+            raise ValueError(f"No action {action}.")
+        done.append(("move", action, model))
+
+    monkeypatch.setattr(settings, "HEARING_BASE_URL", reading.base_url)
+    for name, fake in (("read", read), ("move", move)):
+        monkeypatch.setattr(hearing_server, name, fake)
     return done
 
 

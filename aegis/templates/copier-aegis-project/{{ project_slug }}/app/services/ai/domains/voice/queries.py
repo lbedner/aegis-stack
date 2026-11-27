@@ -6,7 +6,7 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models.conversation import ConversationMessage
-from app.services.ai.models.llm import LargeLanguageModel, LLMOrg
+from app.services.ai.models.llm import LargeLanguageModel, LLMDeployment, LLMOrg
 from app.services.ai.models.voice import (
     CallSetup,
     LiveEngine,
@@ -75,8 +75,9 @@ async def all_engines(session: AsyncSession) -> list[LiveEngine]:
 
 
 async def enabled_engines(session: AsyncSession) -> list[LiveEngine]:
-    """The engines on offer, in their order, each with its catalog model
-    and the org that serves it."""
+    """The engines on offer, in their order, each with its catalog model,
+    the org that serves it and its deployments (what it can write)."""
+    llm = selectinload(LiveEngine.llm)  # type: ignore[arg-type]
     return list(
         (
             await session.exec(
@@ -84,9 +85,8 @@ async def enabled_engines(session: AsyncSession) -> list[LiveEngine]:
                 .where(col(LiveEngine.is_enabled))
                 .order_by(col(LiveEngine.sort_order))
                 .options(
-                    selectinload(LiveEngine.llm).selectinload(  # type: ignore[arg-type]
-                        LargeLanguageModel.served_by  # type: ignore[arg-type]
-                    )
+                    llm.selectinload(LargeLanguageModel.served_by),  # type: ignore[arg-type]
+                    llm.selectinload(LargeLanguageModel.deployments),  # type: ignore[arg-type]
                 )
             )
         ).all()
@@ -108,20 +108,24 @@ async def model_vendor(
     session: AsyncSession, model_id: str
 ) -> tuple[int, str, str, bool | None] | None:
     """A catalog model's id, the slug of the org that serves it, its mode
-    ("realtime", "chat", ...) and whether it can call tools."""
+    ("realtime", "chat", ...) and whether it can call tools
+    (``calls_tools``)."""
     row = (
         await session.exec(
-            select(
-                LargeLanguageModel.id,
-                LLMOrg.slug,
-                LargeLanguageModel.mode,
-                LargeLanguageModel.supports_tools,
+            select(LargeLanguageModel, LLMOrg.slug, LLMDeployment)
+            .join(LLMOrg, LargeLanguageModel.served_by_org_id == LLMOrg.id)
+            .outerjoin(
+                LLMDeployment,
+                (col(LLMDeployment.llm_id) == LargeLanguageModel.id)
+                & (LLMDeployment.org_id == LargeLanguageModel.served_by_org_id),
             )
-            .join(LLMOrg, col(LargeLanguageModel.served_by_org_id) == LLMOrg.id)
             .where(LargeLanguageModel.model_id == model_id)
         )
     ).first()
-    return (row[0], row[1], row[2], row[3]) if row and row[0] is not None else None
+    if row is None or row[0].id is None:
+        return None
+    model, slug, deployment = row
+    return model.id, slug, model.mode, model.tools_with(deployment)
 
 
 async def catalog_ids(session: AsyncSession, model_ids: list[str]) -> dict[str, int]:

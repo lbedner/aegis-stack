@@ -165,7 +165,8 @@
    so a stale body never flashes on the next open. A chat card opened
    larger sits on the page's own black, as it does in the thread; a tool
    run (its script and output, read line by line) gets room, and so does a
-   form with much to pick from (``data-wide``); a table, a picture or a
+   form with much to pick from (``data-wide``), and two panels of picks
+   side by side more (``data-wider``); a table, a picture or a
    video (``data-snug``) is as wide as itself. Mounted
    once by the app shell, outside ``#app-content``. #}
 {% macro dialog() %}
@@ -177,6 +178,7 @@
                has-[[data-card=path]]:max-w-[min(90rem,calc(100vw-2rem))]
                has-[[data-run]]:max-w-4xl
                has-[[data-wide]]:max-w-3xl
+               has-[[data-wider]]:max-w-6xl
                has-[[data-snug]]:w-fit has-[[data-snug]]:max-w-[calc(100vw-2rem)]
                backdrop:bg-aegis-scrim/60 backdrop:backdrop-blur-sm">
   <div class="flex justify-end px-3 pt-3">

@@ -17,7 +17,7 @@ class TestSTTProviderEnum:
 
     def test_all_providers_defined(self) -> None:
         """Test all expected providers are defined."""
-        expected = ["openai_whisper", "whisper_local", "faster_whisper", "groq_whisper"]
+        expected = ["openai_whisper", "groq_whisper", "hearing_server"]
 
         for provider_value in expected:
             provider = STTProvider(provider_value)
@@ -26,8 +26,6 @@ class TestSTTProviderEnum:
     def test_provider_values(self) -> None:
         """Test provider enum values are strings."""
         assert STTProvider.OPENAI_WHISPER.value == "openai_whisper"
-        assert STTProvider.WHISPER_LOCAL.value == "whisper_local"
-        assert STTProvider.FASTER_WHISPER.value == "faster_whisper"
         assert STTProvider.GROQ_WHISPER.value == "groq_whisper"
 
     def test_invalid_provider_raises(self) -> None:
@@ -167,7 +165,7 @@ class TestTranscriptionResult:
         """Test provider field is STTProvider enum."""
         result = TranscriptionResult(
             text="test",
-            provider=STTProvider.FASTER_WHISPER,
+            provider=STTProvider.GROQ_WHISPER,
         )
 
         assert isinstance(result.provider, STTProvider)

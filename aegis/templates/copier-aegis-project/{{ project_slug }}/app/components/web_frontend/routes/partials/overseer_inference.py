@@ -2,7 +2,7 @@
 inference server's memory, or unload it. Mounted by ``routes/pages.py`` at
 ``overseer_inference_text.PARTIALS``. The action runs in the background and
 answers at once; the Models table's stream shows it arriving. The speech
-server's stream too; its actions are the inference API's
+and hearing servers' streams too; their actions are the inference API's
 (``api/inference.py``).
 """
 
@@ -12,6 +12,7 @@ from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import Response, StreamingResponse
 
 from app.components.inference.engine import MODEL_ACTIONS
+from app.components.web_frontend import overseer_inference_hearing as hearing_page
 from app.components.web_frontend import overseer_inference_speech as speech_page
 from app.components.web_frontend import overseer_inference_text as text_page
 from app.components.web_frontend.overseer_live import event_stream
@@ -32,6 +33,14 @@ async def speech_events(window: str | None = None) -> StreamingResponse:
     chips chose, while its page is open."""
     seconds = series.window_of(window, speech_page.SPEECH_WINDOWS)
     return event_stream(speech_page.speech_events(seconds))
+
+
+@router.get("/hearing/events", include_in_schema=False)
+async def hearing_events(window: str | None = None) -> StreamingResponse:
+    """The hearing server's live part and charts over the window its range
+    chips chose, while its page is open."""
+    seconds = series.window_of(window, hearing_page.HEARING_WINDOWS)
+    return event_stream(hearing_page.hearing_events(seconds))
 
 
 @router.post("/{action}")

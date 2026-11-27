@@ -9,8 +9,12 @@ import logging
 import time
 from typing import Any
 
-from .. import local
-from ..models import LOCAL_PACKAGES, AudioInput, STTProvider, TranscriptionResult
+from ..models import (
+    AudioInput,
+    STTProvider,
+    TranscriptionResult,
+    server_url,
+)
 from .config import STTConfig, get_stt_config
 from .providers import BaseSTTProvider, get_stt_provider
 
@@ -65,9 +69,11 @@ class STTService:
         # Build config from settings or explicit values
         if provider or model:
             # Explicit configuration overrides settings
+            chosen = provider or STTProvider.OPENAI_WHISPER
             self._config = STTConfig(
-                provider=provider or STTProvider.OPENAI_WHISPER,
+                provider=chosen,
                 model=model,
+                server_url=server_url(chosen, settings) if settings else None,
             )
         elif settings:
             # Load from settings
@@ -112,18 +118,11 @@ class STTService:
 
             logger.info(f"Initializing STT provider: {provider_type.value}")
 
-            # Build provider-specific kwargs
-            kwargs: dict[str, Any] = {}
-
-            # Add device for local providers if configured
-            if provider_type == STTProvider.WHISPER_LOCAL and self._config.device:
-                kwargs["device"] = self._config.device
-
             self._provider_instance = get_stt_provider(
                 provider=provider_type,
                 api_key=api_key,
                 model=model,
-                **kwargs,
+                server_url=self._config.server_url,
             )
 
         return self._provider_instance
@@ -159,8 +158,6 @@ class STTService:
 
         try:
             result = await provider.transcribe(audio)
-            if provider.provider_type in LOCAL_PACKAGES:  # its model is in memory
-                local.LOADED.add(provider.provider_type)
 
             logger.debug(
                 f"Transcription complete: {len(result.text)} chars, "
@@ -223,7 +220,6 @@ class STTService:
             "provider": self.provider_type.value,
             "model": self.model,
             "language": self._config.language,
-            "device": self._config.device,
             "initialized": self._provider_instance is not None,
             "available": len(errors) == 0,
             "errors": errors if errors else None,

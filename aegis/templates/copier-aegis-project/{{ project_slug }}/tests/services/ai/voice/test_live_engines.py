@@ -14,7 +14,6 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.domains.voice import live_engines, realtime_calls
-from app.services.ai.domains.voice.cascade import connection as cascade
 from app.services.ai.domains.voice.live_engines import ENGINE_SEEDS
 from app.services.ai.domains.voice.profiles import SETUP
 from app.services.ai.models.voice import LiveEngine
@@ -200,22 +199,91 @@ class TestChoosing:
     ) -> None:
         """No realtime API: its call is the app's own chain (``cascade``),
         on the model string the call path builds."""
-        await _local_model(async_db_session, "qwen3.8:27b", "chat")
+        await _cataloged(async_db_session, "qwen3.8:27b", "chat")
 
         made = await live_engines.choose(async_db_session, "qwen3.8:27b")
 
         assert made is not None and made.is_enabled
         await async_db_session.refresh(made, ["llm"])
         await async_db_session.refresh(made.llm, ["served_by"])
-        model = live_engines.realtime_model(made)
-        assert model == "llamacpp:qwen3.8:27b" and cascade.serves(model)
-        assert not cascade.serves("google:gemini-3.8-live")
+        assert live_engines.realtime_model(made) == "llamacpp:qwen3.8:27b"
+        assert live_engines.chained(made)
+        # A realtime seed's cap is sized for audio: a chain's reply is text.
+        assert made.max_output_tokens is None
+
+    @pytest.mark.asyncio
+    async def test_a_cloud_chat_model_that_calls_tools_runs_as_a_chain_too(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Any vendor's, not a local one alone: the chain hears and speaks
+        in the voice's own models and thinks with whatever chat model can
+        call the agent's tools (2026-11-22)."""
+        await _cataloged(
+            async_db_session, "claude-sonnet-5", "chat", tools=True, org="anthropic"
+        )
+
+        made = await live_engines.choose(async_db_session, "claude-sonnet-5")
+
+        assert made is not None
+        await async_db_session.refresh(made, ["llm"])
+        await async_db_session.refresh(made.llm, ["served_by"])
+        assert live_engines.realtime_model(made) == "anthropic:claude-sonnet-5"
+        assert live_engines.chained(made)
+
+    @pytest.mark.asyncio
+    async def test_a_chains_reply_is_capped_at_its_models_own_limit(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """A realtime seed's 1200-token cap, sized for a minute of audio,
+        left GPT-6 Luna no room to think: it said nothing (2026-11-22). A
+        chain's cap is what the catalog says its model can write."""
+        await _cataloged(
+            async_db_session,
+            "claude-sonnet-5",
+            "chat",
+            tools=True,
+            org="anthropic",
+            output=64_000,
+        )
+        await live_engines.choose(async_db_session, "claude-sonnet-5")
+
+        engine = await live_engines.resolve(async_db_session, "claude-sonnet-5")
+
+        assert engine is not None and live_engines.reply_cap(engine) == 64_000
+
+    @pytest.mark.asyncio
+    async def test_a_chain_the_catalog_says_nothing_of_is_not_capped(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """A local model no sync has deployed yet: no limit to go by."""
+        await _cataloged(async_db_session, "qwen3.8:27b", "chat")
+        await live_engines.choose(async_db_session, "qwen3.8:27b")
+
+        engine = await live_engines.resolve(async_db_session, "qwen3.8:27b")
+
+        assert engine is not None and live_engines.reply_cap(engine) is None
+
+    @pytest.mark.asyncio
+    async def test_a_realtime_reply_keeps_its_engines_cap(
+        self, seeded: AsyncSession
+    ) -> None:
+        engine = await live_engines.resolve(seeded, "gemini-live")
+
+        assert engine is not None
+        assert live_engines.reply_cap(engine) == engine.max_output_tokens
+        assert engine.max_output_tokens
+
+    def test_a_cloud_model_must_say_it_calls_tools(self) -> None:
+        """Unknown is let through on a local engine (one that does not say);
+        the cloud catalog says, so its silence is a no."""
+        assert not live_engines.reachable("anthropic", "chat", "x", tools=None)
+        assert live_engines.reachable("anthropic", "chat", "x", tools=True)
 
     @pytest.mark.asyncio
     async def test_a_local_model_that_does_not_chat_is_refused(
         self, async_db_session: AsyncSession
     ) -> None:
-        await _local_model(async_db_session, "nomic-embed", "embedding")
+        await _cataloged(async_db_session, "nomic-embed", "embedding")
 
         assert await live_engines.choose(async_db_session, "nomic-embed") is None
 
@@ -226,19 +294,45 @@ class TestChoosing:
         """A call runs on the agent's tools: a model its engine says takes
         none cannot answer one. Unknown is let through (an engine that does
         not say)."""
-        await _local_model(async_db_session, "tiny:1b", "chat", tools=False)
+        await _cataloged(async_db_session, "tiny:1b", "chat", tools=False)
 
         assert await live_engines.choose(async_db_session, "tiny:1b") is None
         assert live_engines.reachable("llamacpp", "chat", "x", tools=None)
 
 
-async def _local_model(
-    session: AsyncSession, model_id: str, mode: str, tools: bool | None = None
+async def _cataloged(
+    session: AsyncSession,
+    model_id: str,
+    mode: str,
+    tools: bool | None = None,
+    org: str = "llamacpp",
+    output: int | None = None,
 ) -> None:
-    """A model llama.cpp serves, in the catalog."""
-    await listed(
-        session, model_id, served_by="llamacpp", mode=mode, supports_tools=tools
+    """A model ``org`` serves (llama.cpp unless named), in the catalog as
+    its sync leaves it: ``tools`` said on the model by a local engine, on
+    its deployment by a cloud catalog; ``output`` the deployment's output
+    limit (no deployment where a cloud one says neither)."""
+    from app.services.ai.models.llm import LLMDeployment
+    from app.services.ai.models.provider_names import LOCAL_PROVIDERS
+
+    local = org in LOCAL_PROVIDERS
+    model = await listed(
+        session,
+        model_id,
+        served_by=org,
+        mode=mode,
+        supports_tools=tools if local else None,
     )
+    if output is not None or (not local and tools is not None):
+        session.add(
+            LLMDeployment(
+                llm_id=model.id,
+                org_id=model.served_by_org_id,
+                output_max_tokens=output or 4096,
+                function_calling=bool(tools) and not local,
+            )
+        )
+        await session.commit()
 
 
 class TestTheWait:

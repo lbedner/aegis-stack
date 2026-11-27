@@ -72,7 +72,7 @@ MESSAGES: dict[str, str] = {
     "component.database": "SQLModel ORM 데이터베이스 (SQLite 또는 PostgreSQL)",
     "component.ingress": "Traefik 리버스 프록시 및 로드 밸런서",
     "component.observability": "Logfire 관측성, 트레이싱 및 메트릭",
-    "component.inference": "Local AI models via Ollama or llama.cpp, speech via Kokoro",
+    "component.inference": "Local AI models via Ollama or llama.cpp, speech via Kokoro, hearing via speaches",
     "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.deploy": "배포 대상 (Docker Compose), Overseer가 읽음",
     "component.mcp": "MCP server: an outside assistant reads the app's tools",
@@ -193,6 +193,7 @@ MESSAGES: dict[str, str] = {
         "참고: 첫 시작 시 모델 다운로드에 시간이 걸릴 수 있습니다"
     ),
     "interactive.inference_speech": "Run a speech server (Kokoro-FastAPI) beside it, for ai[voice]?",
+    "interactive.inference_hearing": "Run a hearing server (speaches) beside it, for ai[voice]?",
     "interactive.ai_rag_label": "RAG (검색 증강 생성):",
     "interactive.ai_rag_prompt": (
         "문서 인덱싱 및 시맨틱 검색을 위해 RAG를 활성화하시겠습니까?"
@@ -1142,6 +1143,7 @@ MESSAGES: dict[str, str] = {
     "guided.sidebar.services": "서비스",
     "guided.prompt.inference_placement": "Where does the local model server run?",
     "guided.prompt.inference_speech": "Run a speech server beside it?",
+    "guided.prompt.inference_hearing": "Run a hearing server beside it?",
     "guided.prompt.worker_backend": "워커 백엔드 선택",
     "guided.prompt.scheduler_backend": "스케줄러 영속성: 재시작 후에도 작업 기록을 유지할까요?",
     "guided.prompt.database_engine": "{context}의 데이터베이스 엔진",
@@ -1233,6 +1235,8 @@ MESSAGES: dict[str, str] = {
     "guided.choice.inference.host": "Use the one already running on this machine. The default.",
     "guided.choice.inference_speech.none": "No speech server. The default.",
     "guided.choice.inference_speech.kokoro_fastapi": "Text to speech for ai[voice], where the model server runs.",
+    "guided.choice.inference_hearing.none": "No hearing server. The default.",
+    "guided.choice.inference_hearing.speaches": "Speech to text for ai[voice] (Parakeet), in its own container.",
     "guided.choice.worker.arq": "간단하고 충분히 검증된 비동기 워커로, 설정이 최소한입니다. I/O 바운드 작업에 가장 적합합니다. 기본값.",
     "guided.choice.worker.dramatiq": "멀티프로세스 액터 모델. 여러 OS 프로세스의 이점을 살리는 CPU 바운드 작업에 가장 적합합니다.",
     "guided.choice.worker.taskiq": "비동기 네이티브. 큐별 브로커와 확인 응답을 지원하는 Redis Streams 전송을 사용합니다.",

@@ -8,7 +8,7 @@
    what lets one macro serve both a history render and the swap at the end
    of a live turn.
 #}
-{% from "components/macros/form.html" import button_classes %}
+{% from "components/macros/form.html" import button_classes, control %}
 {% from "components/macros/icons.html" import icon %}
 {% from "components/macros/layout.html" import avatar, badge, copy_icon %}
 {% import "components/macros/layout.html" as layout %}
@@ -248,6 +248,18 @@
    posts), ``mark`` naming it for the page; teal-checked when ``current``.
    ``row.badges`` (each a label and tone) say where it runs and what it can
    do, where a row has that to say. #}
+{# A model list's search: typing re-requests ``path`` with ``q`` (and the
+   ``keep`` params) and swaps only ``target``, the list: swapping the box
+   mid-keystroke takes the caret with it. #}
+{% macro model_search(path, target, query, keep={}) %}
+<form hx-get="{{ path }}" hx-target="#{{ target }}" hx-select="#{{ target }}" hx-swap="outerHTML"
+      hx-trigger="input changed delay:200ms from:input[name=q]">
+  {% for name, value in keep.items() %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+  <input type="search" name="q" value="{{ query }}" placeholder="Search models" aria-label="Search models" autofocus
+         class="{{ control("input") }} w-full">
+</form>
+{% endmacro %}
+
 {% macro model_row(row, current, mark, form, hidden="") %}
 <li>
   <form {{ form }}>

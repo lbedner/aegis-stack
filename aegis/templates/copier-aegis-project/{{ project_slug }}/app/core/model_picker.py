@@ -165,6 +165,10 @@ def model_price(model: dict[str, Any]) -> str:
     )
 
 
+# What a model list says when a search leaves none.
+NO_MATCH = "No models match."
+
+
 def filter_models(models: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
     """Case-insensitive substring match over id, title, and vendor."""
     needle = query.strip().casefold()

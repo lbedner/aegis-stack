@@ -137,6 +137,7 @@ def serve(*, detach: bool = False) -> None:
         ollama={% if ollama_mode == "docker" and inference_engine == "ollama" %}True{% else %}False{% endif %},
         llamacpp={% if ollama_mode == "docker" and inference_engine == "llamacpp" %}True{% else %}False{% endif %},
         speech={% if ollama_mode == "docker" and inference_speech == "kokoro_fastapi" %}True{% else %}False{% endif %},
+        hearing={% if include_inference and inference_hearing == "speaches" %}True{% else %}False{% endif %},
         browser={% if include_browser %}True{% else %}False{% endif %},
         storage={% if include_storage %}True{% else %}False{% endif %},
     )

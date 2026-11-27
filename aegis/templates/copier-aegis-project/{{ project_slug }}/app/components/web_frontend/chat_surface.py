@@ -207,11 +207,8 @@ async def conversations(chat: ChatSurface) -> list[Any]:
 async def find_conversation(chat: ChatSurface, conversation_id: str) -> Any | None:
     """The conversation, if it is the mount's user's, about the mount's
     subject: another's is as absent as a missing one."""
-    conversation = await ai_service.get_conversation(conversation_id)
-    if conversation is None:
-        return None
-    meta = conversation.metadata
-    if meta.get("user_id") != chat.user or meta.get("subject") != chat.subject:
+    conversation = await ai_service.get_conversation(conversation_id, user_id=chat.user)
+    if conversation is None or conversation.metadata.get("subject") != chat.subject:
         return None
     return conversation
 

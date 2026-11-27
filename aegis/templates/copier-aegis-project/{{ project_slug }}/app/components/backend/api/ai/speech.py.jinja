@@ -23,10 +23,12 @@ from fastapi import (
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
-from app.components.backend.api.ai.service import ai_service
-from app.services.shared.deps import get_optional_owner_user_id
+from app.components.backend.api.ai.service import ai_service, request_user
+from app.services.shared.deps import get_optional_owner_user_id, get_owner_user_id
 
-router = APIRouter()
+# Hearing and speech are paid per use: a signed-in member's, every route
+# (``get_owner_user_id``: nobody signed in, and no guest, is let in).
+router = APIRouter(dependencies=[Depends(get_owner_user_id)])
 
 
 class TranscriptionSegmentResponse(BaseModel):
@@ -65,7 +67,7 @@ async def voice_chat(
     conversation_id: str | None = Query(None, description="Continue existing conversation"),
     voice_mode: bool = Query(False, description="Summarize response for spoken output"),
     return_audio: bool = Query(False, description="Return TTS audio of response"),
-    user_id: str = Query("api-user", description="User identifier"),
+    user_id: str = Depends(request_user),
     agent_slug: str | None = Query(None, description="Agent to answer as"),
     surface: str | None = Query(None, description="History scope of the turn"),
     transcription_hint: str | None = Query(

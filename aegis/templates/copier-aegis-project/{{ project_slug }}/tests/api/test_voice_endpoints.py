@@ -667,6 +667,7 @@ class TestVoiceChatCarriesTheTurn:
     """The route passes what a typed turn passes, so the caller - not the
     stack - decides which agent answers."""
 
+    @pytest.mark.usefixtures("sign_in_off")
     def test_agent_surface_user_conversation_and_hint(self, client: TestClient) -> None:
         from unittest.mock import AsyncMock, MagicMock, patch
 

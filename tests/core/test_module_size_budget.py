@@ -57,8 +57,8 @@ BUDGET: dict[str, int] = {
     # 404 lines of Docker runtime reading; surfaced when the deploy component
     # gained deploy history (a third module). Debt recorded at size; the fix
     # is splitting the socket client from the readers.
-    "i18n/locales/en.py": 1348,
-    "i18n/locales/zh.py": 1325,
+    "i18n/locales/en.py": 1351,
+    "i18n/locales/zh.py": 1328,
     "i18n/locales/de.py": 1253,
     "i18n/locales/es.py": 1253,
     "i18n/locales/fr.py": 1253,

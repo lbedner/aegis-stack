@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import (
     APIRouter,
+    Depends,
     HTTPException,
 )
 from pydantic import BaseModel
@@ -12,8 +13,12 @@ from pydantic import BaseModel
 from app.components.backend.api.ai.service import ai_service
 from app.core.log import logger
 from app.services.ai.schemas import UsageStatsResponse
+from app.services.shared.deps import Actor, get_admin_actor, get_admin_reader
 
-router = APIRouter()
+# An operator's, every route: what the models cost and how it felt across
+# every user, and the agent registry, whose prompt rides in every turn of
+# its agent. Overseer's dashboard calls these as its admin.
+router = APIRouter(dependencies=[Depends(get_admin_reader)])
 
 
 @router.get("/usage/stats", response_model=UsageStatsResponse)
@@ -102,7 +107,7 @@ async def list_registry_agents() -> list[dict[str, Any]]:
 
 @router.patch("/agents/{slug}")
 async def update_registry_agent(
-    slug: str, request: AgentUpdateRequest
+    slug: str, request: AgentUpdateRequest, _actor: Actor = Depends(get_admin_actor)
 ) -> dict[str, Any]:
     """Apply a partial agent update (invalidates its cached config)."""
     from app.services.ai.service import (

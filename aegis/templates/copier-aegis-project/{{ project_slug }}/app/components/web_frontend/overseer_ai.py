@@ -287,9 +287,9 @@ async def section_context(
         return await overseer_ai_rag.search_context()
     if section == "chat":
         from .chat_surface import surface_context
-        from .overseer_ai_chat import OVERSEER
+        from .overseer_ai_chat import for_viewer
 
-        return await surface_context(OVERSEER)
+        return await surface_context(await for_viewer(req.viewer))
     if section == "voice":
         from . import overseer_ai_voice
 

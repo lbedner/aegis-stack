@@ -338,6 +338,7 @@ class TestTheTurnLiftsIt:
 
         assert (text, meta) == (f"what is late?\n\n{PAGE}", {})
 
+    @pytest.mark.usefixtures("sign_in_off")
     async def test_a_way_in_lifts_the_page_before_the_turn(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

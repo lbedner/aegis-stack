@@ -16,7 +16,7 @@ from app.core import replays, runtime
 from app.core import storage as storage_seam
 from app.core.audit import audit_emitter
 from app.core.ontology import Kind, PartNode, graph
-from app.core.ontology.model import DOMAIN_KINDS, Node, SystemModel
+from app.core.ontology.model import STRUCTURE_KINDS, Node, SystemModel
 from app.core.ontology.observed import running
 from app.core.ontology.summary import summary
 from app.core.tools import current_agent_slug, register_tool
@@ -40,6 +40,7 @@ from app.services.system.node_now import (
     containers_now,
     now_of,
 )
+from app.services.system.ontology_view import hidden, view_of
 from app.services.system.tool_models import (
     AppSummary,
     BriefNode,
@@ -252,12 +253,15 @@ def _findings(node: Node) -> list[pattern_findings.Finding]:
 
 
 async def _node(
-    model: SystemModel, node_id: str, depth: int, note: str | None
+    model: SystemModel, node_id: str, depth: int, note: str | None, live: bool
 ) -> NodeAnswer:
-    """One node's answer (``ontology``'s ``node``)."""
+    """One node's answer (``ontology``'s ``node``): with what is true of it
+    now and what its code breaks only where ``live``."""
     here, near, edges = graph.neighbors(model, node_id, depth)
-    now, findings = await asyncio.gather(
-        now_of(here), asyncio.to_thread(_findings, here)
+    now, findings = (
+        await asyncio.gather(now_of(here), asyncio.to_thread(_findings, here))
+        if live
+        else (None, [])
     )
     return NodeAnswer(
         node=here,
@@ -270,21 +274,6 @@ async def _node(
     )
 
 
-# What ``ontology`` tells anyone but an admin, in every answer: an empty
-# list alone had a model try each kind in turn.
-DOMAIN_ONLY = (
-    "Only the app's tables and the changes to them are read here: its "
-    "parts, routes, jobs, queues, containers and keys are an admin's. "
-    "Tell the user so; do not look further for them."
-)
-
-
-def _an_admins(ids: list[str]) -> list[str]:
-    """The ids naming a kind only an admin reads."""
-    hidden = set(Kind) - set(DOMAIN_KINDS)
-    return [i for i in ids if i.partition(":")[0] in hidden]
-
-
 async def ontology(
     kind: str | None = None,
     category: str | None = None,
@@ -295,9 +284,11 @@ async def ontology(
     route: str | None = None,
 ) -> AppSummary | Matches | NodeAnswer | NodeAnswers | Paths | RouteWalk:
     """What this app is, read from its code: its tables and the changes to
-    them (an admin also sees parts, routes, jobs, the worker's queues
-    (``node="queue:<name>"``: its tasks, its container and its live
-    state, in one call) and tasks, tools and Redis keys:
+    them (a guest sees only its components and services, what each could
+    be built as, and how they connect; an admin also sees parts, routes,
+    jobs, the worker's queues (``node="queue:<name>"``: its tasks, its
+    container and its live state, in one call) and tasks, tools and Redis
+    keys:
     ``kind="keys"``, every key family the app keeps there, what each holds
     and its type). No
     arguments: a summary (the app, counts by kind, its tables by owner with
@@ -324,26 +315,27 @@ async def ontology(
     carries one, every other call waits."""
     if route:
         return await _dry_path(route)
-    model = await running()
-    note = "Partial: built outside the webserver." if model.partial else None
-    if not await caller_is_admin():
+    whole = await running()
+    model, kinds, only = await view_of(whole)
+    live = kinds != STRUCTURE_KINDS
+    note = "Partial: built outside the webserver." if whole.partial else None
+    if kinds is not None:
         asked = [
             *([node] if isinstance(node, str) else node or []),
             *filter(None, [to]),
         ]
-        if refused := _an_admins(asked):
-            raise ValueError(f"{', '.join(refused)}: {DOMAIN_ONLY}")
-        model = model.domain()
-        note = " ".join(filter(None, (note, DOMAIN_ONLY)))
+        if refused := hidden(asked, kinds):
+            raise ValueError(f"{', '.join(refused)}: {only}")
+        note = " ".join(filter(None, (note, only)))
     if isinstance(node, list):
         if to:
             raise ValueError("Paths run from one node: name one with `to`.")
-        read = (_node(model, n, depth, note) for n in node)
+        read = (_node(model, n, depth, note, live) for n in node)
         return NodeAnswers(nodes=list(await asyncio.gather(*read)))
     if node and to:
         return Paths(paths=graph.paths(model, node, to), note=note)
     if node:
-        return await _node(model, node, depth, note)
+        return await _node(model, node, depth, note, live)
     if kind is not None and kind not in set(Kind):
         raise ValueError(f"No kind {kind!r}; known: {', '.join(Kind)}")
     if kind or category or text:

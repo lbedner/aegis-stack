@@ -76,6 +76,14 @@ async def _load_modules() -> list[ContextModule]:
         return await list_context_modules(session, active_only=False)
 
 
+async def _set_module_text(slug: str, text: str) -> None:
+    from app.core.db import get_async_session
+    from app.services.ai.service import update_context_module
+
+    async with get_async_session() as session:
+        await update_context_module(slug, session=session, prompt_content=text)
+
+
 async def _run_test_turn(slug: str, message: str) -> tuple[AgentConfig, str]:
     """One turn the way chat runs it: the agent's tools, memory and code
     mode, usage recorded - in a conversation of its own, deleted after. A
@@ -360,3 +368,26 @@ async def show_module(slug: str = typer.Argument(...)) -> None:
             padding=(1, 2),
         )
     )
+
+
+@modules_app.command("set", help=lazy_t("agents.modules_help_set"))
+async def set_module_text(
+    slug: str = typer.Argument(...),
+    file: Path = typer.Option(
+        ...,
+        "--file",
+        exists=True,
+        dir_okay=False,
+        help=lazy_t("agents.opt_module_file"),
+    ),
+) -> None:
+    import sys
+
+    from app.services.ai.service import InvalidContextModuleError
+
+    try:
+        await _set_module_text(slug, file.read_text())
+    except InvalidContextModuleError as e:
+        _error(str(e))
+        sys.exit(1)
+    console.print(theme.good_text(t("agents.module_set", slug=slug)))

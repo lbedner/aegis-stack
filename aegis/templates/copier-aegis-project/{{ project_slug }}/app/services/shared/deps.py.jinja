@@ -20,7 +20,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 from app.core.db import get_async_session
-from app.core.tools import current_admin, current_owner_user_id
+from app.core.tools import current_admin, current_owner_user_id, current_user_id
+from app.core.visitor import is_guest_visitor
 from app.models.user import User
 from app.services.auth.deps import (
     get_current_active_user,
@@ -34,7 +35,8 @@ from typing import TYPE_CHECKING
 from fastapi import Depends, HTTPException, status
 
 from app.core import exposure
-from app.core.tools import current_admin
+from app.core.tools import current_admin, current_user_id
+from app.core.visitor import is_guest_visitor
 
 if TYPE_CHECKING:
     # No database in every stack without auth: named for the checker only.
@@ -194,6 +196,13 @@ async def owner_is_admin(session: "AsyncSession", owner_user_id: int | None) -> 
 {%- else %}
     return True
 {%- endif %}
+
+
+def caller_is_guest() -> bool:
+    """Whether the tool call being run acts for a guest (``auth[guest]``):
+    by the visitor its turn bound, since a guest is no user to it (no
+    owner)."""
+    return is_guest_visitor(current_user_id.get() or "")
 
 
 async def caller_is_admin() -> bool:

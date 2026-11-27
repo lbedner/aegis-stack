@@ -50,6 +50,10 @@ ToolFunc = Callable[..., Any]
 current_owner_user_id: ContextVar[int | None] = ContextVar(
     "current_owner_user_id", default=None
 )
+# Who the turn is (``app.core.visitor``): the user's id, or a guest's
+# ``guest:<session>``, which has no owner (a guest is no user). Bound by
+# ``memory_user``.
+current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=None)
 # The author of the writes it proposes: which agent asked (an MCP client
 # files as ``mcp:<client>``), in which conversation. A write with no
 # author cannot be audited, and a card is withdrawable only by its author.

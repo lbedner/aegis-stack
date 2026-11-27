@@ -34,7 +34,7 @@ from app.services.system.models import ComponentStatus
 from tests._ontology import dry_walk, edge_of, model_of, node_of
 from tests._replays import kept
 from tests.web.dom import none, one, select, text
-from tests.web.overseer import CACHE, page_html
+from tests.web.overseer import CACHE, VIEWER, page_html
 from tests.web.zoomed import DB, PIECES, auth_opens, zoomable
 
 CARDS = f"{OVERSEER.path}/cards"
@@ -57,7 +57,7 @@ async def _card(card: PathCard) -> str:
     conversation = await ai_service.conversation_manager.create_conversation(
         provider=AIProvider.OLLAMA,
         model="gpt-6-luna",
-        user_id=OVERSEER.user,
+        user_id=VIEWER,
         surface=OVERSEER.surface,
     )
     await ai_service.conversation_manager.save_conversation(conversation)

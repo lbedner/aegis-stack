@@ -92,8 +92,12 @@ def turns(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
             timestamp=datetime.now(UTC),
         )
 
-    async def get_conversation(conversation_id: str) -> Conversation | None:
-        return STORED.get(conversation_id)
+    async def get_conversation(
+        conversation_id: str, user_id: str | None = None
+    ) -> Conversation | None:
+        found = STORED.get(conversation_id)
+        owned = found and user_id in (None, found.metadata.get("user_id"))
+        return found if owned else None
 
     async def list_conversations(
         user_id: str, surface: str | None = None, subject: str | None = None

@@ -121,6 +121,17 @@ def reported_only(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(overseer_sections, "SERVICE_PAGES", frozenset())
 
 
+{%- if include_auth %}
+# The user ``sign_in`` signs in.
+ADMIN_ID = 1
+# Whose chats the viewer ``sign_in`` signs in holds: their own, by id.
+VIEWER = str(ADMIN_ID)
+{%- else %}
+# Whose chats the viewer holds: nobody signs in, so the chat API's one user.
+VIEWER = "api-user"
+{%- endif %}
+
+
 def sign_in(
     app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
@@ -138,7 +149,9 @@ def sign_in(
     for module in (overseer, overseer_nav):
         monkeypatch.setattr(module, "last_system_status", lambda: status)
 {%- if include_auth %}
-    user = User(id=1, email="ops@example.com", hashed_password="x", is_active=True)
+    user = User(
+        id=ADMIN_ID, email="ops@example.com", hashed_password="x", is_active=True
+    )
     if "role" in User.model_fields:  # RBAC: the viewer administers users
         user.role = "admin" if admin else "user"
     monkeypatch.setattr(settings, "AUTH_ENABLED", True)

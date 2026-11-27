@@ -356,6 +356,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/cli/test_auth_cli.py",
                 ".claude/skills/protect-an-endpoint",
                 "tests/api/test_auth_endpoints.py",
+                "tests/_bearer.py",
                 "tests/services/test_auth_integration.py",
                 "tests/services/test_ui_auth.py",
                 # Goal service is auth-coupled (Goal.user_id FK to user table);
@@ -615,6 +616,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 # it also backs the always-shipping API load test CLI +
                 # dashboard tab (``format_relative_time``).
                 "tests/api/test_ai_endpoints.py",
+                "tests/api/test_ai_chat_owner.py",
                 "tests/services/test_conversation_persistence.py",
                 "tests/services/test_chat_attachments.py",
                 "tests/services/ai/test_chat_attachment_persistence.py",
@@ -853,6 +855,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "tests/services/ai/test_conversation_summary.py",
                     "tests/services/ai/test_chat_cards.py",
                     "tests/api/test_ai_cards.py",
+                    "tests/api/test_ai_operator_gate.py",
                     "tests/services/ai/test_context_modules.py",
                     "tests/services/ai/test_llm_pricing_lookup.py",
                     "tests/services/ai/test_llm_service.py",

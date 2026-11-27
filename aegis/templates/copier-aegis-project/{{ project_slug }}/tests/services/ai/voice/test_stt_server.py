@@ -9,6 +9,7 @@ import pytest
 from app.core import speech_server
 from app.core.config import Settings
 from app.services.ai.domains.voice import get_stt_models, get_stt_providers
+from app.services.ai.domains.voice.catalog import get_stt_model
 from app.services.ai.domains.voice.models import (
     DEFAULT_STT_MODELS,
     AudioFormat,
@@ -17,7 +18,8 @@ from app.services.ai.domains.voice.models import (
     STTProvider,
 )
 from app.services.ai.domains.voice.stt import STTConfig, get_stt_provider, server
-from tests._speech_server import openai_answering
+from tests import _speech_server as speaking
+from tests._speech_server import PARAKEET, SPEACHES, WHISPER, openai_answering, serving
 
 URL = "http://localhost:8010/v1"
 
@@ -113,3 +115,33 @@ def test_the_catalog_locks_it_on_its_own_address(
     monkeypatch.setattr(settings, "SPEECH_BASE_URL", speaking)
     monkeypatch.setattr(settings, "HEARING_BASE_URL", hearing)
     assert blocked(server.PROVIDER, {}) == why
+
+
+@pytest.fixture
+def unasked(monkeypatch: pytest.MonkeyPatch) -> None:
+    speaking.unasked(monkeypatch, server, "HEARING_BASE_URL", URL)
+
+
+async def _listed() -> set[str]:
+    return await speaking.listed(get_stt_models, STTProvider.HEARING_SERVER.value)
+
+
+async def test_a_listing_asks_the_server_for_the_models_it_holds(
+    unasked: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    serving(monkeypatch, SPEACHES)
+
+    assert await _listed() == {PARAKEET, WHISPER}  # the known one once
+    whisper = get_stt_model(WHISPER)
+    assert whisper is not None and whisper.provider_id == server.PROVIDER_ID
+
+
+async def test_a_hearing_server_not_running_yet_is_asked_again(
+    unasked: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    answers: dict[str, object] = {"/v1/models": 503}
+    serving(monkeypatch, answers)
+    assert WHISPER not in await _listed()
+
+    answers.update(SPEACHES)
+    assert WHISPER in await _listed()

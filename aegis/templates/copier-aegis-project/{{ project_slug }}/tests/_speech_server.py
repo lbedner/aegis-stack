@@ -2,6 +2,7 @@
 server): the settings a host shell has, the server answering by path, and
 the server answering the real OpenAI client."""
 
+import asyncio
 from collections.abc import Callable
 from typing import Any
 
@@ -13,6 +14,11 @@ from app.core.config import Settings
 # Hearing models a hearing server holds (speaches' Parakeet first).
 PARAKEET = "istupakov/parakeet-tdt-0.6b-v3-onnx"
 WHISPER = "Systran/faster-whisper-small"
+# What speaches answers: the hearing models it holds, and those in memory.
+SPEACHES = {
+    "/v1/models": {"object": "list", "data": [{"id": WHISPER}, {"id": PARAKEET}]},
+    "/api/ps": {"models": [PARAKEET]},
+}
 
 
 class Shell:
@@ -74,3 +80,25 @@ def serving(
         lambda **kw: real(transport=httpx.MockTransport(answer), **kw),
     )
     return sent
+
+
+def unasked(
+    monkeypatch: pytest.MonkeyPatch, server: Any, setting: str, url: str
+) -> None:
+    """``server``'s server at ``url`` (its ``setting``), not asked yet this
+    process for what it holds (its ``LISTED``)."""
+    from app.core.config import settings
+    from app.services.ai.domains.voice import library
+
+    monkeypatch.setattr(library, "TRIED", set())
+    monkeypatch.setattr(server, "LISTED", {})
+    monkeypatch.setattr(settings, setting, url)
+
+
+async def listed(listing: Callable[..., list[Any]], provider_id: str) -> set[str]:
+    """What ``listing`` has of ``provider_id``'s once the ask it starts is in."""
+    from app.services.ai.domains.voice import library
+
+    listing()
+    await asyncio.gather(*library.LOADING)
+    return {item.id for item in listing(provider_id)}

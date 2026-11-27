@@ -20,7 +20,8 @@
   models, Load and Unload, what is in memory and each transcription's time
   charted), `inference hearing` and `inference hearing-model`,
   `/api/v1/inference/hearing`, a row on the inference overview, and a
-  `speaches` health check under `inference`.
+  `speaches` health check under `inference`. The voice settings and Hears
+  list every hearing model the server holds, not Parakeet alone (#2054).
 - **An audit log that keeps its rows.** Every `AuditEmitter.emit` is now a row
   in `audit_event` as well as its log line, wherever the stack has the
   database component: on PostgreSQL in its own `audit` schema, through its own
@@ -31,6 +32,17 @@
   detail or the extra fields is redacted first. Read it on Overseer >
   Database > Audit, at `GET /api/v1/database/audit` (admins; `kind`, `actor`,
   `limit`), and with `audit list` (`--json` for a script).
+
+### Removed
+
+- **The in-app speech engines.** Kokoro (kokoro-onnx), Parakeet (onnx-asr),
+  faster-whisper and Whisper (Local) no longer run in the webserver's
+  process: local voice is a server of yours, Kokoro-FastAPI speaking and the
+  hearing server (`inference[speaches]`) hearing. Their install lines, the
+  Overseer > Inference "In the app" row and `STT_DEVICE` go with them; delete
+  `STT_DEVICE` from a `.env` that sets it. A saved profile on one of them
+  falls back to the default provider. Silero and Smart Turn, which judge a
+  call's turns, still run in the app.
 
 ## [0.21.0] - 2026-11-21
 

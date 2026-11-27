@@ -59,9 +59,13 @@ def reach(settings: Any) -> str | None:
 
 
 async def _loaded(client: httpx.AsyncClient, url: str) -> list[str] | None:
-    """What is in memory, where the server says (speaches); None elsewhere."""
+    """What is in memory, where the server says (speaches); None elsewhere,
+    a page of its own in that route's place included."""
     answer = await client.get(f"{root(url)}/{PS}")
-    return sorted(answer.json()["models"]) if answer.is_success else None
+    try:
+        return sorted(answer.json()["models"]) if answer.is_success else None
+    except (ValueError, KeyError, TypeError):
+        return None
 
 
 async def read(url: str) -> HearingServerReading:

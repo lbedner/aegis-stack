@@ -275,3 +275,22 @@ async def test_anything_headless_speaks_in_the_active_voice(
     spoken = await profiles.active_settings(async_db_session, settings)
 
     assert spoken.TTS_VOICE == "nova" and settings.TTS_VOICE != "nova"
+
+
+async def test_a_model_the_hearing_server_listed_can_be_picked_on_the_form(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Its choices are read when asked: the server's models come in after start."""
+    from app.services.ai.domains.voice import get_stt_models
+    from app.services.ai.domains.voice.stt import server
+    from tests import _speech_server as speaking
+
+    speaking.unasked(
+        monkeypatch, server, "HEARING_BASE_URL", "http://localhost:8010/v1"
+    )
+    speaking.serving(monkeypatch, speaking.SPEACHES)
+    await speaking.listed(get_stt_models, server.PROVIDER_ID)
+
+    assert speaking.WHISPER in {c["id"] for c in profiles.form_choices()["stt_model"]}
+    _, errors = profiles.parse_form({"stt_model": speaking.WHISPER})
+    assert not [e for e in errors if e.startswith("stt model")]

@@ -1,21 +1,36 @@
 """The Overseer's mount of the chat surface (``chat_surface``): the AI
 page's Chat section and the drawer on every other Overseer page, one
-instance at a time, answering as the default agent for the API's own user.
+instance at a time, answering as the default agent. Each admin holds their
+own conversations, the same ones the chat API lists for them (``own_user``).
 """
 
+from dataclasses import replace
 from typing import Any
 
+from fastapi import Depends
+
+from app.components.backend.api.ai.service import own_user
+
 from .chat_surface import ChatSurface
+from .overseer_access import Viewer, viewer
 from .overseer_ai_common import HAS_EVALS, PARTIALS
 from .rendering import templates
 
+
+async def for_viewer(user: Viewer = Depends(viewer)) -> ChatSurface:
+    """The mount as ``user`` holds it: their own conversations, under the
+    id the chat API knows them by (``own_user``)."""
+    return replace(OVERSEER, user=own_user(OVERSEER.user, user))
+
+
 OVERSEER = ChatSurface(
     path=f"{PARTIALS}/chat",
-    # The chat API's own default user, and the history it lists under.
+    # Without sign-in, the chat API's one user; with it, bound per request.
     user="api-user",
     surface="overseer",
     agent_drawer=True,
     eval_cases=f"{PARTIALS}/evals/cases/new" if HAS_EVALS else None,
+    bind=for_viewer,
 )
 # The Overseer shell mounts the chat drawer wherever this is set.
 templates.env.globals["chat_path"] = OVERSEER.path

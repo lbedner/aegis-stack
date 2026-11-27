@@ -186,6 +186,20 @@ class TestConversationManager:
 
         assert retrieved_updated_at >= original_updated_at
 
+    async def test_another_users_conversation_is_as_absent_as_a_missing_one(
+        self, conversation_manager: ConversationManager
+    ) -> None:
+        mine = await conversation_manager.create_conversation(
+            provider=AIProvider.OPENAI, model="gpt-4", user_id="owner"
+        )
+
+        assert (
+            await conversation_manager.get_conversation(mine.id, user_id="other")
+            is None
+        )
+        found = await conversation_manager.get_conversation(mine.id, user_id="owner")
+        assert found is not None and found.id == mine.id
+
     async def test_list_conversations_by_user(self, conversation_manager):
         """Test listing conversations filtered by user."""
         # Use unique user IDs for this test run to avoid conflicts with persisted data
@@ -312,6 +326,23 @@ class TestAIServiceConversationMemory:
             # Verify conversation has both messages
             conversation = await ai_service.get_conversation(first_conv_id)
             assert conversation.get_message_count() == 4  # 2 user + 2 AI messages
+
+    async def test_a_turn_never_continues_another_users_conversation(
+        self, mock_settings: MagicMock
+    ) -> None:
+        from app.services.ai.service import ConversationError
+
+        with _fake_runtime("Test response"):
+            ai_service = AIService(mock_settings)
+            first = await ai_service.chat(
+                message="mine", conversation_id=None, user_id="owner"
+            )
+            with pytest.raises(ConversationError, match="not found"):
+                await ai_service.chat(
+                    message="theirs",
+                    conversation_id=first.metadata["conversation_id"],
+                    user_id="other",
+                )
 
     async def test_conversation_memory_across_service_instances(self, mock_settings):
         """Test conversation memory behavior across service instances.

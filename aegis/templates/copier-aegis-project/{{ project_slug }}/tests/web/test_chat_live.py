@@ -606,7 +606,7 @@ class TestABoundCall:
         async def spent() -> str:
             return "Today's budget is spent."
 
-        mount = replace(OVERSEER, gate=spent, on_call_end=on_call_end)
+        mount = replace(OVERSEER, bind=None, gate=spent, on_call_end=on_call_end)
         with (
             pytest.raises(WebSocketDisconnect) as refused,
             _calls(mount).websocket_connect(SOCKET) as ws,
@@ -668,7 +668,7 @@ def test_a_call_acts_on_the_page_it_is_on(
     """A step she takes on the page reaches it at once, on a page the mount
     declares (the socket says which, as the stream's body does)."""
     gemini.live.events.insert(0, lambda: page_action("highlight", "docs"))
-    mount = replace(OVERSEER, pages={"/": LANDING})
+    mount = replace(OVERSEER, bind=None, pages={"/": LANDING})
     with _calls(mount).websocket_connect(f"{SOCKET}?page=/") as ws:
         ws.send_bytes(b"\x10\x20")  # the fake plays once it hears you
         _, told = _hear(ws, "page")
@@ -691,7 +691,7 @@ class TestABoundedCall:
     ) -> None:
         heard, on_call_end = ends
         monkeypatch.setattr(chat_live, "WRAP_UP_SECONDS", 0.1)
-        mount = replace(OVERSEER, longest_call=0.3, on_call_end=on_call_end)
+        mount = replace(OVERSEER, bind=None, longest_call=0.3, on_call_end=on_call_end)
         with _calls(mount).websocket_connect(SOCKET) as ws:
             _, told = _hear(ws, "ended")
             assert heard.get(timeout=5) == "limit"
@@ -709,7 +709,7 @@ class TestABoundedCall:
         async def spent(bound: ChatSurface) -> str | None:
             return "Today's budget is spent."
 
-        mount = replace(OVERSEER, call_check=spent, on_call_end=on_call_end)
+        mount = replace(OVERSEER, bind=None, call_check=spent, on_call_end=on_call_end)
         with _calls(mount).websocket_connect(SOCKET) as ws:
             ws.send_bytes(b"\x10\x20")  # the fake plays once it hears you
             _, told = _hear(ws, "ended")
@@ -728,7 +728,7 @@ class TestABoundedCall:
         """Hung up, or failed as it opened: each is one end. A call the gate
         refuses never began (``test_a_call_the_gate_refuses_never_opens``)."""
         heard, on_call_end = ends
-        mount = replace(OVERSEER, on_call_end=on_call_end)
+        mount = replace(OVERSEER, bind=None, on_call_end=on_call_end)
         with _calls(mount).websocket_connect(SOCKET) as ws:
             ws.receive()  # ready, or her voice
             ws.close()

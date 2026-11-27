@@ -261,6 +261,9 @@ def stack() -> Stack:
 
 # What any chat user may read (``SystemModel.domain``); the rest is an admin's.
 DOMAIN_KINDS = (Kind.OBJECT, Kind.CHANGE)
+# How the app fits together: its parts, what each could be, and the edges
+# between them (``structure``).
+STRUCTURE_KINDS = (Kind.COMPONENT, Kind.SERVICE)
 
 
 class SystemModel(BaseModel):
@@ -279,10 +282,25 @@ class SystemModel(BaseModel):
         """Only the app's data and the changes to it, and the edges between
         them: what any chat user may read. The rest (routes, containers,
         providers, the modules the code lives in) is an admin's."""
+        return self._only(DOMAIN_KINDS)
+
+    def structure(self) -> Self:
+        """Only the app's components and services, what each could be built
+        as, and the edges between them: how it fits together, with none of
+        its data, routes, containers or code, nor the traffic seen on them
+        or the build and environment it runs as."""
+        parts = self._only(STRUCTURE_KINDS)
+        edges = tuple(
+            e.model_copy(update={"observed": None, "state": None}) for e in parts.edges
+        )
+        app = self.stack.model_copy(update={"env": "", "build": ""})
+        return parts.model_copy(update={"edges": edges, "stack": app})
+
+    def _only(self, kinds: tuple[Kind, ...]) -> Self:
         nodes = tuple(
-            n.model_copy(update={"module": None})
+            n.model_copy(update={"module": None}) if isinstance(n, _Code) else n
             for n in self.nodes
-            if n.kind in DOMAIN_KINDS
+            if n.kind in kinds
         )
         kept = {n.id for n in nodes}
         edges = tuple(e for e in self.edges if e.source in kept and e.target in kept)

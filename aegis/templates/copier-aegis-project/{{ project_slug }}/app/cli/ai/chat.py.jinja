@@ -65,6 +65,7 @@ async def chat(
                     await _interactive_chat_session(
                         ai_service,
                         conversation_id,
+                        user_id,
                     )
         except KeyboardInterrupt:
             typer.echo("\nChat interrupted", err=True)
@@ -117,17 +118,12 @@ async def history(
 
     with suppress_logs():
         ai_service = AIService(settings)
-    conversation = await ai_service.get_conversation(conversation_id)
+    conversation = await ai_service.get_conversation(conversation_id, user_id=user_id)
 
     if not conversation:
         typer.echo(
             f"{t('shared.error')} {t('ai.conversation_not_found', id=conversation_id)}"
         )
-        raise typer.Exit(1)
-
-    # Check if user owns conversation
-    if conversation.metadata.get("user_id") != user_id:
-        typer.echo(f"{t('shared.error')} {t('ai.access_denied')}")
         raise typer.Exit(1)
 
     typer.echo(t("ai.conversation_id_label", id=conversation_id))

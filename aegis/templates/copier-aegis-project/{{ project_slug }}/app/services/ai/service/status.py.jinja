@@ -9,9 +9,13 @@ from app.services.ai.service.base import AIServiceBase
 class StatusMixin(AIServiceBase):
     """Read-only surface: conversations, status, configuration checks."""
 
-    async def get_conversation(self, conversation_id: str) -> Conversation | None:
-        """Get a conversation by ID."""
-        return await self.conversation_manager.get_conversation(conversation_id)
+    async def get_conversation(
+        self, conversation_id: str, user_id: str | None = None
+    ) -> Conversation | None:
+        """Get a conversation by ID; with ``user_id``, only that user's."""
+        return await self.conversation_manager.get_conversation(
+            conversation_id, user_id=user_id
+        )
 
     async def list_conversations(
         self,

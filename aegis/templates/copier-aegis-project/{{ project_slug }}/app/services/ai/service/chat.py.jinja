@@ -223,7 +223,7 @@ class ChatMixin(TurnMixin):
         # Get or create conversation
         if conversation_id:
             conversation = await self.conversation_manager.get_conversation(
-                conversation_id
+                conversation_id, user_id=user_id
             )
             if not conversation:
                 raise ConversationError(f"Conversation {conversation_id} not found")

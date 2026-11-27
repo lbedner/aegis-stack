@@ -5,9 +5,9 @@ installed - the live call's socket (``live_router``), which the web
 frontend mounts outside the pages' gate (a socket has no HTTP request for
 it to read)."""
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.components.web_frontend import chat_surface
@@ -31,11 +31,14 @@ async def reply_agent(
     request: Request,
     conversation_id: str,
     message_id: str,
+    bound: Annotated[
+        chat_surface.ChatSurface, Depends(chat_surface.resolver(OVERSEER))
+    ],
     focus: str | None = None,
 ) -> Response:
     """The agent behind a reply, in the side drawer: what the reply used,
     then the live settings. ``focus`` names the field to land on."""
-    conversation = await chat_surface.find_conversation(OVERSEER, conversation_id)
+    conversation = await chat_surface.find_conversation(bound, conversation_id)
     found = conversation and chat_surface.find_message(conversation, message_id)
     if not found:
         raise HTTPException(status_code=404)

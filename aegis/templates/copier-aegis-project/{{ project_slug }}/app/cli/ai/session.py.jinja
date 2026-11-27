@@ -57,6 +57,7 @@ async def _print_health() -> None:
 async def _interactive_chat_session(
     ai_service,
     conversation_id: str | None = None,
+    user_id: str = "cli-user",
 ) -> None:
     """Start an interactive chat session with continuous conversation."""
 
@@ -238,7 +239,7 @@ async def _interactive_chat_session(
                         ai_service,
                         user_message,
                         current_conversation_id,
-                        "cli-user",
+                        user_id,
                         session_state=session_state,
                     )
                     if returned_conversation_id:
@@ -264,9 +265,9 @@ async def _interactive_chat_session(
                         response = await ai_service.chat(
                             message=user_message,
                             conversation_id=current_conversation_id,
-                            user_id="cli-user",
+                            user_id=user_id,
                             admin=True,  # the operator's own shell, as MCP's stdio
-                            lifted=await lifted_turn(user_message, None, "cli-user"),
+                            lifted=await lifted_turn(user_message, None, user_id),
                         )
                     finally:
                         spinner_live.stop()

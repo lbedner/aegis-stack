@@ -20,7 +20,7 @@ from app.components.web_frontend.overseer_ai_chat import OVERSEER
 from app.services.ai.models import AIProvider, MessageRole
 from app.services.ai.models.chat_card import ChatCard
 from tests.web.dom import none, one, select, text
-from tests.web.overseer import AI, sign_in, status_with
+from tests.web.overseer import AI, VIEWER, sign_in, status_with
 
 CARDS = f"{OVERSEER.path}/cards"
 
@@ -95,7 +95,7 @@ async def drawn() -> dict[str, str]:
     conversation = await ai_service.conversation_manager.create_conversation(
         provider=AIProvider.OLLAMA,
         model="gpt-5.6-luna",
-        user_id=OVERSEER.user,
+        user_id=VIEWER,
         surface=OVERSEER.surface,
     )
     ids = {

@@ -13,7 +13,6 @@ The turn's user is ``current_user_id`` (a ContextVar), bound by
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
@@ -24,7 +23,12 @@ from app.core.db import get_async_session
 from app.core.figures import FIGURES
 from app.core.log import logger
 from app.core.time import utcnow
-from app.core.tools import acting_as, current_admin, current_subject
+from app.core.tools import (
+    acting_as,
+    current_admin,
+    current_subject,
+    current_user_id,
+)
 from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.readings import Reading, kept_readings
 from app.services.ai.domains.chat.tool_telemetry import tool_turn
@@ -41,7 +45,6 @@ MEMORY_CATEGORIES = (
     "general",
 )
 
-current_user_id: ContextVar[str | None] = ContextVar("current_user_id", default=None)
 
 # The user a single-tenant install writes memory for. Chat turns without an
 # authenticated user (the dashboard's own surfaces) resolve to this, so the

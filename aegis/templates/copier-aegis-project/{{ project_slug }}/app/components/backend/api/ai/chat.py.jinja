@@ -17,7 +17,14 @@ from fastapi import (
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from app.components.backend.api.ai.service import ai_service, lifted_turn
+from app.components.backend.api.ai.service import (
+    Caller,
+    ai_service,
+    lifted_turn,
+    own_user,
+    request_user,
+    signed_in,
+)
 from app.components.backend.api.ai.sse import turn_stream
 from app.services.shared.deps import get_optional_owner_user_id
 
@@ -71,6 +78,7 @@ class ConversationSummary(BaseModel):
 async def chat(
     request: ChatRequest,
     owner_user_id: int | None = Depends(get_optional_owner_user_id),
+    caller: Caller = Depends(signed_in),
 ) -> ChatResponse:
     """
     Send a chat message and get AI response.
@@ -84,17 +92,18 @@ async def chat(
     Raises:
         HTTPException: If chat processing fails
     """
+    user_id = own_user(request.user_id, caller)
     try:
         response_message = await ai_service.chat(
             message=request.message,
             conversation_id=request.conversation_id,
-            user_id=request.user_id,
+            user_id=user_id,
             owner_user_id=owner_user_id,
             agent_slug=request.agent_slug,
             surface=request.surface,
             attachments=request.attachments,
             lifted=await lifted_turn(
-                request.message, request.attachments, request.user_id, owner_user_id
+                request.message, request.attachments, user_id, owner_user_id
             ),
         )
 
@@ -138,16 +147,18 @@ async def chat(
 async def chat_stream(
     request: ChatRequest,
     owner_user_id: int | None = Depends(get_optional_owner_user_id),
+    caller: Caller = Depends(signed_in),
 ) -> StreamingResponse:
     """Stream a chat message as Server-Sent Events (``sse.turn_stream``)."""
+    user_id = own_user(request.user_id, caller)
     lifted = await lifted_turn(
-        request.message, request.attachments, request.user_id, owner_user_id
+        request.message, request.attachments, user_id, owner_user_id
     )
     return turn_stream(
         ai_service.stream_chat(
             message=request.message,
             conversation_id=request.conversation_id,
-            user_id=request.user_id,
+            user_id=user_id,
             owner_user_id=owner_user_id,
             stream_delta=True,
             agent_slug=request.agent_slug,
@@ -160,7 +171,9 @@ async def chat_stream(
 
 @router.get("/conversations", response_model=list[ConversationSummary])
 async def list_conversations(
-    user_id: str = "api-user", surface: str | None = None, limit: int = 50
+    surface: str | None = None,
+    limit: int = 50,
+    user_id: str = Depends(request_user),
 ) -> list[ConversationSummary]:
     """
     List conversations for a user, optionally scoped to one chat surface.
@@ -199,30 +212,27 @@ async def list_conversations(
 
 @router.get("/conversations/{conversation_id}")
 async def get_conversation(
-    conversation_id: str, user_id: str = "api-user"
+    conversation_id: str, user_id: str = Depends(request_user)
 ) -> dict[str, Any]:
     """
     Get a specific conversation with full message history.
 
     Args:
         conversation_id: The conversation identifier
-        user_id: User identifier for access control
+        user_id: The caller (the session's own, with sign-in on)
 
     Returns:
         Full conversation details with messages
 
     Raises:
-        HTTPException: If conversation not found or access denied
+        HTTPException: 404 if missing or another user's
     """
     try:
-        conversation = await ai_service.get_conversation(conversation_id)
-
+        conversation = await ai_service.get_conversation(
+            conversation_id, user_id=user_id
+        )
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
-
-        # Check access (basic user matching)
-        if conversation.metadata.get("user_id") != user_id:
-            raise HTTPException(status_code=403, detail="Access denied")
 
         return {
             "id": conversation.id,

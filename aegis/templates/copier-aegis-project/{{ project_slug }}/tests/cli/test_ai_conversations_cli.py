@@ -39,3 +39,28 @@ def test_it_lists_up_to_the_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     assert result.exit_code == 0, result.output
     assert "Water heater" in result.output
     assert "Taxes" not in result.output
+
+
+def test_an_interactive_chat_is_the_named_users(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``-u`` picks the conversation resumed, so the session's turns are
+    that user's too: a turn under another name finds no conversation."""
+    from app.cli.ai import chat
+    from app.services.ai.service import AIService
+
+    async def listed(self: Any, user_id: str) -> list[SimpleNamespace]:
+        return [_conversation("a" * 32, "Water heater")]
+
+    seen: list[tuple[str | None, str]] = []
+
+    async def session(_: Any, conversation_id: str | None, user_id: str) -> None:
+        seen.append((conversation_id, user_id))
+
+    monkeypatch.setattr(AIService, "list_conversations", listed)
+    monkeypatch.setattr(chat, "_interactive_chat_session", session)
+
+    result = invoke(["ai", "chat", "-u", "alice"])
+
+    assert result.exit_code == 0, result.output
+    assert seen == [("a" * 32, "alice")]

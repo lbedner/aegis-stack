@@ -24,11 +24,13 @@ from app.core.ontology.model import (
     TaskNode,
 )
 from app.core.parts import Category
-from app.core.tools import acting_as, get_tool, result_data
+from app.core.tools import acting_as, current_user_id, get_tool, result_data
+from app.core.visitor import guest_visitor
 from app.services.system import health as health_module
 from app.services.system import (
     live_status,
     node_now,
+    ontology_view,
     pattern_findings,
     tools,
     ui_errors,
@@ -892,11 +894,38 @@ async def test_anyone_but_an_admin_is_told_what_is_an_admins() -> None:
         for hidden in ("service:payment", ["object:payment_charge", "route:x"]):
             with pytest.raises(ValueError, match="an admin's"):
                 await tools.ontology(node=hidden)
-    assert [a["note"] for a in answers] == [tools.DOMAIN_ONLY] * 3
+    assert [a["note"] for a in answers] == [ontology_view.DOMAIN_ONLY] * 3
 
     with acting_as(None, "assistant", admin=True):
         seen = result_data(await tools.ontology(kind="route"))
-    assert tools.DOMAIN_ONLY not in (seen["note"] or "")
+    assert ontology_view.DOMAIN_ONLY not in (seen["note"] or "")
+
+
+@pytest.mark.usefixtures("model")
+async def test_a_guest_reads_only_how_the_parts_fit() -> None:
+    """The parts and the edges between them, what each could be built as:
+    the app's structure, with nothing true of it now, nothing its code
+    breaks, and none of its data, routes or containers. Bound as a guest's
+    turn is (``memory_user``): by its visitor, with no owner (a guest is no
+    user)."""
+    token = current_user_id.set(guest_visitor("s"))
+    try:
+        with acting_as(None, "assistant", admin=False):
+            summary = result_data(await tools.ontology())
+            part = result_data(await tools.ontology(node="service:payment"))
+            for hidden in ("object:payment_charge", "route:GET /api/v1/r1"):
+                with pytest.raises(ValueError, match="structure"):
+                    await tools.ontology(node=hidden)
+            with pytest.raises(ValueError):
+                await tools.ontology(route="GET /health/detailed")
+    finally:
+        current_user_id.reset(token)
+    assert summary["counts"] == {"component": 2, "service": 1}
+    assert summary["note"] == ontology_view.STRUCTURE_ONLY
+    assert summary["app"]["build"] == summary["app"]["env"] == ""
+    assert part["now"] is None and part["findings"] == []
+    assert {e["target"] for e in part["edges"]} == {"component:database"}
+    assert all(e.get("observed") is None for e in part["edges"])
 
 
 async def test_a_routes_dry_path_is_an_admins(app: object) -> None:

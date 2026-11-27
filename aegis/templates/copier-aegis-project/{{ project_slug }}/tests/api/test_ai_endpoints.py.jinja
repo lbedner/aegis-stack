@@ -11,6 +11,7 @@ import pytest
 from app.integrations.main import create_integrated_app
 from app.services.ai.models import ConversationMessage, MessageRole
 from app.services.ai.schemas import UsageStatsResponse
+from tests._audit import as_admin
 
 
 @pytest.fixture
@@ -18,6 +19,13 @@ def client() -> TestClient:
     """Create test client."""
     app = create_integrated_app()
     return TestClient(app)
+
+
+@pytest.fixture
+def operator(client: TestClient) -> TestClient:
+    """``client`` making an operator's change (``get_admin_actor``), which
+    without auth is the local dev build's alone."""
+    return as_admin(client)
 
 
 @pytest.fixture
@@ -60,6 +68,7 @@ def mock_usage_stats() -> UsageStatsResponse:
 
 
 {% if ai_backend != "memory" %}
+@pytest.mark.usefixtures("sign_in_off")
 class TestUsageStatsEndpoint:
     """Tests for /api/v1/ai/usage/stats endpoint."""
 
@@ -188,6 +197,7 @@ def _reply() -> ConversationMessage:
     )
 
 
+@pytest.mark.usefixtures("sign_in_off")
 class TestChatAgentSlug:
     """The chat endpoints thread agent_slug through to the service."""
 
@@ -453,6 +463,7 @@ class TestLLMPickerGating:
         assert model["per_second"] == 0.001
 
 
+@pytest.mark.usefixtures("sign_in_off")
 class TestUserMemoryEndpoints:
     """The dashboard's window on what the assistant saved about you."""
 
@@ -478,7 +489,7 @@ class TestUserMemoryEndpoints:
         assert body["facts"] == [f.model_dump(mode="json") for f in facts]
         assert body["user_id"] == "0"  # the standalone default, as elsewhere
 
-    def test_update_rewrites_a_fact(self, client: TestClient) -> None:
+    def test_update_rewrites_a_fact(self, operator: TestClient) -> None:
         from app.services.ai.domains.chat.user_memory import UserFact
 
         updated = UserFact(
@@ -488,7 +499,7 @@ class TestUserMemoryEndpoints:
             "app.services.ai.domains.chat.user_memory.update_user_fact",
             AsyncMock(return_value=updated),
         ) as mock_update:
-            response = client.patch(
+            response = operator.patch(
                 "/api/v1/ai/user-memory/0",
                 json={"fact": "corrected", "category": "finance"},
             )
@@ -497,41 +508,45 @@ class TestUserMemoryEndpoints:
         assert response.json() == updated.model_dump(mode="json")
         assert mock_update.await_count == 1
 
-    def test_delete_removes_a_fact(self, client: TestClient) -> None:
+    def test_delete_removes_a_fact(self, operator: TestClient) -> None:
         with patch(
             "app.services.ai.domains.chat.user_memory.delete_user_fact",
             AsyncMock(),
         ) as mock_delete:
-            response = client.delete("/api/v1/ai/user-memory/0")
+            response = operator.delete("/api/v1/ai/user-memory/0")
 
         assert response.status_code == 200
         assert response.json()["deleted"] is True
         assert mock_delete.await_count == 1
 
-    def test_missing_fact_is_a_404(self, client: TestClient) -> None:
+    def test_missing_fact_is_a_404(self, operator: TestClient) -> None:
         with patch(
             "app.services.ai.domains.chat.user_memory.delete_user_fact",
             AsyncMock(side_effect=IndexError("no fact at index 7")),
         ):
-            response = client.delete("/api/v1/ai/user-memory/7")
+            response = operator.delete("/api/v1/ai/user-memory/7")
 
         assert response.status_code == 404
 
 
-def test_an_agent_update_sets_code_mode(client: TestClient) -> None:
+@pytest.mark.usefixtures("sign_in_off")
+def test_an_agent_update_sets_code_mode(operator: TestClient) -> None:
     with (
         patch(
             "app.services.ai.service.update_agent", AsyncMock(return_value=object())
         ) as update,
         patch("app.services.ai.service.serialize_agent", return_value={}),
     ):
-        response = client.patch("/api/v1/ai/agents/assistant", json={"code_mode": True})
+        response = operator.patch(
+            "/api/v1/ai/agents/assistant", json={"code_mode": True}
+        )
 
     assert response.status_code == 200, response.text
     update.assert_awaited_once_with("assistant", {"code_mode": True})
 {% endif %}
 
 
+@pytest.mark.usefixtures("sign_in_off")
 class TestStreamToolFrame:
     """The SSE ``tool`` frame carries its trail label, computed once on
     the server; a browser client never re-derives it."""
@@ -561,6 +576,7 @@ class TestStreamToolFrame:
         assert data["label"] == "ledger(months=3)"
 
 
+@pytest.mark.usefixtures("sign_in_off")
 class TestChatErrorsReachTheClientCorrectly:
     """``ProviderError`` and ``ConversationError`` subclass ``AIServiceError``,
     and the handlers caught the base first, so both surfaced as a 503 "AI

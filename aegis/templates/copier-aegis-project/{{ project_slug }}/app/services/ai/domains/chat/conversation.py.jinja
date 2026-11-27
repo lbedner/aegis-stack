@@ -89,6 +89,12 @@ async def delete_conversations(
 
 
 {% endif %}
+def _owned_by(meta: dict[str, Any] | None, user_id: str | None) -> bool:
+    """Whether a conversation with ``meta`` is ``user_id``'s to read: any
+    is, where no user asks."""
+    return user_id is None or (meta or {}).get("user_id") == user_id
+
+
 class ConversationManager:
     """
 {% if ai_backend == "memory" %}
@@ -162,22 +168,30 @@ class ConversationManager:
 
         return conversation
 
-    async def get_conversation(self, conversation_id: str) -> Conversation | None:
+    async def get_conversation(
+        self, conversation_id: str, user_id: str | None = None
+    ) -> Conversation | None:
         """
         Get a conversation by ID.
 
         Args:
             conversation_id: The conversation identifier
+            user_id: Its owner, where a user asks: another user's
+                conversation is as absent as a missing one, so an id names
+                nothing a caller does not already own
 
         Returns:
             Conversation | None: The conversation if found, None otherwise
         """
 {% if ai_backend == "memory" %}
-        return self.conversations.get(conversation_id)
+        conversation = self.conversations.get(conversation_id)
+        if conversation is None or not _owned_by(conversation.metadata, user_id):
+            return None
+        return conversation
 {% else %}
         async with get_async_session() as session:
             conv_db = await session.get(ConversationModel, conversation_id)
-            if not conv_db:
+            if not conv_db or not _owned_by(conv_db.meta_data, user_id):
                 return None
 
             messages_db = await queries.messages_for_conversation(

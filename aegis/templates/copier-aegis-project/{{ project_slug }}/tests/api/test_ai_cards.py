@@ -12,6 +12,8 @@ from app.integrations.main import create_integrated_app
 from app.services.ai.models import AIProvider
 from app.services.ai.models.chat_card import ChatCard
 
+pytestmark = pytest.mark.usefixtures("sign_in_off")
+
 TREND: dict[str, Any] = {
     "title": "Groceries by month",
     "measure": "Spent",

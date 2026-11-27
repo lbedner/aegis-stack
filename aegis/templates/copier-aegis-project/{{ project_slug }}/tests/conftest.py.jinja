@@ -167,6 +167,17 @@ def site() -> Generator[Any, None, None]:
 
 {% endif %}
 @pytest.fixture
+def sign_in_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Sign-in off (``AUTH_ENABLED=False``), as a local dev build runs: a
+    request with no session is the synthetic dev user, an admin, and the
+    chat API takes the user a client names (``own_user``). For a test of a
+    route's own work, not of who may reach it."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "AUTH_ENABLED", False)
+
+
+@pytest.fixture
 def fake_service(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Generator[Callable[..., Path], None, None]:
@@ -1111,10 +1122,9 @@ async def admin_user(async_db_session: AsyncSession):
 @pytest.fixture
 async def auth_headers(admin_user) -> dict[str, str]:
     """Bearer token headers for ``admin_user``."""
-    from app.core.security import create_access_token
+    from tests._bearer import bearer
 
-    token = create_access_token(data={"sub": admin_user.email})
-    return {"Authorization": f"Bearer {token}"}
+    return bearer(admin_user.email)
 
 
 @pytest.fixture

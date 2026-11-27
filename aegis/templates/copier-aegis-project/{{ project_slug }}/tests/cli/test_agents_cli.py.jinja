@@ -285,4 +285,30 @@ class TestContextModulesCli:
         result = invoke(["context-modules", "show", "ghost"])
 
         assert result.exit_code == 1
+
+    @patch("app.cli.agents._set_module_text")
+    def test_set_takes_its_text_from_a_file(self, mock_set, tmp_path) -> None:
+        """A module's text changes where its code changed it: the seed
+        writes a module once and never again."""
+        text = tmp_path / "diet.md"
+        text.write_text("THE NEW DIET RULES")
+
+        result = invoke(["context-modules", "set", "diet", "--file", str(text)])
+
+        assert result.exit_code == 0, result.output
+        mock_set.assert_called_once_with("diet", "THE NEW DIET RULES")
+
+    @patch("app.cli.agents._set_module_text")
+    def test_set_on_an_unknown_module_exits_nonzero(self, mock_set, tmp_path) -> None:
+        from app.services.ai.service import InvalidContextModuleError
+
+        mock_set.side_effect = InvalidContextModuleError(
+            "Context module 'ghost' not found"
+        )
+        text = tmp_path / "ghost.md"
+        text.write_text("x")
+
+        result = invoke(["context-modules", "set", "ghost", "--file", str(text)])
+
+        assert result.exit_code == 1
 {% endif %}

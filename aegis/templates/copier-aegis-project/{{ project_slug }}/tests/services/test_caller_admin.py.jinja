@@ -7,11 +7,13 @@ reaches the app."""
 import pytest
 
 from app.core.config import settings
-from app.core.tools import acting_as
-from app.services.shared.deps import caller_is_admin
+from app.core.tools import acting_as, current_user_id
+from app.core.visitor import guest_visitor
+from app.services.shared.deps import caller_is_admin, caller_is_guest
 {% else -%}
-from app.core.tools import acting_as
-from app.services.shared.deps import caller_is_admin
+from app.core.tools import acting_as, current_user_id
+from app.core.visitor import guest_visitor
+from app.services.shared.deps import caller_is_admin, caller_is_guest
 {% endif %}
 
 async def test_what_the_runner_bound_decides() -> None:
@@ -51,3 +53,16 @@ async def test_without_auth_whoever_reaches_the_app_is_the_operator() -> None:
     with acting_as(None, "assistant"):
         assert await caller_is_admin()
 {%- endif %}
+
+
+def test_a_guest_is_told_apart_by_its_visitor() -> None:
+    """A guest signs in to one shared account (``auth[guest]``) and is no
+    user to the turn (no owner): what a tool call for it may read is known
+    by the visitor the turn binds (``memory_user``)."""
+    for who, guest in ((guest_visitor("s"), True), ("2", False)):
+        token = current_user_id.set(who)
+        try:
+            assert caller_is_guest() is guest
+        finally:
+            current_user_id.reset(token)
+    assert not caller_is_guest()

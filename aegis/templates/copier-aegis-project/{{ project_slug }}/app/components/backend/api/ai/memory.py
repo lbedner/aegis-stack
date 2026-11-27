@@ -9,13 +9,17 @@ served from here.
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.core.log import logger
 from app.services.ai.service import DEFAULT_MEMORY_USER_ID
+from app.services.shared.deps import Actor, get_admin_actor, get_admin_reader
 
-router = APIRouter()
+# An operator's, every route: a module's text rides in every turn of every
+# agent that reads it, and the saved facts are any user's by the
+# ``user_id`` asked for. Overseer's dashboard calls these as its admin.
+router = APIRouter(dependencies=[Depends(get_admin_reader)])
 
 
 class ContextModuleUpdateRequest(BaseModel):
@@ -51,7 +55,9 @@ async def list_registry_context_modules() -> list[dict[str, Any]]:
 
 @router.patch("/context-modules/{slug}")
 async def update_registry_context_module(
-    slug: str, request: ContextModuleUpdateRequest
+    slug: str,
+    request: ContextModuleUpdateRequest,
+    _actor: Actor = Depends(get_admin_actor),
 ) -> dict[str, Any]:
     """Apply a partial context-module update."""
     from app.core.db import get_async_session
@@ -132,6 +138,7 @@ async def update_saved_user_fact(
     index: int,
     request: UserFactUpdateRequest,
     user_id: str = DEFAULT_MEMORY_USER_ID,
+    _actor: Actor = Depends(get_admin_actor),
 ) -> dict[str, Any]:
     """Correct one saved fact in place."""
     from app.core.db import get_async_session
@@ -158,7 +165,9 @@ async def update_saved_user_fact(
 
 @router.delete("/user-memory/{index}")
 async def delete_saved_user_fact(
-    index: int, user_id: str = DEFAULT_MEMORY_USER_ID
+    index: int,
+    user_id: str = DEFAULT_MEMORY_USER_ID,
+    _actor: Actor = Depends(get_admin_actor),
 ) -> dict[str, Any]:
     """Forget one saved fact."""
     from app.core.db import get_async_session

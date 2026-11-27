@@ -1,0 +1,97 @@
+"""The one AIService the /ai routes share, and the lift every way in to
+it runs before a turn (``lifted_turn``).
+
+Its own module because every sub-router needs it and the router that
+assembles them imports those sub-routers - so it cannot be the one
+holding the singleton.
+"""
+
+{%- if include_auth %}
+from fastapi import Depends, HTTPException, status
+
+{% endif %}
+from app.core.config import settings
+{%- if include_auth %}
+from app.models.user import User
+{%- endif %}
+from app.services.ai.service import (
+    AIService,
+    ChatAttachment,
+    LiftedTurn,
+    keeps_pastes,
+    lift_turn,
+)
+{%- if include_auth %}
+from app.services.auth.deps import get_optional_user
+
+# Who a chat API request is: the signed-in member, never a guest (a
+# visitor of the chat mounts that take guests, ``auth[guest]``).
+Caller = User | None
+{%- else %}
+
+# Who a chat API request is: nobody signs in.
+Caller = None
+{%- endif %}
+
+ai_service = AIService(settings)
+
+
+async def lifted_turn(
+    message: str,
+    attachments: list[ChatAttachment] | None,
+    user_id: str,
+    owner_user_id: int | None = None,
+) -> LiftedTurn | None:
+    """The turn lifted before it runs (``lift_turn``): its documents read
+    and its walls of pasted text kept apart, in a short session of its
+    own, so none is held across the streamed answer. None where nobody's
+    turn is kept (``keeps_pastes``): it goes as it came. The browser, the
+    API and the CLI each hand the result to the turn as ``lifted``."""
+    if not keeps_pastes(user_id):
+        return None
+    from app.core.db import get_async_session
+
+    async with get_async_session() as session:
+        return await lift_turn(session, message, attachments, user_id, owner_user_id)
+{%- if include_auth %}
+
+
+def own_user(named: str, caller: Caller) -> str:
+    """Whose turn, history and cards a request reaches: with sign-in on, the
+    signed-in member's own, whatever ``user_id`` it names; nobody signed in
+    (a guest included) reaches none. With sign-in off there is one user, and
+    the name a client gives stands."""
+    if not settings.AUTH_ENABLED:
+        return named
+    if caller is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Not signed in")
+    return str(caller.id)
+
+
+async def request_user(
+    user_id: str = "api-user", caller: Caller = Depends(get_optional_user)
+) -> str:
+    """``own_user`` for a route that names its user in the query string."""
+    return own_user(user_id, caller)
+
+
+# The member a route's body names its user for (``own_user``).
+signed_in = get_optional_user
+{%- else %}
+
+
+def own_user(named: str, caller: Caller = None) -> str:
+    """Whose turn, history and cards a request reaches: nobody signs in, so
+    there is one user, and the name a client gives stands."""
+    return named
+
+
+async def request_user(user_id: str = "api-user") -> str:
+    """``own_user`` for a route that names its user in the query string."""
+    return user_id
+
+
+async def signed_in() -> Caller:
+    """The member a route's body names its user for: nobody signs in."""
+    return None
+{%- endif %}

@@ -26,7 +26,7 @@ from app.services.ai.models import (
     MessageRole,
 )
 from tests.web.dom import one, select, text, triggers
-from tests.web.overseer import AI, sign_in, status_with
+from tests.web.overseer import AI, VIEWER, sign_in, status_with
 
 # An agent is a saved row: its drawer needs an AI persistence backend.
 persisted = pytest.mark.skipif(
@@ -57,7 +57,7 @@ def _conversation() -> Conversation:
         title="Hello",
         provider=AIProvider.OLLAMA,
         model="llama3",
-        metadata={"user_id": OVERSEER.user},
+        metadata={"user_id": VIEWER},
         messages=[
             ConversationMessage(
                 id="m1",
@@ -652,3 +652,27 @@ def test_an_app_mounts_the_surface_again_for_its_own_agent(
     # The agent drawer is the Overseer's editor; this mount has none.
     response = TestClient(app).get("/chat/messages/c1/m2/agent")
     assert response.status_code == 404
+
+
+def test_each_admin_holds_their_own_chats(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The section, the drawer and a reply's agent read the signed-in
+    admin's own conversations (``sign_in``'s user), as the chat API does:
+    never one history every admin shares."""
+    asked: list[str] = []
+
+    async def conversations(chat: ChatSurface) -> list[Conversation]:
+        asked.append(chat.user)
+        return []
+
+    async def find(chat: ChatSurface, conversation_id: str) -> Conversation | None:
+        asked.append(chat.user)
+        return None
+
+    monkeypatch.setattr(chat_surface, "conversations", conversations)
+    monkeypatch.setattr(chat_surface, "find_conversation", find)
+    _chat_page(client)
+    client.get(f"{CHAT}/drawer")
+    client.get(f"{CHAT}/messages/c1/m2/agent")
+    assert asked and set(asked) == {VIEWER}, asked

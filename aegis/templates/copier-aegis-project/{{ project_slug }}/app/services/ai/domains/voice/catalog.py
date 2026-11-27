@@ -399,15 +399,18 @@ def get_stt_providers() -> list[ProviderInfo]:
 
 
 def get_stt_models(provider_id: str | None = None) -> list[ModelInfo]:
-    """Get STT models, optionally filtered by provider."""
+    """Get STT models (with a hearing server's, listed so far), optionally
+    filtered by provider."""
+    hearing_server.ask_for_models()
+    models = [*_STT_MODELS, *hearing_server.LISTED.values()]
     if provider_id is None:
-        return _STT_MODELS.copy()
-    return [m for m in _STT_MODELS if m.provider_id == provider_id]
+        return models
+    return [m for m in models if m.provider_id == provider_id]
 
 
 def get_stt_model(model_id: str) -> ModelInfo | None:
     """A hearing model by id; None for one the catalog does not know."""
-    return _STT_BY_ID.get(model_id)
+    return _STT_BY_ID.get(model_id) or hearing_server.LISTED.get(model_id)
 
 
 def get_current_voice_config(settings: Any) -> dict[str, Any]:

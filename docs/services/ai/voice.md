@@ -111,7 +111,7 @@ GOOGLE_API_KEY=...
 |----------|------|-------|-------|---------|----------|
 | **OpenAI Whisper** | Cloud | whisper-1 | Good | High | `OPENAI_API_KEY` |
 | **Groq Whisper** | Cloud | whisper-large-v3-turbo | Very fast | High | `GROQ_API_KEY` |
-| **Hearing server** (speaches, or a server you run) | Local | istupakov/parakeet-tdt-0.6b-v3-onnx | Fast on CPU | High, 25 languages | None (`HEARING_BASE_URL`) |
+| **Hearing server** (speaches, or a server you run) | Local | The models it holds (istupakov/parakeet-tdt-0.6b-v3-onnx first) | Fast on CPU | High, 25 languages | None (`HEARING_BASE_URL`) |
 
 No model runs in the app's own process: a local one runs as a server of its own ([A Speech Server](#a-speech-server), [A Hearing Server](#a-hearing-server)), so the webserver holds none, competes with no model for its CPU, and ships no model packages.
 
@@ -199,7 +199,8 @@ STT_PROVIDER=hearing_server
 Any other server with OpenAI's transcription endpoint
 (`POST /v1/audio/transcriptions`), NVIDIA NIM on a GPU say, works the same
 way: point `HEARING_BASE_URL` at it and set `STT_MODEL` to what it names its
-model.
+model. The voice settings and the call's Hears list every hearing model the
+server holds, asked for once it is set, and again if it was not answering.
 
 speaches loads Parakeet at full precision, about 3 GB in memory (the
 service's limit is 5G). The first transcription ever downloads the model,

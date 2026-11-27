@@ -5,14 +5,9 @@ The server is a stub; the real client's requests are answered in the test."""
 import pytest
 
 from app.core import hearing_server, speech_server
-from tests._speech_server import PARAKEET, WHISPER, serving
+from tests._speech_server import PARAKEET, SPEACHES, WHISPER, serving
 
 URL = "http://localhost:8010/v1"
-# What speaches answers: the hearing models it holds, and those in memory.
-SPEACHES = {
-    "/v1/models": {"object": "list", "data": [{"id": WHISPER}, {"id": PARAKEET}]},
-    "/api/ps": {"models": [PARAKEET]},
-}
 
 
 async def test_a_reading_has_its_models_and_those_in_memory(
@@ -53,6 +48,18 @@ async def test_a_server_without_speaches_own_routes_still_lists_its_models(
     reading = await hearing_server.read(URL)
 
     assert reading.available
+
+
+async def test_a_server_answering_its_own_page_for_speaches_route_still_lists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A server that answers every path with a web page: what is in memory
+    goes unsaid, and its models are still listed."""
+    serving(monkeypatch, {"/v1/models": SPEACHES["/v1/models"], "/api/ps": b"<html>"})
+
+    reading = await hearing_server.read(URL)
+
+    assert reading.available and reading.loaded is None
     assert reading.loaded is None
 
 

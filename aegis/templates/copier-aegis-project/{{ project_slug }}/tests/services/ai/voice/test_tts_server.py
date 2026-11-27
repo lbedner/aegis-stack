@@ -2,7 +2,6 @@
 OpenAI client at SPEECH_BASE_URL, asked only what the server takes. The
 server is a stub; the real client's requests are answered in the test."""
 
-import asyncio
 import json
 from typing import Any
 
@@ -14,7 +13,6 @@ from app.core.config import Settings, settings
 from app.services.ai.domains.voice import (
     get_tts_voices,
     get_voice,
-    library,
     speaking_model,
 )
 from app.services.ai.domains.voice.models import (
@@ -28,6 +26,7 @@ from app.services.ai.domains.voice.tts import (
     realtime,
     server,
 )
+from tests import _speech_server as speaking
 from tests._fake_dns import answering
 from tests._speech_server import openai_answering
 
@@ -149,17 +148,11 @@ async def test_the_server_is_refused_until_its_address_is_set() -> None:
 
 @pytest.fixture
 def unasked(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The server at its address, not asked yet this process."""
-    monkeypatch.setattr(library, "TRIED", set())
-    monkeypatch.setattr(server, "LISTED", {})
-    monkeypatch.setattr(settings, "SPEECH_BASE_URL", URL)
+    speaking.unasked(monkeypatch, server, "SPEECH_BASE_URL", URL)
 
 
 async def _listed() -> set[str]:
-    """The server's voices as a listing has them once the ask it starts is in."""
-    get_tts_voices()
-    await asyncio.gather(*library.LOADING)
-    return {v.id for v in get_tts_voices(TTSProvider.LOCAL_SERVER.value)}
+    return await speaking.listed(get_tts_voices, TTSProvider.LOCAL_SERVER.value)
 
 
 @pytest.mark.parametrize(

@@ -78,20 +78,24 @@ def _speaking(settings: Any) -> Any:
 
 # What the call setup's form may say (what a call runs on is picked from
 # the voice dialog's lists: ``chat_models.use_for_calls``, Hears, Speaks).
-# What each picked column of the form may be: what it checks, what it offers.
-CHOICES = {
-    "stt_model": tuple(m.id for m in get_stt_models()),
-    "reply": get_args(Reply),
-    "working_sound": get_args(WorkingSound),
-}
 IDLE_RANGE = (0, LIVE_IDLE_MAX_SECONDS)
 
 
+def choices() -> dict[str, tuple[str, ...]]:
+    """What each picked column of the form may be: what it checks, what it
+    offers. Read when asked: a hearing server's models come in after start."""
+    return {
+        "stt_model": tuple(m.id for m in get_stt_models()),
+        "reply": get_args(Reply),
+        "working_sound": get_args(WorkingSound),
+    }
+
+
 def form_choices() -> dict[str, list[dict[str, Any]]]:
-    """The setup form's options, from the one list each (``CHOICES``)."""
+    """The setup form's options, from the one list each (``choices``)."""
     return {
         column: [{"id": v, "name": v} for v in allowed]
-        for column, allowed in CHOICES.items()
+        for column, allowed in choices().items()
     }
 
 
@@ -106,7 +110,7 @@ def parse_form(form: Any) -> tuple[dict[str, Any], list[str]]:
     """The call setup's form as column values, and what is wrong with it."""
     errors: list[str] = []
     values: dict[str, Any] = {}
-    for column, allowed in CHOICES.items():
+    for column, allowed in choices().items():
         value = str(form.get(column) or "")
         if value not in allowed:
             errors.append(f"{column.replace('_', ' ')}: pick one of the choices.")

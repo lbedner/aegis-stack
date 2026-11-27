@@ -2318,6 +2318,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-hearing-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A hearing server
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#changing-placement" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7232,6 +7243,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#a-hearing-server" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A hearing server
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#changing-placement" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7385,12 +7407,11 @@
 <ul>
 <li><strong><code>app/components/inference/</code></strong>: <code>engine.py</code>, the one interface; <code>ollama.py</code> and <code>llamacpp.py</code>, async clients for each server's models, running models, and (Ollama) load and unload; <code>activity.py</code>, an in-memory record of models moving in and out of memory.</li>
 <li><strong>Settings:</strong> <code>INFERENCE_ENGINE</code>; <code>OLLAMA_BASE_URL</code> or <code>LLAMACPP_BASE_URL</code> (defaulted from the placement), <code>OLLAMA_BASE_URL_LOCAL</code> for CLI commands run on the host, <code>OLLAMA_HOST_PORT</code> / <code>LLAMACPP_HOST_PORT</code> for the port <code>make serve</code> publishes, <code>OLLAMA_API_KEY</code> for a server behind auth.</li>
-<li><strong>A health check</strong> on the system status, named <code>inference</code>, with each engine under it by name (<code>ollama</code> or <code>llamacpp</code>, and <code>kokoro_fastapi</code> where a speech server is set): reachable, installed and running models, VRAM in use.</li>
+<li><strong>A health check</strong> on the system status, named <code>inference</code>, with each engine under it by name (<code>ollama</code> or <code>llamacpp</code>, <code>kokoro_fastapi</code> where a speech server is set, and <code>speaches</code> where a hearing server is): reachable, installed and running models, VRAM in use.</li>
 <li><strong>Overseer &gt; Inference</strong> (with the htmx frontend):<ul>
 <li><strong>Overview:</strong> a row per engine, with its job, whether it answers, what it holds, its memory and who runs on it (the agents whose model it serves, the voice that speaks or listens through it). One bar shows the memory the engines report together.</li>
 <li><strong>Engines it lacks</strong> are listed with the command or <code>.env</code> address that adds them, never an install button.</li>
-<li><strong>A page per engine</strong>, grouped by job in the menu: the text engine's Overview, Models (load and unload) and Activity, and the speech server's Overview and Voices. Container and Logs follow where the engines run in docker.</li>
-<li><strong>An "In the app" row</strong> appears where <code>ai[voice]</code> loads a model into the webserver (in-app Kokoro, Parakeet, faster-whisper), with the webserver's own memory.</li>
+<li><strong>A page per engine</strong>, grouped by job in the menu: the text engine's Overview, Models (load and unload) and Activity, the speech server's Overview and Voices, and the hearing server's Overview. Container and Logs follow where the engines run in docker.</li>
 </ul>
 </li>
 <li><strong>The same on the CLI and API:</strong> <code>my-app inference status</code> and <code>GET /api/v1/inference</code> list every engine as the overview does.</li>
@@ -7417,10 +7438,6 @@
 <tr>
 <td>Kokoro-FastAPI</td>
 <td>Its whole process, with <code>ENABLE_DEBUG_ENDPOINTS</code> on</td>
-</tr>
-<tr>
-<td>In the app</td>
-<td>The webserver's whole process, read on the webserver only</td>
 </tr>
 </tbody>
 </table>
@@ -7487,10 +7504,22 @@
 </tr>
 </tbody>
 </table>
+<h2 id="a-hearing-server">A hearing server</h2>
+<p>A hearing server transcribes for <code>ai[voice]</code>. speaches is the one so far: Parakeet TDT 0.6B v3 on the CPU, 25 languages.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>speaches<span class="o">]</span><span class="w">   </span><span class="c1"># a speaches service in the compose stack</span>
+</span></code></pre></div>
+<p>It runs in docker whatever the placement, since it has no host GPU to use. Its models are kept in the <code>speaches-models</code> volume (the first call downloads Parakeet, 2.4 GB), it never unloads one, and <code>HEARING_BASE_URL</code> defaults to <code>http://speaches:8000/v1</code>. With an address set:</p>
+<ul>
+<li><strong>Overseer &gt; Inference &gt; speaches</strong> shows the server, read once a second while it is open: how many hearing models it holds and how many are in memory, where the app reaches it, each model with Load or Unload, and charts of what is in memory and how long each transcription took.</li>
+<li><strong>The CLI and API</strong> do the same: <code>my-app inference hearing</code>, <code>my-app inference hearing-model load|unload &lt;model&gt;</code>; <code>GET /api/v1/inference/hearing</code>, <code>POST /api/v1/inference/hearing/{load,unload}/&lt;model&gt;</code>.</li>
+<li><strong>The health check</strong> carries it as <code>speaches</code> under <code>inference</code>: unhealthy where it does not answer, a warning where it holds no models, and information while none is in memory (the next call loads one).</li>
+<li><strong><code>ai[voice]</code></strong> offers it as the Hearing server provider (<a href="../../services/ai/voice/#a-hearing-server">Voice</a>), and the overview names the voice that listens through it.</li>
+</ul>
+<p>Any OpenAI-compatible transcription server works at <code>HEARING_BASE_URL</code>; one without speaches' own routes lists its models, and what is in memory goes unsaid.</p>
 <h2 id="changing-placement">Changing placement</h2>
-<p>The placement is an answer in <code>.copier-answers.yml</code> (<code>inference_placement</code>), and the speech server another (<code>inference_speech</code>). A speech server is added in place (above); to change the placement, remove and re-add the component:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>aegis<span class="w"> </span>remove<span class="w"> </span>inference
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker<span class="o">]</span>
+<p>The placement is an answer in <code>.copier-answers.yml</code> (<code>inference_placement</code>), the speech server another (<code>inference_speech</code>), and the hearing server a third (<code>inference_hearing</code>). Speech and hearing servers are added in place (above); to change the placement, remove and re-add the component:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>aegis<span class="w"> </span>remove<span class="w"> </span>inference
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>aegis<span class="w"> </span>add<span class="w"> </span>inference<span class="o">[</span>docker<span class="o">]</span>
 </span></code></pre></div>
 
 
